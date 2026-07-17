@@ -1,0 +1,46 @@
+# dependencies
+node_modules/
+
+# bun
+.bun/
+*.bun
+bun-debug.log*
+
+# build / compile
+dist/
+bin/herdr-workflows
+*.tsbuildinfo
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# logs / OS
+*.log
+.DS_Store
+Thumbs.db
+
+# test / coverage / caches
+coverage/
+*.lcov
+.cache/
+.eslintcache
+.oxlintcache
+.oxfmtcache
+
+# docs (vitepress)
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+
+# local scratch / agent / openspec
+.plans/
+references/
+openspec/
+.cursor/
+.claude/
+.opencode/
+.idea/
+*.swp
+*.swo
+*~

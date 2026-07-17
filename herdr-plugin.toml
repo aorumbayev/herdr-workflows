@@ -1,0 +1,33 @@
+id = "herdr-workflows"
+name = "herdr-workflows"
+version = "0.1.0"
+min_herdr_version = "0.7.4"
+description = "Linear YAML workflow runner for herdr panes"
+platforms = ["linux", "macos"]
+
+[[build]]
+command = ["bun", "install", "--frozen-lockfile"]
+
+[[build]]
+command = ["bun", "build", "--compile", "--outfile=bin/herdr-workflows", "src/cli.ts"]
+platforms = ["linux", "macos"]
+
+[[build]]
+command = ["node", "scripts/install-cli.mjs"]
+
+[[build]]
+command = ["node", "scripts/install-keybindings.mjs"]
+
+[[actions]]
+id = "launch"
+title = "Launch herdr-workflows workflow"
+contexts = ["workspace", "pane", "selection"]
+command = ["bin/hook.mjs", "launch"]
+
+[[panes]]
+id = "picker"
+title = "Launch workflow"
+placement = "popup"
+width = 56
+height = 14
+command = ["./bin/hook.mjs", "picker"]
