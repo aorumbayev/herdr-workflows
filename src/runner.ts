@@ -5,6 +5,8 @@ import { loadWorkflow } from "./workflows";
 import { appendRunLog } from "./runlog";
 import { defaultDeps, runSteps, type RunnerDeps, type StepResult } from "./runner/dispatch";
 import { fail } from "./runner/fire";
+import { resolveInputValues } from "./runner/inputs";
+import { resolvePreflight } from "./runner/preflight";
 import { runShellStep, SHELL_TIMEOUT_MS } from "./runner/shell";
 
 export { runShellStep, SHELL_TIMEOUT_MS };
@@ -17,6 +19,7 @@ export type RunOptions = {
   sessions?: SessionsConfig;
   ctx: InvocationContext;
   prompt?: string;
+  inputs?: Record<string, string>;
   deps?: Partial<RunnerDeps>;
   onProgress?: (step: number, total: number, label: string) => void;
   onStderr?: (text: string) => void;
@@ -51,52 +54,24 @@ export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
   };
 
   try {
-    let session = "";
-    // Extraction failure below still runs on_fail (recovery can fall back to {pane});
-    // only launching without a pane fails hard — recovery would have no context either.
-    let sessionFailure: string | undefined;
-    if (workflow.needsSession) {
-      if (!opts.ctx.paneId) {
-        return await failPrecondition("session handoff must be launched from an agent pane");
-      }
-      try {
-        session = await deps.sessionText(opts.ctx.paneId, opts.sessions ?? {});
-      } catch (err) {
-        sessionFailure = err instanceof Error ? err.message : String(err);
-      }
-    }
+    const inputs = resolveInputValues(workflow.inputs, opts.inputs);
+    if (!inputs.ok) return await failPrecondition(inputs.error);
 
-    let agent = "";
-    if (workflow.needsInvokingAgent) {
-      if (!opts.ctx.paneId) {
-        return await failPrecondition("invoking agent unresolved — run from agent pane");
-      }
-      try {
-        const label = await deps.agentLabel(opts.ctx.paneId);
-        if (!opts.agents[label]) {
-          return await failPrecondition(
-            `invoking agent '${label}' not in config — add it under agents:`,
-          );
-        }
-        agent = label;
-      } catch (err) {
-        return await failPrecondition(
-          err instanceof Error ? err.message : "invoking agent unresolved — run from agent pane",
-        );
-      }
-    }
+    const pre = await resolvePreflight(workflow, opts.ctx, opts.agents, opts.sessions ?? {}, deps);
+    if (!pre.ok) return await failPrecondition(pre.error);
 
     const base = await buildPlaceholders({
       ctx: opts.ctx,
       prompt: opts.prompt,
       last: "",
       error: "",
-      session,
-      agent,
+      session: pre.session,
+      agent: pre.agent,
+      inputs: inputs.values,
     });
 
-    const primary: StepResult = sessionFailure
-      ? { ok: false, error: await fail(deps, workflow.name, 0, sessionFailure), last: "" }
+    const primary: StepResult = pre.sessionFailure
+      ? { ok: false, error: await fail(deps, workflow.name, 0, pre.sessionFailure), last: "" }
       : await runSteps(workflow.steps, stepOpts, base);
     let result = primary;
     if (!primary.ok && workflow.onFail) {

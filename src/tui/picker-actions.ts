@@ -1,120 +1,53 @@
-import type {
-  CliRenderer,
-  InputRenderable,
-  KeyEvent,
-  SelectRenderable,
-  TextRenderable,
-} from "@opentui/core";
+import type { KeyEvent } from "@opentui/core";
 import { sanitizeDisplay } from "../adapter/stdin";
-import type { AgentsConfig, SessionsConfig } from "../config";
-import type { InvocationContext } from "../context";
 import { runWorkflow } from "../runner";
 import type { WorkflowListEntry } from "../workflows";
 import {
-  buildPickerOptions,
-  filterWorkflowEntries,
-  formatInvalidLines,
-  formatRunProgress,
-  type PickerRowValue,
-} from "./picker-rows";
+  finish,
+  setInputMode,
+  setListMode,
+  setPromptMode,
+  setRunMode,
+  type PickerState,
+} from "./picker-modes";
+import { formatRunProgress } from "./picker-rows";
 import { truncate } from "./text";
 
-export type PickerState = {
-  mode: "list" | "prompt" | "run";
-  entries: WorkflowListEntry[];
-  pending?: WorkflowListEntry;
-  exit?: { code: number };
-  running: boolean;
-  progressLines: string[];
-  repoRoot: string;
-  agents: AgentsConfig;
-  sessions: SessionsConfig;
-  ctx: InvocationContext;
-  renderer: CliRenderer;
-  filter: InputRenderable;
-  list: SelectRenderable;
-  status: TextRenderable;
-  invalid: TextRenderable;
-  promptInput: InputRenderable;
-  footer: TextRenderable;
-};
+/** Show the next unanswered input, then the legacy {prompt} line, then run. */
+function advanceInput(state: PickerState, entry: WorkflowListEntry): void {
+  const spec = state.inputQueue[state.inputIndex];
+  if (spec) return setInputMode(state, entry, spec);
+  if (entry.needsPrompt) return setPromptMode(state, entry);
+  void startRun(state, entry, "");
+}
 
-export const LIST_HINT = "type filter · ↑↓ move · enter run · esc cancel";
-const PROMPT_HINT = "enter submit · esc back";
+function storeInput(state: PickerState, value: string): void {
+  const entry = state.pending;
+  const spec = state.inputQueue[state.inputIndex];
+  if (!entry || !spec) return;
+  state.inputValues[spec.name] = value;
+  state.inputIndex += 1;
+  advanceInput(state, entry);
+}
+
+export function submitInputChoice(state: PickerState, value: string): void {
+  if (state.mode !== "input") return;
+  storeInput(state, value);
+}
+
+export function submitInputText(state: PickerState, value: string): void {
+  if (state.mode !== "input") return;
+  storeInput(state, value.trim());
+}
+
 const FAIL_HINT = "enter/esc close";
 
-export function applyFilter(state: PickerState): void {
-  const { valid, invalid } = filterWorkflowEntries(state.entries, state.filter.value);
-  state.list.options = buildPickerOptions(valid);
-  if (state.list.options.length > 0) {
-    state.list.setSelectedIndex(
-      Math.min(state.list.getSelectedIndex(), state.list.options.length - 1),
-    );
-  }
-  const lines = formatInvalidLines(invalid);
-  state.invalid.content = lines;
-  state.invalid.visible = lines.length > 0;
-}
-
-export function setListMode(state: PickerState): void {
-  state.mode = "list";
-  state.pending = undefined;
-  state.progressLines = [];
-  state.promptInput.visible = false;
-  state.promptInput.value = "";
-  state.filter.visible = true;
-  state.list.visible = true;
-  state.list.flexGrow = 1;
-  state.status.visible = false;
-  state.status.content = "";
-  state.status.flexGrow = 0;
-  state.footer.content = LIST_HINT;
-  applyFilter(state);
-  state.filter.focus();
-}
-
-function setPromptMode(state: PickerState, entry: WorkflowListEntry): void {
-  state.mode = "prompt";
-  state.pending = entry;
-  state.filter.visible = false;
-  state.list.visible = false;
-  state.list.flexGrow = 0;
-  state.invalid.visible = false;
-  state.status.visible = true;
-  state.status.flexGrow = 0;
-  state.status.content = entry.name;
-  state.promptInput.visible = true;
-  state.promptInput.value = "";
-  state.footer.content = PROMPT_HINT;
-  state.promptInput.focus();
-}
-
-function setRunMode(state: PickerState, entry: WorkflowListEntry): void {
-  state.mode = "run";
-  state.running = true;
-  state.progressLines = [];
-  state.filter.visible = false;
-  state.list.visible = false;
-  state.list.flexGrow = 0;
-  state.invalid.visible = false;
-  state.promptInput.visible = false;
-  state.status.visible = true;
-  state.status.flexGrow = 1;
-  state.status.content = formatRunProgress(entry.name, []);
-  state.footer.content = "running…";
-}
-
-function finish(state: PickerState, code: number): void {
-  state.exit = { code };
-  state.renderer.destroy();
-}
-
 export function acceptWorkflow(state: PickerState, entry: WorkflowListEntry): void {
-  if (entry.needsPrompt) {
-    setPromptMode(state, entry);
-    return;
-  }
-  void startRun(state, entry, "");
+  state.pending = entry;
+  state.inputQueue = entry.inputs ?? [];
+  state.inputIndex = 0;
+  state.inputValues = {};
+  advanceInput(state, entry);
 }
 
 export function submitPrompt(state: PickerState, value: string): void {
@@ -127,6 +60,9 @@ async function startRun(
   entry: WorkflowListEntry,
   prompt: string,
 ): Promise<void> {
+  const inputs = Object.fromEntries(
+    Object.entries(state.inputValues).map(([k, v]) => [k, sanitizeDisplay(v)]),
+  );
   setRunMode(state, entry);
   const result = await runWorkflow({
     name: entry.name,
@@ -135,6 +71,7 @@ async function startRun(
     sessions: state.sessions,
     ctx: state.ctx,
     prompt: sanitizeDisplay(prompt),
+    inputs,
     onProgress: (i, n, label) => {
       state.progressLines.push(`[${i}/${n}] ${truncate(label, 48)}`);
       state.status.content = formatRunProgress(entry.name, state.progressLines);
@@ -182,6 +119,13 @@ function handlePromptKey(state: PickerState, key: KeyEvent): void {
   }
 }
 
+function handleInputKey(state: PickerState, key: KeyEvent): void {
+  if (key.name === "escape") {
+    key.preventDefault();
+    setListMode(state);
+  }
+}
+
 function handleRunKey(state: PickerState, key: KeyEvent): void {
   if (state.running) return;
   if (key.name === "escape" || key.name === "return" || key.name === "linefeed") {
@@ -191,6 +135,7 @@ function handleRunKey(state: PickerState, key: KeyEvent): void {
 }
 
 export function handlePickerKey(state: PickerState, key: KeyEvent): void {
+  if (state.mode === "input") return handleInputKey(state, key);
   if (state.mode === "prompt") return handlePromptKey(state, key);
   if (state.mode === "run") return handleRunKey(state, key);
   handleListKey(state, key);

@@ -1,4 +1,5 @@
 import { WorkflowLoadError, positioned, type FlatStep } from "./errors";
+import { AGENT_INPUT_RE } from "./inputs";
 import type { RawStep } from "./parse";
 import {
   commandHasPlaceholder,
@@ -99,6 +100,7 @@ export function checkAgents(file: string, steps: FlatStep[], agents: Set<string>
   steps.forEach((step, idx) => {
     if (step.verb !== "agent") return;
     if (step.name === "{agent}") return;
+    if (AGENT_INPUT_RE.test(step.name)) return; // validated against declared inputs in checkInputRefs
     if (!agents.has(step.name)) {
       throw new WorkflowLoadError(
         positioned(file, idx + 1, "agent", `unknown agent '${step.name}'`),

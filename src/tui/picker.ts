@@ -16,14 +16,13 @@ import type { InvocationContext } from "../context";
 import type { WorkflowListEntry } from "../workflows";
 import {
   acceptWorkflow,
-  applyFilter,
   handlePickerKey,
-  LIST_HINT,
-  setListMode,
   stdinLeakHandlers,
+  submitInputChoice,
+  submitInputText,
   submitPrompt,
-  type PickerState,
 } from "./picker-actions";
+import { applyFilter, LIST_HINT, setListMode, type PickerState } from "./picker-modes";
 import type { PickerRowValue } from "./picker-rows";
 import { SelectList } from "./select-list";
 import { resolveHostTheme } from "./theme";
@@ -81,6 +80,9 @@ export async function runPickerSession(opts: PickerSessionOpts): Promise<number>
   const state: PickerState = {
     mode: "list",
     entries: opts.entries,
+    inputQueue: [],
+    inputIndex: 0,
+    inputValues: {},
     running: false,
     progressLines: [],
     repoRoot: opts.repoRoot,
@@ -97,6 +99,10 @@ export async function runPickerSession(opts: PickerSessionOpts): Promise<number>
   };
 
   state.list.on(SelectRenderableEvents.ITEM_SELECTED, (_i, option) => {
+    if (state.mode === "input") {
+      if (typeof option.value === "string") submitInputChoice(state, option.value);
+      return;
+    }
     if (state.mode !== "list") return;
     const value = option.value as PickerRowValue | undefined;
     if (!value) return;
@@ -105,7 +111,9 @@ export async function runPickerSession(opts: PickerSessionOpts): Promise<number>
   state.filter.on(InputRenderableEvents.INPUT, () => {
     if (state.mode === "list") applyFilter(state);
   });
-  state.promptInput.on(InputRenderableEvents.ENTER, (value) => submitPrompt(state, value));
+  state.promptInput.on(InputRenderableEvents.ENTER, (value) =>
+    state.mode === "input" ? submitInputText(state, value) : submitPrompt(state, value),
+  );
   renderer.keyInput.on("keypress", (key) => handlePickerKey(state, key));
 
   setListMode(state);

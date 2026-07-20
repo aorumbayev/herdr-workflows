@@ -83,7 +83,7 @@ describe("workflow schema", () => {
     await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(/gemini/);
   });
 
-  test("agent: \"{agent}\" accepted at load", async () => {
+  test('agent: "{agent}" accepted at load', async () => {
     const root = await repoWithWorkflows({
       ok: `steps:\n  - agent: "{agent}"\n    prompt: hi\n`,
     });
@@ -176,6 +176,7 @@ describe("substitution safety", () => {
         tab: "",
         prev_tab: "",
         agent: "",
+        inputs: {},
       }),
     ).toBe("{branch}");
   });
@@ -192,6 +193,7 @@ describe("substitution safety", () => {
         tab: "t2",
         prev_tab: "t1",
         agent: "codex",
+        inputs: {},
       }),
     ).toBe("t=t2 p=t1 a=codex");
   });
@@ -285,6 +287,112 @@ describe("composition", () => {
     const m = await loadWorkflow("ship", root, ["claude"]);
     expect(m.needsPrompt).toBe(true);
     expect(m.onFail).toBe("handoff");
+  });
+});
+
+describe("inputs", () => {
+  const values = (inputs: Record<string, string>) => ({
+    pane: "",
+    selection: "",
+    prompt: "",
+    last: "",
+    error: "",
+    session: "",
+    tab: "",
+    prev_tab: "",
+    agent: "",
+    inputs,
+  });
+
+  test("{input.x} substitutes from inputs map", () => {
+    expect(substitute("to {input.target}!", values({ target: "codex" }))).toBe("to codex!");
+    expect(substitute("{input.missing}", values({}))).toBe("");
+  });
+
+  test("choice and text inputs resolve; agents sentinel expands", async () => {
+    const root = await repoWithWorkflows({
+      wf: `inputs:
+  target:
+    options: agents
+  focus:
+    label: focus area
+    default: ""
+steps:
+  - agent: "{input.target}"
+    prompt: "{input.focus}"
+`,
+    });
+    const m = await loadWorkflow("wf", root, ["claude", "codex"]);
+    expect(m.inputs).toEqual([
+      { name: "target", label: "target", options: ["claude", "codex"], default: undefined },
+      { name: "focus", label: "focus area", options: undefined, default: "" },
+    ]);
+  });
+
+  test("undeclared {input.x} rejected", async () => {
+    const root = await repoWithWorkflows({
+      wf: `steps:\n  - shell: cat\n    stdin: "{input.nope}"\n`,
+    });
+    await expect(loadWorkflow("wf", root)).rejects.toThrow(/undeclared input/);
+  });
+
+  test("declared but unused input rejected", async () => {
+    const root = await repoWithWorkflows({
+      wf: `inputs:\n  ghost: {}\nsteps:\n  - shell: "true"\n`,
+    });
+    await expect(loadWorkflow("wf", root)).rejects.toThrow(/never referenced/);
+  });
+
+  test("agent input option outside config rejected", async () => {
+    const root = await repoWithWorkflows({
+      wf: `inputs:\n  target:\n    options: [claude, ghost]\nsteps:\n  - agent: "{input.target}"\n`,
+    });
+    await expect(loadWorkflow("wf", root, ["claude"])).rejects.toThrow(/not a config agent/);
+  });
+
+  test("text input as agent rejected", async () => {
+    const root = await repoWithWorkflows({
+      wf: `inputs:\n  target: {}\nsteps:\n  - agent: "{input.target}"\n`,
+    });
+    await expect(loadWorkflow("wf", root, ["claude"])).rejects.toThrow(/needs options/);
+  });
+
+  test("{input.x} in shell command text rejected", async () => {
+    const root = await repoWithWorkflows({
+      wf: `inputs:\n  x: {}\nsteps:\n  - shell: "echo {input.x}"\n`,
+    });
+    await expect(loadWorkflow("wf", root)).rejects.toThrow(/input.x.*not allowed in command/);
+  });
+
+  test("spliced workflow with inputs rejected", async () => {
+    const root = await repoWithWorkflows({
+      part: `inputs:\n  x: {}\nsteps:\n  - shell: cat\n    stdin: "{input.x}"\n`,
+      wf: `steps:\n  - run: part\n`,
+    });
+    await expect(loadWorkflow("wf", root)).rejects.toThrow(/declares inputs/);
+  });
+
+  test("options agents with no configured agents rejected", async () => {
+    const root = await repoWithWorkflows({
+      wf: `inputs:\n  target:\n    options: agents\nsteps:\n  - agent: "{input.target}"\n`,
+    });
+    await expect(loadWorkflow("wf", root)).rejects.toThrow(/no agents configured/);
+  });
+
+  test("choice default outside options rejected", async () => {
+    const root = await repoWithWorkflows({
+      wf: `inputs:\n  target:\n    options: [a, b]\n    default: c\nsteps:\n  - shell: cat\n    stdin: "{input.target}"\n`,
+    });
+    await expect(loadWorkflow("wf", root)).rejects.toThrow(/not in options/);
+  });
+
+  test("recovery may reference entry inputs", async () => {
+    const root = await repoWithWorkflows({
+      rescue: `steps:\n  - shell: cat\n    stdin: "{input.focus}"\n`,
+      wf: `inputs:\n  focus: {}\non_fail: rescue\nsteps:\n  - shell: cat\n    stdin: "{input.focus}"\n`,
+    });
+    const m = await loadWorkflow("wf", root);
+    expect(m.inputs.map((i) => i.name)).toEqual(["focus"]);
   });
 });
 

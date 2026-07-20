@@ -18,25 +18,41 @@ function parseArgs(args: string[]): {
   flags: Record<string, string>;
   bools: Set<string>;
   positional: string[];
+  multi: Record<string, string[]>;
 } {
   const flags: Record<string, string> = {};
   const bools = new Set<string>();
   const positional: string[] = [];
+  const multi: Record<string, string[]> = {};
+  const setFlag = (key: string, value: string) => {
+    flags[key] = value;
+    (multi[key] ??= []).push(value);
+  };
   for (let i = 0; i < args.length; i++) {
     const a = args[i]!;
     if (a.startsWith("--") && a.includes("=")) {
       const eq = a.indexOf("=");
-      flags[a.slice(2, eq)] = a.slice(eq + 1);
+      setFlag(a.slice(2, eq), a.slice(eq + 1));
     } else if (a.startsWith("--")) {
       const key = a.slice(2);
       const next = args[i + 1];
       if (next !== undefined && !next.startsWith("--")) {
-        flags[key] = next;
+        setFlag(key, next);
         i += 1;
       } else bools.add(key);
     } else positional.push(a);
   }
-  return { flags, bools, positional };
+  return { flags, bools, positional, multi };
+}
+
+function parseInputFlags(values: string[]): Record<string, string> {
+  const inputs: Record<string, string> = {};
+  for (const kv of values) {
+    const eq = kv.indexOf("=");
+    if (eq <= 0) die(`--input expects name=value, got '${kv}'`);
+    inputs[kv.slice(0, eq)] = kv.slice(eq + 1);
+  }
+  return inputs;
 }
 
 async function cmdLaunch(): Promise<void> {
@@ -59,9 +75,9 @@ async function cmdLaunch(): Promise<void> {
 }
 
 async function cmdRun(args: string[]): Promise<void> {
-  const { flags, positional } = parseArgs(args);
+  const { flags, positional, multi } = parseArgs(args);
   const name = positional[0];
-  if (!name) die("usage: hwf|herdr-workflows run <name> [--prompt …]");
+  if (!name) die("usage: hwf|herdr-workflows run <name> [--prompt …] [--input name=value …]");
   const repoRoot = await resolveRepoRoot();
   const { agents, sessions } = await loadConfig(repoRoot);
   const ctx = readInvocationContext();
@@ -74,6 +90,7 @@ async function cmdRun(args: string[]): Promise<void> {
       sessions,
       ctx,
       prompt: flags.prompt,
+      inputs: parseInputFlags(multi.input ?? []),
       onProgress: (i, n, label) => process.stdout.write(`[${i}/${n}] ${label}\n`),
       onStderr: (t) => process.stderr.write(t.endsWith("\n") ? t : `${t}\n`),
     });

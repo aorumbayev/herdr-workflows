@@ -16,13 +16,16 @@ export function filterWorkflowEntries(
 }
 
 export function buildPickerOptions(valid: WorkflowListEntry[]): SelectOption[] {
-  return valid.map((entry) => ({
-    name: entry.needsPrompt
-      ? `${entry.name} · ${entry.source} · prompt`
-      : `${entry.name} · ${entry.source}`,
-    description: "",
-    value: { entry } satisfies PickerRowValue,
-  }));
+  return valid.map((entry) => {
+    const parts = [entry.name, entry.source];
+    if (entry.inputs?.length) parts.push("inputs");
+    if (entry.needsPrompt) parts.push("prompt");
+    return {
+      name: parts.join(" · "),
+      description: "",
+      value: { entry } satisfies PickerRowValue,
+    };
+  });
 }
 
 export function formatInvalidLines(invalid: WorkflowListEntry[]): string {

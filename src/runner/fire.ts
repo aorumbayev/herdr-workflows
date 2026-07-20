@@ -2,13 +2,14 @@ import { HerdrError } from "../adapter/client";
 import { fillAgentArgv } from "../config";
 import { PANE_READ_LINES, PANE_READ_SOURCE } from "../pane-read";
 import { substitute, substituteParams, type FlatStep, type PlaceholderValues } from "../workflows";
+import { AGENT_INPUT_RE } from "../workflows/inputs";
 import { waitAgentDone } from "./agent-wait";
 import { shellArgv } from "./shell";
 import type { RunnerDeps, StepResult, StepRunOptions } from "./types";
 
 export type FireOutcome = { failed?: StepResult; last?: string; tabId?: string };
 
-export const INVOKING_AGENT = "{agent}";
+const INVOKING_AGENT = "{agent}";
 
 async function fail(
   deps: RunnerDeps,
@@ -34,7 +35,9 @@ function autofill(
 }
 
 function resolveAgentName(stepName: string, values: PlaceholderValues): string {
-  return stepName === INVOKING_AGENT ? values.agent : stepName;
+  if (stepName === INVOKING_AGENT) return values.agent;
+  const m = AGENT_INPUT_RE.exec(stepName);
+  return m ? (values.inputs[m[1]!] ?? "") : stepName;
 }
 
 async function fireOpen(
@@ -68,7 +71,12 @@ async function fireAgent(
     return {
       failed: {
         ok: false,
-        error: await fail(opts.deps, opts.name, n, "invoking agent unresolved — run from agent pane"),
+        error: await fail(
+          opts.deps,
+          opts.name,
+          n,
+          "invoking agent unresolved — run from agent pane",
+        ),
         last,
       },
     };

@@ -97,6 +97,92 @@ describe("waitAgentDone", () => {
 });
 
 describe("runner", () => {
+  test("inputs substitute into stdin and choice input resolves agent", async () => {
+    const root = await repoWith({
+      m: `inputs:
+  target:
+    options: [claude, codex]
+  focus: {}
+steps:
+  - shell: cat
+    stdin: "focus={input.focus}"
+  - agent: "{input.target}"
+    prompt: "{last}"
+`,
+    });
+    const { deps, layouts } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: { claude: ["claude", "{prompt}"], codex: ["codex", "{prompt}"] },
+      ctx: { selection: "", cwd: root },
+      inputs: { target: "codex", focus: "tests" },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    expect(layouts).toHaveLength(1);
+    expect(layouts[0]).toMatchObject({ label: "codex", command: ["codex", "focus=tests"] });
+  });
+
+  test("missing required input fails before steps", async () => {
+    const root = await repoWith({
+      m: `inputs:\n  focus: {}\nsteps:\n  - shell: cat\n    stdin: "{input.focus}"\n`,
+    });
+    const { deps, notes } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    expect(result.ok).toBe(false);
+    expect(notes[0]).toContain("missing input 'focus'");
+  });
+
+  test("default fills missing input; bad choice value fails", async () => {
+    const root = await repoWith({
+      m: `inputs:\n  mode:\n    options: [fast, slow]\n    default: fast\nsteps:\n  - shell: cat\n    stdin: "{input.mode}"\n`,
+    });
+    const { deps } = mockDeps();
+    const ok = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    expect(ok.ok).toBe(true);
+
+    const bad = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      inputs: { mode: "warp" },
+      deps,
+    });
+    expect(bad.ok).toBe(false);
+    expect(bad.ok === false && bad.error).toContain("must be one of");
+  });
+
+  test("unknown provided input fails", async () => {
+    const root = await repoWith({
+      m: `inputs:\n  focus: {}\nsteps:\n  - shell: cat\n    stdin: "{input.focus}"\n`,
+    });
+    const { deps } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      inputs: { focus: "x", extra: "y" },
+      deps,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.error).toContain("unknown input 'extra'");
+  });
+
   test("failure at step N stops sequence and notifies once", async () => {
     const root = await repoWith({
       m: `steps:\n  - shell: "echo one"\n  - shell: "echo two >&2; exit 1"\n  - shell: "echo three"\n`,
@@ -767,7 +853,7 @@ describe("runner", () => {
     expect(reads[0]?.source).toBe("recent-unwrapped");
   });
 
-  test("agent: \"{agent}\" resolves from invoking pane", async () => {
+  test('agent: "{agent}" resolves from invoking pane', async () => {
     const root = await repoWith({
       m: `steps:\n  - agent: "{agent}"\n    prompt: go\n`,
     });
@@ -785,7 +871,7 @@ describe("runner", () => {
     expect((layouts[0] as { command: string[] }).command).toEqual(["codex", "go"]);
   });
 
-  test("agent: \"{agent}\" fails when label not in config", async () => {
+  test('agent: "{agent}" fails when label not in config', async () => {
     const root = await repoWith({
       m: `steps:\n  - agent: "{agent}"\n    prompt: go\n`,
     });

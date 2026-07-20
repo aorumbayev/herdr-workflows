@@ -46,6 +46,17 @@ describe("filterWorkflowEntries", () => {
 });
 
 describe("buildPickerOptions", () => {
+  test("inputs flagged in row suffix", () => {
+    const entry: WorkflowListEntry = {
+      name: "handover",
+      source: "repo",
+      file: "/r/handover.yaml",
+      inputs: [{ name: "target", label: "target", options: ["claude"] }],
+    };
+    const options = buildPickerOptions([entry]);
+    expect(options[0]!.name).toBe("handover · repo · inputs");
+  });
+
   test("single-line name with source; prompt flagged", () => {
     const { valid } = filterWorkflowEntries(entries, "");
     const options = buildPickerOptions(valid);

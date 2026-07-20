@@ -57,6 +57,7 @@ export async function buildPlaceholders(opts: {
   error?: string;
   session?: string;
   agent?: string;
+  inputs?: Record<string, string>;
 }): Promise<PlaceholderValues> {
   let pane = "";
   if (opts.ctx.paneId) {
@@ -76,5 +77,6 @@ export async function buildPlaceholders(opts: {
     tab: "",
     prev_tab: "",
     agent: opts.agent ?? "",
+    inputs: opts.inputs ?? {},
   };
 }

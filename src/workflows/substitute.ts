@@ -1,9 +1,16 @@
 import type { PlaceholderValues } from "./errors";
 
-const RE = /\{(pane|selection|prompt|last|error|session|tab|prev_tab|agent)\}/g;
+export const INPUT_NAME_RE = /^[a-z][a-z0-9_]{0,31}$/;
+
+const RE =
+  /\{(pane|selection|prompt|last|error|session|tab|prev_tab|agent)\}|\{input\.([a-z][a-z0-9_]{0,31})\}/g;
 
 export function substitute(template: string, values: PlaceholderValues): string {
-  return template.replace(RE, (_, name: keyof PlaceholderValues) => values[name] ?? "");
+  return template.replace(RE, (_, name: string | undefined, input?: string) =>
+    input !== undefined
+      ? (values.inputs[input] ?? "")
+      : String(values[name as keyof Omit<PlaceholderValues, "inputs">] ?? ""),
+  );
 }
 
 export function substituteParams(
@@ -23,7 +30,9 @@ export function substituteParams(
 
 export function commandHasPlaceholder(command: string): string | undefined {
   RE.lastIndex = 0;
-  return RE.exec(command)?.[1];
+  const m = RE.exec(command);
+  if (!m) return undefined;
+  return m[2] !== undefined ? `input.${m[2]}` : m[1];
 }
 
 export function textHasPrompt(text: string): boolean {
@@ -32,6 +41,26 @@ export function textHasPrompt(text: string): boolean {
 
 export function textHasSession(text: string): boolean {
   return text.includes("{session}");
+}
+
+export function textInputRefs(text: string): string[] {
+  RE.lastIndex = 0;
+  const refs: string[] = [];
+  for (let m = RE.exec(text); m; m = RE.exec(text)) {
+    if (m[2] !== undefined) refs.push(m[2]);
+  }
+  return refs;
+}
+
+export function paramsInputRefs(params: Record<string, unknown> | undefined): string[] {
+  if (!params) return [];
+  const refs: string[] = [];
+  for (const value of Object.values(params)) {
+    if (typeof value === "string") refs.push(...textInputRefs(value));
+    else if (value && typeof value === "object" && !Array.isArray(value))
+      refs.push(...paramsInputRefs(value as Record<string, unknown>));
+  }
+  return refs;
 }
 
 export function paramsHavePrompt(params: Record<string, unknown> | undefined): boolean {

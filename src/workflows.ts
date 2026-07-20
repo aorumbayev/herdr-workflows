@@ -1,6 +1,7 @@
 export {
   WorkflowLoadError,
   type FlatStep,
+  type InputSpec,
   type LoadedWorkflow,
   type WorkflowListEntry,
   type PlaceholderValues,

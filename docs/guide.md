@@ -11,11 +11,11 @@ cd your-repo && hwf init          # .hwf/config.yaml + seeded workflows
 
 `hwf` ≡ `herdr-workflows`. Install also binds `prefix+k` → picker.
 
-| How                           | What                                             |
-| ----------------------------- | ------------------------------------------------ |
-| `prefix+k` / `hwf launch`     | picker (filter, pick, optional prompt line)      |
-| `hwf run <name> [--prompt …]` | CLI; live step/stderr; best for debug            |
-| `hwf` (TTY, no args)          | manage UI: edit workflows/config, browse run log |
+| How                                           | What                                             |
+| --------------------------------------------- | ------------------------------------------------ |
+| `prefix+k` / `hwf launch`                     | picker (filter, pick, optional prompt line)      |
+| `hwf run <name> [--prompt …] [--input k=v …]` | CLI; live step/stderr; best for debug            |
+| `hwf` (TTY, no args)                          | manage UI: edit workflows/config, browse run log |
 
 Workflow file = `.hwf/workflows/<name>.yaml` (or `~/.hwf/workflows/`; repo wins).
 
@@ -53,17 +53,18 @@ One verb per step. Modifiers only on the right verb. Placeholders **only** in `s
 
 \*Without `wait` / `wait_for`, fire-and-forget — `on_fail` cannot see agent/open failure.
 
-| Placeholder   | Value                                                                 |
-| ------------- | --------------------------------------------------------------------- |
-| `{pane}`      | invocation scrollback (up to 100k lines; capped by herdr retention) |
-| `{selection}` | selection text if launched that way                                   |
-| `{prompt}`    | picker / `--prompt`                                                   |
-| `{last}`      | last `shell` stdout (or agent pane text after `wait: done`)           |
-| `{error}`     | failing step + tail; only inside `on_fail` recovery                   |
-| `{session}`   | agent transcript; **`stdin` only**                                    |
-| `{tab}`       | latest tab opened this run via `agent` / `open`                       |
-| `{prev_tab}`  | previous opened tab this run                                          |
-| `{agent}`     | invoking pane’s agent label (must match `agents:` key)                |
+| Placeholder      | Value                                                               |
+| ---------------- | ------------------------------------------------------------------- |
+| `{pane}`         | invocation scrollback (up to 100k lines; capped by herdr retention) |
+| `{selection}`    | selection text if launched that way                                 |
+| `{prompt}`       | picker / `--prompt`                                                 |
+| `{last}`         | last `shell` stdout (or agent pane text after `wait: done`)         |
+| `{error}`        | failing step + tail; only inside `on_fail` recovery                 |
+| `{session}`      | agent transcript; **`stdin` only**                                  |
+| `{tab}`          | latest tab opened this run via `agent` / `open`                     |
+| `{prev_tab}`     | previous opened tab this run                                        |
+| `{agent}`        | invoking pane’s agent label (must match `agents:` key)              |
+| `{input.<name>}` | declared workflow input; collected by picker or `--input`           |
 
 `agent: "{agent}"` resolves at run time to the invoking pane’s agent.
 
@@ -72,6 +73,24 @@ One verb per step. Modifiers only on the right verb. Placeholders **only** in `s
 - shell: echo {pane}    - shell: claude -p "summarize"
                           stdin: "{pane}"
 ```
+
+### Inputs
+
+Declare custom inputs; the picker asks for each (choice list or text line) before running, and the CLI takes `--input name=value` (repeatable):
+
+```yaml
+inputs:
+  target:
+    options: agents # choice; "agents" = your config agent names, or a literal [list]
+  focus:
+    label: focus area # text; label defaults to the input name
+    default: "" # optional → skippable; prefilled in the picker
+steps:
+  - agent: "{input.target}"
+    prompt: "Focus: {input.focus}\n\n{pane}"
+```
+
+`{input.<name>}` works wherever `{prompt}` does (`stdin` / `prompt` / `params`). `agent:` may additionally be exactly `"{input.<name>}"` when the input is a choice whose every option is a config agent — safe because the value set is fixed at load. Undeclared references, declared-but-unused inputs, and `inputs:` on spliced (`run:`) or recovery (`on_fail:`) workflows are load errors.
 
 ### Composition
 

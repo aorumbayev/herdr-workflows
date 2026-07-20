@@ -4,16 +4,16 @@
 
 ## CLI
 
-| Command                       | Does                                                              |
-| ----------------------------- | ----------------------------------------------------------------- |
-| `hwf` (TTY)                   | manage UI                                                         |
-| `hwf run <name> [--prompt …]` | run; live progress/stderr; nonzero on fail                        |
-| `hwf init [--force]`          | write `.hwf/config.yaml` + `workflows/`; confirm before overwrite |
-| `hwf launch` / `hwf picker`   | picker popup                                                      |
+| Command                                       | Does                                                              |
+| --------------------------------------------- | ----------------------------------------------------------------- |
+| `hwf` (TTY)                                   | manage UI                                                         |
+| `hwf run <name> [--prompt …] [--input k=v …]` | run; live progress/stderr; nonzero on fail                        |
+| `hwf init [--force]`                          | write `.hwf/config.yaml` + `workflows/`; confirm before overwrite |
+| `hwf launch` / `hwf picker`                   | picker popup                                                      |
 
 ## Picker
 
-`1`–`9` select · text filters (exact name selects) · `>`/`<` page · `Esc` cancel. Prompt line only if workflow uses `{prompt}`.
+`1`–`9` select · text filters (exact name selects) · `>`/`<` page · `Esc` cancel. Declared `inputs:` ask one screen each (choice list / text line), then the prompt line only if the workflow uses `{prompt}`.
 
 ## Files
 
@@ -35,6 +35,18 @@ sessions:
     # env: HERDR_WORKFLOWS_SESSION_{ID,CWD,AGENT}
 ```
 
+## Inputs
+
+```yaml
+inputs:
+  <name>: # [a-z][a-z0-9_]{0,31}
+    options: agents | [<value>…] # present → choice; "agents" = config agent names
+    label: <text> # picker screen title; default = name
+    default: <value> # optional; picker prefill / CLI fallback
+```
+
+`{input.<name>}` in `stdin` / `prompt` / `params`. `agent:` may be exactly `"{input.<name>}"` for a choice whose options are all config agents. Load errors: undeclared reference, declared-but-unused input, `inputs:` on `run:`-spliced or `on_fail:` workflows, `options: agents` with empty config, default outside options. Picker: one screen per input (choice list / text line), declaration order, before the `{prompt}` line. Choice values validated again at run time.
+
 ## Verbs & modifiers
 
 | Key        | Where              | Role                                              |
@@ -50,9 +62,10 @@ sessions:
 | `herdr`    | step               | socket method                                     |
 | `params`   | herdr              | placeholders in string values; ids auto-filled    |
 | `run`      | step               | load-time splice                                  |
+| `inputs`   | top-level          | declared user inputs; picker screens / `--input`  |
 | `on_fail`  | top-level          | one-shot recovery workflow name                   |
 
-Placeholders: `{pane}` `{selection}` `{prompt}` `{last}` `{error}` `{session}` `{tab}` `{prev_tab}` `{agent}`. Only in `stdin`/`prompt`/`params` (and `agent: "{agent}"`). `{session}` → `stdin` only.
+Placeholders: `{pane}` `{selection}` `{prompt}` `{last}` `{error}` `{session}` `{tab}` `{prev_tab}` `{agent}` `{input.<name>}`. Only in `stdin`/`prompt`/`params` (and `agent: "{agent}"` / `agent: "{input.<name>}"`). `{session}` → `stdin` only.
 
 ## Semantics
 

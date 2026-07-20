@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { WorkflowLoadError, positioned } from "./errors";
 import { refineStepVerbs } from "./refine";
+import { INPUT_NAME_RE } from "./substitute";
 
 const rawStepSchema = z
   .object({
@@ -19,8 +20,22 @@ const rawStepSchema = z
   .strict()
   .superRefine(refineStepVerbs);
 
+const rawInputSchema = z
+  .object({
+    label: z.string().min(1).optional(),
+    options: z.union([z.literal("agents"), z.array(z.string().min(1)).min(1)]).optional(),
+    default: z.string().optional(),
+  })
+  .strict();
+
 export const rawWorkflowSchema = z
   .object({
+    inputs: z
+      .record(
+        z.string().regex(INPUT_NAME_RE, "input name must match [a-z][a-z0-9_]{0,31}"),
+        rawInputSchema,
+      )
+      .optional(),
     steps: z.array(rawStepSchema).min(1),
     on_fail: z.string().min(1).optional(),
   })

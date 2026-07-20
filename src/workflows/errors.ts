@@ -27,6 +27,15 @@ export type PlaceholderValues = {
   tab: string;
   prev_tab: string;
   agent: string;
+  inputs: Record<string, string>;
+};
+
+export type InputSpec = {
+  name: string;
+  label: string;
+  /** Present → choice input; absent → free text. Resolved (never the `agents` sentinel). */
+  options?: string[];
+  default?: string;
 };
 
 export type FlatStep =
@@ -39,6 +48,7 @@ export type LoadedWorkflow = {
   name: string;
   file: string;
   steps: FlatStep[];
+  inputs: InputSpec[];
   onFail?: string;
   needsPrompt: boolean;
   needsSession: boolean;
@@ -51,4 +61,5 @@ export type WorkflowListEntry = {
   file: string;
   error?: string;
   needsPrompt?: boolean;
+  inputs?: InputSpec[];
 };
