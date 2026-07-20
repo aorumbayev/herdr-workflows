@@ -33,11 +33,9 @@ steps:
 # .hwf/config.yaml  (repo overrides ~/.hwf/config.yaml per name)
 agents:
   claude: ["claude", "{prompt}"] # exactly one "{prompt}" argv element
-sessions: # optional; stdout → {session}
-  # codex: ["sh", "-c", "… $HERDR_WORKFLOWS_SESSION_ID …"]
 ```
 
-`{session}` resolve order: `sessions:` command → built-in Claude JSONL → error.
+Optional `sessions:` maps agent → argv whose stdout fills `{session}` (see [Reference](/reference#config)). Built-in Claude JSONL applies when unset.
 
 ## Language
 
@@ -53,6 +51,8 @@ One verb per step. Modifiers only on the right verb. Placeholders **only** in `s
 
 \*Without `wait` / `wait_for`, fire-and-forget — `on_fail` cannot see agent/open failure.
 
+`shell:` = headless blocking command (stdout → `{last}`, no tab). `agent:` = config agent in a new tab. Use `shell:` for one-shot LLM CLIs (`claude -p`); use `agent:` when you want an interactive pane.
+
 | Placeholder      | Value                                                               |
 | ---------------- | ------------------------------------------------------------------- |
 | `{pane}`         | invocation scrollback (up to 100k lines; capped by herdr retention) |
@@ -66,8 +66,6 @@ One verb per step. Modifiers only on the right verb. Placeholders **only** in `s
 | `{agent}`        | invoking pane’s agent label (must match `agents:` key)              |
 | `{input.<name>}` | declared workflow input; collected by picker or `--input`           |
 
-`agent: "{agent}"` resolves at run time to the invoking pane’s agent.
-
 ```yaml
 # ✗ load error          # ✓
 - shell: echo {pane}    - shell: claude -p "summarize"
@@ -76,27 +74,44 @@ One verb per step. Modifiers only on the right verb. Placeholders **only** in `s
 
 ### Inputs
 
-Declare custom inputs; the picker asks for each (choice list or text line) before running, and the CLI takes `--input name=value` (repeatable):
+`{prompt}`, declared `inputs:`, and `{session}` are all first-class — pick by job: one ad hoc focus line → `{prompt}` / `--prompt`; named fields or choices → `inputs:`; agent transcript → `{session}` in `stdin`.
+
+Picker asks one screen per declared input (choice list with type-to-filter, or text line), then the `{prompt}` line if used. CLI: `--input name=value` (repeatable). Exact load rules: [Reference](/reference#inputs).
 
 ```yaml
 inputs:
   target:
-    options: agents # choice; "agents" = your config agent names, or a literal [list]
+    options: agents # builtin → config agent names
+  branch:
+    options: "git branch --format='%(refname:short)'" # shell → stdout lines
   focus:
-    label: focus area # text; label defaults to the input name
-    default: "" # optional → skippable; prefilled in the picker
+    label: focus area
+    default: "" # picker prefill / CLI fallback when --input omitted
 steps:
   - agent: "{input.target}"
-    prompt: "Focus: {input.focus}\n\n{pane}"
+    prompt: "Branch {input.branch}\nFocus: {input.focus}\n\n{pane}"
 ```
 
-`{input.<name>}` works wherever `{prompt}` does (`stdin` / `prompt` / `params`). `agent:` may additionally be exactly `"{input.<name>}"` when the input is a choice whose every option is a config agent — safe because the value set is fixed at load. Undeclared references, declared-but-unused inputs, and `inputs:` on spliced (`run:`) or recovery (`on_fail:`) workflows are load errors.
+| `options:`        | Meaning                                                       |
+| ----------------- | ------------------------------------------------------------- |
+| omitted           | free text                                                     |
+| `[a, b, …]`       | literal choices                                               |
+| `agents`          | builtin — config agent names                                  |
+| `"shell command"` | run in repo cwd; non-empty stdout lines → choices (load time) |
+
+| `agent:` value     | Resolves to                                       |
+| ------------------ | ------------------------------------------------- |
+| `claude`           | that config agent                                 |
+| `"{agent}"`        | invoking pane’s agent label                       |
+| `"{input.target}"` | choice input; every option must be a config agent |
+
+`default` prefills (text) or preselects (choice) in the picker — it does not skip the screen. CLI may omit `--input` only when a default exists (`hwf run … --input target=codex` if `focus` has `default: ""`).
 
 ### Composition
 
 `run: gate` — include steps (no args; cycles = load error).
 
-`on_fail: handoff` — on first observed failure: one notification, then recovery **once**. Only the entry workflow may declare it. Recovery sees original `{pane}`/`{prompt}`/`{selection}`, plus `{last}` and `{error}`.
+`on_fail: continue` — on first observed failure: one notification, then recovery **once**. Only the entry workflow may declare it. Recovery may reference entry `{input.*}` values; it may not declare its own `inputs:`. Recovery sees the original invocation placeholders (`{pane}` / `{prompt}` / `{selection}` / `{session}` / `{agent}` / inputs), plus `{last}` and `{error}`.
 
 ## Patterns
 
@@ -107,12 +122,12 @@ steps:
   - shell: bun run verify
 
 # ship.yaml
-on_fail: handoff
+on_fail: continue
 steps:
   - run: gate
   - shell: git push
 
-# handoff.yaml
+# continue.yaml  (recovery; no inputs:)
 steps:
   - agent: claude
     prompt: |
@@ -121,6 +136,26 @@ steps:
       {pane}
 
       Focus: {prompt}
+
+# handoff.yaml  (seeded by hwf init)
+inputs:
+  target:
+    options: agents
+    label: hand over to
+  focus:
+    default: ""
+steps:
+  - shell: claude -p
+    stdin: |
+      Distil the transcript below into a handoff prompt.
+      Output ONLY the handoff prompt.
+      ---
+      {session}
+  - agent: "{input.target}"
+    prompt: |
+      Focus: {input.focus}
+
+      {last}
 ```
 
 Load errors name file, step, key. Invalid workflows appear greyed in the picker.

@@ -17,7 +17,7 @@ hero:
 ```bash
 herdr plugin install @aorumbayev/herdr-workflows
 cd your-repo && hwf init
-# prefix+k → pick a workflow, or: hwf run handoff --prompt "focus on tests"
+# prefix+k → pick a workflow, or: hwf run handoff --input target=codex
 ```
 
 herdr ≥ 0.7.4 plugin. [Guide](/guide) · [Reference](/reference)

@@ -39,14 +39,65 @@ export function formatAgentsYaml(agents: Record<string, string[]>): string {
 const SEED_WORKFLOWS: { name: string; body: (agent: string) => string }[] = [
   {
     name: "handoff",
-    body: (agent) => `steps:
-  - agent: ${agent}
+    body: () => `inputs:
+  target:
+    options: agents
+    label: hand over to
+  focus:
+    default: ""
+steps:
+  - shell: claude -p
+    stdin: |
+      Below the --- marker is a coding agent session transcript. Distil it into
+      a handoff prompt for a fresh agent session.
+
+      Keep (signal):
+      - architectural decisions with their rationale
+      - working solutions adopted (final approach, not the journey)
+      - configuration choices: versions, settings, flags, env vars
+      - files created/modified with paths and why
+      - constraints discovered: API limits, compatibility issues, platform quirks
+      - productive dead ends, one sentence each: what was tried, why it failed,
+        what it means for remaining work
+      - open questions and unresolved trade-offs
+      - anything the next session would otherwise re-discover
+
+      Drop (noise):
+      - corrections and retries: keep only the final correct version
+      - verbose tool output: summarise builds, tests, diffs
+      - permission prompts and settled back-and-forth
+      - repeated attempts: describe the working one once
+
+      Compression: error-fix cycles reduce to root cause + fix; explorations
+      collapse to their conclusion; long discussions reduce to the decision and
+      key reason.
+
+      Output ONLY the handoff prompt, second-person imperative, in this shape
+      (omit empty sections):
+
+      Continue the work from the previous session. Here is the context you need:
+
+      **Project**: <path>
+      **Branch**: <branch, if known>
+
+      ## Background
+      ## What was done
+      ## Decisions in effect
+      ## Current state
+      ## Open questions
+      ## Your next steps
+      1. <directive>
+
+      Never invent decisions or context not present in the transcript; note
+      unclear items as open questions.
+
+      ---
+      {session}
+  - agent: "{input.target}"
     prompt: |
-      Continue from this pane context:
+      Focus: {input.focus}
 
-      {pane}
-
-      Focus: {prompt}
+      {last}
 `,
   },
   {

@@ -24,7 +24,7 @@ That puts `herdr-workflows` / `hwf` on PATH and binds `prefix+k` to the workflow
 
 ```bash
 cd your-repo && hwf init
-hwf run handoff --prompt "focus on tests"   # or press prefix+k
+hwf run handoff --input target=codex   # or press prefix+k
 ```
 
 ## Docs

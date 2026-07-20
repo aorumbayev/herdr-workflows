@@ -4,6 +4,7 @@ import { runWorkflow } from "../runner";
 import type { WorkflowListEntry } from "../workflows";
 import {
   finish,
+  setConfirmMode,
   setInputMode,
   setListMode,
   setPromptMode,
@@ -13,7 +14,7 @@ import {
 import { formatRunProgress } from "./picker-rows";
 import { truncate } from "./text";
 
-/** Show the next unanswered input, then the legacy {prompt} line, then run. */
+/** Declared inputs first, then {prompt} if used, then run. */
 function advanceInput(state: PickerState, entry: WorkflowListEntry): void {
   const spec = state.inputQueue[state.inputIndex];
   if (spec) return setInputMode(state, entry, spec);
@@ -44,6 +45,10 @@ const FAIL_HINT = "enter/esc close";
 
 export function acceptWorkflow(state: PickerState, entry: WorkflowListEntry): void {
   state.pending = entry;
+  if (entry.source === "repo") {
+    setConfirmMode(state, entry);
+    return;
+  }
   state.inputQueue = entry.inputs ?? [];
   state.inputIndex = 0;
   state.inputValues = {};
@@ -89,27 +94,32 @@ async function startRun(
   state.footer.content = FAIL_HINT;
 }
 
+function navigateSelectList(state: PickerState, key: KeyEvent): boolean {
+  if (key.name === "up") {
+    key.preventDefault();
+    state.list.moveUp();
+    return true;
+  }
+  if (key.name === "down") {
+    key.preventDefault();
+    state.list.moveDown();
+    return true;
+  }
+  if (key.name === "return" || key.name === "linefeed") {
+    key.preventDefault();
+    if (state.list.options.length > 0) state.list.selectCurrent();
+    return true;
+  }
+  return false;
+}
+
 function handleListKey(state: PickerState, key: KeyEvent): void {
   if (key.name === "escape") {
     key.preventDefault();
     finish(state, 0);
     return;
   }
-  if (key.name === "up") {
-    key.preventDefault();
-    state.list.moveUp();
-    return;
-  }
-  if (key.name === "down") {
-    key.preventDefault();
-    state.list.moveDown();
-    return;
-  }
-  if (key.name === "return" || key.name === "linefeed") {
-    key.preventDefault();
-    if (state.list.options.length === 0) return;
-    state.list.selectCurrent();
-  }
+  navigateSelectList(state, key);
 }
 
 function handlePromptKey(state: PickerState, key: KeyEvent): void {
@@ -123,6 +133,26 @@ function handleInputKey(state: PickerState, key: KeyEvent): void {
   if (key.name === "escape") {
     key.preventDefault();
     setListMode(state);
+    return;
+  }
+  if (!state.inputQueue[state.inputIndex]?.options) return;
+  navigateSelectList(state, key);
+}
+
+function handleConfirmKey(state: PickerState, key: KeyEvent): void {
+  if (key.name === "escape") {
+    key.preventDefault();
+    setListMode(state);
+    return;
+  }
+  if (key.name === "return" || key.name === "linefeed") {
+    key.preventDefault();
+    const entry = state.pending;
+    if (!entry) return;
+    state.inputQueue = entry.inputs ?? [];
+    state.inputIndex = 0;
+    state.inputValues = {};
+    advanceInput(state, entry);
   }
 }
 
@@ -135,6 +165,7 @@ function handleRunKey(state: PickerState, key: KeyEvent): void {
 }
 
 export function handlePickerKey(state: PickerState, key: KeyEvent): void {
+  if (state.mode === "confirm") return handleConfirmKey(state, key);
   if (state.mode === "input") return handleInputKey(state, key);
   if (state.mode === "prompt") return handlePromptKey(state, key);
   if (state.mode === "run") return handleRunKey(state, key);

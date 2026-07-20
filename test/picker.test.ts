@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { WorkflowListEntry } from "../src/workflows";
 import {
   buildPickerOptions,
+  filterChoiceOptions,
   filterWorkflowEntries,
   formatInvalidLines,
   formatRunProgress,
@@ -93,6 +94,15 @@ describe("formatRunProgress", () => {
     expect(formatRunProgress("handoff", ["[1/1] shell"], { ok: false, detail: "boom" })).toBe(
       "handoff\n[1/1] shell\n\nFailed · boom",
     );
+  });
+});
+
+describe("filterChoiceOptions", () => {
+  test("substring filter; empty filter keeps all", () => {
+    const options = ["main", "feat/workflow-inputs", "fix/token"];
+    expect(filterChoiceOptions(options, "")).toEqual(options);
+    expect(filterChoiceOptions(options, "feat")).toEqual(["feat/workflow-inputs"]);
+    expect(filterChoiceOptions(options, "zzz")).toEqual([]);
   });
 });
 

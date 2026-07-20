@@ -1,14 +1,65 @@
+import { spawnCapture } from "../runner/shell";
 import { WorkflowLoadError, positioned, type FlatStep, type InputSpec } from "./errors";
 import type { RawWorkflow } from "./parse";
 import { paramsInputRefs, textInputRefs } from "./substitute";
 
 export const AGENT_INPUT_RE = /^\{input\.([a-z][a-z0-9_]{0,31})\}$/;
 
-export function resolveInputs(file: string, raw: RawWorkflow, agents: Set<string>): InputSpec[] {
+const OPTIONS_CMD_TIMEOUT_MS = 5_000;
+const AGENTS_BUILTIN = "agents";
+
+async function resolveOptionLines(
+  file: string,
+  inputName: string,
+  command: string,
+  repoRoot: string,
+): Promise<string[]> {
+  const result = await spawnCapture(["sh", "-c", command], {
+    cwd: repoRoot,
+    timeoutMs: OPTIONS_CMD_TIMEOUT_MS,
+  });
+  if (result.timedOut) {
+    throw new WorkflowLoadError(
+      positioned(
+        file,
+        undefined,
+        `inputs.${inputName}`,
+        `options command timed out after ${OPTIONS_CMD_TIMEOUT_MS / 1000}s`,
+      ),
+    );
+  }
+  if (result.exitCode !== 0) {
+    const detail = result.stderr.trim() || `exit ${result.exitCode}`;
+    throw new WorkflowLoadError(
+      positioned(file, undefined, `inputs.${inputName}`, `options command failed: ${detail}`),
+    );
+  }
+  const lines = result.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  if (lines.length === 0) {
+    throw new WorkflowLoadError(
+      positioned(file, undefined, `inputs.${inputName}`, "options command produced no choices"),
+    );
+  }
+  return lines;
+}
+
+export async function resolveInputs(
+  file: string,
+  raw: RawWorkflow,
+  agents: Set<string>,
+  repoRoot: string,
+): Promise<InputSpec[]> {
   const specs: InputSpec[] = [];
   for (const [name, input] of Object.entries(raw.inputs ?? {})) {
     let options: string[] | undefined;
-    if (input.options === "agents") {
+    if (input.options === undefined) {
+      options = undefined;
+    } else if (Array.isArray(input.options)) {
+      options = input.options;
+    } else if (input.options === AGENTS_BUILTIN) {
       if (agents.size === 0) {
         throw new WorkflowLoadError(
           positioned(file, undefined, `inputs.${name}`, "options: agents but no agents configured"),
@@ -16,7 +67,7 @@ export function resolveInputs(file: string, raw: RawWorkflow, agents: Set<string
       }
       options = [...agents];
     } else {
-      options = input.options;
+      options = await resolveOptionLines(file, name, input.options, repoRoot);
     }
     if (options && input.default !== undefined && !options.includes(input.default)) {
       throw new WorkflowLoadError(
@@ -48,7 +99,6 @@ function checkAgentInput(file: string, idx: number, spec: InputSpec, agents: Set
   }
 }
 
-/** Validate every {input.*} reference against declared inputs; returns the used input names. */
 export function checkInputRefs(
   file: string,
   inputs: Map<string, InputSpec>,

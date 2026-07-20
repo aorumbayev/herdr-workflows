@@ -29,7 +29,7 @@ export async function loadWorkflow(
 
   const steps = await flattenSteps(name, repoRoot, []);
   checkAgents(resolved.file, steps, agents);
-  const inputs = resolveInputs(resolved.file, entry.raw, agents);
+  const inputs = await resolveInputs(resolved.file, entry.raw, agents, repoRoot);
   const declared = new Map(inputs.map((spec) => [spec.name, spec]));
   const used = checkInputRefs(resolved.file, declared, steps, agents);
   let needsPrompt = flatNeedsPrompt(steps);

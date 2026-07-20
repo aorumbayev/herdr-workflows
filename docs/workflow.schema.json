@@ -19,7 +19,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "const": "agents"
+                "minLength": 1
               },
               {
                 "minItems": 1,

@@ -13,7 +13,7 @@
 
 ## Picker
 
-`1`–`9` select · text filters (exact name selects) · `>`/`<` page · `Esc` cancel. Declared `inputs:` ask one screen each (choice list / text line), then the prompt line only if the workflow uses `{prompt}`.
+`1`–`9` select · text filters (exact name selects) · `>`/`<` page · `Esc` cancel. Declared `inputs:` ask one screen each (choice list with the same filter bar, or text line), then the prompt line only if the workflow uses `{prompt}`.
 
 ## Files
 
@@ -23,6 +23,8 @@
 | `~/.hwf/workflows/<name>.yaml`                                    | global (repo shadows)      |
 | `.hwf/config.yaml` / `~/.hwf/config.yaml`                         | agents + optional sessions |
 | `$HERDR_PLUGIN_STATE_DIR/runs.jsonl` or `~/.hwf/state/runs.jsonl` | append-only history        |
+
+Editor schema (optional): `# yaml-language-server: $schema=https://raw.githubusercontent.com/aorumbayev/herdr-workflows/main/docs/workflow.schema.json`
 
 ## Config
 
@@ -35,17 +37,25 @@ sessions:
     # env: HERDR_WORKFLOWS_SESSION_{ID,CWD,AGENT}
 ```
 
+`{session}` resolve order: `sessions:` command → built-in Claude JSONL → error.
+
 ## Inputs
 
 ```yaml
 inputs:
   <name>: # [a-z][a-z0-9_]{0,31}
-    options: agents | [<value>…] # present → choice; "agents" = config agent names
+    options: agents | <shell> | [<value>…] # present → choice
     label: <text> # picker screen title; default = name
-    default: <value> # optional; picker prefill / CLI fallback
+    default: <value> # optional; picker prefill (text) / preselect (choice) / CLI fallback
 ```
 
-`{input.<name>}` in `stdin` / `prompt` / `params`. `agent:` may be exactly `"{input.<name>}"` for a choice whose options are all config agents. Load errors: undeclared reference, declared-but-unused input, `inputs:` on `run:`-spliced or `on_fail:` workflows, `options: agents` with empty config, default outside options. Picker: one screen per input (choice list / text line), declaration order, before the `{prompt}` line. Choice values validated again at run time.
+| `options:`        | Meaning                                                       |
+| ----------------- | ------------------------------------------------------------- |
+| `[a, b, …]`       | literal choices                                               |
+| `agents`          | builtin — config agent names                                  |
+| `"shell command"` | `sh -c` in repo cwd at load; non-empty stdout lines → choices |
+
+`{input.<name>}` in `stdin` / `prompt` / `params`. `agent:` may be exactly `"{input.<name>}"` for a choice whose options are all config agents. Declare `inputs:` only on the entry workflow — spliced (`run:`) and recovery (`on_fail:`) targets may reference entry inputs but must not declare their own. Load errors: undeclared reference, declared-but-unused input, `inputs:` on spliced or recovery workflows, `options: agents` with empty config, options command fail/empty/timeout, default outside options. Picker: one screen per input (never skipped by `default`), declaration order, before the `{prompt}` line. Choice values validated again at run time. Options shell commands are author-controlled (same trust as workflow `shell:` steps).
 
 ## Verbs & modifiers
 
@@ -69,7 +79,8 @@ Placeholders: `{pane}` `{selection}` `{prompt}` `{last}` `{error}` `{session}` `
 
 ## Semantics
 
-- Linear foreground steps. First failure → one notification → optional `on_fail` once.
+- Linear foreground steps. First **step** failure → one notification → optional `on_fail` once. If recovery fails, that error is final (no nested `on_fail`).
+- **Preflight** failures (e.g. `{session}` / `{agent}` required but unavailable) abort before any step — `on_fail` does not run.
 - Run log = observability only (manage **Runs** tab). Optional sidebar: `$herdr-workflows` in herdr config.
 - `run:` flattened + validated at load. Repo shadows global for names.
 - herdr ≥ 0.7.4, POSIX. Keybinding installed into `config.toml` (no manifest field).

@@ -33,7 +33,7 @@ export type PlaceholderValues = {
 export type InputSpec = {
   name: string;
   label: string;
-  /** Present → choice input; absent → free text. Resolved (never the `agents` sentinel). */
+  /** Present → choice input; absent → free text. Resolved lines (never a shell command string). */
   options?: string[];
   default?: string;
 };

@@ -45,3 +45,7 @@ export function formatRunProgress(
   const status = terminal.ok ? "Done." : `Failed · ${terminal.detail}`;
   return `${name}\n${body}\n\n${status}`;
 }
+
+export function filterChoiceOptions(options: string[], filter: string): string[] {
+  return filter ? options.filter((option) => option.includes(filter)) : options;
+}

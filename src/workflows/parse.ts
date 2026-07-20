@@ -23,7 +23,7 @@ const rawStepSchema = z
 const rawInputSchema = z
   .object({
     label: z.string().min(1).optional(),
-    options: z.union([z.literal("agents"), z.array(z.string().min(1)).min(1)]).optional(),
+    options: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]).optional(),
     default: z.string().optional(),
   })
   .strict();

@@ -394,6 +394,46 @@ steps:
     const m = await loadWorkflow("wf", root);
     expect(m.inputs.map((i) => i.name)).toEqual(["focus"]);
   });
+
+  test("options shell command expands stdout lines", async () => {
+    const root = await repoWithWorkflows({
+      wf: `inputs:
+  branch:
+    options: "printf 'main\\nfeat/x\\n'"
+steps:
+  - shell: cat
+    stdin: "{input.branch}"
+`,
+    });
+    const m = await loadWorkflow("wf", root);
+    expect(m.inputs[0]).toEqual({
+      name: "branch",
+      label: "branch",
+      options: ["main", "feat/x"],
+      default: undefined,
+    });
+  });
+
+  test("options shell command failure rejected", async () => {
+    const root = await repoWithWorkflows({
+      wf: `inputs:\n  branch:\n    options: "exit 1"\nsteps:\n  - shell: cat\n    stdin: "{input.branch}"\n`,
+    });
+    await expect(loadWorkflow("wf", root)).rejects.toThrow(/options command failed/);
+  });
+
+  test("options shell command empty stdout rejected", async () => {
+    const root = await repoWithWorkflows({
+      wf: `inputs:\n  branch:\n    options: "true"\nsteps:\n  - shell: cat\n    stdin: "{input.branch}"\n`,
+    });
+    await expect(loadWorkflow("wf", root)).rejects.toThrow(/no choices/);
+  });
+
+  test("dynamic options default outside resolved set rejected", async () => {
+    const root = await repoWithWorkflows({
+      wf: `inputs:\n  branch:\n    options: "printf 'main\\n'"\n    default: other\nsteps:\n  - shell: cat\n    stdin: "{input.branch}"\n`,
+    });
+    await expect(loadWorkflow("wf", root)).rejects.toThrow(/not in options/);
+  });
 });
 
 describe("WorkflowLoadError", () => {
