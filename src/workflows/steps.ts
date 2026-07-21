@@ -9,6 +9,8 @@ import {
   textHasSession,
 } from "./substitute";
 
+const SESSION_STDIN_ONLY = "{session}/{session_file} only allowed in stdin";
+
 function banSessionOutsideStdin(
   file: string,
   stepIndex: number,
@@ -16,16 +18,14 @@ function banSessionOutsideStdin(
   text: string | undefined,
 ): void {
   if (!text || !textHasSession(text)) return;
-  throw new WorkflowLoadError(positioned(file, stepIndex, key, "{session} only allowed in stdin"));
+  throw new WorkflowLoadError(positioned(file, stepIndex, key, SESSION_STDIN_ONLY));
 }
 
 function banPlaceholder(file: string, stepIndex: number, command: string): void {
   const ph = commandHasPlaceholder(command);
   if (!ph) return;
-  if (ph === "session") {
-    throw new WorkflowLoadError(
-      positioned(file, stepIndex, undefined, "{session} only allowed in stdin"),
-    );
+  if (ph === "session" || ph === "session_file") {
+    throw new WorkflowLoadError(positioned(file, stepIndex, undefined, SESSION_STDIN_ONLY));
   }
   throw new WorkflowLoadError(
     positioned(
@@ -69,9 +69,7 @@ export function rawToFlat(file: string, stepIndex: number, step: RawStep): FlatS
   }
   if (step.herdr !== undefined) {
     if (paramsHaveSession(step.params)) {
-      throw new WorkflowLoadError(
-        positioned(file, stepIndex, "params", "{session} only allowed in stdin"),
-      );
+      throw new WorkflowLoadError(positioned(file, stepIndex, "params", SESSION_STDIN_ONLY));
     }
     return { verb: "herdr", method: step.herdr, params: step.params };
   }

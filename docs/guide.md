@@ -61,6 +61,7 @@ One verb per step. Modifiers only on the right verb. Placeholders **only** in `s
 | `{last}`         | last `shell` stdout (or agent pane text after `wait: done`)         |
 | `{error}`        | failing step + tail; only inside `on_fail` recovery                 |
 | `{session}`      | agent transcript; **`stdin` only**                                  |
+| `{session_file}` | path to transcript temp file (deleted after run); **`stdin` only**  |
 | `{tab}`          | latest tab opened this run via `agent` / `open`                     |
 | `{prev_tab}`     | previous opened tab this run                                        |
 | `{agent}`        | invoking pane’s agent label (must match `agents:` key)              |

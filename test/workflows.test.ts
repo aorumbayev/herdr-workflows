@@ -174,6 +174,7 @@ describe("substitution safety", () => {
         last: "",
         error: "",
         session: "",
+        session_file: "",
         tab: "",
         prev_tab: "",
         agent: "",
@@ -191,6 +192,7 @@ describe("substitution safety", () => {
         last: "",
         error: "",
         session: "",
+        session_file: "",
         tab: "t2",
         prev_tab: "t1",
         agent: "codex",
@@ -204,7 +206,7 @@ describe("substitution safety", () => {
       bad: `steps:\n  - agent: claude\n    prompt: "{session}"\n`,
     });
     await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(
-      /\{session\} only allowed in stdin/,
+      /\{session\}\/\{session_file\} only allowed in stdin/,
     );
   });
 
@@ -215,6 +217,23 @@ describe("substitution safety", () => {
     const m = await loadWorkflow("ok", root);
     expect(m.needsSession).toBe(true);
     expect(m.steps).toEqual([{ verb: "shell", command: "cat", stdin: "{session}" }]);
+  });
+
+  test("{session_file} in prompt is load error", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - agent: claude\n    prompt: "{session_file}"\n`,
+    });
+    await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(
+      /\{session\}\/\{session_file\} only allowed in stdin/,
+    );
+  });
+
+  test("{session_file} in stdin ok; needsSession true", async () => {
+    const root = await repoWithWorkflows({
+      ok: `steps:\n  - shell: cat\n    stdin: "{session_file}"\n`,
+    });
+    const m = await loadWorkflow("ok", root);
+    expect(m.needsSession).toBe(true);
   });
 
   test("workflow without {session} has needsSession false", async () => {
@@ -299,6 +318,7 @@ describe("inputs", () => {
     last: "",
     error: "",
     session: "",
+    session_file: "",
     tab: "",
     prev_tab: "",
     agent: "",
@@ -353,7 +373,9 @@ steps:
       items: ["{session}"]
 `,
     });
-    await expect(loadWorkflow("bad", root)).rejects.toThrow(/\{session\} only allowed in stdin/);
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(
+      /\{session\}\/\{session_file\} only allowed in stdin/,
+    );
   });
 
   test("choice and text inputs resolve; agents sentinel expands", async () => {

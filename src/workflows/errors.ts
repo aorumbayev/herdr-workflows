@@ -24,6 +24,7 @@ export type PlaceholderValues = {
   last: string;
   error: string;
   session: string;
+  session_file: string;
   tab: string;
   prev_tab: string;
   agent: string;

@@ -751,6 +751,26 @@ steps:
     if (result.ok) expect(result.last).toBe("user:\nhello session");
   });
 
+  test("{session_file} yields a temp path readable during the run, removed after", async () => {
+    const transcript = "user:\nHERDR_EOF\n'quote\" $(reject) `tick`\nlast line";
+    const root = await repoWith({
+      m: `steps:\n  - shell: sh -s\n    stdin: |\n      P='{session_file}'\n      printf %s "$P" > path.txt\n      cat "$P"\n`,
+    });
+    const { deps } = mockDeps({ sessionText: async () => transcript });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root, paneId: "pane-42" },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.last).toBe(transcript);
+    const path = await Bun.file(`${root}/path.txt`).text();
+    expect(path).toMatch(/hwf-session-/);
+    expect(await Bun.file(path).exists()).toBe(false);
+  });
+
   test("runWorkflow passes opts.sessions to sessionText", async () => {
     const root = await repoWith({
       m: `steps:\n  - shell: cat\n    stdin: "{session}"\n`,

@@ -3,7 +3,7 @@ import type { PlaceholderValues } from "./errors";
 export const INPUT_NAME_RE = /^[a-z][a-z0-9_]{0,31}$/;
 
 const RE =
-  /\{(pane|selection|prompt|last|error|session|tab|prev_tab|agent)\}|\{input\.([a-z][a-z0-9_]{0,31})\}/g;
+  /\{(pane|selection|prompt|last|error|session|session_file|tab|prev_tab|agent)\}|\{input\.([a-z][a-z0-9_]{0,31})\}/g;
 
 export function substitute(template: string, values: PlaceholderValues): string {
   return template.replace(RE, (_, name: string | undefined, input?: string) =>
@@ -44,7 +44,7 @@ export function textHasPrompt(text: string): boolean {
 }
 
 export function textHasSession(text: string): boolean {
-  return text.includes("{session}");
+  return text.includes("{session}") || text.includes("{session_file}");
 }
 
 export function textInputRefs(text: string): string[] {

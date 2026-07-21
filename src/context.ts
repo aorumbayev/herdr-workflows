@@ -56,6 +56,7 @@ export async function buildPlaceholders(opts: {
   last?: string;
   error?: string;
   session?: string;
+  sessionFile?: string;
   agent?: string;
   inputs?: Record<string, string>;
 }): Promise<PlaceholderValues> {
@@ -74,6 +75,7 @@ export async function buildPlaceholders(opts: {
     last: opts.last ?? "",
     error: opts.error ?? "",
     session: opts.session ?? "",
+    session_file: opts.sessionFile ?? "",
     tab: "",
     prev_tab: "",
     agent: opts.agent ?? "",

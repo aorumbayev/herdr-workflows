@@ -77,7 +77,7 @@ inputs:
 | `inputs`   | top-level          | declared user inputs; picker screens / `--input`  |
 | `on_fail`  | top-level          | one-shot recovery workflow name                   |
 
-Placeholders: `{pane}` `{selection}` `{prompt}` `{last}` `{error}` `{session}` `{tab}` `{prev_tab}` `{agent}` `{input.<name>}`. Only in `stdin`/`prompt`/`params` (and `agent: "{agent}"` / `agent: "{input.<name>}"`). `{session}` → `stdin` only.
+Placeholders: `{pane}` `{selection}` `{prompt}` `{last}` `{error}` `{session}` `{session_file}` `{tab}` `{prev_tab}` `{agent}` `{input.<name>}`. Only in `stdin`/`prompt`/`params` (and `agent: "{agent}"` / `agent: "{input.<name>}"`). `{session}` / `{session_file}` → `stdin` only. `{session_file}` is a temp-file path holding the transcript — use it when `stdin` is a shell script (splicing `{session}` text into a script can break its quoting/heredocs); the file is deleted when the run ends, so copy it during the step if a background job needs it.
 
 ## Semantics
 

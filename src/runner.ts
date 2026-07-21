@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AgentsConfig, SessionsConfig } from "./config";
 import { buildPlaceholders, type InvocationContext } from "./context";
 import { loadWorkflow, type LoadedWorkflow } from "./workflows";
@@ -55,6 +58,7 @@ export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
     return { ok: false, error, last: "" };
   };
 
+  let sessionFile = "";
   try {
     const inputs = resolveInputValues(workflow.inputs, opts.inputs);
     if (!inputs.ok) return await failPrecondition(inputs.error);
@@ -62,12 +66,20 @@ export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
     const pre = await resolvePreflight(workflow, opts.ctx, opts.agents, opts.sessions ?? {}, deps);
     if (!pre.ok) return await failPrecondition(pre.error);
 
+    // {session_file}: transcript spliced as text into a shell script can break its
+    // quoting/heredocs, so offer it as a file path instead. Valid for the run only.
+    if (pre.session) {
+      sessionFile = join(tmpdir(), `hwf-session-${runId}.txt`);
+      await Bun.write(sessionFile, pre.session);
+    }
+
     const base = await buildPlaceholders({
       ctx: opts.ctx,
       prompt: opts.prompt,
       last: "",
       error: "",
       session: pre.session,
+      sessionFile,
       agent: pre.agent,
       inputs: inputs.values,
     });
@@ -94,6 +106,7 @@ export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
     });
     return result;
   } finally {
+    if (sessionFile) await rm(sessionFile, { force: true }).catch(() => undefined);
     if (opts.ctx.paneId) {
       void deps.reportToken(opts.ctx.paneId, null).catch(() => undefined);
     }
