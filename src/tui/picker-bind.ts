@@ -11,13 +11,8 @@ import {
   TextRenderable,
   type CliRenderer,
 } from "@opentui/core";
-import {
-  acceptWorkflow,
-  handlePickerKey,
-  submitInputChoice,
-  submitInputText,
-  submitPrompt,
-} from "./picker-actions";
+import { handlePickerKey } from "./picker-actions";
+import { acceptWorkflow, submitInputChoice, submitInputText, submitPrompt } from "./picker-run";
 import { applyChoiceFilter, applyFilter, LIST_HINT, type PickerState } from "./picker-modes";
 import type { PickerRowValue } from "./picker-rows";
 import { SelectList } from "./select-list";
@@ -43,6 +38,8 @@ export function mountPickerUi(
   | "agents"
   | "sessions"
   | "ctx"
+  | "workflow"
+  | "loadWorkflow"
 > {
   renderer.root.add(
     Box(

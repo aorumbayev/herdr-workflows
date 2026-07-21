@@ -51,6 +51,7 @@ export async function resolveInputs(
   raw: RawWorkflow,
   agents: Set<string>,
   repoRoot: string,
+  resolveDynamic = true,
 ): Promise<InputSpec[]> {
   const specs: InputSpec[] = [];
   for (const [name, input] of Object.entries(raw.inputs ?? {})) {
@@ -66,7 +67,7 @@ export async function resolveInputs(
         );
       }
       options = [...agents];
-    } else {
+    } else if (resolveDynamic) {
       options = await resolveOptionLines(file, name, input.options, repoRoot);
     }
     if (options && input.default !== undefined && !options.includes(input.default)) {
@@ -74,12 +75,21 @@ export async function resolveInputs(
         positioned(file, undefined, `inputs.${name}`, `default '${input.default}' not in options`),
       );
     }
-    specs.push({ name, label: input.label ?? name, options, default: input.default });
+    const dynamicOptions =
+      typeof input.options === "string" && input.options !== AGENTS_BUILTIN && !resolveDynamic;
+    specs.push({
+      name,
+      label: input.label ?? name,
+      options,
+      ...(dynamicOptions ? { dynamicOptions: true } : {}),
+      default: input.default,
+    });
   }
   return specs;
 }
 
 function checkAgentInput(file: string, idx: number, spec: InputSpec, agents: Set<string>): void {
+  if (spec.dynamicOptions) return;
   if (!spec.options) {
     throw new WorkflowLoadError(
       positioned(file, idx + 1, "agent", `input '${spec.name}' needs options: to be used as agent`),

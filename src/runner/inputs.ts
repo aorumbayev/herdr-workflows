@@ -13,9 +13,9 @@ export function resolveInputValues(
   for (const name of Object.keys(provided)) {
     if (!declared.has(name)) return { ok: false, error: `unknown input '${name}'` };
   }
-  const values: Record<string, string> = {};
+  const values: Record<string, string> = Object.create(null) as Record<string, string>;
   for (const spec of specs) {
-    const value = provided[spec.name] ?? spec.default;
+    const value = Object.hasOwn(provided, spec.name) ? provided[spec.name] : spec.default;
     if (value === undefined) {
       return { ok: false, error: `missing input '${spec.name}' (--input ${spec.name}=…)` };
     }

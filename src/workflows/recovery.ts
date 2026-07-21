@@ -32,6 +32,7 @@ export async function loadRecovery(
   onFail: string,
   repoRoot: string,
   agents: Set<string>,
+  sources?: Set<"repo" | "global">,
 ): Promise<FlatStep[]> {
   const resolved = await resolveWorkflowFile(onFail, repoRoot);
   if (!resolved) {
@@ -40,6 +41,7 @@ export async function loadRecovery(
     );
   }
   const parsed = await parseFile(resolved.file);
+  sources?.add(resolved.source);
   if (parsed.raw.on_fail !== undefined) {
     throw new WorkflowLoadError(
       positioned(entryFile, undefined, "on_fail", `recovery target '${onFail}' declares on_fail`),
@@ -58,7 +60,7 @@ export async function loadRecovery(
   for (const step of parsed.raw.steps) {
     if (step.run !== undefined) await assertNoOnFail(step.run, repoRoot, resolved.file, 0);
   }
-  const steps = await flattenSteps(onFail, repoRoot, []);
+  const steps = await flattenSteps(onFail, repoRoot, [], sources);
   checkAgents(entryFile, steps, agents);
   return steps;
 }

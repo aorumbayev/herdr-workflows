@@ -42,13 +42,24 @@ describe("herdr-workflows init", () => {
     expect(formatAgentsYaml({ claude: ["claude", "{prompt}"] })).toContain('"{prompt}"');
   });
 
-  test("seeded workflows pass the workflow loader and never overwrite", async () => {
+  test("seeded workflows use each configured agent and never overwrite", async () => {
     const root = await mkdtemp(join(tmpdir(), "herdr-workflows-init-"));
     dirs.push(root);
     const dir = join(root, ".hwf", "workflows");
     await mkdir(dir, { recursive: true });
+    for (const agent of ["claude", "codex", "aider", "cursor"]) {
+      const written = await seedWorkflows(dir, agent);
+      expect(written.sort()).toEqual(["handoff", "review"]);
+      const handoff = await readFile(join(dir, "handoff.yaml"), "utf8");
+      expect(handoff).toContain(`- agent: ${JSON.stringify(agent)}`);
+      expect(handoff).toContain("wait: done");
+      expect(handoff).not.toContain("shell: claude -p");
+      const workflow = await loadWorkflow("handoff", root, [agent]);
+      expect(workflow.needsSession).toBe(false);
+      await rm(join(dir, "handoff.yaml"));
+      await rm(join(dir, "review.yaml"));
+    }
     const written = await seedWorkflows(dir, "claude");
-    expect(written.sort()).toEqual(["handoff", "review"]);
     for (const name of written) {
       const workflow = await loadWorkflow(name, root, ["claude"]);
       expect(workflow.steps.length).toBeGreaterThan(0);

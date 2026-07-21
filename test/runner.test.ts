@@ -6,6 +6,7 @@ import { HerdrError } from "../src/adapter/client";
 import { appendRunLog, runLogPath, type RunLogEntry } from "../src/runlog";
 import type { RunnerDeps } from "../src/runner";
 import { runWorkflow, runShellStep, SHELL_TIMEOUT_MS } from "../src/runner";
+import { resolveInputValues } from "../src/runner/inputs";
 import {
   AGENT_WAIT_IDLE_GRACE_MS,
   AGENT_WAIT_POLL_MS,
@@ -97,6 +98,20 @@ describe("waitAgentDone", () => {
 });
 
 describe("runner", () => {
+  test("required constructor input does not inherit a provided value", () => {
+    const result = resolveInputValues([{ name: "constructor", label: "constructor" }], {});
+    expect(result).toEqual({
+      ok: false,
+      error: "missing input 'constructor' (--input constructor=…)",
+    });
+
+    const resolved = resolveInputValues([{ name: "constructor", label: "constructor" }], {
+      constructor: "value",
+    });
+    expect(resolved.ok).toBe(true);
+    if (resolved.ok) expect(Object.getPrototypeOf(resolved.values)).toBeNull();
+  });
+
   test("inputs substitute into stdin and choice input resolves agent", async () => {
     const root = await repoWith({
       m: `inputs:

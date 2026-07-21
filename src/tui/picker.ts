@@ -1,7 +1,7 @@
 import { createCliRenderer } from "@opentui/core";
 import type { AgentsConfig, SessionsConfig } from "../config";
 import type { InvocationContext } from "../context";
-import type { WorkflowListEntry } from "../workflows";
+import { loadWorkflowEntry, type WorkflowListEntry } from "../workflows";
 import { stdinLeakHandlers } from "./picker-actions";
 import { bindPickerEvents, mountPickerUi } from "./picker-bind";
 import { setListMode, type PickerState } from "./picker-modes";
@@ -39,6 +39,7 @@ export async function runPickerSession(opts: PickerSessionOpts): Promise<number>
     agents: opts.agents,
     sessions: opts.sessions,
     ctx: opts.ctx,
+    loadWorkflow: loadWorkflowEntry,
     ...ui,
   };
 

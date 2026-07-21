@@ -17,14 +17,14 @@ herdr-workflows is a [herdr](https://herdr.dev) plugin that runs short YAML work
 You need [herdr](https://herdr.dev) **0.7.4** or newer.
 
 ```bash
-herdr plugin install @aorumbayev/herdr-workflows
+herdr plugin install aorumbayev/herdr-workflows
 ```
 
 That puts `herdr-workflows` / `hwf` on PATH and binds `prefix+k` to the workflow picker.
 
 ```bash
 cd your-repo && hwf init
-hwf run handoff --input target=codex   # or press prefix+k
+# press prefix+k, choose handoff, then choose configured target agent
 ```
 
 ## Docs

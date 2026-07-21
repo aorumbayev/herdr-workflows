@@ -6,6 +6,7 @@ import {
   loadWorkflow,
   WorkflowLoadError,
   substitute,
+  substituteParams,
   type FlatStep,
   type LoadedWorkflow,
   type WorkflowListEntry,
@@ -307,6 +308,52 @@ describe("inputs", () => {
   test("{input.x} substitutes from inputs map", () => {
     expect(substitute("to {input.target}!", values({ target: "codex" }))).toBe("to codex!");
     expect(substitute("{input.missing}", values({}))).toBe("");
+  });
+
+  test("params substitution descends through arrays and preserves non-strings", () => {
+    expect(
+      substituteParams(
+        { items: ["{input.target}", { prompt: "{prompt}", count: 3 }, false, null] },
+        { ...values({ target: "codex" }), prompt: "ship it" },
+      ),
+    ).toEqual({ items: ["codex", { prompt: "ship it", count: 3 }, false, null] });
+  });
+
+  test("params substitution preserves __proto__ as data", () => {
+    const params = Bun.YAML.parse("payload:\n  __proto__:\n    preserved: yes\n") as Record<
+      string,
+      unknown
+    >;
+    const output = substituteParams(params, values({}))!;
+    const payload = output.payload as Record<string, unknown>;
+    expect(Object.hasOwn(payload, "__proto__")).toBe(true);
+    expect(payload.__proto__).toEqual({ preserved: "yes" });
+  });
+
+  test("input refs and prompt in params arrays are discovered", async () => {
+    const root = await repoWithWorkflows({
+      wf: `inputs:
+  target: {}
+steps:
+  - herdr: pane.send
+    params:
+      items: ["{input.target}", { prompt: "{prompt}" }]
+`,
+    });
+    const m = await loadWorkflow("wf", root);
+    expect(m.inputs.map((input) => input.name)).toEqual(["target"]);
+    expect(m.needsPrompt).toBe(true);
+  });
+
+  test("{session} in params arrays is load error", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:
+  - herdr: pane.send
+    params:
+      items: ["{session}"]
+`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/\{session\} only allowed in stdin/);
   });
 
   test("choice and text inputs resolve; agents sentinel expands", async () => {

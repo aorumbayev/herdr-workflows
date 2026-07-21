@@ -13,19 +13,23 @@ export function substitute(template: string, values: PlaceholderValues): string 
   );
 }
 
+function walkParams(value: unknown, mapText: (text: string) => string): unknown {
+  if (typeof value === "string") return mapText(value);
+  if (Array.isArray(value)) return value.map((item) => walkParams(item, mapText));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, walkParams(item, mapText)]),
+    );
+  }
+  return value;
+}
+
 export function substituteParams(
   params: Record<string, unknown> | undefined,
   values: PlaceholderValues,
 ): Record<string, unknown> | undefined {
   if (!params) return undefined;
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(params)) {
-    if (typeof value === "string") out[key] = substitute(value, values);
-    else if (value && typeof value === "object" && !Array.isArray(value))
-      out[key] = substituteParams(value as Record<string, unknown>, values);
-    else out[key] = value;
-  }
-  return out;
+  return walkParams(params, (text) => substitute(text, values)) as Record<string, unknown>;
 }
 
 export function commandHasPlaceholder(command: string): string | undefined {
@@ -55,32 +59,29 @@ export function textInputRefs(text: string): string[] {
 export function paramsInputRefs(params: Record<string, unknown> | undefined): string[] {
   if (!params) return [];
   const refs: string[] = [];
-  for (const value of Object.values(params)) {
-    if (typeof value === "string") refs.push(...textInputRefs(value));
-    else if (value && typeof value === "object" && !Array.isArray(value))
-      refs.push(...paramsInputRefs(value as Record<string, unknown>));
-  }
+  walkParams(params, (text) => {
+    refs.push(...textInputRefs(text));
+    return text;
+  });
   return refs;
 }
 
 export function paramsHavePrompt(params: Record<string, unknown> | undefined): boolean {
   if (!params) return false;
-  for (const value of Object.values(params)) {
-    if (typeof value === "string" && textHasPrompt(value)) return true;
-    if (value && typeof value === "object" && !Array.isArray(value)) {
-      if (paramsHavePrompt(value as Record<string, unknown>)) return true;
-    }
-  }
-  return false;
+  let found = false;
+  walkParams(params, (text) => {
+    found ||= textHasPrompt(text);
+    return text;
+  });
+  return found;
 }
 
 export function paramsHaveSession(params: Record<string, unknown> | undefined): boolean {
   if (!params) return false;
-  for (const value of Object.values(params)) {
-    if (typeof value === "string" && textHasSession(value)) return true;
-    if (value && typeof value === "object" && !Array.isArray(value)) {
-      if (paramsHaveSession(value as Record<string, unknown>)) return true;
-    }
-  }
-  return false;
+  let found = false;
+  walkParams(params, (text) => {
+    found ||= textHasSession(text);
+    return text;
+  });
+  return found;
 }

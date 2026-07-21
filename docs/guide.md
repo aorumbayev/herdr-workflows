@@ -5,7 +5,7 @@ herdr ≥ 0.7.4. Plugin sequences short YAML workflows; herdr owns panes/tabs/ag
 ## Install & first run
 
 ```bash
-herdr plugin install @aorumbayev/herdr-workflows
+herdr plugin install aorumbayev/herdr-workflows
 cd your-repo && hwf init          # .hwf/config.yaml + seeded workflows
 ```
 
@@ -105,7 +105,7 @@ steps:
 | `"{agent}"`        | invoking pane’s agent label                       |
 | `"{input.target}"` | choice input; every option must be a config agent |
 
-`default` prefills (text) or preselects (choice) in the picker — it does not skip the screen. CLI may omit `--input` only when a default exists (`hwf run … --input target=codex` if `focus` has `default: ""`).
+`default` prefills (text) or preselects (choice) in the picker — it does not skip the screen. CLI may omit `--input` only when a default exists (`hwf run … --input target=<configured-agent>` if `focus` has `default: ""`).
 
 ### Composition
 
@@ -145,12 +145,16 @@ inputs:
   focus:
     default: ""
 steps:
-  - shell: claude -p
-    stdin: |
+  - shell: cat
+    stdin: "{pane}"
+  - agent: claude # hwf init uses its first detected configured agent
+    prompt: |
       Distil the transcript below into a handoff prompt.
       Output ONLY the handoff prompt.
       ---
-      {session}
+      {last}
+    wait: done
+    timeout: 900
   - agent: "{input.target}"
     prompt: |
       Focus: {input.focus}

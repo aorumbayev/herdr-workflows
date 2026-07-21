@@ -1,7 +1,7 @@
 import type { CliRenderer, InputRenderable, SelectRenderable, TextRenderable } from "@opentui/core";
 import type { AgentsConfig, SessionsConfig } from "../config";
 import type { InvocationContext } from "../context";
-import type { InputSpec, WorkflowListEntry } from "../workflows";
+import type { InputSpec, LoadedWorkflow, WorkflowListEntry } from "../workflows";
 import {
   buildPickerOptions,
   filterChoiceOptions,
@@ -25,6 +25,12 @@ export type PickerState = {
   agents: AgentsConfig;
   sessions: SessionsConfig;
   ctx: InvocationContext;
+  loadWorkflow: (
+    entry: WorkflowListEntry,
+    repoRoot: string,
+    agents: Iterable<string>,
+  ) => Promise<LoadedWorkflow>;
+  workflow?: LoadedWorkflow;
   renderer: CliRenderer;
   filter: InputRenderable;
   list: SelectRenderable;
@@ -68,6 +74,7 @@ export function applyChoiceFilter(state: PickerState): void {
 export function setListMode(state: PickerState): void {
   state.mode = "list";
   state.pending = undefined;
+  state.workflow = undefined;
   state.inputQueue = [];
   state.inputIndex = 0;
   state.inputValues = {};
@@ -110,7 +117,7 @@ export function setConfirmMode(state: PickerState, entry: WorkflowListEntry): vo
   hideBrowserChrome(state);
   state.status.visible = true;
   state.status.flexGrow = 0;
-  state.status.content = `${entry.name} · repo workflow — may run shell commands`;
+  state.status.content = `${entry.name} · workflow may run shell commands`;
   state.footer.content = "enter run · esc cancel";
 }
 

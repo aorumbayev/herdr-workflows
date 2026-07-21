@@ -57,6 +57,8 @@ inputs:
 
 `{input.<name>}` in `stdin` / `prompt` / `params`. `agent:` may be exactly `"{input.<name>}"` for a choice whose options are all config agents. Declare `inputs:` only on the entry workflow — spliced (`run:`) and recovery (`on_fail:`) targets may reference entry inputs but must not declare their own. Load errors: undeclared reference, declared-but-unused input, `inputs:` on spliced or recovery workflows, `options: agents` with empty config, options command fail/empty/timeout, default outside options. Picker: one screen per input (never skipped by `default`), declaration order, before the `{prompt}` line. Choice values validated again at run time. Options shell commands are author-controlled (same trust as workflow `shell:` steps).
 
+`stdin` substitution is literal text replacement, not shell escaping. Never use `{input.*}` to construct shell source, such as quoted assignments, commands, or heredocs. Use only fixed author-controlled shell programs; input-driven shell commands require an argv/env data-passing interface, which workflows do not provide.
+
 ## Verbs & modifiers
 
 | Key        | Where              | Role                                              |

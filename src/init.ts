@@ -39,15 +39,17 @@ export function formatAgentsYaml(agents: Record<string, string[]>): string {
 const SEED_WORKFLOWS: { name: string; body: (agent: string) => string }[] = [
   {
     name: "handoff",
-    body: () => `inputs:
+    body: (agent) => `inputs:
   target:
     options: agents
     label: hand over to
   focus:
     default: ""
 steps:
-  - shell: claude -p
-    stdin: |
+  - shell: cat
+    stdin: "{pane}"
+  - agent: ${JSON.stringify(agent)}
+    prompt: |
       Below the --- marker is a coding agent session transcript. Distil it into
       a handoff prompt for a fresh agent session.
 
@@ -92,7 +94,9 @@ steps:
       unclear items as open questions.
 
       ---
-      {session}
+      {last}
+    wait: done
+    timeout: 900
   - agent: "{input.target}"
     prompt: |
       Focus: {input.focus}
@@ -104,7 +108,7 @@ steps:
     name: "review",
     body: (agent) => `steps:
   - shell: git diff HEAD
-  - agent: ${agent}
+  - agent: ${JSON.stringify(agent)}
     prompt: |
       Review this diff. List blocking issues only.
 

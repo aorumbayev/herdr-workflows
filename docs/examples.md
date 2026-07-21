@@ -4,9 +4,9 @@ Copy into `.hwf/workflows/<name>.yaml`. Agent names come from `.hwf/config.yaml`
 
 Use `{session}` for the agent transcript; `{pane}` when scrollback is enough; `{prompt}` for one focus line; `inputs:` when the user must pick named values (e.g. target agent).
 
-## Handoff (`{session}` + inputs)
+## Handoff (`{pane}` + inputs)
 
-Summarize the invoking agent’s transcript, then open a chosen agent with that handoff. Requires `sessions:` (or herdr’s built-in session ref). Seeded by `hwf init` as `handoff`.
+Summarize the invoking pane, then open a chosen agent with that handoff. Seeded `handoff` uses first detected configured agent for summary.
 
 ```yaml
 # .hwf/workflows/handoff.yaml
@@ -17,12 +17,16 @@ inputs:
   focus:
     default: ""
 steps:
-  - shell: claude -p
-    stdin: |
+  - shell: cat
+    stdin: "{pane}"
+  - agent: claude # hwf init uses its first detected configured agent
+    prompt: |
       Distil the transcript below into a handoff prompt.
       Output ONLY the handoff prompt.
       ---
-      {session}
+      {last}
+    wait: done
+    timeout: 900
   - agent: "{input.target}"
     prompt: |
       Focus: {input.focus}
@@ -30,34 +34,16 @@ steps:
       {last}
 ```
 
-`prefix+k` → `handoff` → pick target → focus line (prefilled empty). CLI: `hwf run handoff --input target=codex`.
+`prefix+k` → `handoff` → pick target → focus line (prefilled empty). CLI: `hwf run handoff --input target=<configured-agent>`.
 
-## Worktree space (`options` shell + herdr)
+## Worktree space
 
-Name a space, pick a **base** branch, create a **new** branch/worktree from that base (avoids “branch already checked out”), rename the root pane to `scratchpad`.
+Create named worktrees with herdr directly:
 
-```yaml
-# ~/.hwf/workflows/worktree.yaml
-inputs:
-  name:
-    label: space name
-  branch:
-    label: base branch
-    options: "git branch --format='%(refname:short)'"
-steps:
-  - shell: sh -s
-    stdin: |
-      set -eu
-      NAME='{input.name}'
-      BASE='{input.branch}'
-      SLUG=$(printf '%s' "$NAME" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9._-' '-' | sed 's/^-//;s/-$//')
-      if [ -z "$SLUG" ]; then
-        echo "space name produced empty branch slug" >&2
-        exit 1
-      fi
-      OUT=$(herdr worktree create --branch "$SLUG" --base "$BASE" --label "$NAME" --json --focus)
-      PANE=$(printf '%s\n' "$OUT" | bun -e 'const j=JSON.parse(await Bun.stdin.text()); const r=j.result||j; const id=r.root_pane?.pane_id; if(!id){console.error(JSON.stringify(j)); process.exit(1)}; console.log(id)')
-      herdr pane rename "$PANE" scratchpad
+```bash
+herdr worktree create --branch my-space --base main --label "my space" --focus
 ```
 
-Quote shell metacharacters in `options:` commands (`%(…)` needs quotes — otherwise `sh -c` treats `(…)` as a subshell).
+Do not interpolate `{input.*}` into shell programs, including quoted assignments or heredocs. Workflow substitution is literal text replacement, not shell escaping; untrusted input can change program syntax. Use only fixed, author-controlled `shell:` commands. Input-driven shell automation needs an argv/env data-passing interface, which this workflow format does not provide.
+
+Quote shell metacharacters in `options:` commands (`%(…)` needs quotes — otherwise `sh -c` treats `(…)` as a subshell). Options commands are workflow-author controlled and must not include user input.

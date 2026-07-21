@@ -35,6 +35,8 @@ export type InputSpec = {
   label: string;
   /** Present → choice input; absent → free text. Resolved lines (never a shell command string). */
   options?: string[];
+  /** Dynamic choices exist but were intentionally not executed during listing. */
+  dynamicOptions?: boolean;
   default?: string;
 };
 
@@ -50,6 +52,8 @@ export type LoadedWorkflow = {
   steps: FlatStep[];
   inputs: InputSpec[];
   onFail?: string;
+  recovery?: { name: string; steps: FlatStep[] };
+  repoOwned: boolean;
   needsPrompt: boolean;
   needsSession: boolean;
   needsInvokingAgent: boolean;
@@ -62,4 +66,6 @@ export type WorkflowListEntry = {
   error?: string;
   needsPrompt?: boolean;
   inputs?: InputSpec[];
+  repoOwned?: boolean;
+  dynamicOptions?: boolean;
 };

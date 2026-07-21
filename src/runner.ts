@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AgentsConfig, SessionsConfig } from "./config";
 import { buildPlaceholders, type InvocationContext } from "./context";
-import { loadWorkflow } from "./workflows";
+import { loadWorkflow, type LoadedWorkflow } from "./workflows";
 import { appendRunLog } from "./runlog";
 import { defaultDeps, runSteps, type RunnerDeps, type StepResult } from "./runner/dispatch";
 import { fail } from "./runner/fire";
@@ -20,6 +20,7 @@ export type RunOptions = {
   ctx: InvocationContext;
   prompt?: string;
   inputs?: Record<string, string>;
+  workflow?: LoadedWorkflow;
   deps?: Partial<RunnerDeps>;
   onProgress?: (step: number, total: number, label: string) => void;
   onStderr?: (text: string) => void;
@@ -30,7 +31,8 @@ export type RunResult = StepResult;
 export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
   const deps = { ...defaultDeps(), ...opts.deps };
   const runId = randomUUID().slice(0, 8);
-  const workflow = await loadWorkflow(opts.name, opts.repoRoot, Object.keys(opts.agents));
+  const workflow =
+    opts.workflow ?? (await loadWorkflow(opts.name, opts.repoRoot, Object.keys(opts.agents)));
   const stepOpts = {
     name: workflow.name,
     agents: opts.agents,
@@ -74,11 +76,14 @@ export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
       ? { ok: false, error: await fail(deps, workflow.name, 0, pre.sessionFailure), last: "" }
       : await runSteps(workflow.steps, stepOpts, base);
     let result = primary;
-    if (!primary.ok && workflow.onFail) {
-      const recovery = await loadWorkflow(workflow.onFail, opts.repoRoot, Object.keys(opts.agents));
+    if (!primary.ok && workflow.recovery) {
       // Same invocation snapshot into recovery — re-reading {pane} here would capture post-failure scrollback.
       const recoveryValues = { ...base, last: primary.last, error: primary.error };
-      result = await runSteps(recovery.steps, { ...stepOpts, name: recovery.name }, recoveryValues);
+      result = await runSteps(
+        workflow.recovery.steps,
+        { ...stepOpts, name: workflow.recovery.name },
+        recoveryValues,
+      );
     }
     await appendRunLog({
       ts: new Date().toISOString(),
