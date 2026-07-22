@@ -134,6 +134,9 @@ export function checkInputRefs(
   steps.forEach((step, idx) => {
     if (step.verb === "shell") {
       for (const name of textInputRefs(step.stdin ?? "")) require(name, idx, "stdin");
+      for (const name of inputs.keys()) {
+        if (step.command.includes(`HWF_INPUT_${name}`)) require(name, idx, undefined);
+      }
       return;
     }
     if (step.verb === "herdr") {

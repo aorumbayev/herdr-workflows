@@ -14,6 +14,7 @@ type StepShape = {
   wait?: "done";
   wait_for?: string;
   timeout?: number;
+  close_source?: boolean;
 };
 
 export function refineStepVerbs(step: StepShape, ctx: z.core.$RefinementCtx): void {
@@ -42,6 +43,13 @@ export function refineStepVerbs(step: StepShape, ctx: z.core.$RefinementCtx): vo
   if (step.wait_for !== undefined && verb !== "open") {
     ctx.addIssue({ code: "custom", message: "wait_for only allowed on open", path: ["wait_for"] });
   }
+  if (step.close_source !== undefined && verb !== "agent") {
+    ctx.addIssue({
+      code: "custom",
+      message: "close_source only allowed on agent",
+      path: ["close_source"],
+    });
+  }
   if (step.timeout !== undefined && step.wait === undefined && step.wait_for === undefined) {
     ctx.addIssue({
       code: "custom",
@@ -56,7 +64,8 @@ export function refineStepVerbs(step: StepShape, ctx: z.core.$RefinementCtx): vo
       step.params !== undefined ||
       step.wait !== undefined ||
       step.wait_for !== undefined ||
-      step.timeout !== undefined)
+      step.timeout !== undefined ||
+      step.close_source !== undefined)
   ) {
     ctx.addIssue({ code: "custom", message: "run steps take no modifiers", path: ["run"] });
   }

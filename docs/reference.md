@@ -57,25 +57,26 @@ inputs:
 
 `{input.<name>}` in `stdin` / `prompt` / `params`. `agent:` may be exactly `"{input.<name>}"` for a choice whose options are all config agents. Declare `inputs:` only on the entry workflow — spliced (`run:`) and recovery (`on_fail:`) targets may reference entry inputs but must not declare their own. Load errors: undeclared reference, declared-but-unused input, `inputs:` on spliced or recovery workflows, `options: agents` with empty config, options command fail/empty/timeout, default outside options. Picker: one screen per input (never skipped by `default`), declaration order, before the `{prompt}` line. Choice values validated again at run time. Options shell commands are author-controlled (same trust as workflow `shell:` steps).
 
-`stdin` substitution is literal text replacement, not shell escaping. Never use `{input.*}` to construct shell source, such as quoted assignments, commands, or heredocs. Use only fixed author-controlled shell programs; input-driven shell commands require an argv/env data-passing interface, which workflows do not provide.
+`stdin` substitution is literal text replacement, not shell escaping. Never use `{input.*}` to construct shell source, such as quoted assignments, commands, or heredocs. Use fixed author-controlled shell programs. Declared inputs are also exported to `shell` steps as `HWF_INPUT_<name>` environment variables for argv-safe CLI wrappers.
 
 ## Verbs & modifiers
 
-| Key        | Where              | Role                                              |
-| ---------- | ------------------ | ------------------------------------------------- |
-| `shell`    | step               | blocking `sh -c`; stdout → `{last}`; 300s         |
-| `stdin`    | shell              | piped stdin; placeholders ok                      |
-| `open`     | step               | new tab                                           |
-| `wait_for` | open               | regex; block (default 60s)                        |
-| `agent`    | step               | named config agent                                |
-| `prompt`   | agent              | placeholders ok                                   |
-| `wait`     | agent              | literal `done`; poll until finish (default 1800s) |
-| `timeout`  | with wait/wait_for | seconds                                           |
-| `herdr`    | step               | socket method                                     |
-| `params`   | herdr              | placeholders in string values; ids auto-filled    |
-| `run`      | step               | load-time splice                                  |
-| `inputs`   | top-level          | declared user inputs; picker screens / `--input`  |
-| `on_fail`  | top-level          | one-shot recovery workflow name                   |
+| Key            | Where              | Role                                                         |
+| -------------- | ------------------ | ------------------------------------------------------------ |
+| `shell`        | step               | blocking `sh -c`; stdout → `{last}`; 300s; `HWF_INPUT_*` env |
+| `stdin`        | shell              | piped stdin; placeholders ok                                 |
+| `open`         | step               | new tab                                                      |
+| `wait_for`     | open               | regex; block (default 60s)                                   |
+| `agent`        | step               | named config agent                                           |
+| `prompt`       | agent              | placeholders ok                                              |
+| `wait`         | agent              | literal `done`; poll until finish (default 1800s)            |
+| `close_source` | agent              | after successful open, close invoking `tabId`                |
+| `timeout`      | with wait/wait_for | seconds                                                      |
+| `herdr`        | step               | socket method                                                |
+| `params`       | herdr              | placeholders in string values; ids auto-filled               |
+| `run`          | step               | load-time splice                                             |
+| `inputs`       | top-level          | declared user inputs; picker screens / `--input`             |
+| `on_fail`      | top-level          | one-shot recovery workflow name                              |
 
 Placeholders: `{pane}` `{selection}` `{prompt}` `{last}` `{error}` `{session}` `{session_file}` `{tab}` `{prev_tab}` `{agent}` `{input.<name>}`. Only in `stdin`/`prompt`/`params` (and `agent: "{agent}"` / `agent: "{input.<name>}"`). `{session}` / `{session_file}` → `stdin` only. `{session_file}` is a temp-file path holding the transcript — use it when `stdin` is a shell script (splicing `{session}` text into a script can break its quoting/heredocs); the file is deleted when the run ends, so copy it during the step if a background job needs it.
 

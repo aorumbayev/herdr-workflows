@@ -6,6 +6,7 @@ import type {
   notificationShow,
   paneRead,
   reportToken,
+  tabClose,
   waitOutput,
 } from "../adapter/client";
 import type { AgentsConfig } from "../config";
@@ -24,6 +25,7 @@ export type RunnerDeps = {
   paneRead: typeof paneRead;
   reportToken: typeof reportToken;
   sessionText: typeof sessionText;
+  tabClose: typeof tabClose;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
   agentWaitPollMs?: number;

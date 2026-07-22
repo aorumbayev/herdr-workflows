@@ -44,7 +44,14 @@ export type InputSpec = {
 export type FlatStep =
   | { verb: "shell"; command: string; stdin?: string }
   | { verb: "open"; command: string; waitFor?: string; timeoutMs?: number }
-  | { verb: "agent"; name: string; prompt?: string; wait?: true; timeoutMs?: number }
+  | {
+      verb: "agent";
+      name: string;
+      prompt?: string;
+      wait?: true;
+      timeoutMs?: number;
+      closeSource?: true;
+    }
   | { verb: "herdr"; method: string; params?: Record<string, unknown> };
 
 export type LoadedWorkflow = {

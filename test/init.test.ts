@@ -49,15 +49,21 @@ describe("herdr-workflows init", () => {
     await mkdir(dir, { recursive: true });
     for (const agent of ["claude", "codex", "aider", "cursor"]) {
       const written = await seedWorkflows(dir, agent);
-      expect(written.sort()).toEqual(["handoff", "review"]);
+      expect(written.sort()).toEqual(["handoff", "review", "worktree"]);
       const handoff = await readFile(join(dir, "handoff.yaml"), "utf8");
       expect(handoff).toContain(`- agent: ${JSON.stringify(agent)}`);
       expect(handoff).toContain("wait: done");
-      expect(handoff).not.toContain("shell: claude -p");
+      expect(handoff).toContain('stdin: "{session}"');
+      expect(handoff).toContain("close_source: true");
+      expect(handoff).not.toContain('stdin: "{pane}"');
+      const worktree = await readFile(join(dir, "worktree.yaml"), "utf8");
+      expect(worktree).toContain("HWF_INPUT_branch");
+      expect(worktree).toContain("herdr worktree create");
       const workflow = await loadWorkflow("handoff", root, [agent]);
-      expect(workflow.needsSession).toBe(false);
+      expect(workflow.needsSession).toBe(true);
       await rm(join(dir, "handoff.yaml"));
       await rm(join(dir, "review.yaml"));
+      await rm(join(dir, "worktree.yaml"));
     }
     const written = await seedWorkflows(dir, "claude");
     for (const name of written) {

@@ -100,6 +100,10 @@ async function fireAgent(
     label: name,
     focus: true,
   });
+  // Close source only after target opened — failure above leaves original tab intact.
+  if (step.closeSource && opts.ctx.tabId) {
+    await opts.deps.tabClose(opts.ctx.tabId);
+  }
   if (!step.wait) return { tabId: applied.tabId };
   await waitAgentDone(applied.paneId, step.timeoutMs!, {
     agentStatus: opts.deps.agentStatus,

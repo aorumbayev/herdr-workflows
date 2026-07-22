@@ -16,6 +16,7 @@ const rawStepSchema = z
     wait: z.literal("done").optional(),
     wait_for: z.string().min(1).optional(),
     timeout: z.number().int().positive().optional(),
+    close_source: z.boolean().optional(),
   })
   .strict()
   .superRefine(refineStepVerbs);

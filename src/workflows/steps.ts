@@ -56,6 +56,7 @@ export function rawToFlat(file: string, stepIndex: number, step: RawStep): FlatS
   }
   if (step.agent !== undefined) {
     banSessionOutsideStdin(file, stepIndex, "prompt", step.prompt);
+    const closeSource = step.close_source === true ? (true as const) : undefined;
     if (step.wait !== undefined) {
       return {
         verb: "agent",
@@ -63,9 +64,10 @@ export function rawToFlat(file: string, stepIndex: number, step: RawStep): FlatS
         prompt: step.prompt,
         wait: true,
         timeoutMs: (step.timeout ?? 1800) * 1000,
+        closeSource,
       };
     }
-    return { verb: "agent", name: step.agent, prompt: step.prompt };
+    return { verb: "agent", name: step.agent, prompt: step.prompt, closeSource };
   }
   if (step.herdr !== undefined) {
     if (paramsHaveSession(step.params)) {

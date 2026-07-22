@@ -47,7 +47,7 @@ const SEED_WORKFLOWS: { name: string; body: (agent: string) => string }[] = [
     default: ""
 steps:
   - shell: cat
-    stdin: "{pane}"
+    stdin: "{session}"
   - agent: ${JSON.stringify(agent)}
     prompt: |
       Below the --- marker is a coding agent session transcript. Distil it into
@@ -102,6 +102,19 @@ steps:
       Focus: {input.focus}
 
       {last}
+    close_source: true
+`,
+  },
+  {
+    name: "worktree",
+    body: () => `inputs:
+  branch:
+    label: new branch name
+  base:
+    options: [main, develop]
+    default: main
+steps:
+  - shell: herdr worktree create --branch "$HWF_INPUT_branch" --base "$HWF_INPUT_base" --label "$HWF_INPUT_branch" --focus
 `,
   },
   {

@@ -6,6 +6,7 @@ import {
   notificationShow,
   paneRead,
   reportToken,
+  tabClose,
   waitOutput,
 } from "../adapter/client";
 import { substitute, type FlatStep, type PlaceholderValues } from "../workflows";
@@ -29,6 +30,7 @@ export function defaultDeps(): RunnerDeps {
     paneRead,
     reportToken,
     sessionText,
+    tabClose,
   };
 }
 
@@ -41,6 +43,14 @@ function stepLabel(step: FlatStep): string {
 
 function pushTab(values: PlaceholderValues, tabId: string): PlaceholderValues {
   return { ...values, prev_tab: values.tab, tab: tabId };
+}
+
+function inputEnv(inputs: Record<string, string>): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const [name, value] of Object.entries(inputs)) {
+    env[`HWF_INPUT_${name}`] = value;
+  }
+  return env;
 }
 
 export async function runSteps(
@@ -74,7 +84,11 @@ export async function runSteps(
     const current = { ...values, last, tab, prev_tab };
     if (step.verb === "shell") {
       const stdin = step.stdin !== undefined ? substitute(step.stdin, current) : undefined;
-      const result = await opts.deps.runShell(step.command, { cwd: opts.ctx.cwd, stdin });
+      const result = await opts.deps.runShell(step.command, {
+        cwd: opts.ctx.cwd,
+        stdin,
+        env: inputEnv(current.inputs),
+      });
       if (result.stderr) opts.onStderr?.(result.stderr);
       if (!result.ok) {
         const error = await fail(opts.deps, opts.name, i, result.stderr.trim() || "nonzero exit");

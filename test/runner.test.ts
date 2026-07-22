@@ -73,6 +73,7 @@ function mockDeps(overrides: Partial<RunnerDeps> = {}): {
     paneRead: async () => "",
     reportToken: async () => undefined,
     sessionText: async () => "",
+    tabClose: async () => undefined,
     sleep: async () => undefined,
     agentWaitPollMs: 1,
     agentWaitIdleGraceMs: 5,
@@ -922,5 +923,81 @@ steps:
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain("gemini");
+  });
+
+  test("shell steps export HWF_INPUT_* env from resolved inputs", async () => {
+    const root = await repoWith({
+      m: `inputs:
+  branch: {}
+  base:
+    default: main
+steps:
+  - shell: 'printf "%s/%s" "$HWF_INPUT_branch" "$HWF_INPUT_base"'
+`,
+    });
+    const { deps } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      inputs: { branch: "feat/x" },
+      deps,
+    });
+    expect(result).toEqual({ ok: true, last: "feat/x/main" });
+  });
+
+  test("close_source closes invoking tab after successful agent open", async () => {
+    const root = await repoWith({
+      m: `steps:
+  - agent: claude
+    prompt: hi
+    close_source: true
+`,
+    });
+    const closed: string[] = [];
+    const { deps, layouts } = mockDeps({
+      tabClose: async (tabId) => {
+        closed.push(tabId);
+      },
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: { claude: ["claude", "{prompt}"] },
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "src-tab" },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    expect(layouts).toHaveLength(1);
+    expect(closed).toEqual(["src-tab"]);
+  });
+
+  test("close_source skipped when agent open fails", async () => {
+    const root = await repoWith({
+      m: `steps:
+  - agent: claude
+    prompt: hi
+    close_source: true
+`,
+    });
+    const closed: string[] = [];
+    const { deps } = mockDeps({
+      layoutApply: async () => {
+        throw new Error("layout boom");
+      },
+      tabClose: async (tabId) => {
+        closed.push(tabId);
+      },
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: { claude: ["claude", "{prompt}"] },
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "src-tab" },
+      deps,
+    });
+    expect(result.ok).toBe(false);
+    expect(closed).toEqual([]);
   });
 });

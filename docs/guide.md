@@ -41,17 +41,19 @@ Optional `sessions:` maps agent → argv whose stdout fills `{session}` (see [Re
 
 One verb per step. Modifiers only on the right verb. Placeholders **only** in `stdin` / `prompt` / `params` strings — never in `shell:` / `open:` command text (load error).
 
-| Verb    | Blocks | Notes                                                                                        |
-| ------- | ------ | -------------------------------------------------------------------------------------------- |
-| `shell` | yes    | `sh -c` in repo root; stdout → `{last}`; 300s process-group kill                             |
-| `open`  | no*    | new tab; `wait_for: <regex>` blocks (default 60s)                                            |
-| `agent` | no*    | config argv; `wait: done` blocks until agent finishes (default 1800s) → `{last}` = pane text |
-| `herdr` | no     | socket method; `params`; pane/tab/workspace ids auto-filled                                  |
-| `run`   | —      | load-time splice of another workflow                                                         |
+| Verb    | Blocks | Notes                                                                                                                                                                 |
+| ------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shell` | yes    | `sh -c` in repo root; stdout → `{last}`; 300s process-group kill; inputs as `HWF_INPUT_*` env                                                                         |
+| `open`  | no*    | new tab; `wait_for: <regex>` blocks (default 60s)                                                                                                                     |
+| `agent` | no*    | config argv; `wait: done` blocks until agent finishes (default 1800s) → `{last}` = pane text; optional `close_source: true` closes invoking tab after successful open |
+| `herdr` | no     | socket method; `params`; pane/tab/workspace ids auto-filled                                                                                                           |
+| `run`   | —      | load-time splice of another workflow                                                                                                                                  |
 
 \*Without `wait` / `wait_for`, fire-and-forget — `on_fail` cannot see agent/open failure.
 
-`shell:` = headless blocking command (stdout → `{last}`, no tab). `agent:` = config agent in a new tab. Use `shell:` for one-shot LLM CLIs (`claude -p`); use `agent:` when you want an interactive pane.
+`shell:` = headless blocking command (stdout → `{last}`, no tab). Declared `inputs:` are also exported as `HWF_INPUT_<name>` for argv-safe CLI wrappers (e.g. `herdr worktree create --branch "$HWF_INPUT_branch"`). Still never put `{input.*}` in the `shell:` command string.
+
+`agent:` = config agent in a new tab. Use `shell:` for one-shot LLM CLIs (`claude -p`); use `agent:` when you want an interactive pane. `close_source: true` closes the invoking tab only after the new agent tab opens successfully.
 
 | Placeholder      | Value                                                               |
 | ---------------- | ------------------------------------------------------------------- |
@@ -138,7 +140,7 @@ steps:
 
       Focus: {prompt}
 
-# handoff.yaml  (seeded by hwf init)
+# handoff.yaml  (seeded by hwf init — session transcript, not pane scrollback)
 inputs:
   target:
     options: agents
@@ -147,7 +149,7 @@ inputs:
     default: ""
 steps:
   - shell: cat
-    stdin: "{pane}"
+    stdin: "{session}"
   - agent: claude # hwf init uses its first detected configured agent
     prompt: |
       Distil the transcript below into a handoff prompt.
@@ -161,6 +163,17 @@ steps:
       Focus: {input.focus}
 
       {last}
+    close_source: true
+
+# worktree.yaml  (seeded — inputs via HWF_INPUT_* env, not placeholders in shell:)
+inputs:
+  branch:
+    label: new branch name
+  base:
+    options: [main, develop]
+    default: main
+steps:
+  - shell: herdr worktree create --branch "$HWF_INPUT_branch" --base "$HWF_INPUT_base" --label "$HWF_INPUT_branch" --focus
 ```
 
 Load errors name file, step, key. Invalid workflows appear greyed in the picker.
