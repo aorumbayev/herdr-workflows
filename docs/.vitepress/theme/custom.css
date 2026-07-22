@@ -1,0 +1,62 @@
+/* Match the hwf web workbench palette (src/web/page.html): Nord-ish dark, yellow accent, mono. */
+:root {
+  --wf-bg: #2c323c;
+  --wf-bg-elevated: #343a46;
+  --wf-term-bg: #232831;
+  --wf-ink: #eceff4;
+  --wf-ink-soft: #d8dee9;
+  --wf-muted: #9aa3b5;
+  --wf-line: #3d4452;
+  --wf-line-strong: #4c566a;
+  --wf-accent: #e9e276;
+  --wf-green: #a3be8c;
+  --wf-red: #c9838a;
+  --wf-fill-ink: #26292a;
+
+  --vp-font-family-base:
+    "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --vp-font-family-mono: var(--vp-font-family-base);
+
+  --vp-c-bg: var(--wf-bg);
+  --vp-c-bg-alt: var(--wf-term-bg);
+  --vp-c-bg-soft: var(--wf-bg-elevated);
+  --vp-c-bg-elv: var(--wf-bg-elevated);
+
+  --vp-c-text-1: var(--wf-ink);
+  --vp-c-text-2: var(--wf-ink-soft);
+  --vp-c-text-3: var(--wf-muted);
+
+  --vp-c-divider: var(--wf-line);
+  --vp-c-border: var(--wf-line-strong);
+  --vp-c-gutter: var(--wf-line);
+
+  --vp-c-brand-1: var(--wf-accent);
+  --vp-c-brand-2: var(--wf-accent);
+  --vp-c-brand-3: var(--wf-accent);
+  --vp-c-brand-soft: color-mix(in srgb, var(--wf-accent) 14%, transparent);
+
+  --vp-c-tip-1: var(--wf-green);
+  --vp-c-warning-1: var(--wf-accent);
+  --vp-c-danger-1: var(--wf-red);
+
+  /* filled brand buttons: dark ink on yellow, like the workbench tabs */
+  --vp-button-brand-bg: var(--wf-accent);
+  --vp-button-brand-hover-bg: var(--wf-accent);
+  --vp-button-brand-active-bg: var(--wf-accent);
+  --vp-button-brand-border: var(--wf-accent);
+  --vp-button-brand-hover-border: var(--wf-accent);
+  --vp-button-brand-text: var(--wf-fill-ink);
+  --vp-button-brand-hover-text: var(--wf-fill-ink);
+  --vp-button-brand-active-text: var(--wf-fill-ink);
+}
+
+/* inline code: accent text on terminal-dark, matching page.html `code` */
+:root {
+  --vp-code-color: var(--wf-accent);
+  --vp-code-bg: var(--wf-term-bg);
+  --vp-code-block-bg: var(--wf-term-bg);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--wf-accent) 25%, transparent);
+}

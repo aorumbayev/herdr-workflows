@@ -4,6 +4,7 @@ export default defineConfig({
   title: "herdr-workflows",
   description: "Linear YAML workflow runner for herdr",
   base: "/herdr-workflows/",
+  appearance: "force-dark",
   themeConfig: {
     nav: [
       { text: "Guide", link: "/guide" },
