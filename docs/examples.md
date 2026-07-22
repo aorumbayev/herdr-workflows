@@ -1,15 +1,17 @@
 # Examples
 
-Copy into `.hwf/workflows/<name>.yaml`. Agent names come from `.hwf/config.yaml` (or invoking pane via `{agent}`).
+Copy into `.hwf/workflows/<name>.yaml` (repo) or `~/.hwf/workflows/<name>.yaml` (global; any project). Repo shadows global for the same name.
+
+Agent names come from `.hwf/config.yaml` / `~/.hwf/config.yaml` (or invoking pane via `{agent}`).
 
 Use `{session}` for the agent transcript; `{pane}` when scrollback is enough; `{prompt}` for one focus line; `inputs:` when the user must pick named values (e.g. target agent). Prefer `HWF_INPUT_*` env inside fixed `shell:` commands when driving CLIs — never interpolate `{input.*}` into the command string.
 
 ## Handoff (`{session}` + inputs)
 
-Summarize the invoking agent session, then open a chosen agent with that handoff. Seeded `handoff` uses first detected configured agent for summary and closes the source tab after the target opens.
+`hwf init` can seed this under `~/.hwf/workflows/` (global) or `.hwf/workflows/` (repo). Distill uses the invoking agent (`{agent}`); then opens a chosen target and closes the source tab.
 
 ```yaml
-# .hwf/workflows/handoff.yaml
+# handoff.yaml
 inputs:
   target:
     options: agents
@@ -19,7 +21,7 @@ inputs:
 steps:
   - shell: cat
     stdin: "{session}"
-  - agent: claude # hwf init uses its first detected configured agent
+  - agent: "{agent}"
     prompt: |
       Distil the transcript below into a handoff prompt.
       Output ONLY the handoff prompt.
@@ -35,14 +37,14 @@ steps:
     close_source: true
 ```
 
-`prefix+k` → `handoff` → pick target → focus line (prefilled empty). CLI: `hwf run handoff --input target=<configured-agent>`.
+`prefix+k` → `handoff` → pick target → focus line (prefilled empty). CLI: `hwf run handoff --input target=<configured-agent>`. Launch from an agent pane.
 
 ## Worktree (`HWF_INPUT_*`)
 
-Seeded `worktree` collects branch/base, then calls herdr with env-exported inputs:
+Same init choice — global or repo:
 
 ```yaml
-# .hwf/workflows/worktree.yaml
+# worktree.yaml
 inputs:
   branch:
     label: new branch name

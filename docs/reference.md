@@ -4,12 +4,12 @@
 
 ## CLI
 
-| Command                                       | Does                                                              |
-| --------------------------------------------- | ----------------------------------------------------------------- |
-| `hwf` (TTY)                                   | manage UI                                                         |
-| `hwf run <name> [--prompt …] [--input k=v …]` | run; live progress/stderr; nonzero on fail                        |
-| `hwf init [--force]`                          | write `.hwf/config.yaml` + `workflows/`; confirm before overwrite |
-| `hwf launch` / `hwf picker`                   | picker popup                                                      |
+| Command                                          | Does                                                                                                      |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `hwf` (TTY)                                      | manage UI                                                                                                 |
+| `hwf run <name> [--prompt …] [--input k=v …]`    | run; live progress/stderr; nonzero on fail                                                                |
+| `hwf init [--force] [--seed=global\|repo\|none]` | write `.hwf/config.yaml` + repo `review`; optionally seed `handoff`/`worktree` (TTY asks; default global) |
+| `hwf launch` / `hwf picker`                      | picker popup                                                                                              |
 
 ## Picker
 

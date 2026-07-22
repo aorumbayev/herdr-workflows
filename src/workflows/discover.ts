@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { WorkflowListEntry } from "./errors";
 
 function globalDir(): string {
-  return join(homedir(), ".hwf", "workflows");
+  return join(process.env.HOME ?? homedir(), ".hwf", "workflows");
 }
 function repoDir(root: string): string {
   return join(root, ".hwf", "workflows");

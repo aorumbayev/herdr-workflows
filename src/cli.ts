@@ -1,10 +1,11 @@
 #!/usr/bin/env bun
 import { HerdrError, notificationShow, pluginPaneOpen } from "./adapter/client";
 import { runPickerPopup } from "./adapter/picker";
-import { die, promptLine } from "./adapter/popup";
+import { die } from "./adapter/popup";
+import { parseArgs } from "./cli-args";
+import { cmdInit } from "./cmd-init";
 import { loadConfig } from "./config";
 import { readInvocationContext } from "./context";
-import { runInit } from "./init";
 import { WorkflowLoadError } from "./workflows";
 import { resolveRepoRoot } from "./repo";
 import { runWorkflow } from "./runner";
@@ -12,37 +13,6 @@ import { runManage } from "./tui/manage";
 
 function usage(): never {
   die("usage: hwf|herdr-workflows [<run|init|launch|picker>]  (no args: manage TUI)");
-}
-
-function parseArgs(args: string[]): {
-  flags: Record<string, string>;
-  bools: Set<string>;
-  positional: string[];
-  multi: Record<string, string[]>;
-} {
-  const flags: Record<string, string> = {};
-  const bools = new Set<string>();
-  const positional: string[] = [];
-  const multi: Record<string, string[]> = {};
-  const setFlag = (key: string, value: string) => {
-    flags[key] = value;
-    (multi[key] ??= []).push(value);
-  };
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i]!;
-    if (a.startsWith("--") && a.includes("=")) {
-      const eq = a.indexOf("=");
-      setFlag(a.slice(2, eq), a.slice(eq + 1));
-    } else if (a.startsWith("--")) {
-      const key = a.slice(2);
-      const next = args[i + 1];
-      if (next !== undefined && !next.startsWith("--")) {
-        setFlag(key, next);
-        i += 1;
-      } else bools.add(key);
-    } else positional.push(a);
-  }
-  return { flags, bools, positional, multi };
 }
 
 function parseInputFlags(values: string[]): Record<string, string> {
@@ -99,26 +69,6 @@ async function cmdRun(args: string[]): Promise<void> {
     if (error instanceof WorkflowLoadError) die(error.message);
     throw error;
   }
-}
-
-async function cmdInit(args: string[]): Promise<void> {
-  const { bools } = parseArgs(args);
-  const repoRoot = await resolveRepoRoot();
-  const result = await runInit(repoRoot, {
-    force: bools.has("force") || bools.has("yes"),
-    confirm: async () => {
-      if (!process.stdin.isTTY) return false;
-      process.stdout.write(`.hwf/config.yaml exists — overwrite? [y/N] `);
-      const line = await promptLine("");
-      return line.kind === "line" && line.text.trim().toLowerCase() === "y";
-    },
-  });
-  if (result.kind === "exists") die(`${result.path} already exists (pass --force to overwrite)`);
-  const agents = result.agents.length ? ` (${result.agents.join(", ")})` : " (no agents on PATH)";
-  const workflows = result.workflows.length
-    ? `seeded example workflows: ${result.workflows.join(", ")}\n`
-    : "";
-  process.stdout.write(`wrote ${result.path}${agents}\n${workflows}`);
 }
 
 async function main(): Promise<void> {

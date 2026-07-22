@@ -6,7 +6,7 @@ herdr ≥ 0.7.4. Plugin sequences short YAML workflows; herdr owns panes/tabs/ag
 
 ```bash
 herdr plugin install aorumbayev/herdr-workflows
-cd your-repo && hwf init          # .hwf/config.yaml + seeded workflows
+cd your-repo && hwf init          # config + review; asks where to seed handoff/worktree
 ```
 
 `hwf` ≡ `herdr-workflows`. Install also binds `prefix+k` → picker.
@@ -17,7 +17,7 @@ cd your-repo && hwf init          # .hwf/config.yaml + seeded workflows
 | `hwf run <name> [--prompt …] [--input k=v …]` | CLI; live step/stderr; best for debug            |
 | `hwf` (TTY, no args)                          | manage UI: edit workflows/config, browse run log |
 
-Workflow file = `.hwf/workflows/<name>.yaml` (or `~/.hwf/workflows/`; repo wins).
+Workflow file = `.hwf/workflows/<name>.yaml` (or `~/.hwf/workflows/`; repo wins). `hwf init` always seeds repo `review`; prompts (or `--seed=global|repo|none`) for `handoff` / `worktree`.
 
 ```yaml
 # .hwf/workflows/scratch.yaml
@@ -140,7 +140,7 @@ steps:
 
       Focus: {prompt}
 
-# handoff.yaml  (seeded by hwf init — session transcript, not pane scrollback)
+# handoff.yaml  (init: global ~/.hwf or repo .hwf — distill uses invoking agent)
 inputs:
   target:
     options: agents
@@ -150,7 +150,7 @@ inputs:
 steps:
   - shell: cat
     stdin: "{session}"
-  - agent: claude # hwf init uses its first detected configured agent
+  - agent: "{agent}"
     prompt: |
       Distil the transcript below into a handoff prompt.
       Output ONLY the handoff prompt.
@@ -165,7 +165,7 @@ steps:
       {last}
     close_source: true
 
-# worktree.yaml  (seeded — inputs via HWF_INPUT_* env, not placeholders in shell:)
+# worktree.yaml  (init: global or repo — inputs via HWF_INPUT_* env)
 inputs:
   branch:
     label: new branch name

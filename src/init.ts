@@ -1,6 +1,13 @@
 import { mkdir } from "node:fs/promises";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { repoConfigPath } from "./config";
+import type { PlaybookSeedScope } from "./playbook-scope";
+import { PLAYBOOK_SEED_WORKFLOWS, REPO_SEED_WORKFLOWS, seedWorkflows } from "./seed-workflows";
+
+export type { PlaybookSeedScope } from "./playbook-scope";
+export { parsePlaybookSeedScope } from "./playbook-scope";
+export { PLAYBOOK_SEED_WORKFLOWS, REPO_SEED_WORKFLOWS, seedWorkflows } from "./seed-workflows";
 
 const KNOWN_AGENTS: { name: string; bin: string; argv: string[] }[] = [
   { name: "claude", bin: "claude", argv: ["claude", "{prompt}"] },
@@ -36,122 +43,39 @@ export function formatAgentsYaml(agents: Record<string, string[]>): string {
   return `${lines.join("\n")}\n`;
 }
 
-const SEED_WORKFLOWS: { name: string; body: (agent: string) => string }[] = [
-  {
-    name: "handoff",
-    body: (agent) => `inputs:
-  target:
-    options: agents
-    label: hand over to
-  focus:
-    default: ""
-steps:
-  - shell: cat
-    stdin: "{session}"
-  - agent: ${JSON.stringify(agent)}
-    prompt: |
-      Below the --- marker is a coding agent session transcript. Distil it into
-      a handoff prompt for a fresh agent session.
-
-      Keep (signal):
-      - architectural decisions with their rationale
-      - working solutions adopted (final approach, not the journey)
-      - configuration choices: versions, settings, flags, env vars
-      - files created/modified with paths and why
-      - constraints discovered: API limits, compatibility issues, platform quirks
-      - productive dead ends, one sentence each: what was tried, why it failed,
-        what it means for remaining work
-      - open questions and unresolved trade-offs
-      - anything the next session would otherwise re-discover
-
-      Drop (noise):
-      - corrections and retries: keep only the final correct version
-      - verbose tool output: summarise builds, tests, diffs
-      - permission prompts and settled back-and-forth
-      - repeated attempts: describe the working one once
-
-      Compression: error-fix cycles reduce to root cause + fix; explorations
-      collapse to their conclusion; long discussions reduce to the decision and
-      key reason.
-
-      Output ONLY the handoff prompt, second-person imperative, in this shape
-      (omit empty sections):
-
-      Continue the work from the previous session. Here is the context you need:
-
-      **Project**: <path>
-      **Branch**: <branch, if known>
-
-      ## Background
-      ## What was done
-      ## Decisions in effect
-      ## Current state
-      ## Open questions
-      ## Your next steps
-      1. <directive>
-
-      Never invent decisions or context not present in the transcript; note
-      unclear items as open questions.
-
-      ---
-      {last}
-    wait: done
-    timeout: 900
-  - agent: "{input.target}"
-    prompt: |
-      Focus: {input.focus}
-
-      {last}
-    close_source: true
-`,
-  },
-  {
-    name: "worktree",
-    body: () => `inputs:
-  branch:
-    label: new branch name
-  base:
-    options: [main, develop]
-    default: main
-steps:
-  - shell: herdr worktree create --branch "$HWF_INPUT_branch" --base "$HWF_INPUT_base" --label "$HWF_INPUT_branch" --focus
-`,
-  },
-  {
-    name: "review",
-    body: (agent) => `steps:
-  - shell: git diff HEAD
-  - agent: ${JSON.stringify(agent)}
-    prompt: |
-      Review this diff. List blocking issues only.
-
-      {last}
-    wait: done
-    timeout: 900
-`,
-  },
-];
-
-/** Writes example workflows for the given agent; never overwrites existing files. */
-export async function seedWorkflows(workflowsDir: string, agent: string): Promise<string[]> {
-  const written: string[] = [];
-  for (const seed of SEED_WORKFLOWS) {
-    const file = join(workflowsDir, `${seed.name}.yaml`);
-    if (await Bun.file(file).exists()) continue;
-    await Bun.write(file, seed.body(agent));
-    written.push(seed.name);
-  }
-  return written;
+function globalWorkflowsDir(home: string): string {
+  return join(home, ".hwf", "workflows");
 }
 
 export type InitResult =
-  | { kind: "wrote"; path: string; agents: string[]; workflows: string[] }
+  | {
+      kind: "wrote";
+      path: string;
+      agents: string[];
+      workflows: string[];
+      globalWorkflows: string[];
+      playbookScope: PlaybookSeedScope;
+    }
   | { kind: "exists"; path: string }
-  | { kind: "overwritten"; path: string; agents: string[]; workflows: string[] };
+  | {
+      kind: "overwritten";
+      path: string;
+      agents: string[];
+      workflows: string[];
+      globalWorkflows: string[];
+      playbookScope: PlaybookSeedScope;
+    };
 
 export async function runInit(
   repoRoot: string,
-  opts: { force?: boolean; confirm?: () => Promise<boolean> } = {},
+  opts: {
+    force?: boolean;
+    confirm?: () => Promise<boolean>;
+    /** Where to put handoff/worktree. Default `global` when unset (non-interactive). */
+    playbookScope?: PlaybookSeedScope;
+    choosePlaybookScope?: () => Promise<PlaybookSeedScope>;
+    home?: string;
+  } = {},
 ): Promise<InitResult> {
   const path = repoConfigPath(repoRoot);
   const existed = await Bun.file(path).exists();
@@ -161,15 +85,42 @@ export async function runInit(
   }
 
   const agents = await detectAgents();
+  const home = opts.home ?? process.env.HOME ?? homedir();
+  const globalCfg = join(home, ".hwf", "config.yaml");
+  const globalDir = globalWorkflowsDir(home);
   const workflowsDir = join(repoRoot, ".hwf", "workflows");
+
   await mkdir(dirname(path), { recursive: true });
   await mkdir(workflowsDir, { recursive: true });
+  await mkdir(dirname(globalCfg), { recursive: true });
+  await mkdir(globalDir, { recursive: true });
+
   await Bun.write(path, formatAgentsYaml(agents));
+  if (!(await Bun.file(globalCfg).exists())) {
+    await Bun.write(globalCfg, formatAgentsYaml(agents));
+  }
+
   // Detection order, not alphabetical — KNOWN_AGENTS is the preference ranking.
   const first = KNOWN_AGENTS.find((a) => agents[a.name])?.name;
-  const workflows = first ? await seedWorkflows(workflowsDir, first) : [];
+  const playbookScope =
+    opts.playbookScope ?? (opts.choosePlaybookScope ? await opts.choosePlaybookScope() : "global");
+
+  let workflows: string[] = [];
+  let globalWorkflows: string[] = [];
+  if (first) {
+    workflows = await seedWorkflows(workflowsDir, first, REPO_SEED_WORKFLOWS);
+    if (playbookScope === "repo") {
+      workflows = [
+        ...workflows,
+        ...(await seedWorkflows(workflowsDir, first, PLAYBOOK_SEED_WORKFLOWS)),
+      ];
+    } else if (playbookScope === "global") {
+      globalWorkflows = await seedWorkflows(globalDir, first, PLAYBOOK_SEED_WORKFLOWS);
+    }
+  }
+
   const names = Object.keys(agents).sort();
   return existed
-    ? { kind: "overwritten", path, agents: names, workflows }
-    : { kind: "wrote", path, agents: names, workflows };
+    ? { kind: "overwritten", path, agents: names, workflows, globalWorkflows, playbookScope }
+    : { kind: "wrote", path, agents: names, workflows, globalWorkflows, playbookScope };
 }
