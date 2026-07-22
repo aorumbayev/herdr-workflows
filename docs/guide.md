@@ -16,6 +16,7 @@ cd your-repo && hwf init          # config + review; asks where to seed handoff/
 | `prefix+k` / `hwf launch`                     | picker (filter, pick, optional prompt line)      |
 | `hwf run <name> [--prompt …] [--input k=v …]` | CLI; live step/stderr; best for debug            |
 | `hwf` (TTY, no args)                          | manage UI: edit workflows/config, browse run log |
+| `hwf web [--port <n>] [--no-open]`            | browser workbench: browse/edit/validate/share    |
 
 Workflow file = `.hwf/workflows/<name>.yaml` (or `~/.hwf/workflows/`; repo wins). `hwf init` always seeds repo `review`; prompts (or `--seed=global|repo|none`) for `handoff` / `worktree`.
 
@@ -36,6 +37,20 @@ agents:
 ```
 
 Optional `sessions:` maps agent → argv whose stdout fills `{session}` (see [Reference](/reference#config)). Built-in Claude JSONL applies when unset.
+
+## Web workbench
+
+```bash
+hwf web              # opens http://127.0.0.1:7317/?token=… in your browser
+hwf web --no-open    # print the URL, don't launch a browser
+hwf web --port 8080  # pick the port; default 7317, auto-increments if busy
+```
+
+Three tabs — **Workflows**, **Config**, **Runs** (read-only log). The workflow editor has two modes: **text** (raw YAML with add-step buttons that append readable blocks, plus live validation) and **visual** (drag-reorderable step cards — the same flat step list, edited as a form; it round-trips back to YAML). List entries are marked `local` / `global` / `local + global`. Share a workflow with copy, download `.yaml`, or **move** it between local and global (refuses to overwrite an existing name unless you confirm; delete lets you pick which scope when a name exists in both).
+
+**No run from the browser.** Running needs herdr panes and the invoking pane's context (`{pane}`, `{selection}`, `{tab}`, agents) — a browser has none. The editor shows the `hwf run <name>` to paste into a terminal instead.
+
+**Security.** The server binds `127.0.0.1` only, mints a random token per launch (in the opened URL, sent as `x-hwf-token` on every request), and rejects any request whose `Origin`/`Host` isn't the bound localhost address. The token dies with the process. It reads and writes your `.hwf` files, so treat the URL as a secret while it runs.
 
 ## Language
 

@@ -21,6 +21,10 @@ async function yamlNames(dir: string): Promise<string[]> {
   }
 }
 
+export function workflowPath(scope: "repo" | "global", repoRoot: string, name: string): string {
+  return join(scope === "repo" ? repoDir(repoRoot) : globalDir(), `${name}.yaml`);
+}
+
 export async function resolveWorkflowFile(
   name: string,
   repoRoot: string,

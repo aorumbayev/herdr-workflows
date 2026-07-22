@@ -9,8 +9,61 @@ import {
 
 import { checkInputRefs, resolveInputs } from "./inputs";
 import { flattenSteps, parseFile } from "./flatten";
+import { parseRaw, type RawWorkflow } from "./parse";
 import { assertNoOnFail, loadRecovery } from "./recovery";
 import { checkAgents, flatNeedsInvokingAgent, flatNeedsPrompt, flatNeedsSession } from "./steps";
+
+async function loadFromRaw(
+  name: string,
+  file: string,
+  source: "repo" | "global",
+  raw: RawWorkflow,
+  repoRoot: string,
+  agentNames: Iterable<string>,
+  resolveDynamic: boolean,
+): Promise<LoadedWorkflow> {
+  const agents = new Set(agentNames);
+  const sources = new Set<"repo" | "global">([source]);
+  for (const [i, step] of raw.steps.entries()) {
+    if (step.run !== undefined) await assertNoOnFail(step.run, repoRoot, file, i + 1);
+  }
+
+  const steps = await flattenSteps(name, repoRoot, [], sources, { file, source }, raw);
+  checkAgents(file, steps, agents);
+  const inputs = await resolveInputs(file, raw, agents, repoRoot, resolveDynamic);
+  const declared = new Map(inputs.map((spec) => [spec.name, spec]));
+  const used = checkInputRefs(file, declared, steps, agents);
+  let needsPrompt = flatNeedsPrompt(steps);
+  let needsSession = flatNeedsSession(steps);
+  let needsInvokingAgent = flatNeedsInvokingAgent(steps);
+  let recovery: FlatStep[] | undefined;
+  if (raw.on_fail) {
+    recovery = await loadRecovery(file, raw.on_fail, repoRoot, agents, sources);
+    for (const name of checkInputRefs(file, declared, recovery, agents)) used.add(name);
+    needsPrompt = needsPrompt || flatNeedsPrompt(recovery);
+    needsSession = needsSession || flatNeedsSession(recovery);
+    needsInvokingAgent = needsInvokingAgent || flatNeedsInvokingAgent(recovery);
+  }
+  for (const spec of inputs) {
+    if (!used.has(spec.name)) {
+      throw new WorkflowLoadError(
+        positioned(file, undefined, `inputs.${spec.name}`, "declared but never referenced"),
+      );
+    }
+  }
+  return {
+    name,
+    file,
+    steps,
+    inputs,
+    onFail: raw.on_fail,
+    ...(recovery ? { recovery: { name: raw.on_fail!, steps: recovery } } : {}),
+    repoOwned: sources.has("repo"),
+    needsPrompt,
+    needsSession,
+    needsInvokingAgent,
+  };
+}
 
 async function loadResolvedWorkflow(
   name: string,
@@ -19,53 +72,33 @@ async function loadResolvedWorkflow(
   resolved: { file: string; source: "repo" | "global" },
   resolveDynamic: boolean,
 ): Promise<LoadedWorkflow> {
-  const agents = new Set(agentNames);
   const entry = await parseFile(resolved.file);
-  const sources = new Set<"repo" | "global">([resolved.source]);
-  for (const [i, step] of entry.raw.steps.entries()) {
-    if (step.run !== undefined) await assertNoOnFail(step.run, repoRoot, resolved.file, i + 1);
-  }
-
-  const steps = await flattenSteps(name, repoRoot, [], sources, resolved);
-  checkAgents(resolved.file, steps, agents);
-  const inputs = await resolveInputs(resolved.file, entry.raw, agents, repoRoot, resolveDynamic);
-  const declared = new Map(inputs.map((spec) => [spec.name, spec]));
-  const used = checkInputRefs(resolved.file, declared, steps, agents);
-  let needsPrompt = flatNeedsPrompt(steps);
-  let needsSession = flatNeedsSession(steps);
-  let needsInvokingAgent = flatNeedsInvokingAgent(steps);
-  let recovery: FlatStep[] | undefined;
-  if (entry.raw.on_fail) {
-    recovery = await loadRecovery(resolved.file, entry.raw.on_fail, repoRoot, agents, sources);
-    for (const name of checkInputRefs(resolved.file, declared, recovery, agents)) used.add(name);
-    needsPrompt = needsPrompt || flatNeedsPrompt(recovery);
-    needsSession = needsSession || flatNeedsSession(recovery);
-    needsInvokingAgent = needsInvokingAgent || flatNeedsInvokingAgent(recovery);
-  }
-  for (const spec of inputs) {
-    if (!used.has(spec.name)) {
-      throw new WorkflowLoadError(
-        positioned(
-          resolved.file,
-          undefined,
-          `inputs.${spec.name}`,
-          "declared but never referenced",
-        ),
-      );
-    }
-  }
-  return {
+  return loadFromRaw(
     name,
-    file: resolved.file,
-    steps,
-    inputs,
-    onFail: entry.raw.on_fail,
-    ...(recovery ? { recovery: { name: entry.raw.on_fail!, steps: recovery } } : {}),
-    repoOwned: sources.has("repo"),
-    needsPrompt,
-    needsSession,
-    needsInvokingAgent,
-  };
+    resolved.file,
+    resolved.source,
+    entry.raw,
+    repoRoot,
+    agentNames,
+    resolveDynamic,
+  );
+}
+
+/**
+ * Validate an in-memory YAML buffer through the exact file-load path so buffer and file
+ * validation produce identical positioned errors. `file` is the label used in those errors
+ * (defaults to `<name>.yaml`); splices and dynamic options still resolve against `repoRoot`.
+ */
+export async function parseWorkflowText(
+  name: string,
+  yaml: string,
+  agentNames: Iterable<string> = [],
+  repoRoot: string = process.cwd(),
+  file = `${name}.yaml`,
+  resolveDynamic = true,
+): Promise<LoadedWorkflow> {
+  const raw = parseRaw(file, yaml);
+  return loadFromRaw(name, file, "repo", raw, repoRoot, agentNames, resolveDynamic);
 }
 
 export async function loadWorkflow(

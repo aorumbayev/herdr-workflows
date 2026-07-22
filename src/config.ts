@@ -48,12 +48,11 @@ function formatIssue(file: string, issue: z.core.$ZodIssue): string {
   return positioned(file, key, issue.message);
 }
 
-async function loadFile(file: string): Promise<WorkflowsConfig | undefined> {
-  const f = Bun.file(file);
-  if (!(await f.exists())) return undefined;
+/** Validate a config YAML buffer through the same schema `loadConfig` uses. */
+export function parseConfigText(file: string, text: string): WorkflowsConfig {
   let data: unknown;
   try {
-    data = Bun.YAML.parse(await f.text());
+    data = Bun.YAML.parse(text);
   } catch (error) {
     throw new ConfigLoadError(
       positioned(file, undefined, error instanceof Error ? error.message : String(error)),
@@ -67,6 +66,12 @@ async function loadFile(file: string): Promise<WorkflowsConfig | undefined> {
     agents: result.data.agents,
     sessions: result.data.sessions ?? {},
   };
+}
+
+async function loadFile(file: string): Promise<WorkflowsConfig | undefined> {
+  const f = Bun.file(file);
+  if (!(await f.exists())) return undefined;
+  return parseConfigText(file, await f.text());
 }
 
 export function globalConfigPath(): string {

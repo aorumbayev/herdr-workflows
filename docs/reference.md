@@ -10,6 +10,11 @@
 | `hwf run <name> [--prompt …] [--input k=v …]`    | run; live progress/stderr; nonzero on fail                                                                |
 | `hwf init [--force] [--seed=global\|repo\|none]` | write `.hwf/config.yaml` + repo `review`; optionally seed `handoff`/`worktree` (TTY asks; default global) |
 | `hwf launch` / `hwf picker`                      | picker popup                                                                                              |
+| `hwf web [--port <n>] [--no-open]`               | localhost workbench: browse/edit/validate/share workflows + config; default port 7317, auto-increments    |
+
+### Web workbench
+
+Localhost-only HTTP UI over the same core the CLI uses — browse repo + global workflows, edit with live validation (same errors as `hwf run`), edit config, browse the run log, and share via copy/download/import/promote (promote refuses to clobber an existing name unless forced). **It never runs workflows** (needs herdr panes); it surfaces `hwf run <name>` instead. Bound to `127.0.0.1` with a per-launch token (`x-hwf-token`) and `Origin`/`Host` allowlist on every route.
 
 ## Picker
 

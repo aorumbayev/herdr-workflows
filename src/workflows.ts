@@ -6,5 +6,12 @@ export {
   type WorkflowListEntry,
   type PlaceholderValues,
 } from "./workflows/errors";
-export { listWorkflows, loadWorkflow, loadWorkflowEntry } from "./workflows/load";
+export {
+  listWorkflows,
+  loadWorkflow,
+  loadWorkflowEntry,
+  parseWorkflowText,
+} from "./workflows/load";
+export { workflowPath } from "./workflows/discover";
+export { parseRaw, type RawWorkflow } from "./workflows/parse";
 export { substitute, substituteParams } from "./workflows/substitute";

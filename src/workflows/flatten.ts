@@ -16,6 +16,7 @@ export async function flattenSteps(
   stack: string[],
   sources?: Set<"repo" | "global">,
   root?: { file: string; source: "repo" | "global" },
+  rootRaw?: RawWorkflow,
 ): Promise<FlatStep[]> {
   if (stack.includes(name)) {
     throw new WorkflowLoadError(
@@ -40,7 +41,10 @@ export async function flattenSteps(
     );
   }
   sources?.add(resolved.source);
-  const parsed = await parseFile(resolved.file);
+  const parsed =
+    stack.length === 0 && rootRaw
+      ? { file: resolved.file, raw: rootRaw }
+      : await parseFile(resolved.file);
   if (stack.length > 0 && parsed.raw.inputs !== undefined) {
     throw new WorkflowLoadError(
       positioned(

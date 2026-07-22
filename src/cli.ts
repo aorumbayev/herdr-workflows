@@ -10,9 +10,10 @@ import { WorkflowLoadError } from "./workflows";
 import { resolveRepoRoot } from "./repo";
 import { runWorkflow } from "./runner";
 import { runManage } from "./tui/manage";
+import { startWebServer } from "./web/server";
 
 function usage(): never {
-  die("usage: hwf|herdr-workflows [<run|init|launch|picker>]  (no args: manage TUI)");
+  die("usage: hwf|herdr-workflows [<run|init|launch|picker|web>]  (no args: manage TUI)");
 }
 
 function parseInputFlags(values: string[]): Record<string, string> {
@@ -71,6 +72,31 @@ async function cmdRun(args: string[]): Promise<void> {
   }
 }
 
+function openBrowser(url: string): void {
+  const cmd =
+    process.platform === "darwin"
+      ? ["open", url]
+      : process.platform === "win32"
+        ? ["cmd", "/c", "start", "", url]
+        : ["xdg-open", url];
+  try {
+    Bun.spawn(cmd, { stdout: "ignore", stderr: "ignore" });
+  } catch {
+    // browser launch is best-effort; the printed URL still works
+  }
+}
+
+async function cmdWeb(args: string[]): Promise<void> {
+  const { flags, bools } = parseArgs(args);
+  const port = flags.port !== undefined ? Number(flags.port) : undefined;
+  if (port !== undefined && !Number.isInteger(port))
+    die(`--port expects an integer, got '${flags.port}'`);
+  const repoRoot = await resolveRepoRoot();
+  const { url } = await startWebServer({ repoRoot, port });
+  process.stdout.write(`herdr-workflows web · ${url}\n`);
+  if (!bools.has("no-open")) openBrowser(url);
+}
+
 async function main(): Promise<void> {
   // Older cached manifests invoked `bin/hook.mjs herdr <cmd>`; strip that prefix so a stale
   // plugins.json still reaches launch/picker until the next `bun run install:dev` re-links.
@@ -85,6 +111,7 @@ async function main(): Promise<void> {
   if (command === "picker") return runPickerPopup();
   if (command === "run") return cmdRun(rest);
   if (command === "init") return cmdInit(rest);
+  if (command === "web") return cmdWeb(rest);
   usage();
 }
 

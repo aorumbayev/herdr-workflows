@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="icon" href="data:," />
+<title>herdr-workflows</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg:#2c323c; --bg-elevated:#343a46;
+    --ink:#eceff4; --ink-soft:#d8dee9; --muted:#9aa3b5;
+    --line:#3d4452; --line-strong:#4c566a;
+    --accent:#e9e276; --accent-soft:color-mix(in srgb, var(--accent) 12%, transparent);
+    --green:#a3be8c; --red:#c9838a;
+    --term-bg:#232831; --term-border:#3b4252; --term-text:#d8dee9;
+    --fill:#e9e276; --fill-ink:#26292a;
+    --radius:4px; --radius-sm:2px;
+    --mono:'JetBrains Mono Variable',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--ink); font-family:var(--mono); font-size:14px; line-height:1.6; -webkit-font-smoothing:antialiased; }
+  ::selection { background:color-mix(in srgb, var(--accent) 25%, transparent); }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:var(--line-strong); border-radius:6px; }
+
+  header { display:flex; gap:.5rem; align-items:center; padding:.7rem 1.1rem; border-bottom:1px solid var(--line); background:var(--bg-elevated); }
+  header h1 { font-size:14px; margin-right:1rem; font-weight:700; letter-spacing:-.01em; }
+
+  button, select, input {
+    font:inherit; color:var(--ink); background:transparent;
+    border:1px solid var(--line-strong); border-radius:var(--radius);
+    padding:.4rem .75rem; cursor:pointer;
+    transition:background 120ms ease, border-color 120ms ease, color 120ms ease;
+  }
+  button:hover, select:hover { border-color:var(--accent); background:var(--accent-soft); }
+  button:active { transform:translateY(1px); }
+  input { min-width:9rem; cursor:text; }
+  input:focus, select:focus, textarea:focus { outline:2px solid var(--accent); outline-offset:1px; border-color:transparent; }
+
+  .tab { font-weight:600; }
+  .tab.on { background:var(--accent); color:var(--fill-ink); border-color:var(--accent); }
+  .tab.on:hover { background:var(--fill); }
+
+  main { display:grid; grid-template-columns:260px minmax(0,1fr); height:calc(100vh - 51px); }
+  main.full { grid-template-columns:minmax(0,1fr); }
+  aside { border-right:1px solid var(--line); overflow:auto; padding:.6rem; display:flex; flex-direction:column; gap:.3rem; }
+  aside .row { padding:.45rem .6rem; border-radius:var(--radius); cursor:pointer; display:flex; justify-content:space-between; gap:.5rem; align-items:center; border:1px solid transparent; }
+  aside .row:hover { background:var(--accent-soft); }
+  aside .row.on { background:var(--accent); color:var(--fill-ink); }
+  aside .row.on .badge { color:var(--fill-ink); opacity:.8; }
+  aside .row.bad > span:first-child { color:var(--red); }
+  .badge { font-size:11px; color:var(--muted); }
+
+  section { display:flex; flex-direction:column; padding:1rem 1.2rem; gap:.7rem; overflow:auto; }
+  .bar { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
+  textarea {
+    flex:1; min-height:55vh; font:inherit; padding:.8rem 1rem;
+    border:1px solid var(--term-border); border-radius:var(--radius);
+    background:var(--term-bg); color:var(--term-text); resize:vertical; line-height:1.7;
+  }
+  .status { min-height:1.4rem; white-space:pre-wrap; font-size:.85rem; color:var(--muted); }
+  .status.bad { color:var(--red); }
+  .status.ok { color:var(--green); }
+  code { background:var(--term-bg); border:1px solid var(--term-border); padding:.12rem .4rem; border-radius:var(--radius-sm); color:var(--accent); }
+  .hint { color:var(--muted); font-size:.85rem; }
+  .hide { display:none !important; }
+
+  /* segmented text/visual toggle */
+  .seg { display:inline-flex; border:1px solid var(--line-strong); border-radius:var(--radius); overflow:hidden; }
+  .seg button { border:0; border-radius:0; padding:.4rem .8rem; }
+  .seg button.on { background:var(--accent); color:var(--fill-ink); }
+  .seg button.on:hover { background:var(--fill); }
+  .spacer { flex:1; }
+
+  /* visual step cards */
+  #visual { display:flex; flex-direction:column; gap:.6rem; min-height:40vh; flex:none; }
+  .step { border:1px solid var(--line); border-radius:var(--radius); background:var(--bg-elevated); padding:.7rem .8rem; display:grid; grid-template-columns:auto auto 1fr auto; gap:.5rem .6rem; align-items:start; }
+  .step.drag { opacity:.4; }
+  .step.over { border-color:var(--accent); }
+  .step .grip { cursor:grab; color:var(--muted); user-select:none; padding-top:.4rem; line-height:1; font-size:1.1rem; }
+  .step .grip:active { cursor:grabbing; }
+  .step select.verb { align-self:start; }
+  .step .fields { grid-column:3; display:flex; flex-direction:column; gap:.4rem; }
+  .step .fields label { display:flex; flex-direction:column; gap:.15rem; font-size:.72rem; color:var(--muted); }
+  .step .fields input, .step .fields textarea { font-size:.85rem; }
+  .step .fields textarea { min-height:3.5rem; resize:vertical; }
+  .step .fields .inline { flex-direction:row; align-items:center; gap:.4rem; font-size:.8rem; color:var(--ink-soft); }
+  .step .rm { align-self:start; color:var(--muted); border-color:transparent; padding:.3rem .5rem; }
+  .step .rm:hover { color:var(--red); border-color:var(--red); background:transparent; }
+  .addbar { display:flex; gap:.4rem; flex-wrap:wrap; }
+
+  /* runs */
+  #runs-list { display:flex; flex-direction:column; gap:.5rem; }
+  .run { display:flex; align-items:center; gap:.7rem; border:1px solid var(--line); border-radius:var(--radius); padding:.6rem .8rem; background:var(--bg-elevated); }
+  .run .dot { width:.55rem; height:.55rem; border-radius:50%; flex:none; background:var(--muted); }
+  .run .dot.ok { background:var(--green); }
+  .run .dot.bad { background:var(--red); }
+  .run .name { font-weight:600; }
+  .run .when { color:var(--muted); font-size:.8rem; margin-left:auto; white-space:nowrap; }
+  .run .err { color:var(--red); font-size:.8rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>herdr-workflows</h1>
+  <button class="tab on" data-tab="workflows">Workflows</button>
+  <button class="tab" data-tab="config">Config</button>
+  <button class="tab" data-tab="runs">Runs</button>
+  <span id="repo" class="badge" style="margin-left:auto"></span>
+</header>
+<main>
+  <aside id="list"></aside>
+  <section id="pane"></section>
+</main>
+<script>
+const TOKEN = "__HWF_TOKEN__";
+const $ = (id) => document.getElementById(id);
+let state = { entries: [], agents: [], repoRoot: "" };
+let tab = "workflows";
+let current = null; // {name, scope}
+
+async function api(path, opts) {
+  const o = opts || {};
+  o.headers = Object.assign({ "x-hwf-token": TOKEN }, o.headers || {});
+  if (o.body) o.headers["content-type"] = "application/json";
+  const res = await fetch(path, o);
+  return { status: res.status, data: await res.json().catch(() => ({})) };
+}
+
+async function loadState() {
+  const { data } = await api("/api/state");
+  state = data;
+  $("repo").textContent = data.repoRoot || "";
+  render();
+}
+
+function render() {
+  document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+  document.querySelector("main").classList.toggle("full", tab !== "workflows");
+  if (tab === "workflows") return renderWorkflows();
+  if (tab === "config") return renderConfig();
+  return renderRuns();
+}
+
+function renderWorkflows() {
+  const list = $("list");
+  list.classList.remove("hide");
+  list.innerHTML = "";
+  const nu = document.createElement("button");
+  nu.textContent = "+ new";
+  nu.className = "tab";
+  nu.style.width = "100%";
+  nu.onclick = newWorkflow;
+  list.appendChild(nu);
+  for (const e of state.entries) {
+    const row = document.createElement("div");
+    row.className = "row" + (!e.valid ? " bad" : "") + (current && current.name === e.name ? " on" : "");
+    const where = e.inRepo && e.inGlobal ? "local + global" : e.source === "repo" ? "local" : "global";
+    row.innerHTML = "<span>" + e.name + "</span><span class=badge>" + where + "</span>";
+    row.onclick = () => openWorkflow(e.name, e.source);
+    list.appendChild(row);
+  }
+  if (!current) $("pane").innerHTML = "<p class=hint>Select a workflow or create one.</p>";
+}
+
+async function openWorkflow(name, scope) {
+  const { data } = await api("/api/workflow?name=" + encodeURIComponent(name) + "&scope=" + scope);
+  current = { name, scope };
+  renderEditor(name, scope, data.text || "");
+  renderWorkflows();
+}
+
+function newWorkflow() {
+  current = { name: "", scope: "repo" };
+  renderEditor("", "repo", "steps:\n  - shell: echo hello\n");
+}
+
+// Readable step blocks appended at the end of the step list (the right slot for a linear runner).
+const SKELETONS = {
+  shell: "  - shell: ",
+  agent: "  - agent: \n    prompt: |-\n      ",
+  open: "  - open: ",
+  herdr: "  - herdr: \n    params: {}",
+  run: "  - run: ",
+};
+
+const VERBS = ["shell", "agent", "open", "herdr", "run"];
+let validateTimer = null;
+
+function renderEditor(name, scope, text) {
+  const pane = $("pane");
+  pane.innerHTML = "";
+  let mode = "text";
+  let extras = {}; // inputs / on_fail carried through visual mode untouched
+
+  const nameIn = document.createElement("input");
+  nameIn.placeholder = "name";
+  nameIn.value = name;
+  const scopeSel = mkScopeSelect(scope);
+
+  const modeSeg = document.createElement("div");
+  modeSeg.className = "seg";
+  const textBtn = mkBtn("text", () => setMode("text"));
+  const visBtn = mkBtn("visual", () => setMode("visual"));
+  textBtn.classList.add("on");
+  modeSeg.append(textBtn, visBtn);
+
+  const addbar = document.createElement("div");
+  addbar.className = "addbar";
+  for (const verb of VERBS) addbar.appendChild(mkBtn("+ " + verb, () => addStep(verb)));
+
+  const bar1 = document.createElement("div");
+  bar1.className = "bar";
+  bar1.append(nameIn, scopeSel, modeSeg, addbar);
+
+  const ta = document.createElement("textarea");
+  ta.value = text;
+
+  const visual = document.createElement("div");
+  visual.id = "visual";
+  visual.classList.add("hide");
+  wireDragContainer(visual, () => syncFromVisual());
+
+  const status = document.createElement("div");
+  status.className = "status";
+
+  function runValidate() {
+    clearTimeout(validateTimer);
+    validateTimer = setTimeout(async () => {
+      const r = await api("/api/validate", { method: "POST", body: JSON.stringify({ name: nameIn.value.trim() || "buffer", text: ta.value }) });
+      setStatus(status, r.data.ok, r.data.ok ? "valid" : r.data.error);
+    }, 350);
+  }
+
+  // Append a well-formed step at the end of the list (text mode) or as a new card (visual).
+  function addStep(verb) {
+    if (mode === "visual") {
+      visual.appendChild(buildCard({ [verb]: "" }));
+      syncFromVisual();
+      return;
+    }
+    let t = ta.value.replace(/\s+$/, "");
+    if (!/^steps:/m.test(t)) t = (t ? t + "\n" : "") + "steps:";
+    ta.value = t + "\n\n" + SKELETONS[verb] + "\n";
+    ta.focus();
+    runValidate();
+  }
+
+  async function setMode(next) {
+    if (next === mode) return;
+    if (next === "visual") {
+      const r = await api("/api/parse", { method: "POST", body: JSON.stringify({ text: ta.value }) });
+      if (!r.data.ok) { setStatus(status, false, "fix YAML before visual edit — " + r.data.error); return; }
+      extras = {};
+      if (r.data.doc.inputs) extras.inputs = r.data.doc.inputs;
+      if (r.data.doc.on_fail) extras.on_fail = r.data.doc.on_fail;
+      visual.innerHTML = "";
+      for (const step of r.data.doc.steps) visual.appendChild(buildCard(step));
+    } else {
+      await syncFromVisual();
+    }
+    mode = next;
+    textBtn.classList.toggle("on", mode === "text");
+    visBtn.classList.toggle("on", mode === "visual");
+    ta.classList.toggle("hide", mode !== "text");
+    visual.classList.toggle("hide", mode !== "visual");
+  }
+
+  // Read cards → raw steps → server format → back into the shared YAML buffer, then validate.
+  async function syncFromVisual() {
+    const steps = [];
+    for (const card of visual.querySelectorAll(".step")) {
+      const raw = card.toRaw();
+      if (raw.error) { setStatus(status, false, raw.error); return; }
+      steps.push(raw.step);
+    }
+    if (steps.length === 0) { setStatus(status, false, "add at least one step"); return; }
+    const r = await api("/api/format", { method: "POST", body: JSON.stringify({ doc: Object.assign({}, extras, { steps }) }) });
+    if (!r.data.ok) { setStatus(status, false, r.data.error || "format failed"); return; }
+    ta.value = r.data.text;
+    runValidate();
+  }
+
+  const bar2 = document.createElement("div");
+  bar2.className = "bar";
+  const save = mkBtn("save", async () => {
+    if (mode === "visual") await syncFromVisual();
+    const r = await api("/api/workflow", {
+      method: "PUT",
+      body: JSON.stringify({ name: nameIn.value.trim(), scope: scopeSel.value, text: ta.value }),
+    });
+    if (r.data.ok) { setStatus(status, true, "saved"); current = { name: nameIn.value.trim(), scope: scopeSel.value }; await loadState(); }
+    else setStatus(status, false, r.data.error || "save failed");
+  });
+  const copy = mkBtn("copy", () => navigator.clipboard.writeText(ta.value));
+  const download = mkBtn("download", () => {
+    const blob = new Blob([ta.value], { type: "text/yaml" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = (nameIn.value.trim() || "workflow") + ".yaml";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+  bar2.append(save, copy, download);
+
+  const entry = state.entries.find((e) => e.name === name);
+  const inBoth = !!entry && entry.inRepo && entry.inGlobal;
+
+  // Move (copy to the other scope, then drop the source) only when the name lives in one scope;
+  // when it exists in both, a move would clobber, so no button.
+  if (entry && !inBoth) {
+    const to = scope === "repo" ? "global" : "repo";
+    const move = mkBtn("move to " + (to === "global" ? "global" : "local"), async () => {
+      const p = await api("/api/promote", { method: "POST", body: JSON.stringify({ name, from: scope, to }) });
+      if (!p.data.ok) { setStatus(status, false, p.data.error || "move failed"); return; }
+      await api("/api/workflow", { method: "DELETE", body: JSON.stringify({ name, scope }) });
+      current = { name, scope: to };
+      setStatus(status, true, "moved to " + (to === "global" ? "global" : "local"));
+      await loadState();
+      await openWorkflow(name, to);
+    });
+    bar2.appendChild(move);
+  }
+
+  // Delete: when the name exists in both scopes, let the user pick which variant(s) to remove.
+  if (inBoth) {
+    const delSel = document.createElement("select");
+    for (const [val, lbl] of [["repo", "local"], ["global", "global"], ["both", "both"]]) {
+      const o = document.createElement("option");
+      o.value = val; o.textContent = lbl;
+      delSel.appendChild(o);
+    }
+    const del = mkBtn("delete", async () => {
+      const which = delSel.value;
+      if (!confirm("delete " + name + " (" + (which === "repo" ? "local" : which) + ")?")) return;
+      const scopes = which === "both" ? ["repo", "global"] : [which];
+      for (const s of scopes) await api("/api/workflow", { method: "DELETE", body: JSON.stringify({ name, scope: s }) });
+      current = null; await loadState();
+    });
+    bar2.append(delSel, del);
+  } else {
+    const del = mkBtn("delete", async () => {
+      if (!confirm("delete " + name + "?")) return;
+      await api("/api/workflow", { method: "DELETE", body: JSON.stringify({ name, scope }) });
+      current = null; await loadState();
+    });
+    bar2.appendChild(del);
+  }
+
+  const foot = document.createElement("div");
+  foot.className = "hint";
+  const setFoot = () => { foot.innerHTML = "run in a terminal: <code>hwf run " + (nameIn.value.trim() || "&lt;name&gt;") + "</code> (no run from browser)"; };
+  setFoot();
+  nameIn.oninput = setFoot;
+  ta.oninput = runValidate;
+
+  pane.append(bar1, ta, visual, status, bar2, foot);
+}
+
+function mkScopeSelect(scope) {
+  const sel = document.createElement("select");
+  for (const s of ["repo", "global"]) {
+    const o = document.createElement("option");
+    o.value = s;
+    o.textContent = s === "repo" ? "local" : "global";
+    if (s === scope) o.selected = true;
+    sel.appendChild(o);
+  }
+  return sel;
+}
+
+function verbOf(step) {
+  return VERBS.find((v) => step[v] !== undefined) || "shell";
+}
+
+// One draggable step card. Attaches toRaw() reading its live field values back into a raw step.
+function buildCard(step) {
+  const verb = verbOf(step);
+  const card = document.createElement("div");
+  card.className = "step";
+  card.draggable = true;
+
+  const grip = document.createElement("span");
+  grip.className = "grip";
+  grip.textContent = "⠿";
+
+  const verbSel = document.createElement("select");
+  verbSel.className = "verb";
+  for (const v of VERBS) {
+    const o = document.createElement("option");
+    o.value = o.textContent = v;
+    if (v === verb) o.selected = true;
+    verbSel.appendChild(o);
+  }
+  verbSel.onchange = () => {
+    const fresh = buildCard({ [verbSel.value]: "" });
+    card.replaceWith(fresh);
+    fresh.dispatchEvent(new Event("step-changed", { bubbles: true }));
+  };
+
+  const fields = document.createElement("div");
+  fields.className = "fields";
+  const rm = mkBtn("✕", () => { const p = card.parentElement; card.remove(); p.dispatchEvent(new Event("step-changed", { bubbles: true })); });
+  rm.className = "rm";
+
+  const inputs = {};
+  const textField = (key, label, val, ta) => {
+    const wrap = document.createElement("label");
+    wrap.textContent = label;
+    const el = document.createElement(ta ? "textarea" : "input");
+    el.value = val || "";
+    wrap.appendChild(el);
+    fields.appendChild(wrap);
+    inputs[key] = el;
+    return el;
+  };
+  const checkField = (key, label, on) => {
+    const wrap = document.createElement("label");
+    wrap.className = "inline";
+    const el = document.createElement("input");
+    el.type = "checkbox";
+    el.checked = !!on;
+    wrap.append(el, document.createTextNode(label));
+    fields.appendChild(wrap);
+    inputs[key] = el;
+  };
+
+  if (verb === "shell") {
+    textField("shell", "command", step.shell);
+    textField("stdin", "stdin (optional)", step.stdin);
+  } else if (verb === "open") {
+    textField("open", "command", step.open);
+    textField("wait_for", "wait_for (optional)", step.wait_for);
+    textField("timeout", "timeout seconds (optional)", step.timeout);
+  } else if (verb === "agent") {
+    textField("agent", "agent name", step.agent);
+    textField("prompt", "prompt", step.prompt, true);
+    checkField("wait", "wait for done", step.wait === "done");
+    textField("timeout", "timeout seconds (optional)", step.timeout);
+    checkField("close_source", "close source pane", step.close_source);
+  } else if (verb === "herdr") {
+    textField("herdr", "method", step.herdr);
+    textField("params", "params (JSON)", step.params ? JSON.stringify(step.params) : "");
+  } else if (verb === "run") {
+    textField("run", "workflow name", step.run);
+  }
+
+  card.toRaw = () => {
+    const out = {};
+    const s = (k) => inputs[k] ? inputs[k].value.trim() : "";
+    const num = (k) => { const v = s(k); if (!v) return; const n = parseInt(v, 10); if (Number.isInteger(n)) out.timeout = n; };
+    if (verb === "shell") { out.shell = s("shell"); if (s("stdin")) out.stdin = inputs.stdin.value; }
+    else if (verb === "open") { out.open = s("open"); if (s("wait_for")) out.wait_for = s("wait_for"); num("timeout"); }
+    else if (verb === "agent") {
+      out.agent = s("agent");
+      if (inputs.prompt.value !== "") out.prompt = inputs.prompt.value;
+      if (inputs.wait.checked) out.wait = "done";
+      num("timeout");
+      if (inputs.close_source.checked) out.close_source = true;
+    } else if (verb === "herdr") {
+      out.herdr = s("herdr");
+      const p = s("params");
+      if (p) { try { out.params = JSON.parse(p); } catch { return { error: "step params must be valid JSON" }; } }
+    } else if (verb === "run") { out.run = s("run"); }
+    return { step: out };
+  };
+
+  card.append(grip, verbSel, fields, rm);
+  for (const el of card.querySelectorAll("input, textarea")) {
+    el.oninput = () => card.dispatchEvent(new Event("step-changed", { bubbles: true }));
+  }
+  return card;
+}
+
+// Native drag reorder for the card list; `onChange` fires after any drop or edit.
+function wireDragContainer(container, onChange) {
+  let dragEl = null;
+  let debounce = null;
+  const fire = () => { clearTimeout(debounce); debounce = setTimeout(onChange, 300); };
+  container.addEventListener("step-changed", fire);
+  container.addEventListener("dragstart", (e) => {
+    dragEl = e.target.closest(".step");
+    if (dragEl) dragEl.classList.add("drag");
+  });
+  container.addEventListener("dragend", () => {
+    if (dragEl) dragEl.classList.remove("drag");
+    container.querySelectorAll(".over").forEach((c) => c.classList.remove("over"));
+    dragEl = null;
+    fire();
+  });
+  container.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    const over = e.target.closest(".step");
+    if (!over || over === dragEl || !dragEl) return;
+    const rect = over.getBoundingClientRect();
+    const after = e.clientY > rect.top + rect.height / 2;
+    over.parentElement.insertBefore(dragEl, after ? over.nextSibling : over);
+  });
+}
+
+function mkBtn(label, fn) {
+  const b = document.createElement("button");
+  b.textContent = label;
+  b.onclick = fn;
+  return b;
+}
+
+function setStatus(el, ok, msg) {
+  el.textContent = msg || "";
+  el.className = "status " + (ok ? "ok" : "bad");
+}
+
+async function renderConfig() {
+  $("list").classList.add("hide");
+  const pane = $("pane");
+  pane.innerHTML = "";
+  const bar = document.createElement("div");
+  bar.className = "bar";
+  const scopeSel = document.createElement("select");
+  for (const s of ["repo", "global"]) {
+    const o = document.createElement("option");
+    o.value = s;
+    o.textContent = s === "repo" ? "local" : "global";
+    scopeSel.appendChild(o);
+  }
+  const ta = document.createElement("textarea");
+  const status = document.createElement("div");
+  status.className = "status";
+  const load = async () => {
+    const { data } = await api("/api/config?scope=" + scopeSel.value);
+    ta.value = data.text || "";
+  };
+  scopeSel.onchange = load;
+  const save = mkBtn("save", async () => {
+    const r = await api("/api/config", { method: "PUT", body: JSON.stringify({ scope: scopeSel.value, text: ta.value }) });
+    setStatus(status, !!r.data.ok, r.data.ok ? "saved" : r.data.error || "save failed");
+  });
+  bar.append(scopeSel, save);
+  pane.append(bar, ta, status);
+  await load();
+}
+
+function fmtWhen(ts) {
+  const d = new Date(ts);
+  if (isNaN(d)) return ts;
+  return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function esc(s) {
+  const d = document.createElement("div");
+  d.textContent = s == null ? "" : String(s);
+  return d.innerHTML;
+}
+
+async function renderRuns() {
+  $("list").classList.add("hide");
+  const pane = $("pane");
+  pane.innerHTML = "<p class=hint>loading…</p>";
+  const { data } = await api("/api/runs");
+  const runs = data.runs || [];
+  pane.innerHTML = "";
+  if (!runs.length) { pane.innerHTML = "<p class=hint>no runs yet</p>"; return; }
+  const wrap = document.createElement("div");
+  wrap.id = "runs-list";
+  for (const r of runs) {
+    const row = document.createElement("div");
+    row.className = "run";
+    const status = r.ok ? "ok" : (r.error ? "failed" : "fail");
+    row.innerHTML =
+      '<span class="dot ' + (r.ok ? "ok" : "bad") + '"></span>' +
+      '<span class="name">' + esc(r.workflow) + "</span>" +
+      '<span class="' + (r.ok ? "hint" : "err") + '">' + esc(status) + "</span>" +
+      (r.error ? '<span class="err">— ' + esc(r.error) + "</span>" : "") +
+      '<span class="when">' + esc(fmtWhen(r.ts)) + "</span>";
+    wrap.appendChild(row);
+  }
+  pane.appendChild(wrap);
+}
+
+document.querySelectorAll(".tab").forEach((b) => b.onclick = () => { tab = b.dataset.tab; if (tab === "workflows") current = null; render(); });
+loadState();
+</script>
+</body>
+</html>
