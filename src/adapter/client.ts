@@ -148,13 +148,13 @@ export async function agentSessionInfo(paneId: string): Promise<AgentSessionInfo
 }
 
 export async function waitOutput(paneId: string, match: string, timeoutMs: number): Promise<void> {
+  // herdr 0.7.5 removed top-level `wait`; `pane wait-output` takes the pattern as --regex's value.
   const { stdout, stderr, exitCode } = await herdrCli([
-    "wait",
-    "output",
-    paneId,
-    "--match",
-    match,
+    "pane",
+    "wait-output",
     "--regex",
+    match,
+    paneId,
     "--timeout",
     String(timeoutMs),
   ]);

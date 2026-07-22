@@ -20,4 +20,4 @@ cd your-repo && hwf init
 # prefix+k → handoff → choose configured target agent
 ```
 
-herdr ≥ 0.7.4 plugin. [Guide](/guide) · [Reference](/reference)
+herdr ≥ 0.7.5 plugin. [Guide](/guide) · [Reference](/reference)

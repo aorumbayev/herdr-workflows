@@ -91,7 +91,7 @@ Placeholders: `{pane}` `{selection}` `{prompt}` `{last}` `{error}` `{session}` `
 - **Preflight** failures (e.g. `{session}` / `{agent}` required but unavailable) abort before any step — `on_fail` does not run.
 - Run log = observability only (manage **Runs** tab). Optional sidebar: `$herdr-workflows` in herdr config.
 - `run:` flattened + validated at load. Repo shadows global for names.
-- herdr ≥ 0.7.4, POSIX. Keybinding installed into `config.toml` (no manifest field).
+- herdr ≥ 0.7.5, POSIX. Keybinding installed into `config.toml` (no manifest field).
 - `agent` / `open` push opened tab ids → `{tab}` / `{prev_tab}`.
 
 ## Ceilings

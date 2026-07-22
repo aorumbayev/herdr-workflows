@@ -1,5 +1,5 @@
 /**
- * Empirical checks against a live herdr 0.7.4 server (skipped when no socket).
+ * Empirical checks against a live herdr 0.7.5 server (skipped when no socket).
  * Confirms layout.apply shapes, agent.list visibility, and pane read text has no ESC.
  */
 import { describe, expect, test } from "bun:test";
@@ -11,7 +11,7 @@ import { herdrCall, herdrRequest, layoutApply, paneRead, tabClose } from "../src
 const socket = process.env.HERDR_SOCKET_PATH ?? "";
 const live = Boolean(socket);
 
-describe.skipIf(!live)("herdr 0.7.4 empirical", () => {
+describe.skipIf(!live)("herdr 0.7.5 empirical", () => {
   test("layout.apply returns tab+pane ids and pane appears in agent.list", async () => {
     process.env.HERDR_SOCKET_PATH = socket;
     const cwd = await mkdtemp(join(tmpdir(), "herdr-workflows-emp-"));

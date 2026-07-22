@@ -1,6 +1,6 @@
 # Guide
 
-herdr ≥ 0.7.4. Plugin sequences short YAML workflows; herdr owns panes/tabs/agents.
+herdr ≥ 0.7.5. Plugin sequences short YAML workflows; herdr owns panes/tabs/agents.
 
 ## Install & first run
 

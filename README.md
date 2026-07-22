@@ -18,7 +18,7 @@ herdr-workflows is a [herdr](https://herdr.dev) plugin that runs short YAML work
 
 ## Install
 
-You need [herdr](https://herdr.dev) **0.7.4** or newer.
+You need [herdr](https://herdr.dev) **0.7.5** or newer.
 
 ```bash
 herdr plugin install aorumbayev/herdr-workflows
