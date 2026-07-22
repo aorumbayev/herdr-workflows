@@ -5,7 +5,7 @@
 <p align="center">Automate stuff in herdr</p>
 
 <p align="center">
-  <a href="docs/guide.md">Guide</a> · <a href="docs/examples.md">Examples</a> · <a href="docs/reference.md">Reference</a>
+  <a href="https://aorumbayev.github.io/herdr-workflows/guide">Guide</a> · <a href="https://aorumbayev.github.io/herdr-workflows/examples">Examples</a> · <a href="https://aorumbayev.github.io/herdr-workflows/reference">Reference</a>
 </p>
 
 <p align="center">
@@ -54,7 +54,7 @@ Running always happens through the picker or `hwf run` — it needs real herdr p
 
 ## Docs
 
-Full documentation lives in [`docs/`](docs/guide.md).
+Full documentation lives at [aorumbayev.github.io/herdr-workflows](https://aorumbayev.github.io/herdr-workflows/).
 
 ## License
 
