@@ -37,24 +37,15 @@ Press `prefix+k` to pick and run a workflow, or use the CLI directly:
 
 ```bash
 hwf run review      # run a workflow, live progress in the terminal
-hwf                 # manage TUI: edit workflows/config, browse run log
-hwf web             # open the browser workbench (build/edit/share; no run)
+hwf web             # browser workbench: build/edit/validate workflows, browse run log
+hwf                 # same as `hwf web`
 ```
-
-## Surfaces
-
-| How                       | What                                                                    |
-| ------------------------- | ----------------------------------------------------------------------- |
-| `prefix+k` / `hwf launch` | picker popup — filter, pick, optional prompt line                       |
-| `hwf run <name>`          | CLI — live step/stderr output; best for debugging                       |
-| `hwf` (no args, TTY)      | manage TUI — edit workflows/config, browse the run log                  |
-| `hwf web`                 | localhost workbench — browse/edit/validate/share, text or visual editor |
 
 Running always happens through the picker or `hwf run` — it needs real herdr panes, so the web workbench builds and shares but never runs.
 
 ## Docs
 
-Full documentation lives at [aorumbayev.github.io/herdr-workflows](https://aorumbayev.github.io/herdr-workflows/).
+Full documentation lives at [aorumbayev.github.io/herdr-workflows](https://aorumbayev.github.io/herdr-workflows/) — [Guide](https://aorumbayev.github.io/herdr-workflows/guide) for the concepts, [Examples](https://aorumbayev.github.io/herdr-workflows/examples) for recipes, [Reference](https://aorumbayev.github.io/herdr-workflows/reference) for every rule.
 
 ## License
 

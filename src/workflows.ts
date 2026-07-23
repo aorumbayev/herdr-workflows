@@ -13,5 +13,5 @@ export {
   parseWorkflowText,
 } from "./workflows/load";
 export { workflowPath } from "./workflows/discover";
-export { parseRaw, type RawWorkflow } from "./workflows/parse";
+export { parseRaw } from "./workflows/parse";
 export { substitute, substituteParams } from "./workflows/substitute";

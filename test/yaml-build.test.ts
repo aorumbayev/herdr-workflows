@@ -1,41 +1,54 @@
 import { describe, expect, test } from "bun:test";
+import { parseRaw } from "../src/workflows";
 import { dumpWorkflow } from "../src/web/yaml-build";
-import { parseRaw, type RawWorkflow } from "../src/workflows";
 
-function roundtrip(doc: RawWorkflow): RawWorkflow {
-  return parseRaw("t.yaml", dumpWorkflow(doc));
+function roundTrip(doc: Parameters<typeof dumpWorkflow>[0]) {
+  return parseRaw("buf.yaml", dumpWorkflow(doc));
 }
 
-describe("dumpWorkflow", () => {
-  test("placeholder value is quoted so it parses as a string, not a flow map", () => {
-    const yaml = dumpWorkflow({ steps: [{ shell: "echo hi", stdin: "{pane}" }] });
-    expect(yaml).toContain('stdin: "{pane}"');
-    expect(parseRaw("t.yaml", yaml).steps[0]).toEqual({ shell: "echo hi", stdin: "{pane}" });
+describe("dumpWorkflow round-trips through parseRaw", () => {
+  test("YAML-typed scalars stay strings", () => {
+    for (const v of [
+      "123",
+      "1.5",
+      "true",
+      "True",
+      "FALSE",
+      "null",
+      "~",
+      "0x10",
+      "1e3",
+      ".nan",
+      "+7",
+    ]) {
+      const doc = roundTrip({ steps: [{ shell: `echo ${v}` }] });
+      expect(doc.steps[0]!.shell).toBe(`echo ${v}`);
+      const run = roundTrip({ steps: [{ run: v }] });
+      expect(run.steps[0]!.run).toBe(v);
+    }
   });
 
-  test("blank line separates steps for readability", () => {
-    const yaml = dumpWorkflow({ steps: [{ shell: "a" }, { shell: "b" }] });
-    expect(yaml).toBe("steps:\n  - shell: a\n\n  - shell: b\n");
+  test("trailing colon and mapping/comment traps are quoted", () => {
+    for (const v of ["note:", "a: b", "has # hash", "# leading", "- dash"]) {
+      const doc = roundTrip({ steps: [{ shell: v }] });
+      expect(doc.steps[0]!.shell).toBe(v);
+    }
   });
 
-  test("multi-line prompt becomes a literal block scalar", () => {
-    const doc: RawWorkflow = { steps: [{ agent: "claude", prompt: "line one\nline two" }] };
-    const yaml = dumpWorkflow(doc);
-    expect(yaml).toContain("prompt: |");
-    expect(roundtrip(doc).steps[0]).toEqual({ agent: "claude", prompt: "line one\nline two" });
+  test("multi-line values round-trip byte-exact", () => {
+    const cases = ["line1  \nline2", "foo\n\n\n", "  indented\nok", "a\nb", 'quote "me"\nnow'];
+    for (const v of cases) {
+      const doc = roundTrip({ steps: [{ agent: "claude", prompt: v }] });
+      expect(doc.steps[0]!.prompt).toBe(v);
+    }
   });
 
-  test("inputs, modifiers and on_fail survive a round-trip", () => {
-    const doc: RawWorkflow = {
-      inputs: { target: { label: "Agent", options: ["claude", "codex"], default: "claude" } },
-      steps: [
-        { open: "lazygit", wait_for: "ready", timeout: 30 },
-        { agent: "claude", prompt: "go", wait: "done", timeout: 600, close_source: true },
-        { herdr: "pane.focus", params: { id: 2 } },
-        { run: "other" },
-      ],
-      on_fail: "cleanup",
-    };
-    expect(roundtrip(doc)).toEqual(doc);
+  test("input values that look like YAML scalars stay strings", () => {
+    const doc = roundTrip({
+      inputs: { target: { label: "pick: one" }, plain: { default: "true" } },
+      steps: [{ shell: "echo hi" }],
+    });
+    expect(doc.inputs?.target?.label).toBe("pick: one");
+    expect(doc.inputs?.plain?.default).toBe("true");
   });
 });

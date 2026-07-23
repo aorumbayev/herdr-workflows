@@ -2,7 +2,6 @@
   "$schema": "https://unpkg.com/knip/schema.json",
   "entry": ["bin/hook.mjs!"],
   "project": ["src/**/*.ts", "bin/**/*.mjs"],
-  "ignore": ["src/web/**"],
   "ignoreDependencies": ["oxfmt", "oxlint"],
   "ignoreBinaries": ["herdr"]
 }

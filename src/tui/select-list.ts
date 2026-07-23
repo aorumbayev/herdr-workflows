@@ -5,7 +5,7 @@ type SelectListOpts = Pick<SelectRenderableOptions, "showDescription" | "flexGro
   theme: HostTheme["select"];
 };
 
-/** Shared Select defaults for picker + manage lists. */
+/** Shared Select defaults for picker lists. */
 export function SelectList(id: string, opts: SelectListOpts) {
   const { theme, showDescription = true, flexGrow = 1, height } = opts;
   return Select({

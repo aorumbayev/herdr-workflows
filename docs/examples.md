@@ -1,14 +1,89 @@
 # Examples
 
-Copy into `.hwf/workflows/<name>.yaml` (repo) or `~/.hwf/workflows/<name>.yaml` (global; any project). Repo shadows global for the same name.
+Copy into `.hwf/workflows/<name>.yaml` (repo) or `~/.hwf/workflows/<name>.yaml` (global, every project). Ordered simple → complex.
 
-Agent names come from `.hwf/config.yaml` / `~/.hwf/config.yaml` (or invoking pane via `{agent}`).
+## Scratch — open a tool
 
-Use `{session}` for the agent transcript; `{pane}` when scrollback is enough; `{prompt}` for one focus line; `inputs:` when the user must pick named values (e.g. target agent). Prefer `HWF_INPUT_*` env inside fixed `shell:` commands when driving CLIs — never interpolate `{input.*}` into the command string.
+The smallest useful workflow: a new tab running a command.
 
-## Handoff (`{session}` + inputs)
+```yaml
+# scratch.yaml
+steps:
+  - open: lazygit
+```
 
-`hwf init` can seed this under `~/.hwf/workflows/` (global) or `.hwf/workflows/` (repo). Distill uses the invoking agent (`{agent}`); then opens a chosen target and closes the source tab.
+`prefix+k` → `scratch` → enter.
+
+## Gate & ship — compose, recover on failure
+
+`gate` runs checks; `ship` reuses them and pushes; if anything fails, `continue` hands the pane to an agent.
+
+```yaml
+# gate.yaml
+steps:
+  - shell: bun test
+  - shell: bun run verify
+```
+
+```yaml
+# ship.yaml
+on_fail: continue
+steps:
+  - run: gate
+  - shell: git push
+```
+
+```yaml
+# continue.yaml  (recovery — no inputs: allowed)
+steps:
+  - agent: claude
+    prompt: |
+      Continue from this pane:
+
+      {pane}
+
+      Focus: {prompt}
+```
+
+## Inputs — ask the user
+
+Choice from a shell command, plus a free-text field with a default.
+
+```yaml
+# discuss.yaml
+inputs:
+  branch:
+    options: "git branch --format='%(refname:short)'"
+  focus:
+    default: ""
+steps:
+  - agent: claude
+    prompt: "Branch {input.branch}\nFocus: {input.focus}\n\n{pane}"
+```
+
+Picker: two screens, then run. CLI: `hwf run discuss --input branch=main`.
+
+## Worktree — inputs via `HWF_INPUT_*` env
+
+Seeded by `hwf init`. Values reach the CLI through environment variables, not interpolation:
+
+```yaml
+# worktree.yaml
+inputs:
+  branch:
+    label: new branch name
+  base:
+    options: [main, develop]
+    default: main
+steps:
+  - shell: herdr worktree create --branch "$HWF_INPUT_branch" --base "$HWF_INPUT_base" --label "$HWF_INPUT_branch" --focus
+```
+
+Never put `{input.*}` inside the `shell:` command string — substitution is literal text replacement, not shell escaping, so crafted input could rewrite your command. Fixed command text + env vars for values.
+
+## Handoff — distill one agent session into another
+
+Seeded by `hwf init`. Run it from an agent pane: distils the current session (`{session}`) with the invoking agent (`{agent}`), then opens the chosen target and closes the source tab.
 
 ```yaml
 # handoff.yaml
@@ -37,30 +112,4 @@ steps:
     close_source: true
 ```
 
-`prefix+k` → `handoff` → pick target → focus line (prefilled empty). CLI: `hwf run handoff --input target=<configured-agent>`. Launch from an agent pane.
-
-## Worktree (`HWF_INPUT_*`)
-
-Same init choice — global or repo:
-
-```yaml
-# worktree.yaml
-inputs:
-  branch:
-    label: new branch name
-  base:
-    options: [main, develop]
-    default: main
-steps:
-  - shell: herdr worktree create --branch "$HWF_INPUT_branch" --base "$HWF_INPUT_base" --label "$HWF_INPUT_branch" --focus
-```
-
-Same CLI without a workflow:
-
-```bash
-herdr worktree create --branch my-space --base main --label "my space" --focus
-```
-
-Do not interpolate `{input.*}` into shell programs, including quoted assignments or heredocs. Workflow substitution is literal text replacement, not shell escaping; untrusted input can change program syntax. Use fixed, author-controlled `shell:` commands and `HWF_INPUT_*` for values.
-
-Quote shell metacharacters in `options:` commands (`%(…)` needs quotes — otherwise `sh -c` treats `(…)` as a subshell). Options commands are workflow-author controlled and must not include user input.
+CLI: `hwf run handoff --input target=<configured-agent>`. `{session}` works in `stdin` only; non-Claude agents need a `sessions:` entry in config (see [Reference](/reference#config)).

@@ -4,21 +4,24 @@
 
 ## CLI
 
-| Command                                          | Does                                                                                                      |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| `hwf` (TTY)                                      | manage UI                                                                                                 |
-| `hwf run <name> [--prompt …] [--input k=v …]`    | run; live progress/stderr; nonzero on fail                                                                |
-| `hwf init [--force] [--seed=global\|repo\|none]` | write `.hwf/config.yaml` + repo `review`; optionally seed `handoff`/`worktree` (TTY asks; default global) |
-| `hwf launch` / `hwf picker`                      | picker popup                                                                                              |
-| `hwf web [--port <n>] [--no-open]`               | localhost workbench: browse/edit/validate/share workflows + config; default port 7317, auto-increments    |
+| Command                                                 | Does                                                                                                      |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `hwf` (TTY, no args)                                    | web workbench (same as `hwf web`)                                                                         |
+| `hwf run <name> [--prompt …] [--input k=v …]`           | run; live progress/stderr; nonzero on fail                                                                |
+| `hwf init [--force\|--yes] [--seed=global\|repo\|none]` | write `.hwf/config.yaml` + repo `review`; optionally seed `handoff`/`worktree` (TTY asks; default global) |
+| `hwf launch`                                            | open the picker in a herdr popup pane                                                                     |
+| `hwf picker`                                            | run the picker full-screen in the current terminal (the popup's internal entrypoint)                      |
+| `hwf web [--port <n>] [--no-open]`                      | localhost workbench: browse/edit/validate/share workflows + config; default port 7317, auto-increments    |
 
 ### Web workbench
 
-Localhost-only HTTP UI over the same core the CLI uses — browse repo + global workflows, edit with live validation (same errors as `hwf run`), edit config, browse the run log, and share via copy/download/import/promote (promote refuses to clobber an existing name unless forced). **It never runs workflows** (needs herdr panes); it surfaces `hwf run <name>` instead. Bound to `127.0.0.1` with a per-launch token (`x-hwf-token`) and `Origin`/`Host` allowlist on every route.
+Localhost-only HTTP UI over the same core the CLI uses — browse repo + global workflows, edit with live validation (same errors as `hwf run`), edit config, browse the run log, and share via copy/download/move (move refuses to clobber an existing name unless forced). **It never runs workflows** (needs herdr panes); it surfaces `hwf run <name>` instead. Bound to `127.0.0.1` with a per-launch token (`x-hwf-token`) and `Origin`/`Host` allowlist on every route.
 
 ## Picker
 
-`1`–`9` select · text filters (exact name selects) · `>`/`<` page · `Esc` cancel. Declared `inputs:` ask one screen each (choice list with the same filter bar, or text line), then the prompt line only if the workflow uses `{prompt}`.
+List: `type filter · ↑↓ move · enter run · esc cancel`. Choice input: `type filter · ↑↓ move · enter select · esc back`. Text input / prompt: `enter submit · esc back`.
+
+Declared `inputs:` ask one screen each (declaration order), then the prompt line only if the workflow uses `{prompt}`.
 
 ## Files
 
@@ -89,10 +92,11 @@ Placeholders: `{pane}` `{selection}` `{prompt}` `{last}` `{error}` `{session}` `
 
 - Linear foreground steps. First **step** failure → one notification → optional `on_fail` once. If recovery fails, that error is final (no nested `on_fail`).
 - **Preflight** failures (e.g. `{session}` / `{agent}` required but unavailable) abort before any step — `on_fail` does not run.
-- Run log = observability only (manage **Runs** tab). Optional sidebar: `$herdr-workflows` in herdr config.
+- Run log = observability only (web workbench **Runs** tab). Optional sidebar: `$herdr-workflows` in herdr config.
 - `run:` flattened + validated at load. Repo shadows global for names.
 - herdr ≥ 0.7.5, POSIX. Keybinding installed into `config.toml` (no manifest field).
 - `agent` / `open` push opened tab ids → `{tab}` / `{prev_tab}`.
+- Without `wait` / `wait_for`, `agent` and `open` are fire-and-forget — `on_fail` cannot see their failure.
 
 ## Ceilings
 

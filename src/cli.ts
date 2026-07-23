@@ -9,11 +9,10 @@ import { readInvocationContext } from "./context";
 import { WorkflowLoadError } from "./workflows";
 import { resolveRepoRoot } from "./repo";
 import { runWorkflow } from "./runner";
-import { runManage } from "./tui/manage";
 import { startWebServer } from "./web/server";
 
 function usage(): never {
-  die("usage: hwf|herdr-workflows [<run|init|launch|picker|web>]  (no args: manage TUI)");
+  die("usage: hwf|herdr-workflows [<run|init|launch|picker|web>]  (no args: web UI)");
 }
 
 function parseInputFlags(values: string[]): Record<string, string> {
@@ -89,8 +88,8 @@ function openBrowser(url: string): void {
 async function cmdWeb(args: string[]): Promise<void> {
   const { flags, bools } = parseArgs(args);
   const port = flags.port !== undefined ? Number(flags.port) : undefined;
-  if (port !== undefined && !Number.isInteger(port))
-    die(`--port expects an integer, got '${flags.port}'`);
+  if (port !== undefined && (!Number.isInteger(port) || port < 1 || port > 65535))
+    die(`--port expects an integer between 1 and 65535, got '${flags.port}'`);
   const repoRoot = await resolveRepoRoot();
   const { url } = await startWebServer({ repoRoot, port });
   process.stdout.write(`herdr-workflows web · ${url}\n`);
@@ -104,7 +103,7 @@ async function main(): Promise<void> {
   const args = argv[0] === "herdr" ? argv.slice(1) : argv;
   const [command, ...rest] = args;
   if (!command) {
-    if (process.stdin.isTTY && process.stdout.isTTY) return runManage();
+    if (process.stdin.isTTY && process.stdout.isTTY) return cmdWeb([]);
     usage();
   }
   if (command === "launch") return cmdLaunch();

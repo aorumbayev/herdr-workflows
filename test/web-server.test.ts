@@ -52,6 +52,16 @@ describe("web server security", () => {
     const data = (await res.json()) as { agents: string[] };
     expect(data.agents).toContain("claude");
   });
+
+  test("workflow GET rejects path-traversal names", async () => {
+    const root = await repo();
+    const { base, token } = await serve(root);
+    const res = await fetch(
+      `${base}/api/workflow?name=${encodeURIComponent("../../.hwf/config")}&scope=repo`,
+      { headers: { "x-hwf-token": token } },
+    );
+    expect(res.status).toBe(400);
+  });
 });
 
 describe("web visual round-trip", () => {

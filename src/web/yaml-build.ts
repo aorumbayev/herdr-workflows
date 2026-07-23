@@ -2,31 +2,48 @@ import type { RawStep, RawWorkflow } from "../workflows/parse";
 
 const IND = "  ";
 
-/** A scalar is safe unquoted in block context when it starts with no YAML indicator and
- *  carries no `: ` / ` #` that would flip it into a mapping or comment. */
+/** A scalar is safe unquoted in block context when it starts with no YAML indicator, carries no
+ *  `: `/` #`/trailing-`:` that would flip it into a mapping or comment, and would not be
+ *  re-parsed as a bool/null/number. */
 function plainOk(s: string): boolean {
   if (s === "") return false;
   if (/^[-?:,[\]{}#&*!|>'"%@`\s]/.test(s)) return false;
   if (/:\s/.test(s) || /\s#/.test(s)) return false;
-  if (/\s$/.test(s)) return false;
+  if (s.endsWith(":") || /\s$/.test(s)) return false;
+  if (/^(true|false|null|~)$/i.test(s)) return false;
+  if (/^[-+]?(\d[\d_]*(\.\d+)?([eE][-+]?\d+)?|0x[0-9a-f]+|\.(nan|inf))$/i.test(s)) return false;
   return true;
+}
+
+function quoted(v: string): string {
+  return `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")}"`;
 }
 
 function scalar(v: string): string {
   if (plainOk(v)) return v;
-  return `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  return quoted(v);
 }
 
-/** Emit `key: value`, using a literal block scalar for multi-line strings so prompts stay readable. */
+/** Literal blocks survive intact only when no line has leading/trailing whitespace; anything
+ *  else falls back to a double-quoted scalar so content round-trips byte-exact. */
+function blockSafe(v: string): boolean {
+  return v.split("\n").every((ln) => ln === ln.trim() || ln === "");
+}
+
+/** Emit `key: value`, using a literal block scalar for multi-line strings so prompts stay readable.
+ *  `|-` strips trailing newlines, so values ending in `\n` (or with ragged whitespace) fall back
+ *  to a double-quoted scalar to round-trip byte-exact. */
 function field(lines: string[], indent: string, key: string, v: string): void {
   if (v.includes("\n")) {
-    lines.push(`${indent}${key}: |-`);
-    for (const ln of v.replace(/\n+$/, "").split("\n")) {
-      lines.push(`${indent}${IND}${ln}`.replace(/\s+$/, ""));
+    if (!v.endsWith("\n") && blockSafe(v)) {
+      lines.push(`${indent}${key}: |-`);
+      for (const ln of v.split("\n")) lines.push(`${indent}${IND}${ln}`);
+      return;
     }
-  } else {
-    lines.push(`${indent}${key}: ${scalar(v)}`);
+    lines.push(`${indent}${key}: ${quoted(v)}`);
+    return;
   }
+  lines.push(`${indent}${key}: ${scalar(v)}`);
 }
 
 function dumpStep(step: RawStep): string[] {
@@ -60,7 +77,7 @@ function dumpStep(step: RawStep): string[] {
 function dumpInputs(lines: string[], inputs: NonNullable<RawWorkflow["inputs"]>): void {
   lines.push("inputs:");
   for (const [name, inp] of Object.entries(inputs)) {
-    lines.push(`${IND}${name}:`);
+    lines.push(`${IND}${scalar(name)}:`);
     if (inp.label !== undefined) lines.push(`${IND}${IND}label: ${scalar(inp.label)}`);
     if (inp.options !== undefined) {
       if (Array.isArray(inp.options)) {
