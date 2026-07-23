@@ -22,7 +22,7 @@ command = ["node", "scripts/install-keybindings.mjs"]
 id = "launch"
 title = "Launch herdr-workflows workflow"
 contexts = ["workspace", "pane", "selection"]
-command = ["bin/hook.mjs", "launch"]
+command = ["bin/herdr-workflows", "launch"]
 
 [[panes]]
 id = "picker"
@@ -30,4 +30,4 @@ title = "Launch workflow"
 placement = "popup"
 width = 56
 height = 14
-command = ["./bin/hook.mjs", "picker"]
+command = ["./bin/herdr-workflows", "picker"]

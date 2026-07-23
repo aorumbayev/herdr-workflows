@@ -20,7 +20,7 @@ bun run install:dev                      # compile + herdr plugin link + keybind
 - CI (`.github/workflows/verify.yml`): `bun test ./test` then `npm run verify`.
 - Local `npm run verify` auto-fixes lint/format; under `CI=1` it only checks.
 - `test/herdr-empirical.test.ts` runs only when `HERDR_SOCKET_PATH` is set; otherwise skipped.
-- After `install:dev`, live binary is `bin/herdr-workflows`; `bin/hook.mjs` prefers that, else `bun src/cli.ts`.
+- After `install:dev`, live binary is `bin/herdr-workflows`; the manifest invokes it directly. `bin/hook.mjs` (prefers binary, else `bun src/cli.ts`) remains for stale cached manifests only.
 
 ## Layout
 

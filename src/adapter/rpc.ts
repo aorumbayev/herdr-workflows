@@ -29,7 +29,8 @@ function socketPath(): string {
 
 const RPC_TIMEOUT_MS = 10_000;
 
-// Raw socket request. Prefer CLI wrappers when they exist; layout.apply has no CLI surface.
+// Raw socket request. Prefer CLI wrappers when they exist; socket-only for layout.apply (no CLI
+// surface) and plugin.pane.open (picker hot path — a CLI subprocess costs ~50ms per launch).
 export function herdrRequest(
   method: string,
   params: Record<string, unknown> = {},

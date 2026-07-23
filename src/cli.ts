@@ -1,6 +1,8 @@
 #!/usr/bin/env bun
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { HerdrError, notificationShow, pluginPaneOpen } from "./adapter/client";
-import { runPickerPopup } from "./adapter/picker";
 import { die } from "./adapter/popup";
 import { parseArgs } from "./cli-args";
 import { cmdInit } from "./cmd-init";
@@ -96,6 +98,28 @@ async function cmdWeb(args: string[]): Promise<void> {
   if (!bools.has("no-open")) openBrowser(url);
 }
 
+// bun --compile re-extracts the embedded libopentui to a temp file per spawn (~200ms on the
+// picker hot path); point opentui at the on-disk copy when node_modules is present.
+function preferOnDiskOpentuiLib(): void {
+  if (process.env.OTUI_ASSET_ROOT) return;
+  if (process.platform !== "darwin" && process.platform !== "linux") return;
+  const musl = process.platform === "linux" && process.env.OPENTUI_LIBC === "musl" ? "-musl" : "";
+  const asset = join(
+    `@opentui/core-${process.platform}-${process.arch}${musl}`,
+    process.platform === "darwin" ? "libopentui.dylib" : "libopentui.so",
+  );
+  const roots = [
+    join(dirname(process.execPath), "..", "node_modules"), // compiled: bin/../node_modules
+    join(dirname(fileURLToPath(import.meta.url)), "..", "node_modules"), // dev: src/../node_modules
+  ];
+  for (const root of roots) {
+    if (existsSync(join(root, asset))) {
+      process.env.OTUI_ASSET_ROOT = root;
+      return;
+    }
+  }
+}
+
 async function main(): Promise<void> {
   // Older cached manifests invoked `bin/hook.mjs herdr <cmd>`; strip that prefix so a stale
   // plugins.json still reaches launch/picker until the next `bun run install:dev` re-links.
@@ -107,7 +131,11 @@ async function main(): Promise<void> {
     usage();
   }
   if (command === "launch") return cmdLaunch();
-  if (command === "picker") return runPickerPopup();
+  if (command === "picker") {
+    preferOnDiskOpentuiLib();
+    const { runPickerPopup } = await import("./adapter/picker");
+    return runPickerPopup();
+  }
   if (command === "run") return cmdRun(rest);
   if (command === "init") return cmdInit(rest);
   if (command === "web") return cmdWeb(rest);

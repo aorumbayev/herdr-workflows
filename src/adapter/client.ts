@@ -48,24 +48,15 @@ export async function pluginPaneOpen(params: {
   env?: Record<string, string>;
   placement?: string;
 }): Promise<void> {
-  const args = [
-    "plugin",
-    "pane",
-    "open",
-    "--plugin",
-    process.env.HERDR_PLUGIN_ID ?? "herdr-workflows",
-    "--entrypoint",
-    params.entrypoint,
-  ];
-  if (params.placement) args.push("--placement", params.placement);
-  for (const [key, value] of Object.entries(params.env ?? {}))
-    args.push("--env", `${key}=${value}`);
-  const { stderr, exitCode, stdout } = await herdrCli(args);
-  if (exitCode !== 0) {
-    const body = stderr.trim() || stdout.trim();
-    if (body.includes("ui_busy")) throw new HerdrError("ui_busy", body);
-    throw new HerdrError("plugin_pane_open_failed", body || "plugin pane open failed");
-  }
+  // Socket instead of the CLI wrapper: skips a herdr subprocess on the picker hot path.
+  // focus: true matches the CLI default (`herdr plugin pane open` without --no-focus).
+  await herdrCall("plugin.pane.open", {
+    plugin_id: process.env.HERDR_PLUGIN_ID ?? "herdr-workflows",
+    entrypoint: params.entrypoint,
+    placement: params.placement ?? null,
+    focus: true,
+    env: params.env ?? {},
+  });
 }
 
 export async function paneRead(
