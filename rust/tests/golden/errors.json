@@ -1,0 +1,455 @@
+{
+  "source": "Captured from the TS loader (src/workflows parse/refine/flatten/inputs/recovery/steps) by .plans/extract-golden.ts. {REPO_ROOT} marks the temp repo root in error labels. Do not edit by hand; re-run the extractor instead.",
+  "cases": [
+    {
+      "id": "two-verbs",
+      "name": "bad",
+      "yaml": "steps:\n  - shell: echo\n    open: lazygit\n",
+      "expected": "bad.yaml, step 1: step has multiple verbs: shell, open"
+    },
+    {
+      "id": "prompt-on-open",
+      "name": "bad",
+      "yaml": "steps:\n  - open: lazygit\n    prompt: hi\n",
+      "expected": "bad.yaml, step 1, prompt: prompt only allowed on agent"
+    },
+    {
+      "id": "stdin-on-run",
+      "name": "bad",
+      "files": {
+        "other": "steps:\n  - shell: \"true\"\n"
+      },
+      "yaml": "steps:\n  - run: other\n    stdin: x\n",
+      "expected": "bad.yaml, step 1, stdin: stdin only allowed on shell; bad.yaml, step 1, run: run steps take no modifiers"
+    },
+    {
+      "id": "unknown-top-level-key",
+      "name": "bad",
+      "yaml": "retries: 3\nsteps:\n  - shell: \"true\"\n",
+      "expected": "bad.yaml, retries: Unrecognized key: \"retries\""
+    },
+    {
+      "id": "empty-steps",
+      "name": "bad",
+      "yaml": "steps: []\n",
+      "expected": "bad.yaml, steps: Too small: expected array to have >=1 items"
+    },
+    {
+      "id": "unknown-agent",
+      "name": "bad",
+      "agents": [
+        "claude"
+      ],
+      "yaml": "steps:\n  - agent: gemini\n    prompt: hi\n",
+      "expected": "bad.yaml, step 1, agent: unknown agent 'gemini'"
+    },
+    {
+      "id": "wait-on-shell",
+      "name": "bad",
+      "yaml": "steps:\n  - shell: echo hi\n    wait: done\n",
+      "expected": "bad.yaml, step 1, wait: wait only allowed on agent"
+    },
+    {
+      "id": "wait-for-on-agent",
+      "name": "bad",
+      "agents": [
+        "claude"
+      ],
+      "yaml": "steps:\n  - agent: claude\n    wait_for: ready\n",
+      "expected": "bad.yaml, step 1, wait_for: wait_for only allowed on open"
+    },
+    {
+      "id": "timeout-without-wait",
+      "name": "bad",
+      "yaml": "steps:\n  - shell: echo hi\n    timeout: 10\n",
+      "expected": "bad.yaml, step 1, timeout: timeout requires wait or wait_for"
+    },
+    {
+      "id": "wait-wrong-value",
+      "name": "bad",
+      "agents": [
+        "claude"
+      ],
+      "yaml": "steps:\n  - agent: claude\n    wait: whatever\n",
+      "expected": "bad.yaml, step 1, wait: Invalid input: expected \"done\""
+    },
+    {
+      "id": "placeholder-in-shell",
+      "name": "bad",
+      "yaml": "steps:\n  - shell: \"echo {pane}\"\n",
+      "expected": "bad.yaml, step 1: placeholder {pane} not allowed in command strings (use stdin/prompt/params)"
+    },
+    {
+      "id": "placeholder-in-open",
+      "name": "bad",
+      "yaml": "steps:\n  - open: \"echo {selection}\"\n",
+      "expected": "bad.yaml, step 1: placeholder {selection} not allowed in command strings (use stdin/prompt/params)"
+    },
+    {
+      "id": "session-in-prompt",
+      "name": "bad",
+      "agents": [
+        "claude"
+      ],
+      "yaml": "steps:\n  - agent: claude\n    prompt: \"{session}\"\n",
+      "expected": "bad.yaml, step 1, prompt: {session}/{session_file} only allowed in stdin"
+    },
+    {
+      "id": "session-file-in-prompt",
+      "name": "bad",
+      "agents": [
+        "claude"
+      ],
+      "yaml": "steps:\n  - agent: claude\n    prompt: \"{session_file}\"\n",
+      "expected": "bad.yaml, step 1, prompt: {session}/{session_file} only allowed in stdin"
+    },
+    {
+      "id": "unknown-run-target",
+      "name": "bad",
+      "yaml": "steps:\n  - run: nonexistent\n",
+      "expected": "bad.yaml, step 1, run: unknown workflow 'nonexistent'"
+    },
+    {
+      "id": "run-cycle",
+      "name": "a",
+      "files": {
+        "b": "steps:\n  - run: a\n"
+      },
+      "entry_on_disk": true,
+      "yaml": "steps:\n  - run: b\n",
+      "expected": "a.yaml, run: cycle detected: a → b → a"
+    },
+    {
+      "id": "run-self-reference",
+      "name": "a",
+      "entry_on_disk": true,
+      "yaml": "steps:\n  - run: a\n",
+      "expected": "a.yaml, run: cycle detected: a → a"
+    },
+    {
+      "id": "on-fail-on-run-target",
+      "name": "ship",
+      "files": {
+        "gate": "steps:\n  - shell: \"true\"\non_fail: handoff\n",
+        "handoff": "steps:\n  - shell: \"true\"\n"
+      },
+      "yaml": "steps:\n  - run: gate\n",
+      "expected": "ship.yaml, step 1, on_fail: run target 'gate' declares on_fail"
+    },
+    {
+      "id": "on-fail-on-recovery-target",
+      "name": "ship",
+      "files": {
+        "nested": "steps:\n  - shell: \"true\"\non_fail: x\n",
+        "x": "steps:\n  - shell: \"true\"\n"
+      },
+      "yaml": "steps:\n  - shell: \"true\"\non_fail: nested\n",
+      "expected": "ship.yaml, on_fail: recovery target 'nested' declares on_fail"
+    },
+    {
+      "id": "session-in-params",
+      "name": "bad",
+      "yaml": "steps:\n  - herdr: pane.send\n    params:\n      items: [\"{session}\"]\n",
+      "expected": "bad.yaml, step 1, params: {session}/{session_file} only allowed in stdin"
+    },
+    {
+      "id": "undeclared-input",
+      "name": "bad",
+      "yaml": "steps:\n  - shell: cat\n    stdin: \"{input.nope}\"\n",
+      "expected": "bad.yaml, step 1, stdin: undeclared input '{input.nope}' — declare it under inputs:"
+    },
+    {
+      "id": "unused-input",
+      "name": "bad",
+      "yaml": "inputs:\n  ghost: {}\nsteps:\n  - shell: \"true\"\n",
+      "expected": "bad.yaml, inputs.ghost: declared but never referenced"
+    },
+    {
+      "id": "agent-input-option-not-config",
+      "name": "bad",
+      "agents": [
+        "claude"
+      ],
+      "yaml": "inputs:\n  target:\n    options: [claude, ghost]\nsteps:\n  - agent: \"{input.target}\"\n",
+      "expected": "bad.yaml, step 1, agent: input 'target' option 'ghost' is not a config agent"
+    },
+    {
+      "id": "text-input-as-agent",
+      "name": "bad",
+      "agents": [
+        "claude"
+      ],
+      "yaml": "inputs:\n  target: {}\nsteps:\n  - agent: \"{input.target}\"\n",
+      "expected": "bad.yaml, step 1, agent: input 'target' needs options: to be used as agent"
+    },
+    {
+      "id": "input-in-shell-command",
+      "name": "bad",
+      "yaml": "inputs:\n  x: {}\nsteps:\n  - shell: \"echo {input.x}\"\n",
+      "expected": "bad.yaml, step 1: placeholder {input.x} not allowed in command strings (use stdin/prompt/params)"
+    },
+    {
+      "id": "spliced-declares-inputs",
+      "name": "wf",
+      "files": {
+        "part": "inputs:\n  x: {}\nsteps:\n  - shell: cat\n    stdin: \"{input.x}\"\n"
+      },
+      "yaml": "steps:\n  - run: part\n",
+      "expected": "wf.yaml, run: spliced workflow 'part' declares inputs — declare them on the entry workflow"
+    },
+    {
+      "id": "options-agents-no-agents",
+      "name": "bad",
+      "yaml": "inputs:\n  target:\n    options: agents\nsteps:\n  - agent: \"{input.target}\"\n",
+      "expected": "bad.yaml, inputs.target: options: agents but no agents configured"
+    },
+    {
+      "id": "choice-default-outside-options",
+      "name": "bad",
+      "yaml": "inputs:\n  target:\n    options: [a, b]\n    default: c\nsteps:\n  - shell: cat\n    stdin: \"{input.target}\"\n",
+      "expected": "bad.yaml, inputs.target: default 'c' not in options"
+    },
+    {
+      "id": "options-command-failure",
+      "name": "bad",
+      "yaml": "inputs:\n  branch:\n    options: \"exit 1\"\nsteps:\n  - shell: cat\n    stdin: \"{input.branch}\"\n",
+      "expected": "bad.yaml, inputs.branch: options command failed: exit 1"
+    },
+    {
+      "id": "options-command-no-choices",
+      "name": "bad",
+      "yaml": "inputs:\n  branch:\n    options: \"true\"\nsteps:\n  - shell: cat\n    stdin: \"{input.branch}\"\n",
+      "expected": "bad.yaml, inputs.branch: options command produced no choices"
+    },
+    {
+      "id": "dynamic-default-outside-options",
+      "name": "bad",
+      "yaml": "inputs:\n  branch:\n    options: \"printf 'main\\n'\"\n    default: other\nsteps:\n  - shell: cat\n    stdin: \"{input.branch}\"\n",
+      "expected": "bad.yaml, inputs.branch: default 'other' not in options"
+    },
+    {
+      "id": "parse-text-placeholder",
+      "name": "bad",
+      "yaml": "steps:\n  - shell: echo {pane}\n",
+      "expected": "bad.yaml, step 1: placeholder {pane} not allowed in command strings (use stdin/prompt/params)"
+    },
+    {
+      "id": "no-verb",
+      "name": "bad",
+      "yaml": "steps:\n  - stdin: x\n",
+      "expected": "bad.yaml, step 1: step has no verb"
+    },
+    {
+      "id": "stdin-on-agent",
+      "name": "bad",
+      "agents": [
+        "claude"
+      ],
+      "yaml": "steps:\n  - agent: claude\n    stdin: x\n",
+      "expected": "bad.yaml, step 1, stdin: stdin only allowed on shell"
+    },
+    {
+      "id": "stdin-on-open",
+      "name": "bad",
+      "yaml": "steps:\n  - open: lazygit\n    stdin: x\n",
+      "expected": "bad.yaml, step 1, stdin: stdin only allowed on shell"
+    },
+    {
+      "id": "stdin-on-herdr",
+      "name": "bad",
+      "yaml": "steps:\n  - herdr: pane.send\n    stdin: x\n",
+      "expected": "bad.yaml, step 1, stdin: stdin only allowed on shell"
+    },
+    {
+      "id": "params-on-shell",
+      "name": "bad",
+      "yaml": "steps:\n  - shell: echo\n    params:\n      a: 1\n",
+      "expected": "bad.yaml, step 1, params: params only allowed on herdr"
+    },
+    {
+      "id": "params-on-agent",
+      "name": "bad",
+      "agents": [
+        "claude"
+      ],
+      "yaml": "steps:\n  - agent: claude\n    params:\n      a: 1\n",
+      "expected": "bad.yaml, step 1, params: params only allowed on herdr"
+    },
+    {
+      "id": "wait-on-open",
+      "name": "bad",
+      "yaml": "steps:\n  - open: lazygit\n    wait: done\n",
+      "expected": "bad.yaml, step 1, wait: wait only allowed on agent"
+    },
+    {
+      "id": "wait-on-herdr",
+      "name": "bad",
+      "yaml": "steps:\n  - herdr: pane.send\n    wait: done\n",
+      "expected": "bad.yaml, step 1, wait: wait only allowed on agent"
+    },
+    {
+      "id": "wait-for-on-shell",
+      "name": "bad",
+      "yaml": "steps:\n  - shell: echo\n    wait_for: ready\n",
+      "expected": "bad.yaml, step 1, wait_for: wait_for only allowed on open"
+    },
+    {
+      "id": "wait-for-on-herdr",
+      "name": "bad",
+      "yaml": "steps:\n  - herdr: pane.send\n    wait_for: ready\n",
+      "expected": "bad.yaml, step 1, wait_for: wait_for only allowed on open"
+    },
+    {
+      "id": "close-source-on-shell",
+      "name": "bad",
+      "yaml": "steps:\n  - shell: echo\n    close_source: true\n",
+      "expected": "bad.yaml, step 1, close_source: close_source only allowed on agent"
+    },
+    {
+      "id": "close-source-on-open",
+      "name": "bad",
+      "yaml": "steps:\n  - open: lazygit\n    close_source: true\n",
+      "expected": "bad.yaml, step 1, close_source: close_source only allowed on agent"
+    },
+    {
+      "id": "timeout-on-open-without-wait-for",
+      "name": "bad",
+      "yaml": "steps:\n  - open: lazygit\n    timeout: 10\n",
+      "expected": "bad.yaml, step 1, timeout: timeout requires wait or wait_for"
+    },
+    {
+      "id": "run-with-timeout",
+      "name": "bad",
+      "files": {
+        "other": "steps:\n  - shell: \"true\"\n"
+      },
+      "yaml": "steps:\n  - run: other\n    timeout: 10\n",
+      "expected": "bad.yaml, step 1, timeout: timeout requires wait or wait_for; bad.yaml, step 1, run: run steps take no modifiers"
+    },
+    {
+      "id": "run-with-prompt",
+      "name": "bad",
+      "files": {
+        "other": "steps:\n  - shell: \"true\"\n"
+      },
+      "yaml": "steps:\n  - run: other\n    prompt: hi\n",
+      "expected": "bad.yaml, step 1, prompt: prompt only allowed on agent; bad.yaml, step 1, run: run steps take no modifiers"
+    },
+    {
+      "id": "three-verbs",
+      "name": "bad",
+      "agents": [
+        "claude"
+      ],
+      "yaml": "steps:\n  - shell: echo\n    open: lazygit\n    agent: claude\n",
+      "expected": "bad.yaml, step 1: step has multiple verbs: shell, open, agent"
+    },
+    {
+      "id": "input-name-invalid",
+      "name": "bad",
+      "yaml": "inputs:\n  Bad: {}\nsteps:\n  - shell: cat\n    stdin: \"{input.Bad}\"\n",
+      "expected": "bad.yaml, inputs: Invalid key in record"
+    },
+    {
+      "id": "options-empty-array",
+      "name": "bad",
+      "yaml": "inputs:\n  x:\n    options: []\nsteps:\n  - shell: cat\n    stdin: \"{input.x}\"\n",
+      "expected": "bad.yaml, inputs: Too small: expected array to have >=1 items"
+    },
+    {
+      "id": "options-empty-string",
+      "name": "bad",
+      "yaml": "inputs:\n  x:\n    options: \"\"\nsteps:\n  - shell: cat\n    stdin: \"{input.x}\"\n",
+      "expected": "bad.yaml, inputs: Too small: expected string to have >=1 characters"
+    },
+    {
+      "id": "invalid-yaml",
+      "name": "bad",
+      "yaml": "steps:\n  - shell: \"unclosed\n",
+      "expected": "bad.yaml: YAML Parse error: Unexpected EOF"
+    },
+    {
+      "id": "step-unknown-key",
+      "name": "bad",
+      "yaml": "steps:\n  - shell: echo\n    bogus: 1\n",
+      "expected": "bad.yaml, step 1: Unrecognized key: \"bogus\""
+    },
+    {
+      "id": "input-unknown-key",
+      "name": "bad",
+      "yaml": "inputs:\n  x:\n    bogus: 1\nsteps:\n  - shell: cat\n    stdin: \"{input.x}\"\n",
+      "expected": "bad.yaml, inputs: Unrecognized key: \"bogus\""
+    },
+    {
+      "id": "missing-steps",
+      "name": "bad",
+      "yaml": "on_fail: whatever\n",
+      "expected": "bad.yaml, steps: Invalid input: expected array, received undefined"
+    },
+    {
+      "id": "timeout-not-integer",
+      "name": "bad",
+      "yaml": "steps:\n  - shell: echo\n    timeout: 1.5\n",
+      "expected": "bad.yaml, step 1, timeout: Invalid input: expected int, received number"
+    },
+    {
+      "id": "timeout-negative",
+      "name": "bad",
+      "yaml": "steps:\n  - shell: echo\n    timeout: -5\n",
+      "expected": "bad.yaml, step 1, timeout: Too small: expected number to be >0; bad.yaml, step 1, timeout: timeout requires wait or wait_for"
+    },
+    {
+      "id": "multiple-issues-joined",
+      "name": "bad",
+      "yaml": "retries: 3\nsteps: []\n",
+      "expected": "bad.yaml, steps: Too small: expected array to have >=1 items; bad.yaml, retries: Unrecognized key: \"retries\""
+    },
+    {
+      "id": "placeholder-agent-in-shell",
+      "name": "bad",
+      "yaml": "steps:\n  - shell: \"echo {agent}\"\n",
+      "expected": "bad.yaml, step 1: placeholder {agent} not allowed in command strings (use stdin/prompt/params)"
+    },
+    {
+      "id": "session-in-open-command",
+      "name": "bad",
+      "yaml": "steps:\n  - open: \"echo {session}\"\n",
+      "expected": "bad.yaml, step 1: {session}/{session_file} only allowed in stdin"
+    },
+    {
+      "id": "input-in-open-command",
+      "name": "bad",
+      "yaml": "inputs:\n  x: {}\nsteps:\n  - open: \"echo {input.x}\"\n",
+      "expected": "bad.yaml, step 1: placeholder {input.x} not allowed in command strings (use stdin/prompt/params)"
+    },
+    {
+      "id": "recovery-declares-inputs",
+      "name": "wf",
+      "files": {
+        "rescue": "inputs:\n  x: {}\nsteps:\n  - shell: cat\n    stdin: \"{input.x}\"\n"
+      },
+      "yaml": "steps:\n  - shell: \"true\"\non_fail: rescue\n",
+      "expected": "wf.yaml, on_fail: recovery target 'rescue' declares inputs — declare them on the entry workflow"
+    },
+    {
+      "id": "recovery-run-target-declares-on-fail",
+      "name": "wf",
+      "files": {
+        "rescue": "steps:\n  - run: x\n",
+        "x": "steps:\n  - shell: \"true\"\non_fail: y\n",
+        "y": "steps:\n  - shell: \"true\"\n"
+      },
+      "yaml": "steps:\n  - shell: \"true\"\non_fail: rescue\n",
+      "expected": "{REPO_ROOT}/.hwf/workflows/rescue.yaml, step 0, on_fail: run target 'x' declares on_fail"
+    },
+    {
+      "id": "spliced-step-placeholder",
+      "name": "wf",
+      "files": {
+        "part": "steps:\n  - shell: \"echo {pane}\"\n"
+      },
+      "yaml": "steps:\n  - run: part\n",
+      "expected": "{REPO_ROOT}/.hwf/workflows/part.yaml, step 1: placeholder {pane} not allowed in command strings (use stdin/prompt/params)"
+    }
+  ]
+}
