@@ -34,10 +34,9 @@ coverage/
 docs/.vitepress/cache/
 docs/.vitepress/dist/
 
-# local scratch / agent / openspec
+# local scratch / agent
 .plans/
 references/
-openspec/
 .cursor/
 .claude/
 .opencode/

@@ -34,7 +34,7 @@ bun run install:dev                      # compile + herdr plugin link + keybind
 | `herdr-plugin.toml`                         | plugin manifest (build + `prefix+k` → picker) |
 | `knip.json`                                 | unused-code entry is `bin/hook.mjs`           |
 
-Gitignored local-only: `openspec/`, `references/`, `.plans/`, `.claude/`, `.opencode/`, `.cursor/`. Do not commit them.
+Gitignored local-only: `references/`, `.plans/`, `.claude/`, `.opencode/`, `.cursor/`. Do not commit them. `openspec/` is tracked (spec-driven workflow state travels with the repo).
 
 ## Hard constraints
 
