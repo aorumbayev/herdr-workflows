@@ -61,6 +61,17 @@ Exactly one per step. Steps run top to bottom.
 
 Placement is a modifier: `in: here | tab | right | down` (defaults: `here` for `run:`, `tab` for `agent:`).
 
+## Agents
+
+An agent is a named CLI in `.hwf/config.yaml`. `hwf init` detects `claude` / `codex` on your PATH and writes them for you:
+
+```yaml
+agents:
+  claude: [claude, "{prompt}"]
+```
+
+The one literal `{prompt}` element is where the step's `prompt:` text lands. `agent: claude` then opens that command in a pane and waits for it to finish; `out:` captures its final message.
+
 ## Placeholders
 
 One flat namespace: `{branch}`, `{diff}`, `{session}`, builtins. **Not** `{input.branch}` or `{last}`.
@@ -125,9 +136,17 @@ hwf web   # opens http://127.0.0.1:7317/?token=… — or just run bare `hwf`
 
 Text editor with live validation, or visual mode (drag-reorderable step cards). Bound to `127.0.0.1` with a per-launch token.
 
-## Breaking change (syntax v2)
+## Let an agent write it
 
-Existing v1 files fail to load with errors naming the v2 spelling. No migrate command. See [Reference](/reference#v1--v2-keys) and `CHANGELOG.md`.
+`herdr-workflow-create` is an agent skill that interviews you, then validates the YAML against this plugin's own loader before writing the file:
+
+```bash
+npx skills add aorumbayev/herdr-workflows --skill herdr-workflow-create --global
+```
+
+## Coming from v1
+
+v1 files fail to load, with errors naming the v2 spelling. There is no migrate command — the [key map](/reference#v1-to-v2-keys) is a short rename table.
 
 ## Next
 

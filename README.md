@@ -14,7 +14,17 @@
 
 ---
 
-herdr-workflows is a [herdr](https://herdr.dev) plugin that runs short YAML workflows — sequences of `shell`, `open`, `agent`, and `herdr` steps — from a picker (`prefix+k`), the `hwf` CLI, or a local web workbench. herdr owns panes and UI; this plugin just sequences them.
+herdr-workflows is a [herdr](https://herdr.dev) plugin that runs short YAML workflows — sequences of commands (`run:`), coding agents (`agent:`), other workflows (`use:`), and herdr's own pane/worktree methods — from a picker (`prefix+k`), the `hwf` CLI, or a local web workbench. herdr owns panes and UI; this plugin just sequences them.
+
+```yaml
+# .hwf/workflows/review.yaml
+steps:
+  - run: git diff HEAD
+    out: diff
+  - agent: claude
+    when: "{diff}"
+    prompt: "Review this diff. Blocking issues only.\n\n{diff}"
+```
 
 ## Install
 
@@ -42,6 +52,14 @@ hwf                 # same as `hwf web`
 ```
 
 Running always happens through the picker or `hwf run` — it needs real herdr panes, so the web workbench builds and shares but never runs.
+
+## Agent skill
+
+`skills/herdr-workflow-create` is an agent skill that walks you through authoring a workflow and validates the YAML against this plugin's own loader before writing it. Install it into any coding agent:
+
+```bash
+npx skills add aorumbayev/herdr-workflows --skill herdr-workflow-create --global
+```
 
 ## Docs
 

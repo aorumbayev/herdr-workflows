@@ -4,7 +4,7 @@ layout: home
 hero:
   name: herdr-workflows
   text: Workflows for your agentic terminal
-  tagline: Short YAML sequences of shell, open, agent, and herdr steps — one keystroke.
+  tagline: Short YAML sequences of commands, agents, and herdr panes — one keystroke.
   actions:
     - theme: brand
       text: Guide
@@ -25,7 +25,8 @@ Write `.hwf/workflows/scratch.yaml`:
 
 ```yaml
 steps:
-  - open: lazygit
+  - run: lazygit
+    in: tab
 ```
 
 Press `prefix+k`, pick `scratch`, hit enter — a lazygit tab opens. That's a workflow.
