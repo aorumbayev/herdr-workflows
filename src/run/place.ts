@@ -1,9 +1,25 @@
 import { HerdrError } from "../adapter/rpc";
 import type { Placement } from "../workflow/types";
-import type { StepRunOptions } from "./types";
+
+type PlaceLayoutApply = (params: {
+  workspaceId?: string;
+  tabId?: string;
+  tabLabel?: string;
+  root: unknown;
+  focus?: boolean;
+}) => Promise<{ tabId: string; paneId: string; workspaceId: string }>;
+
+export type PlaceOpts = {
+  deps: { layoutApply: PlaceLayoutApply };
+  ctx: {
+    workspaceId?: string;
+    paneId?: string;
+    tabId?: string;
+  };
+};
 
 export async function placeCommand(
-  opts: StepRunOptions,
+  opts: PlaceOpts,
   place: Placement,
   argv: string[],
   label: string,

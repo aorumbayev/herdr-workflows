@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runWorkflow } from "../src/runner";
+import { runWorkflow } from "../src/run/runner";
 import type { PickerState } from "../src/tui/picker-modes";
 import { acceptWorkflow, startRun } from "../src/tui/picker-run";
 import { listWorkflows, loadWorkflow, loadWorkflowEntry } from "../src/workflow/load";

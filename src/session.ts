@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { agentSessionInfo, type AgentSessionInfo } from "./adapter/client";
 import { HerdrError } from "./adapter/rpc";
 import type { SessionsConfig } from "./config";
-import { spawnCapture } from "./runner/shell";
+import { spawnCapture } from "./run/steps/shell";
 
 export function slug(cwd: string): string {
   return cwd.replace(/[^a-zA-Z0-9]/g, "-");

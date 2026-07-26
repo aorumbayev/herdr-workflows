@@ -1,5 +1,5 @@
 import { sanitizeDisplay } from "../adapter/stdin";
-import { runWorkflow } from "../runner";
+import { runWorkflow } from "../run/runner";
 import type { WorkflowListEntry } from "../workflow/types";
 import {
   finish,

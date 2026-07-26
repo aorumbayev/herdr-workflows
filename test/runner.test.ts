@@ -4,16 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HerdrError } from "../src/adapter/rpc";
 import { appendRunLog, runLogPath, type RunLogEntry } from "../src/runlog";
-import { runWorkflow } from "../src/runner";
-import { runShellStep, SHELL_TIMEOUT_MS } from "../src/runner/shell";
-import type { RunnerDeps } from "../src/runner/types";
-import { resolveInputValues } from "../src/runner/inputs";
+import { runWorkflow, resolveInputValues, type RunnerDeps } from "../src/run/runner";
+import { runShellStep, SHELL_TIMEOUT_MS } from "../src/run/steps/shell";
 import {
   AGENT_WAIT_IDLE_GRACE_MS,
   AGENT_WAIT_POLL_MS,
   waitAgentDone,
   type WaitAgentDoneOpts,
-} from "../src/runner/agent-wait";
+} from "../src/run/steps/agent";
 
 const dirs: string[] = [];
 beforeEach(async () => {
@@ -69,7 +67,7 @@ function mockDeps(overrides: Partial<RunnerDeps> = {}): {
     },
     runShell: runShellStep,
     runArgv: async (argv, opts) => {
-      const { spawnCapture } = await import("../src/runner/shell");
+      const { spawnCapture } = await import("../src/run/steps/shell");
       const r = await spawnCapture(argv, opts);
       if (r.timedOut) return { ok: false, stdout: r.stdout, stderr: "timed out" };
       if (r.exitCode !== 0) return { ok: false, stdout: r.stdout, stderr: r.stderr };

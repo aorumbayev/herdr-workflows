@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { shellArgv, spawnCapture } from "../runner/shell";
+import { shellArgv, spawnCapture } from "../run/steps/shell";
 import {
   AGENT_NAME_RE,
   checkAgents,

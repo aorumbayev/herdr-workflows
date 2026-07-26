@@ -12,7 +12,7 @@ import { readInvocationContext } from "./context";
 import { WorkflowLoadError } from "./workflow/types";
 import { resolveRepoRoot } from "./repo";
 import { ensureHerdrProtocol } from "./herdr-protocol";
-import { runWorkflow } from "./runner";
+import { runWorkflow } from "./run/runner";
 import { startWebServer } from "./web/server";
 
 function usage(): never {
