@@ -1,7 +1,7 @@
 import type { SessionsConfig } from "../config";
 import type { InvocationContext } from "../context";
-import type { LoadedWorkflow } from "../workflows";
-import type { RunnerDeps } from "./dispatch";
+import type { LoadedWorkflow } from "../workflows/types";
+import type { RunnerDeps } from "./types";
 
 export type Preflight =
   | { ok: true; session: string; sessionFailure?: string; agent: string }
@@ -16,8 +16,7 @@ export async function resolvePreflight(
   deps: RunnerDeps,
 ): Promise<Preflight> {
   let session = "";
-  // Extraction failure below still runs on_fail (recovery can fall back to {pane});
-  // only launching without a pane fails hard — recovery would have no context either.
+  // Extraction failure aborts before steps and does not trigger on_error.
   let sessionFailure: string | undefined;
   if (workflow.needsSession) {
     if (!ctx.paneId) {

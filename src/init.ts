@@ -1,13 +1,9 @@
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { repoConfigPath } from "./config";
+import { parseConfigText, repoConfigPath, type SessionsConfig } from "./config";
 import type { PlaybookSeedScope } from "./playbook-scope";
 import { PLAYBOOK_SEED_WORKFLOWS, REPO_SEED_WORKFLOWS, seedWorkflows } from "./seed-workflows";
-
-export type { PlaybookSeedScope } from "./playbook-scope";
-export { parsePlaybookSeedScope } from "./playbook-scope";
-export { PLAYBOOK_SEED_WORKFLOWS, REPO_SEED_WORKFLOWS, seedWorkflows } from "./seed-workflows";
 
 const KNOWN_AGENTS: { name: string; bin: string; argv: string[] }[] = [
   { name: "claude", bin: "claude", argv: ["claude", "{prompt}"] },
@@ -29,18 +25,38 @@ export async function detectAgents(): Promise<Record<string, string[]>> {
   return agents;
 }
 
-export function formatAgentsYaml(agents: Record<string, string[]>): string {
-  const lines = ["agents:"];
-  const names = Object.keys(agents).sort();
+function formatArgvMap(key: string, entries: Record<string, string[]>): string[] {
+  const lines = [`${key}:`];
+  const names = Object.keys(entries).sort();
   if (names.length === 0) {
     lines.push("  {}");
-    return `${lines.join("\n")}\n`;
+    return lines;
   }
   for (const name of names) {
-    const argv = agents[name]!.map((a) => JSON.stringify(a)).join(", ");
+    const argv = entries[name]!.map((a) => JSON.stringify(a)).join(", ");
     lines.push(`  ${name}: [${argv}]`);
   }
+  return lines;
+}
+
+export function formatAgentsYaml(
+  agents: Record<string, string[]>,
+  sessions: SessionsConfig = {},
+): string {
+  const lines = formatArgvMap("agents", agents);
+  if (Object.keys(sessions).length > 0) {
+    lines.push(...formatArgvMap("sessions", sessions));
+  }
   return `${lines.join("\n")}\n`;
+}
+
+async function readSessions(path: string): Promise<SessionsConfig> {
+  try {
+    if (!(await Bun.file(path).exists())) return {};
+    return parseConfigText(path, await Bun.file(path).text()).sessions;
+  } catch {
+    return {};
+  }
 }
 
 function globalWorkflowsDir(home: string): string {
@@ -95,7 +111,8 @@ export async function runInit(
   await mkdir(dirname(globalCfg), { recursive: true });
   await mkdir(globalDir, { recursive: true });
 
-  await Bun.write(path, formatAgentsYaml(agents));
+  const sessions = await readSessions(path);
+  await Bun.write(path, formatAgentsYaml(agents, sessions));
   if (!(await Bun.file(globalCfg).exists())) {
     await Bun.write(globalCfg, formatAgentsYaml(agents));
   }

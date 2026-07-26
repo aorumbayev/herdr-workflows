@@ -1,4 +1,4 @@
-import { HerdrError } from "../adapter/client";
+import { HerdrError } from "../adapter/rpc";
 
 export const AGENT_WAIT_POLL_MS = 2000;
 export const AGENT_WAIT_IDLE_GRACE_MS = 30_000;

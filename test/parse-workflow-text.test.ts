@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadWorkflow, parseWorkflowText } from "../src/workflows";
+import { loadWorkflow, parseWorkflowText } from "../src/workflows/load";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -21,7 +21,7 @@ async function repo(name: string, body: string): Promise<{ root: string; file: s
 
 describe("parseWorkflowText parity", () => {
   test("valid buffer matches file load", async () => {
-    const body = `steps:\n  - shell: echo hi\n    stdin: "{pane}"\n`;
+    const body = `steps:\n  - run: echo hi\n`;
     const { root, file } = await repo("ok", body);
     const fromFile = await loadWorkflow("ok", root);
     const fromText = await parseWorkflowText("ok", body, [], root, file);
@@ -30,7 +30,7 @@ describe("parseWorkflowText parity", () => {
   });
 
   test("invalid buffer produces the same positioned error as file load", async () => {
-    const body = `steps:\n  - shell: echo {pane}\n`;
+    const body = `steps:\n  - run: echo {pane}\n`;
     const { root, file } = await repo("bad", body);
     const fileErr = await loadWorkflow("bad", root).catch((e) => (e as Error).message);
     const textErr = await parseWorkflowText("bad", body, [], root, file).catch(

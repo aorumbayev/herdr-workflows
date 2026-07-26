@@ -12,7 +12,7 @@ export function buildSchema(): unknown {
     $id: "https://raw.githubusercontent.com/aorumbayev/herdr-workflows/main/docs/workflow.schema.json",
     title: "herdr-workflows workflow",
     description:
-      "Linear YAML workflow for the herdr-workflows herdr plugin. Cross-field rules (one verb per step; wait only on agent; wait_for only on open; timeout requires wait/wait_for; {session} only in stdin) are enforced by the loader, not this schema.",
+      "Linear YAML workflow for the herdr-workflows herdr plugin (syntax v2). Cross-field rules (one action key per step; placeholder legality by run: form; when/for/retry; primitives) are enforced by the loader, not this schema.",
   };
 }
 

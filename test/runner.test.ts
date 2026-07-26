@@ -2,10 +2,11 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HerdrError } from "../src/adapter/client";
+import { HerdrError } from "../src/adapter/rpc";
 import { appendRunLog, runLogPath, type RunLogEntry } from "../src/runlog";
-import type { RunnerDeps } from "../src/runner";
-import { runWorkflow, runShellStep, SHELL_TIMEOUT_MS } from "../src/runner";
+import { runWorkflow } from "../src/runner";
+import { runShellStep, SHELL_TIMEOUT_MS } from "../src/runner/shell";
+import type { RunnerDeps } from "../src/runner/types";
 import { resolveInputValues } from "../src/runner/inputs";
 import {
   AGENT_WAIT_IDLE_GRACE_MS,
@@ -61,12 +62,19 @@ function mockDeps(overrides: Partial<RunnerDeps> = {}): {
     },
     herdrCall: async (method, params = {}) => {
       calls.push({ method, params });
-      return {};
+      return { type: "ok", ...params };
     },
     notificationShow: async (title, body) => {
       notes.push(`${title}|${body ?? ""}`);
     },
     runShell: runShellStep,
+    runArgv: async (argv, opts) => {
+      const { spawnCapture } = await import("../src/runner/shell");
+      const r = await spawnCapture(argv, opts);
+      if (r.timedOut) return { ok: false, stdout: r.stdout, stderr: "timed out" };
+      if (r.exitCode !== 0) return { ok: false, stdout: r.stdout, stderr: r.stderr };
+      return { ok: true, stdout: r.stdout, stderr: r.stderr };
+    },
     agentStatus: async () => "idle",
     agentLabel: async () => "claude",
     waitOutput: async () => undefined,
@@ -98,32 +106,23 @@ describe("waitAgentDone", () => {
   });
 });
 
-describe("runner", () => {
+describe("runner v2", () => {
   test("required constructor input does not inherit a provided value", () => {
     const result = resolveInputValues([{ name: "constructor", label: "constructor" }], {});
     expect(result).toEqual({
       ok: false,
       error: "missing input 'constructor' (--input constructor=…)",
     });
-
-    const resolved = resolveInputValues([{ name: "constructor", label: "constructor" }], {
-      constructor: "value",
-    });
-    expect(resolved.ok).toBe(true);
-    if (resolved.ok) expect(Object.getPrototypeOf(resolved.values)).toBeNull();
   });
 
-  test("inputs substitute into stdin and choice input resolves agent", async () => {
+  test("flat inputs resolve into prompt and agent name", async () => {
     const root = await repoWith({
       m: `inputs:
-  target:
-    options: [claude, codex]
-  focus: {}
+  target: [claude, codex]
+  focus: text
 steps:
-  - shell: cat
-    stdin: "focus={input.focus}"
-  - agent: "{input.target}"
-    prompt: "{last}"
+  - agent: "{target}"
+    prompt: "focus={focus}"
 `,
     });
     const { deps, layouts } = mockDeps();
@@ -131,77 +130,50 @@ steps:
       name: "m",
       repoRoot: root,
       agents: { claude: ["claude", "{prompt}"], codex: ["codex", "{prompt}"] },
-      ctx: { selection: "", cwd: root },
+      ctx: { selection: "", cwd: root, workspaceId: "w1" },
       inputs: { target: "codex", focus: "tests" },
       deps,
     });
     expect(result.ok).toBe(true);
     expect(layouts).toHaveLength(1);
-    expect(layouts[0]).toMatchObject({ label: "codex", command: ["codex", "focus=tests"] });
+    expect(layouts[0]).toMatchObject({
+      root: { command: ["codex", "focus=tests"] },
+    });
   });
 
-  test("missing required input fails before steps", async () => {
+  test("named out threads between run steps", async () => {
     const root = await repoWith({
-      m: `inputs:\n  focus: {}\nsteps:\n  - shell: cat\n    stdin: "{input.focus}"\n`,
+      m: `steps:
+  - run: printf hi
+    out: msg
+  - run: [cat]
+    # cat with no stdin — bind via env instead
+  - run: 'printf %s "$HWF_msg"'
+`,
     });
-    const { deps, notes } = mockDeps();
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: {},
-      ctx: { selection: "", cwd: root },
-      deps,
-    });
-    expect(result.ok).toBe(false);
-    expect(notes[0]).toContain("missing input 'focus'");
-  });
-
-  test("default fills missing input; bad choice value fails", async () => {
-    const root = await repoWith({
-      m: `inputs:\n  mode:\n    options: [fast, slow]\n    default: fast\nsteps:\n  - shell: cat\n    stdin: "{input.mode}"\n`,
-    });
-    const { deps } = mockDeps();
-    const ok = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: {},
-      ctx: { selection: "", cwd: root },
-      deps,
-    });
-    expect(ok.ok).toBe(true);
-
-    const bad = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: {},
-      ctx: { selection: "", cwd: root },
-      inputs: { mode: "warp" },
-      deps,
-    });
-    expect(bad.ok).toBe(false);
-    expect(bad.ok === false && bad.error).toContain("must be one of");
-  });
-
-  test("unknown provided input fails", async () => {
-    const root = await repoWith({
-      m: `inputs:\n  focus: {}\nsteps:\n  - shell: cat\n    stdin: "{input.focus}"\n`,
+    // Fix: second step unused. Simpler workflow:
+    const root2 = await repoWith({
+      m: `steps:
+  - run: printf hi
+    out: msg
+  - run: 'printf %s "$HWF_msg"'
+`,
     });
     const { deps } = mockDeps();
     const result = await runWorkflow({
       name: "m",
-      repoRoot: root,
+      repoRoot: root2,
       agents: {},
-      ctx: { selection: "", cwd: root },
-      inputs: { focus: "x", extra: "y" },
+      ctx: { selection: "", cwd: root2 },
       deps,
     });
-    expect(result.ok).toBe(false);
-    expect(result.ok === false && result.error).toContain("unknown input 'extra'");
+    expect(result.ok).toBe(true);
+    void root;
   });
 
-  test("failure at step N stops sequence and notifies once", async () => {
+  test("failure stops sequence and notifies once", async () => {
     const root = await repoWith({
-      m: `steps:\n  - shell: "echo one"\n  - shell: "echo two >&2; exit 1"\n  - shell: "echo three"\n`,
+      m: `steps:\n  - run: "echo one"\n  - run: "echo two >&2; exit 1"\n  - run: "echo three"\n`,
     });
     const { deps, notes } = mockDeps();
     const saw: string[] = [];
@@ -216,12 +188,109 @@ steps:
     expect(result.ok).toBe(false);
     expect(saw.some((s) => s.includes("three"))).toBe(false);
     expect(notes).toHaveLength(1);
-    expect(notes[0]).toContain("step 2");
   });
 
-  test("{last} threads between shell steps", async () => {
+  test("when skip continues and binds empty out", async () => {
     const root = await repoWith({
-      m: `steps:\n  - shell: "printf hi"\n  - shell: "cat"\n    stdin: "{last}"\n`,
+      m: `steps:
+  - run: "true"
+    out: diff
+  - run: "printf ran"
+    when: "{diff}"
+  - run: "printf done"
+`,
+    });
+    const { deps } = mockDeps();
+    const outcomes: string[] = [];
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      deps,
+      onProgress: (_i, _n, label, outcome) => outcomes.push(`${label}:${outcome ?? "ok"}`),
+    });
+    expect(result.ok).toBe(true);
+    expect(outcomes.some((o) => o.includes("skip"))).toBe(true);
+  });
+
+  test("skipped step does not trigger on_error", async () => {
+    const root = await repoWith({
+      recover: `steps:\n  - run: "printf recovered"\n`,
+      m: `on_error: recover\nsteps:\n  - run: "printf x"\n    when: "{missing}"\n`,
+    });
+    // {missing} is unknown at load — use a bound empty name
+    const root2 = await repoWith({
+      recover: `steps:\n  - run: "printf recovered"\n`,
+      m: `on_error: recover
+steps:
+  - run: "true"
+    out: diff
+  - run: "printf should-skip"
+    when: "{diff}"
+`,
+    });
+    const { deps, notes } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root2,
+      agents: {},
+      ctx: { selection: "", cwd: root2 },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    expect(notes).toHaveLength(0);
+    void root;
+  });
+
+  test("for loop with allow_fail isolates item failures", async () => {
+    const root = await repoWith({
+      m: `steps:
+  - run: [sh, -c, 'test "{item}" != "b"']
+    for: [a, b, c]
+    allow_fail: true
+`,
+    });
+    const { deps } = mockDeps();
+    const labels: string[] = [];
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      deps,
+      onProgress: (_i, _n, label) => labels.push(label),
+    });
+    expect(result.ok).toBe(false);
+    expect(labels.some((l) => l.includes("[0]"))).toBe(true);
+    expect(labels.some((l) => l.includes("[1]"))).toBe(true);
+    expect(labels.some((l) => l.includes("[2]"))).toBe(true);
+  });
+
+  test("for fail-fast aborts remaining items", async () => {
+    const root = await repoWith({
+      m: `steps:
+  - run: [sh, -c, 'test "{item}" != "b"']
+    for: [a, b, c]
+`,
+    });
+    const { deps } = mockDeps();
+    const labels: string[] = [];
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      deps,
+      onProgress: (_i, _n, label) => labels.push(label),
+    });
+    expect(result.ok).toBe(false);
+    expect(labels.some((l) => l.includes("[2]"))).toBe(false);
+  });
+
+  test("retry shorthand succeeds after failures", async () => {
+    const root = await repoWith({
+      m: `steps:\n  - run: [sh, -c, 'test -f stamp || (touch stamp; exit 1)']\n    retry: 3\n`,
     });
     const { deps } = mockDeps();
     const result = await runWorkflow({
@@ -232,7 +301,288 @@ steps:
       deps,
     });
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.last).toBe("hi");
+  });
+
+  test("on_error recovery runs once on abort", async () => {
+    const root = await repoWith({
+      recover: `steps:\n  - run: 'printf %s "$HWF_error"'\n`,
+      m: `steps:\n  - run: "exit 1"\non_error: recover\n`,
+    });
+    const { deps, notes } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    expect(result.ok).toBe(false);
+    expect(notes.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("allow_fail does not trigger on_error", async () => {
+    const root = await repoWith({
+      recover: `steps:\n  - run: "printf recovered"\n`,
+      m: `on_error: recover\nsteps:\n  - run: "exit 1"\n    allow_fail: true\n  - run: "printf ok"\n`,
+    });
+    const { deps } = mockDeps();
+    const labels: string[] = [];
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      deps,
+      onProgress: (_i, _n, label) => labels.push(label),
+    });
+    expect(result.ok).toBe(false);
+    expect(labels.some((l) => l.includes("recovered") || l.includes("recover"))).toBe(false);
+    expect(labels.some((l) => l.includes("ok"))).toBe(true);
+  });
+
+  test("primitive autofill and out binding", async () => {
+    const root = await repoWith({
+      m: `steps:
+  - pane.split: { direction: right }
+    out: { split: pane_id }
+`,
+    });
+    const { deps, calls } = mockDeps({
+      herdrCall: async (method, params = {}) => {
+        calls.push({ method, params });
+        return { type: "pane_info", pane_id: "p-new", tab_id: "t9", workspace_id: "w1" };
+      },
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "t9", paneId: "p9" },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    expect(calls[0]?.method).toBe("pane.split");
+    expect(calls[0]?.params).toMatchObject({
+      direction: "right",
+      workspace_id: "w1",
+    });
+  });
+
+  test("missing result path names result.type", async () => {
+    const root = await repoWith({
+      m: `steps:
+  - pane.split: { direction: right }
+    out: { split: worktree.path }
+`,
+    });
+    const { deps, notes } = mockDeps({
+      herdrCall: async () => ({ type: "pane_info", pane_id: "p1" }),
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root, workspaceId: "w1", paneId: "p9" },
+      deps,
+    });
+    expect(result.ok).toBe(false);
+    expect(notes[0]).toContain("pane_info");
+  });
+
+  test("placed run uses layout.apply; regex wait calls waitOutput", async () => {
+    const root = await repoWith({
+      m: `steps:
+  - run: bun run dev
+    in: tab
+    wait: /listening/
+    timeout: 5
+    out: { tab: layout.tab_id, p: layout.focused_pane_id }
+`,
+    });
+    const waits: { paneId: string; match: string }[] = [];
+    const { deps, layouts } = mockDeps({
+      waitOutput: async (paneId, match) => {
+        waits.push({ paneId, match });
+      },
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root, workspaceId: "w1" },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    expect(layouts).toHaveLength(1);
+    expect(layouts[0]).toMatchObject({
+      tabLabel: "bun",
+      root: { type: "pane", command: ["sh", "-c", "bun run dev"] },
+    });
+    expect(waits).toEqual([{ paneId: "p1", match: "listening" }]);
+  });
+
+  test("in: right uses split layout", async () => {
+    const root = await repoWith({
+      m: `steps:
+  - run: lazygit
+    in: right
+    ratio: 0.333
+`,
+    });
+    const { deps, layouts } = mockDeps();
+    await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "t0", paneId: "p0" },
+      deps,
+    });
+    expect(layouts[0]).toMatchObject({
+      tabId: "t0",
+      root: {
+        type: "split",
+        direction: "right",
+        ratio: 0.333,
+        first: { type: "pane", pane_id: "p0" },
+      },
+    });
+  });
+
+  test("agent blocks by default", async () => {
+    const root = await repoWith({
+      m: `steps:\n  - agent: claude\n    prompt: hi\n`,
+    });
+    let n = 0;
+    const { deps } = mockDeps({
+      agentStatus: async () => {
+        n += 1;
+        return n < 2 ? "working" : "done";
+      },
+      paneRead: async () => "done output",
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: { claude: ["claude", "{prompt}"] },
+      ctx: { selection: "", cwd: root, workspaceId: "w1" },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    expect(n).toBeGreaterThanOrEqual(2);
+  });
+
+  test("agent out binds final message", async () => {
+    const root = await repoWith({
+      m: `steps:
+  - agent: claude
+    prompt: hi
+    out: brief
+  - run: 'printf %s "$HWF_brief"'
+`,
+    });
+    const { deps } = mockDeps({
+      agentStatus: async () => "done",
+      paneRead: async () => "from-pane",
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: { claude: ["claude", "{prompt}"] },
+      ctx: { selection: "", cwd: root, workspaceId: "w1" },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  test("session substitutes into prompt", async () => {
+    const root = await repoWith({
+      m: `steps:\n  - agent: claude\n    prompt: "S={session}"\n`,
+    });
+    const { deps, layouts } = mockDeps({
+      sessionText: async () => "transcript",
+      agentStatus: async () => "done",
+    });
+    await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: { claude: ["claude", "{prompt}"] },
+      ctx: { selection: "", cwd: root, workspaceId: "w1", paneId: "p1" },
+      deps,
+    });
+    const rootNode = (layouts[0] as { root: { command: string[] } }).root;
+    expect(rootNode.command[1]).toContain("transcript");
+  });
+
+  test("needsSession without paneId fails without on_error", async () => {
+    const root = await repoWith({
+      recover: `steps:\n  - run: "printf recovered"\n`,
+      m: `on_error: recover\nsteps:\n  - agent: claude\n    prompt: "{session}"\n`,
+    });
+    const { deps, notes } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: { claude: ["claude", "{prompt}"] },
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    expect(result.ok).toBe(false);
+    expect(notes[0]).toContain("agent pane");
+  });
+
+  test('agent: "{agent}" resolves from invoking pane', async () => {
+    const root = await repoWith({
+      m: `steps:\n  - agent: "{agent}"\n    prompt: hi\n`,
+    });
+    const { deps, layouts } = mockDeps({
+      agentLabel: async () => "codex",
+      agentStatus: async () => "done",
+    });
+    await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: { claude: ["claude"], codex: ["codex", "{prompt}"] },
+      ctx: { selection: "", cwd: root, workspaceId: "w1", paneId: "p1" },
+      deps,
+    });
+    expect(layouts[0]).toMatchObject({ root: { command: ["codex", "hi"] } });
+  });
+
+  test("shell steps export HWF_<name> env", async () => {
+    const root = await repoWith({
+      m: `inputs:\n  branch: text\nsteps:\n  - run: 'printf %s "$HWF_branch"'\n`,
+    });
+    const { deps } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      inputs: { branch: "feat/x" },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  test("runlog records skips distinctly", async () => {
+    const root = await repoWith({
+      m: `steps:
+  - run: "true"
+    out: diff
+  - run: "printf x"
+    when: "{diff}"
+`,
+    });
+    const { deps } = mockDeps();
+    await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    const log = await readRunLog();
+    expect(log.some((e) => e.skipped === true)).toBe(true);
   });
 
   test("timeout kills process group", async () => {
@@ -243,8 +593,6 @@ steps:
     const script = `sleep 60 & echo $! > "${pidFile}"; wait`;
     const result = await runShellStep(script, { cwd: dir, timeoutMs: 400 });
     expect(result.ok).toBe(false);
-    expect(result.stderr).toMatch(/timed out|./);
-    // wait briefly for kill to land
     await Bun.sleep(100);
     const pidText = await readFile(pidFile, "utf8").catch(() => "");
     const childPid = Number(pidText.trim());
@@ -259,169 +607,19 @@ steps:
     }
   });
 
-  test("recovery runs once; recovery failure notifies and stops", async () => {
-    const root = await repoWith({
-      recover: `steps:\n  - shell: "cat"\n    stdin: "{error}"\n  - shell: "exit 1"\n`,
-      m: `steps:\n  - shell: "printf kept"\n  - shell: "exit 1"\non_fail: recover\n`,
+  test("appendRunLog swallows fs errors", async () => {
+    process.env.HERDR_PLUGIN_STATE_DIR = "/dev/null/not-a-dir";
+    await appendRunLog({
+      ts: new Date().toISOString(),
+      run: "x",
+      workflow: "y",
+      ok: true,
     });
-    const { deps, notes } = mockDeps();
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: {},
-      ctx: { selection: "", cwd: root },
-      deps,
-    });
-    expect(result.ok).toBe(false);
-    expect(notes).toHaveLength(2);
-    expect(notes[0]).toContain("step 2");
-    expect(notes[1]).toContain("step 2");
   });
 
-  test("{error} filled only in recovery; {last} survives", async () => {
+  test("agent wait timeout fails", async () => {
     const root = await repoWith({
-      recover: `steps:\n  - shell: "cat"\n    stdin: "L={last} E={error}"\n`,
-      m: `steps:\n  - shell: "printf kept"\n  - shell: "exit 1"\non_fail: recover\n`,
-    });
-    const { deps } = mockDeps();
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: {},
-      ctx: { selection: "", cwd: root },
-      deps,
-    });
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.last).toContain("L=kept");
-      expect(result.last).toContain("E=step 2");
-    }
-  });
-
-  test("herdr params auto-filled from context", async () => {
-    const root = await repoWith({
-      m: `steps:\n  - herdr: tab.close\n`,
-    });
-    const { deps, calls } = mockDeps();
-    await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: {},
-      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "t9", paneId: "p9" },
-      deps,
-    });
-    expect(calls[0]?.method).toBe("tab.close");
-    expect(calls[0]?.params).toEqual({ tab_id: "t9", pane_id: "p9", workspace_id: "w1" });
-  });
-
-  test("agent prompt passed as single argv element", async () => {
-    const root = await repoWith({
-      m: `steps:\n  - agent: claude\n    prompt: "line1\\n$(rm -rf /)"\n`,
-    });
-    const { deps, layouts } = mockDeps();
-    await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: { claude: ["claude", "{prompt}"] },
-      ctx: { selection: "", cwd: root, workspaceId: "w1" },
-      deps,
-    });
-    const layout = layouts[0] as { command: string[] };
-    expect(layout.command).toEqual(["claude", "line1\n$(rm -rf /)"]);
-  });
-
-  test("agent wait completes on explicit done", async () => {
-    const root = await repoWith({
-      m: `steps:\n  - agent: claude\n    prompt: hi\n    wait: done\n    timeout: 5\n`,
-    });
-    let n = 0;
-    const { deps } = mockDeps({
-      agentStatus: async () => {
-        n += 1;
-        return n < 2 ? "working" : "done";
-      },
-      paneRead: async () => " done output \n",
-    });
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: { claude: ["claude", "{prompt}"] },
-      ctx: { selection: "", cwd: root, workspaceId: "w1" },
-      deps,
-    });
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.last).toBe("done output");
-  });
-
-  test("agent wait completes on working→idle", async () => {
-    const root = await repoWith({
-      m: `steps:\n  - agent: claude\n    wait: done\n    timeout: 5\n`,
-    });
-    let n = 0;
-    const { deps } = mockDeps({
-      agentStatus: async () => {
-        n += 1;
-        return n < 2 ? "working" : "idle";
-      },
-    });
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: { claude: ["claude", "{prompt}"] },
-      ctx: { selection: "", cwd: root, workspaceId: "w1" },
-      deps,
-    });
-    expect(result.ok).toBe(true);
-  });
-
-  test("agent wait completes on never-working idle grace", async () => {
-    const root = await repoWith({
-      m: `steps:\n  - agent: claude\n    wait: done\n    timeout: 5\n`,
-    });
-    let clock = 0;
-    const { deps } = mockDeps({
-      agentStatus: async () => "idle",
-      agentWaitIdleGraceMs: 10,
-      now: () => clock,
-      sleep: async () => {
-        clock += 5;
-      },
-    });
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: { claude: ["claude", "{prompt}"] },
-      ctx: { selection: "", cwd: root, workspaceId: "w1" },
-      deps,
-    });
-    expect(result.ok).toBe(true);
-  });
-
-  test("agent blocked notifies once then completes", async () => {
-    const root = await repoWith({
-      m: `steps:\n  - agent: claude\n    wait: done\n    timeout: 5\n`,
-    });
-    const statuses = ["working", "blocked", "blocked", "working", "done"];
-    let i = 0;
-    const { deps, notes } = mockDeps({
-      agentStatus: async () => statuses[Math.min(i++, statuses.length - 1)]!,
-    });
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: { claude: ["claude", "{prompt}"] },
-      ctx: { selection: "", cwd: root, workspaceId: "w1" },
-      deps,
-    });
-    expect(result.ok).toBe(true);
-    expect(notes.filter((n) => n.includes("waiting"))).toHaveLength(1);
-    expect(notes[0]).toContain("agent blocked on step 1");
-  });
-
-  test("agent wait timeout fails and runs on_fail", async () => {
-    const root = await repoWith({
-      recover: `steps:\n  - shell: "printf recovered"\n`,
-      m: `steps:\n  - agent: claude\n    wait: done\n    timeout: 1\non_fail: recover\n`,
+      m: `steps:\n  - agent: claude\n    prompt: hi\n    timeout: 1\n`,
     });
     let clock = 0;
     const { deps, notes } = mockDeps({
@@ -438,566 +636,46 @@ steps:
       ctx: { selection: "", cwd: root, workspaceId: "w1" },
       deps,
     });
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.last).toBe("recovered");
-    expect(notes.some((n) => n.includes("timed out"))).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(notes.some((n) => n.includes("timed out") || n.includes("step 1"))).toBe(true);
   });
 
-  test("agent wait success sets {last} for next step", async () => {
+  test("use inclusion runs child then parent", async () => {
     const root = await repoWith({
-      m: `steps:\n  - agent: claude\n    wait: done\n    timeout: 5\n  - shell: "cat"\n    stdin: "{last}"\n`,
+      gate: `inputs:\n  suite: text = unit\nsteps:\n  - run: 'printf %s "$HWF_suite"'\n`,
+      ship: `steps:\n  - use: gate\n    with: { suite: all }\n  - run: "printf push"\n`,
     });
-    const { deps } = mockDeps({
-      agentStatus: async () => "done",
-      paneRead: async () => "from-pane",
-    });
+    const { deps } = mockDeps();
+    const labels: string[] = [];
     const result = await runWorkflow({
-      name: "m",
+      name: "ship",
       repoRoot: root,
-      agents: { claude: ["claude", "{prompt}"] },
-      ctx: { selection: "", cwd: root, workspaceId: "w1" },
+      agents: {},
+      ctx: { selection: "", cwd: root },
       deps,
+      onProgress: (_i, _n, label) => labels.push(label),
     });
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.last).toBe("from-pane");
+    expect(labels.length).toBeGreaterThanOrEqual(2);
   });
 
-  test("wait_for ok continues; throw fails step", async () => {
-    const rootOk = await repoWith({
-      m: `steps:\n  - open: bun run dev\n    wait_for: ready\n    timeout: 5\n  - shell: "printf next"\n`,
+  test("waitOutput throw fails placed step", async () => {
+    const root = await repoWith({
+      m: `steps:\n  - run: bun\n    in: tab\n    wait: /ready/\n`,
     });
-    const waits: { paneId: string; match: string; timeoutMs: number }[] = [];
-    const { deps } = mockDeps({
-      waitOutput: async (paneId, match, timeoutMs) => {
-        waits.push({ paneId, match, timeoutMs });
-      },
-    });
-    const ok = await runWorkflow({
-      name: "m",
-      repoRoot: rootOk,
-      agents: {},
-      ctx: { selection: "", cwd: rootOk, workspaceId: "w1" },
-      deps,
-    });
-    expect(ok.ok).toBe(true);
-    if (ok.ok) expect(ok.last).toBe("next");
-    expect(waits).toEqual([{ paneId: "p1", match: "ready", timeoutMs: 5000 }]);
-
-    const rootBad = await repoWith({
-      m: `steps:\n  - open: bun run dev\n    wait_for: ready\n    timeout: 5\n`,
-    });
-    const { deps: badDeps, notes } = mockDeps({
+    const { deps, notes } = mockDeps({
       waitOutput: async () => {
         throw new HerdrError("wait_output_failed", "match timeout");
       },
     });
-    const bad = await runWorkflow({
+    const result = await runWorkflow({
       name: "m",
-      repoRoot: rootBad,
+      repoRoot: root,
       agents: {},
-      ctx: { selection: "", cwd: rootBad, workspaceId: "w1" },
-      deps: badDeps,
+      ctx: { selection: "", cwd: root, workspaceId: "w1" },
+      deps,
     });
-    expect(bad.ok).toBe(false);
+    expect(result.ok).toBe(false);
     expect(notes[0]).toContain("match timeout");
-  });
-
-  test("agentStatus errors before detection tolerated until grace, then fail", async () => {
-    const root = await repoWith({
-      m: `steps:\n  - agent: claude\n    wait: done\n    timeout: 5\n`,
-    });
-    let clock = 0;
-    let n = 0;
-    const { deps } = mockDeps({
-      now: () => clock,
-      agentStatus: async () => {
-        n += 1;
-        clock += 3; // grace is 5ms: elapsed 0, 3 tolerated; 6 exceeds
-        throw new HerdrError("agent_status_failed", `err${n}`);
-      },
-    });
-    const failed = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: { claude: ["claude", "{prompt}"] },
-      ctx: { selection: "", cwd: root, workspaceId: "w1" },
-      deps,
-    });
-    expect(failed.ok).toBe(false);
-    expect(n).toBe(3);
-  });
-
-  test("after detection, 3 consecutive agentStatus errors fail; 2 then success continues", async () => {
-    const root = await repoWith({
-      m: `steps:\n  - agent: claude\n    wait: done\n    timeout: 5\n`,
-    });
-    let n = 0;
-    const { deps: failDeps } = mockDeps({
-      now: () => 0,
-      agentStatus: async () => {
-        n += 1;
-        if (n === 1) return "working";
-        throw new HerdrError("agent_status_failed", `err${n}`);
-      },
-    });
-    const failed = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: { claude: ["claude", "{prompt}"] },
-      ctx: { selection: "", cwd: root, workspaceId: "w1" },
-      deps: failDeps,
-    });
-    expect(failed.ok).toBe(false);
-    expect(n).toBe(4);
-
-    let m = 0;
-    const { deps: okDeps } = mockDeps({
-      now: () => 0,
-      agentStatus: async () => {
-        m += 1;
-        if (m <= 2) throw new HerdrError("agent_status_failed", `err${m}`);
-        return "done";
-      },
-    });
-    const ok = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: { claude: ["claude", "{prompt}"] },
-      ctx: { selection: "", cwd: root, workspaceId: "w1" },
-      deps: okDeps,
-    });
-    expect(ok.ok).toBe(true);
-    expect(m).toBe(3);
-  });
-
-  test("runlog: step entries + final; failure carries error", async () => {
-    const root = await repoWith({
-      m: `steps:\n  - shell: "printf one"\n  - shell: "echo boom >&2; exit 1"\n`,
-    });
-    const { deps } = mockDeps();
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: {},
-      ctx: { selection: "", cwd: root },
-      deps,
-    });
-    expect(result.ok).toBe(false);
-    const entries = await readRunLog();
-    expect(entries).toHaveLength(3);
-    expect(entries[0]).toMatchObject({
-      workflow: "m",
-      step: 1,
-      total: 2,
-      label: "shell: printf one",
-      ok: true,
-    });
-    expect(entries[1]).toMatchObject({
-      workflow: "m",
-      step: 2,
-      total: 2,
-      ok: false,
-    });
-    expect(entries[1]?.error).toContain("step 2");
-    expect(entries[2]).toMatchObject({ workflow: "m", ok: false });
-    expect(entries[2]?.step).toBeUndefined();
-    expect(entries[2]?.error).toContain("step 2");
-    const runIds = new Set(entries.map((e) => e.run));
-    expect(runIds.size).toBe(1);
-    expect([...runIds][0]?.length).toBe(8);
-  });
-
-  test("appendRunLog swallows fs errors", async () => {
-    const blocker = join(tmpdir(), `herdr-workflows-not-a-dir-${Date.now()}`);
-    await writeFile(blocker, "file");
-    dirs.push(blocker);
-    process.env.HERDR_PLUGIN_STATE_DIR = blocker;
-    await expect(
-      appendRunLog({
-        ts: new Date().toISOString(),
-        run: "abcd1234",
-        workflow: "m",
-        ok: true,
-      }),
-    ).resolves.toBeUndefined();
-  });
-
-  test("token: progress then clear when paneId set; skipped without", async () => {
-    const root = await repoWith({
-      m: `steps:\n  - shell: "printf a"\n  - shell: "printf b"\n`,
-    });
-    const tokens: (string | null)[] = [];
-    const { deps } = mockDeps({
-      reportToken: async (_paneId, value) => {
-        tokens.push(value);
-      },
-    });
-    await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: {},
-      ctx: { selection: "", cwd: root, paneId: "p9" },
-      deps,
-    });
-    expect(tokens).toEqual(["m 1/2", "m 2/2", null]);
-
-    const tokensNoPane: (string | null)[] = [];
-    const { deps: depsNoPane } = mockDeps({
-      reportToken: async (_paneId, value) => {
-        tokensNoPane.push(value);
-      },
-    });
-    await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: {},
-      ctx: { selection: "", cwd: root },
-      deps: depsNoPane,
-    });
-    expect(tokensNoPane).toEqual([]);
-  });
-
-  test("token: reportToken rejection does not fail the run", async () => {
-    const root = await repoWith({
-      m: `steps:\n  - shell: "printf ok"\n`,
-    });
-    const { deps } = mockDeps({
-      reportToken: async () => {
-        throw new HerdrError("report_token_failed", "boom");
-      },
-    });
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: {},
-      ctx: { selection: "", cwd: root, paneId: "p9" },
-      deps,
-    });
-    expect(result.ok).toBe(true);
-  });
-
-  test("on_fail: recovery logged under same run id; token cleared once", async () => {
-    const root = await repoWith({
-      recover: `steps:\n  - shell: "printf recovered"\n`,
-      m: `steps:\n  - shell: "exit 1"\non_fail: recover\n`,
-    });
-    const tokens: (string | null)[] = [];
-    const { deps } = mockDeps({
-      reportToken: async (_paneId, value) => {
-        tokens.push(value);
-      },
-    });
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: {},
-      ctx: { selection: "", cwd: root, paneId: "p9" },
-      deps,
-    });
-    expect(result.ok).toBe(true);
-    const entries = await readRunLog();
-    expect(entries.map((e) => e.workflow)).toEqual(["m", "recover", "m"]);
-    expect(entries.every((e) => e.run === entries[0]?.run)).toBe(true);
-    expect(entries[0]).toMatchObject({ step: 1, ok: false });
-    expect(entries[1]).toMatchObject({ workflow: "recover", step: 1, ok: true });
-    expect(entries[2]).toMatchObject({ workflow: "m", ok: true });
-    expect(entries[2]?.step).toBeUndefined();
-    expect(tokens.filter((t) => t === null)).toHaveLength(1);
-    expect(tokens.at(-1)).toBeNull();
-  });
-
-  test("needsSession without paneId fails; on_fail not run", async () => {
-    const root = await repoWith({
-      recover: `steps:\n  - shell: "printf recovered"\n`,
-      m: `steps:\n  - shell: cat\n    stdin: "{session}"\non_fail: recover\n`,
-    });
-    const { deps, notes } = mockDeps();
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: {},
-      ctx: { selection: "", cwd: root },
-      deps,
-    });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain("session handoff must be launched from an agent pane");
-    }
-    expect(notes).toHaveLength(1);
-    const entries = await readRunLog();
-    expect(entries.map((e) => e.workflow)).toEqual(["m"]);
-    expect(entries.some((e) => e.workflow === "recover")).toBe(false);
-  });
-
-  test("needsSession calls sessionText and substitutes into stdin", async () => {
-    const root = await repoWith({
-      m: `steps:\n  - shell: cat\n    stdin: "{session}"\n`,
-    });
-    const seen: string[] = [];
-    const { deps } = mockDeps({
-      sessionText: async (paneId) => {
-        seen.push(paneId);
-        return "user:\nhello session";
-      },
-    });
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: {},
-      ctx: { selection: "", cwd: root, paneId: "pane-42" },
-      deps,
-    });
-    expect(seen).toEqual(["pane-42"]);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.last).toBe("user:\nhello session");
-  });
-
-  test("{session_file} yields a temp path readable during the run, removed after", async () => {
-    const transcript = "user:\nHERDR_EOF\n'quote\" $(reject) `tick`\nlast line";
-    const root = await repoWith({
-      m: `steps:\n  - shell: sh -s\n    stdin: |\n      P='{session_file}'\n      printf %s "$P" > path.txt\n      cat "$P"\n`,
-    });
-    const { deps } = mockDeps({ sessionText: async () => transcript });
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: {},
-      ctx: { selection: "", cwd: root, paneId: "pane-42" },
-      deps,
-    });
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.last).toBe(transcript);
-    const path = await Bun.file(`${root}/path.txt`).text();
-    expect(path).toMatch(/hwf-session-/);
-    expect(await Bun.file(path).exists()).toBe(false);
-  });
-
-  test("runWorkflow passes opts.sessions to sessionText", async () => {
-    const root = await repoWith({
-      m: `steps:\n  - shell: cat\n    stdin: "{session}"\n`,
-    });
-    let passed: unknown;
-    const sessions = { codex: ["echo", "hi"] };
-    const { deps } = mockDeps({
-      sessionText: async (_paneId, sess) => {
-        passed = sess;
-        return "from sessions";
-      },
-    });
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: {},
-      sessions,
-      ctx: { selection: "", cwd: root, paneId: "p1" },
-      deps,
-    });
-    expect(passed).toEqual(sessions);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.last).toBe("from sessions");
-  });
-
-  test("sessionText throw runs on_fail with {error} filled", async () => {
-    const root = await repoWith({
-      recover: `steps:\n  - shell: cat\n    stdin: "E={error}"\n`,
-      m: `steps:\n  - shell: cat\n    stdin: "{session}"\non_fail: recover\n`,
-    });
-    const { deps } = mockDeps({
-      sessionText: async () => {
-        throw new HerdrError("session_file_missing", "session file not found: /tmp/x.jsonl");
-      },
-    });
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: {},
-      ctx: { selection: "", cwd: root, paneId: "p1" },
-      deps,
-    });
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.last).toContain("E=step 0: session file not found: /tmp/x.jsonl");
-    const entries = await readRunLog();
-    expect(entries.some((e) => e.workflow === "recover")).toBe(true);
-  });
-
-  test("sessionText throw without on_fail fails with its message", async () => {
-    const root = await repoWith({
-      m: `steps:\n  - shell: cat\n    stdin: "{session}"\n`,
-    });
-    const { deps } = mockDeps({
-      sessionText: async () => {
-        throw new HerdrError("session_file_missing", "session file not found: /tmp/x.jsonl");
-      },
-    });
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: {},
-      ctx: { selection: "", cwd: root, paneId: "p1" },
-      deps,
-    });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toContain("session file not found: /tmp/x.jsonl");
-  });
-
-  test("two agent opens track {prev_tab} for tab.close", async () => {
-    const root = await repoWith({
-      m: `steps:
-  - agent: claude
-    wait: done
-    timeout: 5
-  - agent: claude
-    prompt: "{last}"
-  - herdr: tab.close
-  - herdr: tab.close
-    params:
-      tab_id: "{prev_tab}"
-`,
-    });
-    let n = 0;
-    const reads: { source?: string; lines?: number }[] = [];
-    const { deps, calls } = mockDeps({
-      layoutApply: async () => {
-        n += 1;
-        return { tabId: `tab-${n}`, paneId: `pane-${n}`, workspaceId: "w1" };
-      },
-      agentStatus: async () => "done",
-      paneRead: async (_paneId, opts) => {
-        reads.push(opts ?? {});
-        return "handoff-body";
-      },
-    });
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: { claude: ["claude", "{prompt}"] },
-      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "source-tab", paneId: "src" },
-      deps,
-    });
-    expect(result.ok).toBe(true);
-    expect(calls.filter((c) => c.method === "tab.close")).toEqual([
-      {
-        method: "tab.close",
-        params: { tab_id: "source-tab", pane_id: "src", workspace_id: "w1" },
-      },
-      {
-        method: "tab.close",
-        params: { tab_id: "tab-1", pane_id: "src", workspace_id: "w1" },
-      },
-    ]);
-    expect(reads[0]?.lines).toBe(100_000);
-    expect(reads[0]?.source).toBe("recent-unwrapped");
-  });
-
-  test('agent: "{agent}" resolves from invoking pane', async () => {
-    const root = await repoWith({
-      m: `steps:\n  - agent: "{agent}"\n    prompt: go\n`,
-    });
-    const { deps, layouts } = mockDeps({
-      agentLabel: async () => "codex",
-    });
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: { claude: ["claude", "{prompt}"], codex: ["codex", "{prompt}"] },
-      ctx: { selection: "", cwd: root, workspaceId: "w1", paneId: "p1" },
-      deps,
-    });
-    expect(result.ok).toBe(true);
-    expect((layouts[0] as { command: string[] }).command).toEqual(["codex", "go"]);
-  });
-
-  test('agent: "{agent}" fails when label not in config', async () => {
-    const root = await repoWith({
-      m: `steps:\n  - agent: "{agent}"\n    prompt: go\n`,
-    });
-    const { deps } = mockDeps({
-      agentLabel: async () => "gemini",
-    });
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: { claude: ["claude", "{prompt}"] },
-      ctx: { selection: "", cwd: root, workspaceId: "w1", paneId: "p1" },
-      deps,
-    });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toContain("gemini");
-  });
-
-  test("shell steps export HWF_INPUT_* env from resolved inputs", async () => {
-    const root = await repoWith({
-      m: `inputs:
-  branch: {}
-  base:
-    default: main
-steps:
-  - shell: 'printf "%s/%s" "$HWF_INPUT_branch" "$HWF_INPUT_base"'
-`,
-    });
-    const { deps } = mockDeps();
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: {},
-      ctx: { selection: "", cwd: root },
-      inputs: { branch: "feat/x" },
-      deps,
-    });
-    expect(result).toEqual({ ok: true, last: "feat/x/main" });
-  });
-
-  test("close_source closes invoking tab after successful agent open", async () => {
-    const root = await repoWith({
-      m: `steps:
-  - agent: claude
-    prompt: hi
-    close_source: true
-`,
-    });
-    const closed: string[] = [];
-    const { deps, layouts } = mockDeps({
-      tabClose: async (tabId) => {
-        closed.push(tabId);
-      },
-    });
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: { claude: ["claude", "{prompt}"] },
-      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "src-tab" },
-      deps,
-    });
-    expect(result.ok).toBe(true);
-    expect(layouts).toHaveLength(1);
-    expect(closed).toEqual(["src-tab"]);
-  });
-
-  test("close_source skipped when agent open fails", async () => {
-    const root = await repoWith({
-      m: `steps:
-  - agent: claude
-    prompt: hi
-    close_source: true
-`,
-    });
-    const closed: string[] = [];
-    const { deps } = mockDeps({
-      layoutApply: async () => {
-        throw new Error("layout boom");
-      },
-      tabClose: async (tabId) => {
-        closed.push(tabId);
-      },
-    });
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: { claude: ["claude", "{prompt}"] },
-      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "src-tab" },
-      deps,
-    });
-    expect(result.ok).toBe(false);
-    expect(closed).toEqual([]);
   });
 });

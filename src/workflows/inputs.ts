@@ -1,12 +1,28 @@
-import { spawnCapture } from "../runner/shell";
-import { WorkflowLoadError, positioned, type FlatStep, type InputSpec } from "./errors";
+import { shellArgv, spawnCapture } from "../runner/shell";
+import { WorkflowLoadError, positioned, type FlatStep, type InputSpec } from "./types";
 import type { RawWorkflow } from "./parse";
-import { paramsInputRefs, textInputRefs } from "./substitute";
+import { isBuiltin } from "./substitute";
+import { AGENT_NAME_RE, stepOutNames, stepReferencedNames } from "./steps";
+import { AGENTS_BUILTIN, normalizeInput } from "./input-normalize";
 
-export const AGENT_INPUT_RE = /^\{input\.([a-z][a-z0-9_]{0,31})\}$/;
+export { AGENT_NAME_RE };
 
 const OPTIONS_CMD_TIMEOUT_MS = 5_000;
-const AGENTS_BUILTIN = "agents";
+
+/** True when `command` references `$HWF_<name>` or `$HWF_INPUT_<name>` exactly. */
+function commandUsesEnv(command: string, name: string): boolean {
+  for (const prefix of [`HWF_${name}`, `HWF_INPUT_${name}`]) {
+    let from = 0;
+    while (from <= command.length) {
+      const i = command.indexOf(prefix, from);
+      if (i === -1) break;
+      const after = command[i + prefix.length];
+      if (after === undefined || !/[A-Za-z0-9_]/.test(after)) return true;
+      from = i + prefix.length;
+    }
+  }
+  return false;
+}
 
 async function resolveOptionLines(
   file: string,
@@ -14,7 +30,7 @@ async function resolveOptionLines(
   command: string,
   repoRoot: string,
 ): Promise<string[]> {
-  const result = await spawnCapture(["sh", "-c", command], {
+  const result = await spawnCapture(shellArgv(command), {
     cwd: repoRoot,
     timeoutMs: OPTIONS_CMD_TIMEOUT_MS,
   });
@@ -54,7 +70,13 @@ export async function resolveInputs(
   resolveDynamic = true,
 ): Promise<InputSpec[]> {
   const specs: InputSpec[] = [];
-  for (const [name, input] of Object.entries(raw.inputs ?? {})) {
+  for (const [name, value] of Object.entries(raw.inputs ?? {})) {
+    if (isBuiltin(name)) {
+      throw new WorkflowLoadError(
+        positioned(file, undefined, `inputs.${name}`, `name shadows builtin '{${name}}'`),
+      );
+    }
+    const input = normalizeInput(file, name, value);
     let options: string[] | undefined;
     let dynamicOptions = false;
     if (input.options !== undefined) {
@@ -86,6 +108,7 @@ export async function resolveInputs(
     specs.push({
       name,
       label: input.label ?? name,
+      desc: input.desc,
       options,
       ...(dynamicOptions ? { dynamicOptions: true } : {}),
       default: input.default,
@@ -115,44 +138,121 @@ function checkAgentInput(file: string, idx: number, spec: InputSpec, agents: Set
   }
 }
 
+function checkStepNames(
+  file: string,
+  inputs: Map<string, InputSpec>,
+  steps: FlatStep[],
+  agents: Set<string>,
+  knownNames: Set<string>,
+  used: Set<string>,
+  markInputUse: boolean,
+): void {
+  let idx = 0;
+  for (const step of steps) {
+    const stepIndex = idx + 1;
+    if (step.action.kind === "include") {
+      for (const name of stepReferencedNames(step)) {
+        if (isBuiltin(name)) continue;
+        if (!knownNames.has(name) && !inputs.has(name)) {
+          throw new WorkflowLoadError(
+            positioned(file, stepIndex, "with", `unknown name '{${name}}'`),
+          );
+        }
+        if (inputs.has(name) && markInputUse) used.add(name);
+      }
+      const childKnown = new Set<string>([
+        ...Object.keys(step.action.with),
+        ...Object.keys(step.action.defaults),
+      ]);
+      checkStepNames(file, new Map(), step.action.steps, agents, childKnown, used, false);
+      for (const n of step.action.exportedOuts) knownNames.add(n);
+      idx++;
+      continue;
+    }
+
+    for (const name of stepReferencedNames(step)) {
+      if (name === "item" || name === "index") {
+        if (!step.for) {
+          throw new WorkflowLoadError(
+            positioned(file, stepIndex, undefined, `{${name}} requires for:`),
+          );
+        }
+        continue;
+      }
+      if (name === "attempt") {
+        if (!step.retry) {
+          throw new WorkflowLoadError(
+            positioned(file, stepIndex, undefined, `{attempt} requires retry:`),
+          );
+        }
+        continue;
+      }
+      if (isBuiltin(name)) continue;
+      if (knownNames.has(name)) {
+        if (inputs.has(name) && markInputUse) used.add(name);
+        continue;
+      }
+      if (inputs.has(name)) {
+        if (markInputUse) used.add(name);
+        continue;
+      }
+      throw new WorkflowLoadError(
+        positioned(file, stepIndex, undefined, `unknown name '{${name}}'`),
+      );
+    }
+
+    if (step.action.kind === "run" && step.action.payload.form !== "argv") {
+      for (const name of inputs.keys()) {
+        if (commandUsesEnv(step.action.payload.command, name)) {
+          if (markInputUse) used.add(name);
+        }
+      }
+    }
+    if (step.action.kind === "agent") {
+      const m = AGENT_NAME_RE.exec(step.action.agent);
+      if (m && !isBuiltin(m[1]!)) {
+        const spec = inputs.get(m[1]!);
+        if (!spec) {
+          throw new WorkflowLoadError(
+            positioned(file, stepIndex, "agent", `unknown name '{${m[1]}}'`),
+          );
+        }
+        if (markInputUse) used.add(m[1]!);
+        checkAgentInput(file, idx, spec, agents);
+      }
+    }
+    if (step.as) {
+      if (isBuiltin(step.as) || inputs.has(step.as) || knownNames.has(step.as)) {
+        throw new WorkflowLoadError(
+          positioned(file, stepIndex, "as", `name '${step.as}' collides with an existing name`),
+        );
+      }
+    }
+    for (const name of stepOutNames(step)) {
+      if (isBuiltin(name)) {
+        throw new WorkflowLoadError(
+          positioned(file, stepIndex, "out", `name shadows a builtin '{${name}}'`),
+        );
+      }
+      if (inputs.has(name) || knownNames.has(name)) {
+        throw new WorkflowLoadError(
+          positioned(file, stepIndex, "out", `name '${name}' collides with an existing name`),
+        );
+      }
+      knownNames.add(name);
+    }
+    idx++;
+  }
+}
+
 export function checkInputRefs(
   file: string,
   inputs: Map<string, InputSpec>,
   steps: FlatStep[],
   agents: Set<string>,
+  knownNames: Set<string>,
 ): Set<string> {
   const used = new Set<string>();
-  const require = (name: string, idx: number, key: string | undefined): InputSpec => {
-    const spec = inputs.get(name);
-    if (!spec) {
-      throw new WorkflowLoadError(
-        positioned(
-          file,
-          idx + 1,
-          key,
-          `undeclared input '{input.${name}}' — declare it under inputs:`,
-        ),
-      );
-    }
-    used.add(name);
-    return spec;
-  };
-  steps.forEach((step, idx) => {
-    if (step.verb === "shell") {
-      for (const name of textInputRefs(step.stdin ?? "")) require(name, idx, "stdin");
-      for (const name of inputs.keys()) {
-        if (step.command.includes(`HWF_INPUT_${name}`)) require(name, idx, undefined);
-      }
-      return;
-    }
-    if (step.verb === "herdr") {
-      for (const name of paramsInputRefs(step.params)) require(name, idx, "params");
-      return;
-    }
-    if (step.verb !== "agent") return;
-    for (const name of textInputRefs(step.prompt ?? "")) require(name, idx, "prompt");
-    const m = AGENT_INPUT_RE.exec(step.name);
-    if (m) checkAgentInput(file, idx, require(m[1]!, idx, "agent"), agents);
-  });
+  checkStepNames(file, inputs, steps, agents, knownNames, used, true);
   return used;
 }

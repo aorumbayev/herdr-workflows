@@ -26,12 +26,19 @@ Writes `.hwf/config.yaml` (agent definitions) plus a starter `review` workflow, 
 ```yaml
 # .hwf/workflows/scratch.yaml
 steps:
-  - open: lazygit
+  - run: lazygit
+    in: tab
 ```
 
 - `prefix+k` → type `scratch` → enter. Done.
 - Same thing from a terminal: `hwf run scratch` (live step output — best for debugging).
 - Workflows live in `.hwf/workflows/` (repo) or `~/.hwf/workflows/` (global, every project). Repo shadows global on the same name.
+
+One-liner floor:
+
+```yaml
+steps: bun test
+```
 
 ## Pick a surface
 
@@ -43,61 +50,72 @@ steps:
 
 The web workbench never runs workflows — running needs real herdr panes. It shows you the `hwf run <name>` line to paste instead.
 
-## The five verbs
+## Action keys
 
-One verb per step. Steps run top to bottom.
+Exactly one per step. Steps run top to bottom.
 
-- `shell: <cmd>` — blocking `sh -c` in the repo root. Stdout becomes `{last}` for later steps.
-- `open: <cmd>` — fire a command in a new herdr tab. `wait_for: <regex>` makes it block until output matches.
-- `agent: <name>` — launch a configured agent in a new tab. `wait: done` blocks until it finishes; `close_source: true` closes the invoking tab after the new one opens.
-- `herdr: <method>` — call herdr's socket API with `params:`.
-- `run: <workflow>` — splice another workflow's steps in here (composition).
+- `run:` — command. Shape decides shell involvement: scalar/block go through `shell:` (default `sh`, no placeholders); argv list is shell-free and accepts `{name}` per argument.
+- `agent:` — configured agent in a pane. Waits by default; `wait: false` detaches.
+- `use:` — include another workflow; pass params with `with:`.
+- `pane.split:` / `worktree.create:` / … — any allowed herdr method, spelled as herdr spells it.
 
-`shell` vs `agent`: use `shell` for one-shot CLI calls (`claude -p …`), `agent` when you want an interactive pane a human can watch.
+Placement is a modifier: `in: here | tab | right | down` (defaults: `here` for `run:`, `tab` for `agent:`).
 
 ## Placeholders
 
-Workflows get data through placeholders — but **only** inside `stdin`, `prompt`, and `params` strings. A placeholder in `shell:` / `open:` command text is a load error:
+One flat namespace: `{branch}`, `{diff}`, `{session}`, builtins. **Not** `{input.branch}` or `{last}`.
+
+Scalar/block `run:` reject placeholders — pass values as `HWF_<name>` env, or use argv form:
 
 ```yaml
-# ✗ load error            # ✓
-- shell: echo {pane}      - shell: claude -p "summarize"
-                            stdin: "{pane}"
+# ✗ load error                         # ✓
+- run: git checkout {branch}           - run: [git, checkout, "{branch}"]
 ```
 
-The everyday three: `{pane}` (invoking pane's scrollback), `{prompt}` (one ad hoc line from the picker or `--prompt`), `{last}` (previous step's output). Full list: [Reference](/reference#verbs--modifiers).
+`{session}` is legal in prompts, argv, and primitive params (no more `run: cat` hop).
 
 ## Inputs
 
-When a run needs named values, declare them:
-
 ```yaml
 inputs:
-  branch:
-    options: "git branch --format='%(refname:short)'"
-  focus:
-    default: ""
+  branch: sh git branch --format='%(refname:short)'
+  focus: text = ""
 steps:
   - agent: claude
-    prompt: "Branch {input.branch}\nFocus: {input.focus}\n\n{pane}"
+    prompt: "Branch {branch}\nFocus: {focus}\n\n{pane}"
 ```
 
-The picker asks one screen per input (choice list with type-to-filter, or a text line); the CLI takes `--input branch=main --input focus=perf`. `options:` can be a literal list, the builtin `agents` (your config's agent names), or a shell command whose stdout lines become choices. Rules and validation: [Reference](/reference#inputs).
+Shorthands: `text`, `text = …`, `[a, b] = a`, `sh <cmd>`, `agents`. Map form still has `label` / `desc`.
 
-Inside `shell:` commands, read inputs from `HWF_INPUT_<name>` environment variables — never interpolate `{input.*}` into command text.
+## Control flow
 
-## Failure handling
-
-`on_fail: <workflow>` on the entry workflow runs a recovery sequence once if a step fails:
+Skip with `when:`, loop with `for:` / `as:`, retry with `retry:` (pane-creating steps need `reset:`), soft-fail with `allow_fail:`, recover with `on_error:`.
 
 ```yaml
-on_fail: continue
 steps:
-  - run: gate
-  - shell: git push
+  - run: git diff HEAD
+    out: diff
+  - agent: claude
+    when: "{diff}"
+    prompt: "Review:\n{diff}"
 ```
 
-Recovery sees everything the original run saw, plus `{error}`. It runs once, may not declare its own `inputs:`, and only the entry workflow may declare `on_fail`.
+## Composition
+
+```yaml
+# gate.yaml
+inputs:
+  suite: [unit, all] = unit
+steps:
+  - run: [bun, test, "--", "{suite}"]
+
+# ship.yaml
+on_error: continue
+steps:
+  - use: gate
+    with: { suite: all }
+  - run: git push
+```
 
 ## Web workbench
 
@@ -105,13 +123,13 @@ Recovery sees everything the original run saw, plus `{error}`. It runs once, may
 hwf web   # opens http://127.0.0.1:7317/?token=… — or just run bare `hwf`
 ```
 
-- **Workflows** tab: text editor with live validation, or visual mode (drag-reorderable step cards that round-trip to YAML). Copy, download, move between repo/global, delete.
-- **Config** tab: edit repo/global `config.yaml`.
-- **Runs** tab: read-only run history.
+Text editor with live validation, or visual mode (drag-reorderable step cards). Bound to `127.0.0.1` with a per-launch token.
 
-Bound to `127.0.0.1` with a per-launch token; the token dies with the process. Treat the URL as a secret while it runs — it can write your `.hwf` files.
+## Breaking change (syntax v2)
+
+Existing v1 files fail to load with errors naming the v2 spelling. No migrate command. See [Reference](/reference#v1--v2-keys) and `CHANGELOG.md`.
 
 ## Next
 
-- [Examples](/examples) — recipes from trivial to agent handoffs.
-- [Reference](/reference) — CLI flags, picker keys, load rules, ceilings.
+- [Examples](/examples) — guarded review, fix-until-green, per-file loop, review workspace.
+- [Reference](/reference) — every key, deny table, ceilings.

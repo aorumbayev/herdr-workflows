@@ -8,15 +8,12 @@ export const PLAYBOOK_SEED_WORKFLOWS: Seed[] = [
   {
     name: "handoff",
     body: () => `inputs:
-  target:
-    options: agents
-    label: hand over to
-  focus:
-    default: ""
+  target: agents
+  focus: text = ""
 steps:
-  - shell: cat
-    stdin: "{session}"
   - agent: "{agent}"
+    timeout: 900
+    out: brief
     prompt: |
       Below the --- marker is a coding agent session transcript. Distil it into
       a handoff prompt for a fresh agent session.
@@ -62,27 +59,23 @@ steps:
       unclear items as open questions.
 
       ---
-      {last}
-    wait: done
-    timeout: 900
-  - agent: "{input.target}"
+      {session}
+  - agent: "{target}"
     prompt: |
-      Focus: {input.focus}
+      Focus: {focus}
 
-      {last}
-    close_source: true
+      {brief}
+  - tab.close: { tab_id: "{source_tab}" }
 `,
   },
   {
     name: "worktree",
     body: () => `inputs:
-  branch:
-    label: new branch name
-  base:
-    options: [main, develop]
-    default: main
+  branch: text
+  base: [main, develop] = main
 steps:
-  - shell: herdr worktree create --branch "$HWF_INPUT_branch" --base "$HWF_INPUT_base" --label "$HWF_INPUT_branch" --focus
+  - worktree.create: { branch: "{branch}", base: "{base}", label: "{branch}", focus: true }
+    out: { path: worktree.path }
 `,
   },
 ];
@@ -92,14 +85,15 @@ export const REPO_SEED_WORKFLOWS: Seed[] = [
   {
     name: "review",
     body: (agent) => `steps:
-  - shell: git diff HEAD
+  - run: git diff HEAD
+    out: diff
   - agent: ${JSON.stringify(agent)}
+    when: "{diff}"
+    timeout: 900
     prompt: |
       Review this diff. List blocking issues only.
 
-      {last}
-    wait: done
-    timeout: 900
+      {diff}
 `,
   },
 ];

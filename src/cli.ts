@@ -2,14 +2,16 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { HerdrError, notificationShow, pluginPaneOpen } from "./adapter/client";
+import { notificationShow, pluginPaneOpen } from "./adapter/client";
+import { HerdrError } from "./adapter/rpc";
 import { die } from "./adapter/popup";
 import { parseArgs } from "./cli-args";
 import { cmdInit } from "./cmd-init";
 import { loadConfig } from "./config";
 import { readInvocationContext } from "./context";
-import { WorkflowLoadError } from "./workflows";
+import { WorkflowLoadError } from "./workflows/types";
 import { resolveRepoRoot } from "./repo";
+import { ensureHerdrProtocol } from "./herdr-protocol";
 import { runWorkflow } from "./runner";
 import { startWebServer } from "./web/server";
 
@@ -28,6 +30,7 @@ function parseInputFlags(values: string[]): Record<string, string> {
 }
 
 async function cmdLaunch(): Promise<void> {
+  await ensureHerdrProtocol();
   // The picker runs in a fresh popup pane rooted at the plugin dir, so forward the invoking
   // pane's repo (and raw context) — otherwise workflow discovery and {pane} target the wrong place.
   const ctx = readInvocationContext();
@@ -47,6 +50,7 @@ async function cmdLaunch(): Promise<void> {
 }
 
 async function cmdRun(args: string[]): Promise<void> {
+  await ensureHerdrProtocol();
   const { flags, positional, multi } = parseArgs(args);
   const name = positional[0];
   if (!name) die("usage: hwf|herdr-workflows run <name> [--prompt …] [--input name=value …]");
@@ -74,12 +78,7 @@ async function cmdRun(args: string[]): Promise<void> {
 }
 
 function openBrowser(url: string): void {
-  const cmd =
-    process.platform === "darwin"
-      ? ["open", url]
-      : process.platform === "win32"
-        ? ["cmd", "/c", "start", "", url]
-        : ["xdg-open", url];
+  const cmd = process.platform === "darwin" ? ["open", url] : ["xdg-open", url];
   try {
     Bun.spawn(cmd, { stdout: "ignore", stderr: "ignore" });
   } catch {
@@ -121,17 +120,14 @@ function preferOnDiskOpentuiLib(): void {
 }
 
 async function main(): Promise<void> {
-  // Older cached manifests invoked `bin/hook.mjs herdr <cmd>`; strip that prefix so a stale
-  // plugins.json still reaches launch/picker until the next `bun run install:dev` re-links.
-  const argv = process.argv.slice(2);
-  const args = argv[0] === "herdr" ? argv.slice(1) : argv;
-  const [command, ...rest] = args;
+  const [command, ...rest] = process.argv.slice(2);
   if (!command) {
     if (process.stdin.isTTY && process.stdout.isTTY) return cmdWeb([]);
     usage();
   }
   if (command === "launch") return cmdLaunch();
   if (command === "picker") {
+    await ensureHerdrProtocol();
     preferOnDiskOpentuiLib();
     const { runPickerPopup } = await import("./adapter/picker");
     return runPickerPopup();

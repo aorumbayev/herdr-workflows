@@ -1,36 +1,44 @@
 import { HerdrError, herdrCall, herdrCli } from "./rpc";
 
-export { HerdrError, herdrCall, herdrRequest } from "./rpc";
-
 export async function tabClose(tabId: string): Promise<void> {
   await herdrCall("tab.close", { tab_id: tabId });
 }
 
 export type LayoutApplyResult = { tabId: string; paneId: string; workspaceId: string };
 
+type LayoutPaneNode = {
+  type: "pane";
+  label?: string;
+  cwd?: string;
+  command?: string[];
+  env?: Record<string, string>;
+  pane_id?: string;
+};
+
+type LayoutSplitNode = {
+  type: "split";
+  direction: "right" | "down";
+  ratio: number;
+  first: LayoutNode;
+  second: LayoutNode;
+};
+
+export type LayoutNode = LayoutPaneNode | LayoutSplitNode;
+
 export async function layoutApply(params: {
   workspaceId?: string;
-  tabLabel: string;
+  tabLabel?: string;
   tabId?: string;
-  cwd: string;
-  command: string[];
-  label: string;
-  env?: Record<string, string>;
+  root: LayoutNode;
   focus?: boolean;
 }): Promise<LayoutApplyResult> {
   // herdr rejects both set ("use either tab_id or workspace_id, not both").
   const result = await herdrCall("layout.apply", {
     workspace_id: params.tabId ? null : (params.workspaceId ?? null),
-    tab_label: params.tabLabel,
+    tab_label: params.tabLabel ?? null,
     tab_id: params.tabId ?? null,
     focus: params.focus ?? true,
-    root: {
-      type: "pane",
-      label: params.label,
-      cwd: params.cwd,
-      command: params.command,
-      env: params.env ?? {},
-    },
+    root: params.root,
   });
   const layout = result.layout as
     | { tab_id?: string; focused_pane_id?: string; workspace_id?: string }

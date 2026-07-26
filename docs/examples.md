@@ -4,37 +4,37 @@ Copy into `.hwf/workflows/<name>.yaml` (repo) or `~/.hwf/workflows/<name>.yaml` 
 
 ## Scratch — open a tool
 
-The smallest useful workflow: a new tab running a command.
-
 ```yaml
 # scratch.yaml
 steps:
-  - open: lazygit
+  - run: lazygit
+    in: tab
 ```
 
 `prefix+k` → `scratch` → enter.
 
 ## Gate & ship — compose, recover on failure
 
-`gate` runs checks; `ship` reuses them and pushes; if anything fails, `continue` hands the pane to an agent.
-
 ```yaml
 # gate.yaml
+inputs:
+  suite: [unit, all] = unit
 steps:
-  - shell: bun test
-  - shell: bun run verify
+  - run: [bun, test, "--", "{suite}"]
+  - run: bun run verify
 ```
 
 ```yaml
 # ship.yaml
-on_fail: continue
+on_error: continue
 steps:
-  - run: gate
-  - shell: git push
+  - use: gate
+    with: { suite: all }
+  - run: git push
 ```
 
 ```yaml
-# continue.yaml  (recovery — no inputs: allowed)
+# continue.yaml
 steps:
   - agent: claude
     prompt: |
@@ -47,69 +47,115 @@ steps:
 
 ## Inputs — ask the user
 
-Choice from a shell command, plus a free-text field with a default.
-
 ```yaml
 # discuss.yaml
 inputs:
-  branch:
-    options: "git branch --format='%(refname:short)'"
-  focus:
-    default: ""
+  branch: sh git branch --format='%(refname:short)'
+  focus: text = ""
 steps:
   - agent: claude
-    prompt: "Branch {input.branch}\nFocus: {input.focus}\n\n{pane}"
+    prompt: "Branch {branch}\nFocus: {focus}\n\n{pane}"
 ```
 
-Picker: two screens, then run. CLI: `hwf run discuss --input branch=main`.
+CLI: `hwf run discuss --input branch=main`.
 
-## Worktree — inputs via `HWF_INPUT_*` env
+## Guarded review
 
-Seeded by `hwf init`. Values reach the CLI through environment variables, not interpolation:
+Seeded by `hwf init`. Skips the agent when the tree is clean:
+
+```yaml
+# review.yaml
+steps:
+  - run: git diff HEAD
+    out: diff
+  - agent: claude
+    when: "{diff}"
+    timeout: 900
+    prompt: |
+      Review this diff. List blocking issues only.
+
+      {diff}
+```
+
+## Worktree — primitive
 
 ```yaml
 # worktree.yaml
 inputs:
-  branch:
-    label: new branch name
-  base:
-    options: [main, develop]
-    default: main
+  branch: text
+  base: [main, develop] = main
 steps:
-  - shell: herdr worktree create --branch "$HWF_INPUT_branch" --base "$HWF_INPUT_base" --label "$HWF_INPUT_branch" --focus
+  - worktree.create: { branch: "{branch}", base: "{base}", label: "{branch}", focus: true }
+    out: { path: worktree.path }
 ```
 
-Never put `{input.*}` inside the `shell:` command string — substitution is literal text replacement, not shell escaping, so crafted input could rewrite your command. Fixed command text + env vars for values.
+## Handoff — session into a prompt
 
-## Handoff — distill one agent session into another
-
-Seeded by `hwf init`. Run it from an agent pane: distils the current session (`{session}`) with the invoking agent (`{agent}`), then opens the chosen target and closes the source tab.
+Run from an agent pane. Distils `{session}` with `{agent}`, opens the target, closes the source tab:
 
 ```yaml
 # handoff.yaml
 inputs:
-  target:
-    options: agents
-    label: hand over to
-  focus:
-    default: ""
+  target: agents
+  focus: text = ""
 steps:
-  - shell: cat
-    stdin: "{session}"
   - agent: "{agent}"
+    timeout: 900
+    out: brief
     prompt: |
       Distil the transcript below into a handoff prompt.
       Output ONLY the handoff prompt.
       ---
-      {last}
-    wait: done
-    timeout: 900
-  - agent: "{input.target}"
+      {session}
+  - agent: "{target}"
     prompt: |
-      Focus: {input.focus}
+      Focus: {focus}
 
-      {last}
-    close_source: true
+      {brief}
+  - tab.close: { tab_id: "{source_tab}" }
 ```
 
-CLI: `hwf run handoff --input target=<configured-agent>`. `{session}` works in `stdin` only; non-Claude agents need a `sessions:` entry in config (see [Reference](/reference#config)).
+## Fix-until-green
+
+```yaml
+steps:
+  - run: bun test
+    out: failures
+    retry:
+      times: 3
+      until: bun test
+      reset:
+        - run: git stash
+  - agent: claude
+    when: "{failures}"
+    prompt: "Tests failed:\n{failures}"
+```
+
+## Per-file review loop
+
+```yaml
+steps:
+  - run: git diff --name-only main
+    out: changed
+  - agent: claude
+    for: "{changed}"
+    as: path
+    allow_fail: true
+    prompt: "Review {path}. Blocking issues only."
+```
+
+## Dedicated review workspace
+
+```yaml
+inputs:
+  branch: text = main
+steps:
+  - workspace.create: { label: "review {branch}" }
+    out: { workspace: workspace.workspace_id }
+  - run: [git, diff, "{branch}"]
+    in: tab
+  - agent: claude
+    in: right
+    ratio: 0.4
+    prompt: "Review the diff in the pane on the left."
+```

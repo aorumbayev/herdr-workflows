@@ -17,11 +17,13 @@ function hasBareEsc(raw: string): boolean {
 
 /** herdr prefix leaks into popup stdin — strip C0 controls (keep tab/CR/LF/ESC). */
 function sanitizePromptInput(raw: string): string {
+  // oxlint-disable-next-line no-control-regex -- intentional C0 strip for leaked herdr prefix keys
   return raw.replace(/[\x00-\x08\x0b\x0c\x0e-\x1a\x1c-\x1f]/g, "");
 }
 
 /** Strip C0 controls from AI/evidence text before writing to the terminal (keep tab/CR/LF). */
 export function sanitizeDisplay(raw: string): string {
+  // oxlint-disable-next-line no-control-regex -- intentional C0 strip before terminal write
   return raw.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
 }
 

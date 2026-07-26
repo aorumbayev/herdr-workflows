@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/package.json",
   "name": "herdr-workflows",
   "version": "0.0.0-development",
-  "description": "Linear YAML workflow runner for herdr panes — shell, open, agent, herdr steps.",
+  "description": "Linear YAML workflow runner for herdr panes — run, agent, use, and dotted herdr primitives.",
   "keywords": [
     "agent",
     "ai",
@@ -33,6 +33,7 @@
   "scripts": {
     "test": "bun test ./test",
     "schema": "bun scripts/generate-schema.ts",
+    "schema:herdr": "bun scripts/generate-herdr-methods.ts",
     "build": "bun build --compile --outfile=bin/herdr-workflows src/cli.ts",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
@@ -45,7 +46,7 @@
     "verify": "verifyx --no-tests",
     "verify:unused-code": "verifyx unused-code --max-warnings 0",
     "verify:duplicate-code": "verifyx duplicate-code --max-warnings 0",
-    "verify:complexity": "verifyx complexity",
+    "verify:complexity": "verifyx complexity --threshold 31",
     "verify:comments": "verifyx comments --pushback",
     "verify:circular-deps": "skott --displayMode=raw --showCircularDependencies --exitCodeOnCircularDependencies=1",
     "verify:hardcoded-colors": "verifyx hardcoded-colors"

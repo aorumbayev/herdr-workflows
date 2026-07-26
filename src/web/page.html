@@ -494,19 +494,18 @@
       function newWorkflow() {
         openSeq += 1; // cancel any in-flight openWorkflow
         current = { name: "", scope: "repo" };
-        renderEditor("", "repo", "steps:\n  - shell: echo hello\n");
+        renderEditor("", "repo", "steps:\n  - run: echo hello\n");
       }
 
       // Readable step blocks appended at the end of the step list (the right slot for a linear runner).
       const SKELETONS = {
-        shell: "  - shell: ",
-        agent: "  - agent: \n    prompt: |-\n      ",
-        open: "  - open: ",
-        herdr: "  - herdr: \n    params: {}",
         run: "  - run: ",
+        agent: "  - agent: \n    prompt: |-\n      ",
+        use: "  - use: ",
+        primitive: "  - pane.split: { direction: right }\n",
       };
 
-      const VERBS = ["shell", "agent", "open", "herdr", "run"];
+      const VERBS = ["run", "agent", "use", "primitive"];
 
       function renderEditor(name, scope, text) {
         const pane = $("pane");
@@ -561,7 +560,9 @@
         // Append a well-formed step at the end of the list (text mode) or as a new card (visual).
         function addStep(verb) {
           if (mode === "visual") {
-            visual.appendChild(buildCard({ [verb]: "" }));
+            const seed =
+              verb === "primitive" ? { "pane.split": { direction: "right" } } : { [verb]: "" };
+            visual.appendChild(buildCard(seed));
             syncFromVisual();
             return;
           }
@@ -584,8 +585,9 @@
               return;
             }
             extras = {};
+            if (r.data.doc.desc) extras.desc = r.data.doc.desc;
             if (r.data.doc.inputs) extras.inputs = r.data.doc.inputs;
-            if (r.data.doc.on_fail) extras.on_fail = r.data.doc.on_fail;
+            if (r.data.doc.on_error) extras.on_error = r.data.doc.on_error;
             visual.innerHTML = "";
             for (const step of r.data.doc.steps) visual.appendChild(buildCard(step));
           } else {
@@ -760,7 +762,16 @@
       }
 
       function verbOf(step) {
-        return VERBS.find((v) => step[v] !== undefined) || "shell";
+        if (step.run !== undefined) return "run";
+        if (step.agent !== undefined) return "agent";
+        if (step.use !== undefined) return "use";
+        const method = Object.keys(step).find((k) => k.includes("."));
+        if (method) return "primitive";
+        return "run";
+      }
+
+      function primitiveMethod(step) {
+        return Object.keys(step).find((k) => k.includes(".")) || "pane.split";
       }
 
       // One draggable step card. Attaches toRaw() reading its live field values back into a raw step.
@@ -783,7 +794,11 @@
           verbSel.appendChild(o);
         }
         verbSel.onchange = () => {
-          const fresh = buildCard({ [verbSel.value]: "" });
+          const next =
+            verbSel.value === "primitive"
+              ? { "pane.split": { direction: "right" } }
+              : { [verbSel.value]: "" };
+          const fresh = buildCard(next);
           card.replaceWith(fresh);
           fresh.dispatchEvent(new Event("step-changed", { bubbles: true }));
         };
@@ -819,24 +834,42 @@
           inputs[key] = el;
         };
 
-        if (verb === "shell") {
-          textField("shell", "command", step.shell);
-          textField("stdin", "stdin (optional)", step.stdin);
-        } else if (verb === "open") {
-          textField("open", "command", step.open);
-          textField("wait_for", "wait_for (optional)", step.wait_for);
+        if (verb === "run") {
+          const runVal = Array.isArray(step.run) ? JSON.stringify(step.run) : step.run || "";
+          textField("run", "command (scalar) or argv JSON list", runVal, true);
+          textField("shell", "shell (optional)", step.shell);
+          textField("in", "in (here|tab|right|down)", step.in);
+          textField("out", "out (optional)", typeof step.out === "string" ? step.out : "");
           textField("timeout", "timeout seconds (optional)", step.timeout);
+          checkField("detach", "wait: false (detach)", step.wait === false);
         } else if (verb === "agent") {
           textField("agent", "agent name", step.agent);
           textField("prompt", "prompt", step.prompt, true);
-          checkField("wait", "wait for done", step.wait === "done");
+          textField("in", "in (here|tab|right|down)", step.in);
+          textField("out", "out (optional)", typeof step.out === "string" ? step.out : "");
           textField("timeout", "timeout seconds (optional)", step.timeout);
-          checkField("close_source", "close source pane", step.close_source);
-        } else if (verb === "herdr") {
-          textField("herdr", "method", step.herdr);
-          textField("params", "params (JSON)", step.params ? JSON.stringify(step.params) : "");
-        } else if (verb === "run") {
-          textField("run", "workflow name", step.run);
+          checkField("detach", "wait: false (detach)", step.wait === false);
+        } else if (verb === "use") {
+          textField("use", "workflow name", step.use);
+          textField(
+            "with",
+            "with (JSON object, optional)",
+            step.with ? JSON.stringify(step.with) : "",
+          );
+        } else if (verb === "primitive") {
+          const method = primitiveMethod(step);
+          textField("method", "method (e.g. pane.split)", method);
+          const params = step[method];
+          textField(
+            "params",
+            "params (JSON object)",
+            params && typeof params === "object" ? JSON.stringify(params) : "{}",
+          );
+          textField(
+            "out",
+            "out map JSON (optional)",
+            step.out && typeof step.out === "object" ? JSON.stringify(step.out) : "",
+          );
         }
 
         card.toRaw = () => {
@@ -850,31 +883,56 @@
             out.timeout = n;
             return true;
           };
-          if (verb === "shell") {
-            out.shell = s("shell");
-            if (s("stdin")) out.stdin = inputs.stdin.value;
-          } else if (verb === "open") {
-            out.open = s("open");
-            if (s("wait_for")) out.wait_for = s("wait_for");
+          if (verb === "run") {
+            const raw = s("run");
+            if (raw.startsWith("[")) {
+              try {
+                out.run = JSON.parse(raw);
+              } catch {
+                return { error: "run argv must be valid JSON" };
+              }
+            } else {
+              out.run = raw;
+            }
+            if (s("shell")) out.shell = s("shell");
+            if (s("in")) out.in = s("in");
+            if (s("out")) out.out = s("out");
             if (!num("timeout")) return { error: "timeout must be a positive integer" };
+            if (inputs.detach && inputs.detach.checked) out.wait = false;
           } else if (verb === "agent") {
             out.agent = s("agent");
             if (inputs.prompt.value !== "") out.prompt = inputs.prompt.value;
-            if (inputs.wait.checked) out.wait = "done";
+            if (s("in")) out.in = s("in");
+            if (s("out")) out.out = s("out");
             if (!num("timeout")) return { error: "timeout must be a positive integer" };
-            if (inputs.close_source.checked) out.close_source = true;
-          } else if (verb === "herdr") {
-            out.herdr = s("herdr");
-            const p = s("params");
-            if (p) {
+            if (inputs.detach && inputs.detach.checked) out.wait = false;
+          } else if (verb === "use") {
+            out.use = s("use");
+            const w = s("with");
+            if (w) {
               try {
-                out.params = JSON.parse(p);
+                out.with = JSON.parse(w);
               } catch {
-                return { error: "step params must be valid JSON" };
+                return { error: "with must be valid JSON" };
               }
             }
-          } else if (verb === "run") {
-            out.run = s("run");
+          } else if (verb === "primitive") {
+            const method = s("method");
+            if (!method.includes(".")) return { error: "method must be a dotted herdr name" };
+            const p = s("params") || "{}";
+            try {
+              out[method] = JSON.parse(p);
+            } catch {
+              return { error: "params must be valid JSON" };
+            }
+            const o = s("out");
+            if (o) {
+              try {
+                out.out = JSON.parse(o);
+              } catch {
+                return { error: "out must be a JSON object" };
+              }
+            }
           }
           return { step: out };
         };

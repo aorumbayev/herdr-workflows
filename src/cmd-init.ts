@@ -1,7 +1,8 @@
 import { die } from "./adapter/popup";
 import { readLine } from "./adapter/stdin";
 import { parseArgs } from "./cli-args";
-import { parsePlaybookSeedScope, runInit } from "./init";
+import { runInit } from "./init";
+import { parsePlaybookSeedScope } from "./playbook-scope";
 import { resolveRepoRoot } from "./repo";
 
 export async function cmdInit(args: string[]): Promise<void> {

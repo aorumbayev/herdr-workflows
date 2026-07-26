@@ -1,15 +1,18 @@
-import type { PlaceholderValues } from "./errors";
+import { BUILTIN_NAMES, type PlaceholderValues } from "./types";
 
 export const INPUT_NAME_RE = /^[a-z][a-z0-9_]{0,31}$/;
+const IDENT_PLACEHOLDER_RE = /\{([a-z][a-z0-9_]{0,31})\}/g;
+const V1_INPUT_PLACEHOLDER_RE = /\{input\.([a-z][a-z0-9_]{0,31})\}/g;
 
-const RE =
-  /\{(pane|selection|prompt|last|error|session|session_file|tab|prev_tab|agent)\}|\{input\.([a-z][a-z0-9_]{0,31})\}/g;
+const BUILTIN_SET = new Set<string>(BUILTIN_NAMES);
+
+export function isBuiltin(name: string): boolean {
+  return BUILTIN_SET.has(name);
+}
 
 export function substitute(template: string, values: PlaceholderValues): string {
-  return template.replace(RE, (_, name: string | undefined, input?: string) =>
-    input !== undefined
-      ? (values.inputs[input] ?? "")
-      : values[name as keyof Omit<PlaceholderValues, "inputs">],
+  return template.replace(IDENT_PLACEHOLDER_RE, (match, name: string) =>
+    Object.hasOwn(values, name) ? values[name]! : match,
   );
 }
 
@@ -32,35 +35,36 @@ export function substituteParams(
   return walkParams(params, (text) => substitute(text, values)) as Record<string, unknown>;
 }
 
-export function commandHasPlaceholder(command: string): string | undefined {
-  RE.lastIndex = 0;
-  const m = RE.exec(command);
-  if (!m) return undefined;
-  return m[2] !== undefined ? `input.${m[2]}` : m[1];
+/** Identifier-shaped placeholders in text (excludes non-identifier braces like `{"a":1}`). */
+export function textPlaceholders(text: string): string[] {
+  IDENT_PLACEHOLDER_RE.lastIndex = 0;
+  const names: string[] = [];
+  for (let m = IDENT_PLACEHOLDER_RE.exec(text); m; m = IDENT_PLACEHOLDER_RE.exec(text)) {
+    names.push(m[1]!);
+  }
+  return names;
+}
+
+export function firstPlaceholder(text: string): string | undefined {
+  IDENT_PLACEHOLDER_RE.lastIndex = 0;
+  const m = IDENT_PLACEHOLDER_RE.exec(text);
+  return m?.[1];
 }
 
 export function textHasPrompt(text: string): boolean {
-  return text.includes("{prompt}");
+  return textPlaceholders(text).includes("prompt");
 }
 
 export function textHasSession(text: string): boolean {
-  return text.includes("{session}") || text.includes("{session_file}");
+  const names = textPlaceholders(text);
+  return names.includes("session") || names.includes("session_file");
 }
 
-export function textInputRefs(text: string): string[] {
-  RE.lastIndex = 0;
-  const refs: string[] = [];
-  for (let m = RE.exec(text); m; m = RE.exec(text)) {
-    if (m[2] !== undefined) refs.push(m[2]);
-  }
-  return refs;
-}
-
-export function paramsInputRefs(params: Record<string, unknown> | undefined): string[] {
+export function paramsPlaceholders(params: Record<string, unknown> | undefined): string[] {
   if (!params) return [];
   const refs: string[] = [];
   walkParams(params, (text) => {
-    refs.push(...textInputRefs(text));
+    refs.push(...textPlaceholders(text));
     return text;
   });
   return refs;
@@ -85,4 +89,14 @@ export function paramsHavePrompt(params: Record<string, unknown> | undefined): b
 
 export function paramsHaveSession(params: Record<string, unknown> | undefined): boolean {
   return paramsAnyText(params, textHasSession);
+}
+
+export function findV1InputPlaceholder(text: string): string | undefined {
+  V1_INPUT_PLACEHOLDER_RE.lastIndex = 0;
+  const m = V1_INPUT_PLACEHOLDER_RE.exec(text);
+  return m?.[1];
+}
+
+export function findV1Last(text: string): boolean {
+  return textPlaceholders(text).includes("last");
 }

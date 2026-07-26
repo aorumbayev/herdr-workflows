@@ -1,7 +1,7 @@
 import { paneRead } from "./adapter/client";
 import { sanitizeDisplay } from "./adapter/stdin";
 import { PANE_READ_LINES, PANE_READ_SOURCE } from "./pane-read";
-import type { PlaceholderValues } from "./workflows";
+import type { PlaceholderValues } from "./workflows/types";
 
 export type InvocationContext = {
   workspaceId?: string;
@@ -53,7 +53,6 @@ export function readInvocationContext(): InvocationContext {
 export async function buildPlaceholders(opts: {
   ctx: InvocationContext;
   prompt?: string;
-  last?: string;
   error?: string;
   session?: string;
   sessionFile?: string;
@@ -68,17 +67,18 @@ export async function buildPlaceholders(opts: {
     }).catch(() => "");
     pane = sanitizeDisplay(scrollback);
   }
-  return {
+  const values: PlaceholderValues = {
     pane,
     selection: sanitizeDisplay(opts.ctx.selection),
     prompt: opts.prompt ?? "",
-    last: opts.last ?? "",
     error: opts.error ?? "",
     session: opts.session ?? "",
     session_file: opts.sessionFile ?? "",
-    tab: "",
-    prev_tab: "",
+    source_tab: opts.ctx.tabId ?? "",
     agent: opts.agent ?? "",
-    inputs: opts.inputs ?? {},
   };
+  for (const [name, value] of Object.entries(opts.inputs ?? {})) {
+    values[name] = value;
+  }
+  return values;
 }

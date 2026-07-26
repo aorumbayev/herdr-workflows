@@ -1,4 +1,4 @@
-import type { InputSpec } from "../workflows";
+import type { InputSpec } from "../workflows/types";
 
 export type ResolvedInputs =
   | { ok: true; values: Record<string, string> }

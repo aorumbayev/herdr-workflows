@@ -1,7 +1,6 @@
 import type {
   agentLabel,
   agentStatus,
-  herdrCall,
   layoutApply,
   notificationShow,
   paneRead,
@@ -9,16 +8,18 @@ import type {
   tabClose,
   waitOutput,
 } from "../adapter/client";
+import type { herdrCall } from "../adapter/rpc";
 import type { AgentsConfig } from "../config";
 import type { InvocationContext } from "../context";
 import type { sessionText } from "../session";
-import type { runShellStep } from "./shell";
+import type { runArgvStep, runShellStep } from "./shell";
 
 export type RunnerDeps = {
   layoutApply: typeof layoutApply;
   herdrCall: typeof herdrCall;
   notificationShow: typeof notificationShow;
   runShell: typeof runShellStep;
+  runArgv: typeof runArgvStep;
   agentStatus: typeof agentStatus;
   agentLabel: typeof agentLabel;
   waitOutput: typeof waitOutput;
@@ -38,8 +39,20 @@ export type StepRunOptions = {
   ctx: InvocationContext;
   deps: RunnerDeps;
   runId: string;
-  onProgress?: (step: number, total: number, label: string) => void;
+  onProgress?: (
+    step: number,
+    total: number,
+    label: string,
+    outcome?: "ok" | "skip" | "fail",
+  ) => void;
   onStderr?: (text: string) => void;
 };
 
-export type StepResult = { ok: true; last: string } | { ok: false; error: string; last: string };
+export type StepResult =
+  | { ok: true; skipped?: boolean; failures?: string[] }
+  | {
+      ok: false;
+      error: string;
+      failures?: string[];
+      /** true when a non-allow_fail step aborted */ aborted?: boolean;
+    };

@@ -6,7 +6,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { herdrCall, herdrRequest, layoutApply, paneRead, tabClose } from "../src/adapter/client";
+import { layoutApply, paneRead, tabClose } from "../src/adapter/client";
+import { herdrCall, herdrRequest } from "../src/adapter/rpc";
 
 const socket = process.env.HERDR_SOCKET_PATH ?? "";
 const live = Boolean(socket);
@@ -17,9 +18,12 @@ describe.skipIf(!live)("herdr 0.7.5 empirical", () => {
     const cwd = await mkdtemp(join(tmpdir(), "herdr-workflows-emp-"));
     const applied = await layoutApply({
       tabLabel: `herdr-workflows-emp-${Date.now().toString(36)}`,
-      cwd,
-      command: ["sh", "-c", "echo emp; sleep 3"],
-      label: "emp",
+      root: {
+        type: "pane",
+        label: "emp",
+        cwd,
+        command: ["sh", "-c", "echo emp; sleep 3"],
+      },
       focus: false,
     });
     expect(applied.tabId).toMatch(/^w/);
@@ -35,9 +39,12 @@ describe.skipIf(!live)("herdr 0.7.5 empirical", () => {
     const cwd = await mkdtemp(join(tmpdir(), "herdr-workflows-emp-read-"));
     const applied = await layoutApply({
       tabLabel: `herdr-workflows-read-${Date.now().toString(36)}`,
-      cwd,
-      command: ["sh", "-c", "printf 'hello\\n'; sleep 2"],
-      label: "read",
+      root: {
+        type: "pane",
+        label: "read",
+        cwd,
+        command: ["sh", "-c", "printf 'hello\\n'; sleep 2"],
+      },
       focus: false,
     });
     await Bun.sleep(200);

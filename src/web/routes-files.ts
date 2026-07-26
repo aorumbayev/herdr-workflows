@@ -1,14 +1,19 @@
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { globalConfigPath, parseConfigText, repoConfigPath } from "../config";
-import { parseWorkflowText, workflowPath } from "../workflows";
+import { workflowPath } from "../workflows/discover";
+import { parseWorkflowText } from "../workflows/load";
 import { agentsOf, errText, json, scopeOf, type Scope } from "./routes";
 
 const WORKFLOW_NAME_RE = /^[a-z0-9][a-z0-9-_]*$/;
 
-function requireNameScope(name: string, scope: Scope | undefined): Response | undefined {
+function requireNameScope(
+  name: string,
+  scope: Scope | undefined,
+): { ok: true; scope: Scope } | { ok: false; response: Response } {
   if (!WORKFLOW_NAME_RE.test(name) || !scope)
-    return json({ ok: false, error: "name and scope required" }, 400);
+    return { ok: false, response: json({ ok: false, error: "name and scope required" }, 400) };
+  return { ok: true, scope };
 }
 
 async function writeWorkflow(
@@ -37,10 +42,9 @@ export async function handleWorkflow(
 ): Promise<Response> {
   if (req.method === "GET") {
     const name = url.searchParams.get("name") ?? "";
-    const scope = scopeOf(url.searchParams.get("scope"));
-    const bad = requireNameScope(name, scope);
-    if (bad) return bad;
-    const text = await Bun.file(workflowPath(scope!, repoRoot, name))
+    const checked = requireNameScope(name, scopeOf(url.searchParams.get("scope")));
+    if (!checked.ok) return checked.response;
+    const text = await Bun.file(workflowPath(checked.scope, repoRoot, name))
       .text()
       .catch(() => "");
     let valid = true;
@@ -62,10 +66,9 @@ export async function handleWorkflow(
   }
   if (req.method === "DELETE") {
     const name = String(body.name ?? "");
-    const scope = scopeOf(body.scope);
-    const bad = requireNameScope(name, scope);
-    if (bad) return bad;
-    await Bun.file(workflowPath(scope!, repoRoot, name))
+    const checked = requireNameScope(name, scopeOf(body.scope));
+    if (!checked.ok) return checked.response;
+    await Bun.file(workflowPath(checked.scope, repoRoot, name))
       .delete()
       .catch(() => {});
     return json({ ok: true });
@@ -78,15 +81,15 @@ export async function handlePromote(
   body: Record<string, unknown>,
 ): Promise<Response> {
   const name = String(body.name ?? "");
-  const from = scopeOf(body.from);
-  const to = scopeOf(body.to);
-  const bad = requireNameScope(name, from) ?? requireNameScope(name, to);
-  if (bad) return bad;
-  const src = Bun.file(workflowPath(from!, repoRoot, name));
+  const fromChecked = requireNameScope(name, scopeOf(body.from));
+  if (!fromChecked.ok) return fromChecked.response;
+  const toChecked = requireNameScope(name, scopeOf(body.to));
+  if (!toChecked.ok) return toChecked.response;
+  const src = Bun.file(workflowPath(fromChecked.scope, repoRoot, name));
   if (!(await src.exists())) return json({ ok: false, error: "source not found" }, 404);
-  const dstPath = workflowPath(to!, repoRoot, name);
+  const dstPath = workflowPath(toChecked.scope, repoRoot, name);
   if (body.force !== true && (await Bun.file(dstPath).exists()))
-    return json({ ok: false, error: `'${name}' already exists in ${to}` }, 409);
+    return json({ ok: false, error: `'${name}' already exists in ${toChecked.scope}` }, 409);
   await mkdir(dirname(dstPath), { recursive: true });
   await Bun.write(dstPath, await src.text());
   return json({ ok: true });

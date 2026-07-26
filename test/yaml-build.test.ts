@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseRaw } from "../src/workflows";
+import { parseRaw } from "../src/workflows/parse";
 import { dumpWorkflow } from "../src/web/yaml-build";
 
 function roundTrip(doc: Parameters<typeof dumpWorkflow>[0]) {
@@ -21,8 +21,8 @@ describe("dumpWorkflow round-trips through parseRaw", () => {
       ".nan",
       "+7",
     ]) {
-      const doc = roundTrip({ steps: [{ shell: `echo ${v}` }] });
-      expect(doc.steps[0]!.shell).toBe(`echo ${v}`);
+      const doc = roundTrip({ steps: [{ run: `echo ${v}` }] });
+      expect(doc.steps[0]!.run).toBe(`echo ${v}`);
       const run = roundTrip({ steps: [{ run: v }] });
       expect(run.steps[0]!.run).toBe(v);
     }
@@ -30,8 +30,8 @@ describe("dumpWorkflow round-trips through parseRaw", () => {
 
   test("trailing colon and mapping/comment traps are quoted", () => {
     for (const v of ["note:", "a: b", "has # hash", "# leading", "- dash"]) {
-      const doc = roundTrip({ steps: [{ shell: v }] });
-      expect(doc.steps[0]!.shell).toBe(v);
+      const doc = roundTrip({ steps: [{ run: v }] });
+      expect(doc.steps[0]!.run).toBe(v);
     }
   });
 
@@ -46,9 +46,11 @@ describe("dumpWorkflow round-trips through parseRaw", () => {
   test("input values that look like YAML scalars stay strings", () => {
     const doc = roundTrip({
       inputs: { target: { label: "pick: one" }, plain: { default: "true" } },
-      steps: [{ shell: "echo hi" }],
+      steps: [{ run: "echo hi" }],
     });
-    expect(doc.inputs?.target?.label).toBe("pick: one");
-    expect(doc.inputs?.plain?.default).toBe("true");
+    const target = doc.inputs?.target;
+    const plain = doc.inputs?.plain;
+    expect(typeof target === "object" && !Array.isArray(target) && target.label).toBe("pick: one");
+    expect(typeof plain === "object" && !Array.isArray(plain) && plain.default).toBe("true");
   });
 });

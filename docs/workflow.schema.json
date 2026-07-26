@@ -2,6 +2,9 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
+    "desc": {
+      "type": "string"
+    },
     "inputs": {
       "type": "object",
       "propertyNames": {
@@ -9,97 +12,106 @@
         "pattern": "^[a-z][a-z0-9_]{0,31}$"
       },
       "additionalProperties": {
-        "type": "object",
-        "properties": {
-          "label": {
-            "type": "string",
-            "minLength": 1
+        "anyOf": [
+          {
+            "type": "string"
           },
-          "options": {
-            "anyOf": [
-              {
+          {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["text", "agents"]
+              },
+              "label": {
                 "type": "string",
                 "minLength": 1
               },
-              {
-                "minItems": 1,
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "minLength": 1
-                }
+              "desc": {
+                "type": "string"
+              },
+              "options": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                ]
+              },
+              "default": {
+                "type": "string"
               }
-            ]
-          },
-          "default": {
-            "type": "string"
+            },
+            "additionalProperties": false
           }
-        },
-        "additionalProperties": false
+        ]
       }
     },
-    "steps": {
-      "minItems": 1,
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "shell": {
-            "type": "string"
-          },
-          "open": {
-            "type": "string"
-          },
-          "agent": {
-            "type": "string"
-          },
-          "herdr": {
-            "type": "string"
-          },
-          "run": {
-            "type": "string"
-          },
-          "stdin": {
-            "type": "string"
-          },
-          "prompt": {
-            "type": "string"
-          },
-          "params": {
+    "on_error": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "minItems": 1,
+          "type": "array",
+          "items": {
             "type": "object",
             "propertyNames": {
               "type": "string"
             },
             "additionalProperties": {}
-          },
-          "wait": {
-            "type": "string",
-            "const": "done"
-          },
-          "wait_for": {
-            "type": "string",
-            "minLength": 1
-          },
-          "timeout": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 9007199254740991
-          },
-          "close_source": {
-            "type": "boolean"
           }
-        },
-        "additionalProperties": false
-      }
+        }
+      ]
     },
-    "on_fail": {
-      "type": "string",
-      "minLength": 1
+    "steps": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        }
+      ]
     }
   },
   "required": ["steps"],
   "additionalProperties": false,
   "$id": "https://raw.githubusercontent.com/aorumbayev/herdr-workflows/main/docs/workflow.schema.json",
   "title": "herdr-workflows workflow",
-  "description": "Linear YAML workflow for the herdr-workflows herdr plugin. Cross-field rules (one verb per step; wait only on agent; wait_for only on open; timeout requires wait/wait_for; {session} only in stdin) are enforced by the loader, not this schema."
+  "description": "Linear YAML workflow for the herdr-workflows herdr plugin (syntax v2). Cross-field rules (one action key per step; placeholder legality by run: form; when/for/retry; primitives) are enforced by the loader, not this schema."
 }

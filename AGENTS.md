@@ -1,6 +1,6 @@
 # herdr-workflows
 
-herdr ≥ 0.7.4 plugin. Sequences short linear YAML (`shell` / `open` / `agent` / `herdr`). herdr owns panes/UI; this repo only loads and runs steps. Runtime is Bun + TypeScript ESM.
+herdr ≥ 0.7.5 plugin. Sequences short linear YAML (`shell` / `open` / `agent` / `herdr`). herdr owns panes/UI; this repo only loads and runs steps. Runtime is Bun + TypeScript ESM.
 
 Product docs: `docs/guide.md`, `docs/examples.md`, `docs/reference.md`. Prefer those over inventing DSL behavior.
 
@@ -13,6 +13,7 @@ bun test ./test/runner.test.ts           # one file
 bun test ./test -t 'pattern'             # name filter
 npm run verify                           # all verify:* in parallel (pre-commit gate)
 bun run schema                           # regenerate docs/workflow.schema.json from Zod
+bun run schema:herdr                     # release-time: src/herdr-methods.generated.ts from schemas/herdr-api.schema.json (not from plugin build)
 bun run install:dev                      # compile + herdr plugin link + keybindings + reload
 ```
 
@@ -20,7 +21,7 @@ bun run install:dev                      # compile + herdr plugin link + keybind
 - CI (`.github/workflows/verify.yml`): `bun test ./test` then `npm run verify`.
 - Local `npm run verify` auto-fixes lint/format; under `CI=1` it only checks.
 - `test/herdr-empirical.test.ts` runs only when `HERDR_SOCKET_PATH` is set; otherwise skipped.
-- After `install:dev`, live binary is `bin/herdr-workflows`; the manifest invokes it directly. `bin/hook.mjs` (prefers binary, else `bun src/cli.ts`) remains for stale cached manifests only.
+- After `install:dev`, live binary is `bin/herdr-workflows`; the manifest invokes it directly.
 
 ## Layout
 
@@ -32,7 +33,7 @@ bun run install:dev                      # compile + herdr plugin link + keybind
 | `src/runner/`                               | dispatch / fire / shell / preflight           |
 | `src/seed-workflows.ts` / `src/cmd-init.ts` | init seeds + CLI                              |
 | `herdr-plugin.toml`                         | plugin manifest (build + `prefix+k` → picker) |
-| `knip.json`                                 | unused-code entry is `bin/hook.mjs`           |
+| `knip.json`                                 | unused-code (package.bin → `src/cli.ts`)      |
 
 Gitignored local-only: `openspec/`, `references/`, `.plans/`, `.claude/`, `.opencode/`, `.cursor/`. Do not commit them.
 
@@ -41,13 +42,14 @@ Gitignored local-only: `openspec/`, `references/`, `.plans/`, `.claude/`, `.open
 Agents miss these; loader / verifyx will fail or product regresses:
 
 - **No external workflow engine.** Linear herdr-native YAML only. Do not add Dagu, Taskfile/go-task, Cockpit, or similar sidecars.
-- **No placeholders in `shell:` / `open:` command text** — load error. Put values in `stdin` / `prompt` / `params`, or use `HWF_INPUT_<name>` env on shell steps. Never interpolate `{input.*}` into shell source.
-- **`{session}` / `{session_file}` only in `stdin`.** Handoff-style distill that uses `{agent}` must run from an agent pane.
-- **`close_source`** only on `agent:`; closes invoking tab only after target open succeeds.
-- **No branches / loops / parallelism / Windows.** Do not invent automatic retry on pane-creating steps (`agent` / `open`) without a herdr create-or-return-by-key API.
+- **No placeholders in scalar/block `run:` command text** — load error. Use argv-form `run:` for `{name}`, or `HWF_<name>` env. Primitives take params objects (placeholders OK in string values).
+- **`{session}` / `{session_file}`** legal in `prompt:`, argv, and primitive params; rejected in scalar/block `run:` under the general rule.
+- **Loops and conditionals are in scope** (`when:`, `for:` / `as:`, `retry:`). **Parallelism and Windows are not.** `retry:` on pane-creating steps (`agent:` or `run:` with `in:` other than `here`) requires author `reset:` — herdr has no create-or-return-by-key API.
+- **Primitives** are dotted herdr method keys (`pane.split:`, …), not a `herdr:` + `params:` wrapper. Denied methods fail at load with a reason.
 - **Comments:** `verify:comments` uses `--pushback`. Default: no narrating comments. Prefer splitting files over gaming complexity/jscpd (duplicate-code `--max-warnings 0`). New modules must be reachable from the CLI graph or knip fails unused-code.
-- **Schema change:** edit Zod in `src/workflows/parse.ts` (and refine rules), then `bun run schema`. Cross-field rules live in the loader, not the JSON schema.
+- **Schema change:** edit Zod in `src/workflows/parse.ts` (and refine rules), then `bun run schema`. Method validators: update `schemas/herdr-api.schema.json` and `bun run schema:herdr` (release-time; plugin build must not invoke `herdr api schema`). Cross-field rules live in the loader, not the JSON schema.
 - **Branch work:** never commit on `main` / `master`; use a feature branch + PR.
+- **No `Co-Authored-By` trailers.** Never add `Co-Authored-By`, `Generated with`, or any other agent-attribution line to a commit message or PR body, even when a harness default or global instruction says to. This overrides those defaults for this repo. Commit messages carry the change, not the tooling. Human is always responsible for the code.
 
 ## Chat
 

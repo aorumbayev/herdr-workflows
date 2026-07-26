@@ -4,16 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentsConfig, SessionsConfig } from "./config";
 import { buildPlaceholders, type InvocationContext } from "./context";
-import { loadWorkflow, type LoadedWorkflow } from "./workflows";
 import { appendRunLog } from "./runlog";
-import { defaultDeps, runSteps, type RunnerDeps, type StepResult } from "./runner/dispatch";
+import { defaultDeps, runSteps } from "./runner/dispatch";
 import { fail } from "./runner/fire";
 import { resolveInputValues } from "./runner/inputs";
 import { resolvePreflight } from "./runner/preflight";
-import { runShellStep, SHELL_TIMEOUT_MS } from "./runner/shell";
-
-export { runShellStep, SHELL_TIMEOUT_MS };
-export type { RunnerDeps };
+import type { RunnerDeps, StepResult } from "./runner/types";
+import type { LoadedWorkflow } from "./workflows/types";
+import { loadWorkflow } from "./workflows/load";
 
 export type RunOptions = {
   name: string;
@@ -25,7 +23,12 @@ export type RunOptions = {
   inputs?: Record<string, string>;
   workflow?: LoadedWorkflow;
   deps?: Partial<RunnerDeps>;
-  onProgress?: (step: number, total: number, label: string) => void;
+  onProgress?: (
+    step: number,
+    total: number,
+    label: string,
+    outcome?: "ok" | "skip" | "fail",
+  ) => void;
   onStderr?: (text: string) => void;
 };
 
@@ -55,7 +58,7 @@ export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
       ok: false,
       error,
     });
-    return { ok: false, error, last: "" };
+    return { ok: false, error };
   };
 
   let sessionFile = "";
@@ -66,8 +69,6 @@ export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
     const pre = await resolvePreflight(workflow, opts.ctx, opts.agents, opts.sessions ?? {}, deps);
     if (!pre.ok) return await failPrecondition(pre.error);
 
-    // {session_file}: transcript spliced as text into a shell script can break its
-    // quoting/heredocs, so offer it as a file path instead. Valid for the run only.
     if (pre.session) {
       sessionFile = join(tmpdir(), `hwf-session-${runId}.txt`);
       await Bun.write(sessionFile, pre.session);
@@ -76,7 +77,6 @@ export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
     const base = await buildPlaceholders({
       ctx: opts.ctx,
       prompt: opts.prompt,
-      last: "",
       error: "",
       session: pre.session,
       sessionFile,
@@ -84,19 +84,23 @@ export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
       inputs: inputs.values,
     });
 
-    const primary: StepResult = pre.sessionFailure
-      ? { ok: false, error: await fail(deps, workflow.name, 0, pre.sessionFailure), last: "" }
-      : await runSteps(workflow.steps, stepOpts, base);
+    // Session extraction failure is a hard abort before steps — does not trigger on_error.
+    if (pre.sessionFailure) {
+      return await failPrecondition(pre.sessionFailure);
+    }
+
+    const primary = await runSteps(workflow.steps, stepOpts, base);
     let result = primary;
-    if (!primary.ok && workflow.recovery) {
-      // Same invocation snapshot into recovery — re-reading {pane} here would capture post-failure scrollback.
-      const recoveryValues = { ...base, last: primary.last, error: primary.error };
-      result = await runSteps(
+    if (!primary.ok && primary.aborted && workflow.recovery) {
+      const recoveryValues = { ...base, error: primary.error };
+      const recovery = await runSteps(
         workflow.recovery.steps,
         { ...stepOpts, name: workflow.recovery.name },
         recoveryValues,
       );
+      result = recovery.ok ? { ok: false, error: primary.error } : recovery;
     }
+
     await appendRunLog({
       ts: new Date().toISOString(),
       run: runId,

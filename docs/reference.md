@@ -1,6 +1,6 @@
 # Reference
 
-`hwf` ≡ `herdr-workflows`.
+`hwf` ≡ `herdr-workflows`. Syntax v2 — hard break from v1 (see [Changelog](/guide#breaking-change-syntax-v2) / `CHANGELOG.md`).
 
 ## CLI
 
@@ -15,7 +15,7 @@
 
 ### Web workbench
 
-Localhost-only HTTP UI over the same core the CLI uses — browse repo + global workflows, edit with live validation (same errors as `hwf run`), edit config, browse the run log, and share via copy/download/move (move refuses to clobber an existing name unless forced). **It never runs workflows** (needs herdr panes); it surfaces `hwf run <name>` instead. Bound to `127.0.0.1` with a per-launch token (`x-hwf-token`) and `Origin`/`Host` allowlist on every route.
+Localhost-only HTTP UI over the same core the CLI uses — browse repo + global workflows, edit with live validation (same errors as `hwf run`), edit config, browse the run log, and share via copy/download/move. **It never runs workflows** (needs herdr panes); it surfaces `hwf run <name>` instead. Bound to `127.0.0.1` with a per-launch token (`x-hwf-token`) and `Origin`/`Host` allowlist on every route.
 
 ## Picker
 
@@ -47,60 +47,126 @@ sessions:
 
 `{session}` resolve order: `sessions:` command → built-in Claude JSONL → error.
 
+## Workflow shape
+
+Top-level keys only: `desc`, `inputs`, `on_error`, `steps`. `steps` may be a bare command string (`steps: bun test` → one `run:` step), a single step map, or a list.
+
 ## Inputs
 
 ```yaml
 inputs:
-  <name>: # [a-z][a-z0-9_]{0,31}
-    options: agents | <shell> | [<value>…] # present → choice
-    label: <text> # picker screen title; default = name
-    default: <value> # optional; picker prefill (text) / preselect (choice) / CLI fallback
+  branch: text                              # required free text
+  focus: text = ""                          # optional free text
+  base: [main, develop] = main              # choice + default
+  ref: sh git branch --format='%(refname:short)'
+  target: agents                            # config agent names
+  fancy:                                    # map form when you need label/desc
+    type: text
+    label: focus area
+    desc: optional hint
+    default: ""
 ```
 
-| `options:`        | Meaning                                                       |
-| ----------------- | ------------------------------------------------------------- |
-| `[a, b, …]`       | literal choices                                               |
-| `agents`          | builtin — config agent names                                  |
-| `"shell command"` | `sh -c` in repo cwd at load; non-empty stdout lines → choices |
+Names: `[a-z][a-z0-9_]{0,31}`. Reference as `{name}` (flat namespace — not `{input.name}`). Unused declared inputs are load errors. Default outside options is a load error. Only the entry workflow prompts; `use:` targets get values via `with:`.
 
-`{input.<name>}` in `stdin` / `prompt` / `params`. `agent:` may be exactly `"{input.<name>}"` for a choice whose options are all config agents. Declare `inputs:` only on the entry workflow — spliced (`run:`) and recovery (`on_fail:`) targets may reference entry inputs but must not declare their own. Load errors: undeclared reference, declared-but-unused input, `inputs:` on spliced or recovery workflows, `options: agents` with empty config, options command fail/empty/timeout, default outside options. Picker: one screen per input (never skipped by `default`), declaration order, before the `{prompt}` line. Choice values validated again at run time. Options shell commands are author-controlled (same trust as workflow `shell:` steps).
+Scalar/block `run:` steps receive every bound name as `HWF_<name>` env (inputs and `out:` names). Prefer argv-form `run:` when values must be arguments.
 
-`stdin` substitution is literal text replacement, not shell escaping. Never use `{input.*}` to construct shell source, such as quoted assignments, commands, or heredocs. Use fixed author-controlled shell programs. Declared inputs are also exported to `shell` steps as `HWF_INPUT_<name>` environment variables for argv-safe CLI wrappers.
+## Action keys
 
-## Verbs & modifiers
+Exactly one per step:
 
-| Key            | Where              | Role                                                         |
-| -------------- | ------------------ | ------------------------------------------------------------ |
-| `shell`        | step               | blocking `sh -c`; stdout → `{last}`; 300s; `HWF_INPUT_*` env |
-| `stdin`        | shell              | piped stdin; placeholders ok                                 |
-| `open`         | step               | new tab                                                      |
-| `wait_for`     | open               | regex; block (default 60s)                                   |
-| `agent`        | step               | named config agent                                           |
-| `prompt`       | agent              | placeholders ok                                              |
-| `wait`         | agent              | literal `done`; poll until finish (default 1800s)            |
-| `close_source` | agent              | after successful open, close invoking `tabId`                |
-| `timeout`      | with wait/wait_for | seconds                                                      |
-| `herdr`        | step               | socket method                                                |
-| `params`       | herdr              | placeholders in string values; ids auto-filled               |
-| `run`          | step               | load-time splice                                             |
-| `inputs`       | top-level          | declared user inputs; picker screens / `--input`             |
-| `on_fail`      | top-level          | one-shot recovery workflow name                              |
+| Key           | Value                      | Role                                      |
+| ------------- | -------------------------- | ----------------------------------------- |
+| `run`         | scalar / argv list / block | local subprocess or placed command        |
+| `agent`       | config agent name          | pane + prompt; waits by default           |
+| `use`         | workflow name              | include another workflow (`with:` params) |
+| `method.name` | params object              | any allowed herdr socket method           |
 
-Placeholders: `{pane}` `{selection}` `{prompt}` `{last}` `{error}` `{session}` `{session_file}` `{tab}` `{prev_tab}` `{agent}` `{input.<name>}`. Only in `stdin`/`prompt`/`params` (and `agent: "{agent}"` / `agent: "{input.<name>}"`). `{session}` / `{session_file}` → `stdin` only. `{session_file}` is a temp-file path holding the transcript — use it when `stdin` is a shell script (splicing `{session}` text into a script can break its quoting/heredocs); the file is deleted when the run ends, so copy it during the step if a background job needs it.
+### `run:` forms
+
+| Form   | Example                            | Shell?                       | Placeholders |
+| ------ | ---------------------------------- | ---------------------------- | ------------ |
+| scalar | `run: git diff HEAD`               | yes (`shell:`, default `sh`) | **rejected** |
+| argv   | `run: [git, checkout, "{branch}"]` | no                           | allowed      |
+| block  | `run: \|\n  set -eu\n  bun test`   | yes                          | **rejected** |
+
+`shell:` selects `sh` / `bash` / `zsh` / `pwsh` / `powershell` / `cmd`. Illegal on argv form and on non-`run:` steps.
+
+### Placement (`in:`)
+
+On `run:` / `agent:`: `here` \| `tab` \| `right` \| `down`. Defaults: `here` for `run:`, `tab` for `agent:`. `ratio:` only with `right`/`down`. `cwd:` / `env:` allowed on both.
+
+### Wait
+
+Blocking is the default. `wait: false` detaches. `wait: /regex/` waits for pane output (placed steps only). `timeout:` bounds the wait.
+
+### Outputs (`out:`)
+
+- Identifier: text result (`run` here → stdout; `agent` → final message) → `{name}`
+- Map: `out: { pane: pane.pane_id }` for structured primitive results (dot-paths checked against herdr result union at load; exact at run)
+
+Detached steps cannot bind `out:`.
+
+### Guards, loops, retry
+
+| Key            | Role                                                                        |
+| -------------- | --------------------------------------------------------------------------- |
+| `when:`        | skip when false — `{name}` / `!{name}`, argv list, or shell string          |
+| `for:` / `as:` | sequential loop (literal list, `sh …`, or `{name}`); cap 100; no nesting    |
+| `retry:`       | int or `{times, delay, until, reset}`; pane-creating steps require `reset:` |
+| `allow_fail:`  | record failure, continue; never triggers `on_error:`                        |
+| `on_error:`    | workflow or step recovery (one-shot)                                        |
+| `name:`        | progress label                                                              |
+
+Skip is a third outcome (not success, not failure). Skipped `out:` names bind empty so downstream `when:` chains.
+
+### Primitives
+
+Dotted herdr methods (`pane.split:`, `worktree.create:`, `notification.show:`, …). Params validated from vendored `schemas/herdr-api.schema.json` (`bun run schema:herdr`). Caller context autofills omitted `pane_id` / `tab_id` / `workspace_id`.
+
+**Denied** (load error with reason): `server.*`, `plugin.*`, `events.subscribe`, `session.snapshot`, `popup.close`, `pane.graphics.*`, `pane.report_agent`, `pane.report_agent_session`, `pane.clear_agent_authority`, `pane.release_agent`.
+
+**Allowed areas:** `workspace.*`, `tab.*`, `pane.*` (minus denylist), `worktree.*`, `agent.*`, `layout.*`, `notification.show`, `client.window_title.*`, `ping`.
+
+Startup compares pinned protocol with live herdr; mismatch names both numbers and `min_herdr_version`.
+
+### Composition (`use:` / `with:`)
+
+```yaml
+steps:
+  - use: gate
+    with: { suite: all }
+```
+
+Repo shadows global. Cycles and unknown targets are load errors. Included workflows see only `with:` values + builtins; their `out:` names are visible downstream.
+
+## Namespace
+
+Builtins: `{pane}` `{selection}` `{prompt}` `{session}` `{session_file}` `{source_tab}` `{agent}` `{error}` `{item}` `{index}` `{attempt}`.
+
+`{session}` / `{session_file}` legal in `prompt:`, argv, and primitive params — rejected in scalar/block `run:` under the general placeholder rule.
+
+Non-identifier braces (`{"json": true}`) pass through. Unknown `{word}` is a load error. No `{last}` / `{input.*}` — use named `out:` and `{name}`.
 
 ## Semantics
 
-- Linear foreground steps. First **step** failure → one notification → optional `on_fail` once. If recovery fails, that error is final (no nested `on_fail`).
-- **Preflight** failures (e.g. `{session}` / `{agent}` required but unavailable) abort before any step — `on_fail` does not run.
-- Run log = observability only (web workbench **Runs** tab). Optional sidebar: `$herdr-workflows` in herdr config.
-- `run:` flattened + validated at load. Repo shadows global for names.
-- herdr ≥ 0.7.5, POSIX. Keybinding installed into `config.toml` (no manifest field).
-- `agent` / `open` push opened tab ids → `{tab}` / `{prev_tab}`.
-- Without `wait` / `wait_for`, `agent` and `open` are fire-and-forget — `on_fail` cannot see their failure.
+- Linear foreground steps. First hard failure → optional `on_error` once. Preflight failures skip `on_error`.
+- Skip / success / failure are distinct in progress and the run log.
+- herdr ≥ 0.7.5, POSIX. Parallelism and Windows are out of scope.
+- Schema regen: `bun run schema` (workflow JSON Schema) and `bun run schema:herdr` (method validators) — release-time; plugin build does not call `herdr api schema`.
 
-## Ceilings
+## v1 → v2 keys
 
-- `{pane}` / post-`wait: done` read: up to 100k lines (`recent-unwrapped`); still capped by herdr scrollback retention.
-- `{session}` built-in: Claude JSONL only; others need `sessions:`.
-- Fixed 300s shell timeout.
-- No branches, loops, retries, parallelism, Windows.
+| v1                   | v2                                      |
+| -------------------- | --------------------------------------- |
+| `shell:` (payload)   | `run:` (+ `shell:` = interpreter)       |
+| `open:`              | `run:` with `in: tab`                   |
+| `wait_for:`          | `wait: /regex/`                         |
+| `wait: done`         | default blocking                        |
+| `close_source:`      | `tab.close: { tab_id: "{source_tab}" }` |
+| `herdr:` + `params:` | dotted method key                       |
+| `run: <workflow>`    | `use:` + `with:`                        |
+| `on_fail:`           | `on_error:`                             |
+| `{last}`             | named `out:`                            |
+| `{input.<name>}`     | `{name}`                                |
+| `HWF_INPUT_*`        | `HWF_*` (inputs and outs)               |

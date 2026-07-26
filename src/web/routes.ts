@@ -1,6 +1,8 @@
 import { loadConfig } from "../config";
 import { readRunLog, recentRuns } from "../runlog";
-import { listWorkflows, parseRaw, parseWorkflowText, workflowPath } from "../workflows";
+import { workflowPath } from "../workflows/discover";
+import { listWorkflows, parseWorkflowText } from "../workflows/load";
+import { normalizeSteps, parseRaw, rawWorkflowSchema } from "../workflows/parse";
 import { dumpWorkflow } from "./yaml-build";
 
 export type Scope = "repo" | "global";
@@ -53,7 +55,20 @@ export function handleParse(body: Record<string, unknown>): Response {
 
 export function handleFormat(body: Record<string, unknown>): Response {
   try {
-    const text = dumpWorkflow(body.doc as never);
+    const parsed = rawWorkflowSchema.safeParse(body.doc);
+    if (!parsed.success) {
+      return json(
+        {
+          ok: false,
+          error: parsed.error.issues.map((i) => i.message).join("; "),
+        },
+        400,
+      );
+    }
+    const text = dumpWorkflow({
+      ...parsed.data,
+      steps: normalizeSteps(parsed.data.steps),
+    });
     parseRaw("buffer.yaml", text);
     return json({ ok: true, text });
   } catch (error) {

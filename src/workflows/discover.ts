@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { WorkflowListEntry } from "./errors";
+import type { WorkflowListEntry } from "./types";
 
 function globalDir(): string {
   return join(process.env.HOME ?? homedir(), ".hwf", "workflows");

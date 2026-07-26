@@ -21,10 +21,6 @@ function navigateSelectList(state: PickerState, key: KeyEvent): boolean {
   return false;
 }
 
-function handleListKey(state: PickerState, key: KeyEvent): void {
-  navigateSelectList(state, key);
-}
-
 function handleInputKey(state: PickerState, key: KeyEvent): void {
   if (!state.inputQueue[state.inputIndex]?.options) return;
   navigateSelectList(state, key);
@@ -58,7 +54,7 @@ export function handlePickerKey(state: PickerState, key: KeyEvent): void {
   if (state.mode === "confirm") return handleConfirmKey(state, key);
   if (state.mode === "input") return handleInputKey(state, key);
   if (state.mode === "prompt") return;
-  handleListKey(state, key);
+  navigateSelectList(state, key);
 }
 
 /** herdr prefix-key C0 bytes sit in the popup PTY; drop buffered + ignore late leaks. */

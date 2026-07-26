@@ -2,21 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  loadWorkflow,
-  WorkflowLoadError,
-  substitute,
-  substituteParams,
-  type FlatStep,
-  type LoadedWorkflow,
-  type WorkflowListEntry,
-  type PlaceholderValues,
-} from "../src/workflows";
-
-void null as unknown as FlatStep;
-void null as unknown as LoadedWorkflow;
-void null as unknown as WorkflowListEntry;
-void null as unknown as PlaceholderValues;
+import { loadWorkflow } from "../src/workflows/load";
+import { substitute, substituteParams } from "../src/workflows/substitute";
+import { WorkflowLoadError } from "../src/workflows/types";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -34,474 +22,470 @@ async function repoWithWorkflows(files: Record<string, string>): Promise<string>
   return root;
 }
 
-describe("workflow schema", () => {
-  test("valid shell+stdin parses", async () => {
-    const root = await repoWithWorkflows({
-      ok: `steps:\n  - shell: echo hi\n    stdin: "{pane}"\n`,
-    });
+const emptyValues = {
+  pane: "",
+  selection: "",
+  prompt: "",
+  error: "",
+  session: "",
+  session_file: "",
+  source_tab: "",
+  agent: "",
+};
+
+describe("workflow grammar", () => {
+  test("bare string steps shorthand", async () => {
+    const root = await repoWithWorkflows({ ok: `steps: bun test\n` });
     const m = await loadWorkflow("ok", root);
-    expect(m.steps).toEqual([{ verb: "shell", command: "echo hi", stdin: "{pane}" }]);
-  });
-
-  test("two verbs rejected with step position", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:\n  - shell: echo\n    open: lazygit\n`,
+    expect(m.steps).toHaveLength(1);
+    expect(m.steps[0]!.action).toMatchObject({
+      kind: "run",
+      payload: { form: "scalar", command: "bun test", shell: "sh" },
+      in: "here",
     });
-    expect(loadWorkflow("bad", root)).rejects.toThrow(/step 1/);
-  });
-
-  test("modifier on wrong verb rejected", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:\n  - open: lazygit\n    prompt: hi\n`,
-    });
-    await expect(loadWorkflow("bad", root)).rejects.toThrow(/step 1.*prompt/);
-  });
-
-  test("modifier on run rejected", async () => {
-    const root = await repoWithWorkflows({
-      other: `steps:\n  - shell: "true"\n`,
-      bad: `steps:\n  - run: other\n    stdin: x\n`,
-    });
-    await expect(loadWorkflow("bad", root)).rejects.toThrow(/step 1/);
   });
 
   test("unknown top-level key rejected", async () => {
     const root = await repoWithWorkflows({
-      bad: `retries: 3\nsteps:\n  - shell: "true"\n`,
+      bad: `retries: 3\nsteps: bun test\n`,
     });
     await expect(loadWorkflow("bad", root)).rejects.toThrow(/retries/);
   });
 
-  test("empty steps rejected", async () => {
-    const root = await repoWithWorkflows({ bad: `steps: []\n` });
+  test("on_fail points to on_error", async () => {
+    const root = await repoWithWorkflows({
+      bad: `on_fail: continue\nsteps: bun test\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/on_error/);
+  });
+
+  test("missing steps rejected", async () => {
+    const root = await repoWithWorkflows({ bad: `inputs:\n  x: text\n` });
     await expect(loadWorkflow("bad", root)).rejects.toThrow(/steps/);
   });
 
-  test("unknown agent rejected at load", async () => {
+  test("two action keys rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - run: bun test\n    agent: claude\n`,
+    });
+    await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(/multiple action keys/);
+  });
+
+  test("modifiers only rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - out: diff\n    when: "{x}"\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/no action key/);
+  });
+
+  test("placeholder rejected in scalar run", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - run: git checkout {base}\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/placeholders are not allowed/);
+  });
+
+  test("placeholder accepted in argv run", async () => {
+    const root = await repoWithWorkflows({
+      ok: `inputs:\n  base: text\nsteps:\n  - run: [git, checkout, "{base}"]\n`,
+    });
+    const m = await loadWorkflow("ok", root);
+    expect(m.steps[0]!.action).toMatchObject({
+      kind: "run",
+      payload: { form: "argv", argv: ["git", "checkout", "{base}"] },
+    });
+  });
+
+  test("shell on argv form rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - run: [git, status]\n    shell: bash\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/argv form does not use a shell/);
+  });
+
+  test("explicit interpreter", async () => {
+    const root = await repoWithWorkflows({
+      ok: `steps:\n  - run: Get-ChildItem\n    shell: pwsh\n`,
+    });
+    const m = await loadWorkflow("ok", root);
+    expect(m.steps[0]!.action).toMatchObject({
+      kind: "run",
+      payload: { shell: "pwsh", command: "Get-ChildItem" },
+    });
+  });
+
+  test("default placement for run is here", async () => {
+    const root = await repoWithWorkflows({ ok: `steps:\n  - run: git diff\n` });
+    const m = await loadWorkflow("ok", root);
+    expect(m.steps[0]!.action).toMatchObject({ kind: "run", in: "here" });
+  });
+
+  test("ratio without split rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - run: bun\n    in: tab\n    ratio: 0.5\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/ratio/);
+  });
+
+  test("regex wait on here rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - run: bun run dev\n    in: here\n    wait: /listening/\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/placed step/);
+  });
+
+  test("detached step with out rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - run: lazygit\n    in: tab\n    wait: false\n    out: { tab: tab_id }\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/detached/);
+  });
+
+  test("two outputs coexist", async () => {
+    const root = await repoWithWorkflows({
+      ok: `steps:
+  - run: git diff HEAD
+    out: diff
+  - run: git log -5 --oneline
+    out: recent
+  - agent: claude
+    prompt: "{diff} {recent}"
+`,
+    });
+    const m = await loadWorkflow("ok", root, ["claude"]);
+    expect(m.steps.map((s) => (s.out && s.out.kind === "text" ? s.out.name : null))).toEqual([
+      "diff",
+      "recent",
+      null,
+    ]);
+  });
+
+  test("choice shorthand with default", async () => {
+    const root = await repoWithWorkflows({
+      ok: `inputs:\n  base: [main, develop] = main\nsteps:\n  - run: [echo, "{base}"]\n`,
+    });
+    const m = await loadWorkflow("ok", root);
+    expect(m.inputs[0]).toMatchObject({
+      name: "base",
+      options: ["main", "develop"],
+      default: "main",
+    });
+  });
+
+  test("shell-sourced choices", async () => {
+    const root = await repoWithWorkflows({
+      ok: `inputs:\n  branch: sh printf 'main\\nfeat/x\\n'\nsteps:\n  - run: [echo, "{branch}"]\n`,
+    });
+    const m = await loadWorkflow("ok", root);
+    expect(m.inputs[0]!.options).toEqual(["main", "feat/x"]);
+  });
+
+  test("unused input rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `inputs:\n  focus: text\nsteps:\n  - run: "true"\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/never referenced/);
+  });
+
+  test("default outside options rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `inputs:\n  base: [main, develop] = trunk\nsteps:\n  - run: [echo, "{base}"]\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/not in options/);
+  });
+
+  test("typo placeholder caught at load", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - run: git diff\n    out: diff\n  - agent: claude\n    prompt: "{dif}"\n`,
+    });
+    await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(/dif/);
+  });
+
+  test("collision with builtin rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - run: echo\n    out: agent\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/builtin/);
+  });
+
+  test("JSON braces pass through", () => {
+    expect(substitute('{"key": "value"}', emptyValues)).toBe('{"key": "value"}');
+  });
+
+  test("session legal in prompt", async () => {
+    const root = await repoWithWorkflows({
+      ok: `steps:\n  - agent: claude\n    prompt: "{session}"\n`,
+    });
+    const m = await loadWorkflow("ok", root, ["claude"]);
+    expect(m.needsSession).toBe(true);
+  });
+
+  test("session rejected in scalar run", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - run: "echo {session}"\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/placeholders are not allowed/);
+  });
+
+  test("v1 shell key rejected", async () => {
+    const root = await repoWithWorkflows({ bad: `steps:\n  - shell: bun test\n` });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/run:/);
+  });
+
+  test("v1 last placeholder rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - agent: claude\n    prompt: "{last}"\n`,
+    });
+    await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(/out:/);
+  });
+
+  test("v1 input namespace rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `inputs:\n  focus: text\nsteps:\n  - agent: claude\n    prompt: "{input.focus}"\n`,
+    });
+    await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(/\{focus\}/);
+  });
+
+  test("wait: done rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - agent: claude\n    prompt: hi\n    wait: done\n`,
+    });
+    await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(/wait: done/);
+  });
+
+  test("agent defaults to in: tab and blocking", async () => {
+    const root = await repoWithWorkflows({
+      ok: `steps:\n  - agent: claude\n    prompt: hi\n`,
+    });
+    const m = await loadWorkflow("ok", root, ["claude"]);
+    expect(m.steps[0]!.action).toMatchObject({ kind: "agent", in: "tab" });
+    expect(m.steps[0]!.wait).toEqual({ kind: "block" });
+  });
+
+  test("unknown agent rejected", async () => {
     const root = await repoWithWorkflows({
       bad: `steps:\n  - agent: gemini\n    prompt: hi\n`,
     });
     await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(/gemini/);
   });
 
-  test('agent: "{agent}" accepted at load', async () => {
+  test('agent: "{agent}" accepted', async () => {
     const root = await repoWithWorkflows({
       ok: `steps:\n  - agent: "{agent}"\n    prompt: hi\n`,
     });
     const m = await loadWorkflow("ok", root, ["claude"]);
-    expect(m.steps[0]).toEqual({ verb: "agent", name: "{agent}", prompt: "hi" });
     expect(m.needsInvokingAgent).toBe(true);
-  });
-
-  test("wait on shell rejected", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:\n  - shell: echo hi\n    wait: done\n`,
-    });
-    await expect(loadWorkflow("bad", root)).rejects.toThrow(/wait only allowed on agent/);
-  });
-
-  test("wait_for on agent rejected", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:\n  - agent: claude\n    wait_for: ready\n`,
-    });
-    await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(
-      /wait_for only allowed on open/,
-    );
-  });
-
-  test("timeout without wait rejected", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:\n  - shell: echo hi\n    timeout: 10\n`,
-    });
-    await expect(loadWorkflow("bad", root)).rejects.toThrow(/timeout requires wait or wait_for/);
-  });
-
-  test("wait: whatever rejected", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:\n  - agent: claude\n    wait: whatever\n`,
-    });
-    await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(/wait/);
-  });
-
-  test("valid wait/wait_for parse to FlatStep with timeoutMs", async () => {
-    const root = await repoWithWorkflows({
-      ok: `steps:
-  - agent: claude
-    prompt: hi
-    wait: done
-  - open: bun run dev
-    wait_for: "Listening on :3000"
-    timeout: 45
-`,
-    });
-    const m = await loadWorkflow("ok", root, ["claude"]);
-    expect(m.steps).toEqual([
-      { verb: "agent", name: "claude", prompt: "hi", wait: true, timeoutMs: 1_800_000 },
-      {
-        verb: "open",
-        command: "bun run dev",
-        waitFor: "Listening on :3000",
-        timeoutMs: 45_000,
-      },
-    ]);
   });
 });
 
-describe("substitution safety", () => {
-  test("placeholder in shell command rejected", async () => {
+describe("step control flow load rules", () => {
+  test("placeholder in shell when rejected", async () => {
     const root = await repoWithWorkflows({
-      bad: `steps:\n  - shell: "echo {pane}"\n`,
+      bad: `steps:\n  - run: bun test\n    when: 'test -n "{diff}"'\n`,
     });
-    await expect(loadWorkflow("bad", root)).rejects.toMatchObject({
-      name: "WorkflowLoadError",
-      message: expect.stringMatching(/step 1.*placeholder \{pane\}/),
-    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/placeholders are not allowed/);
   });
 
-  test("placeholder in open command rejected", async () => {
+  test("item outside for rejected", async () => {
     const root = await repoWithWorkflows({
-      bad: `steps:\n  - open: "echo {selection}"\n`,
+      bad: `steps:\n  - run: [echo, "{item}"]\n`,
     });
-    await expect(loadWorkflow("bad", root)).rejects.toThrow(/step 1/);
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/requires for:/);
   });
 
-  test("unknown token passes through in substitute", () => {
-    expect(
-      substitute("{branch}", {
-        pane: "",
-        selection: "",
-        prompt: "",
-        last: "",
-        error: "",
-        session: "",
-        session_file: "",
-        tab: "",
-        prev_tab: "",
-        agent: "",
-        inputs: {},
-      }),
-    ).toBe("{branch}");
-  });
-
-  test("tab prev_tab agent substitute", () => {
-    expect(
-      substitute("t={tab} p={prev_tab} a={agent}", {
-        pane: "",
-        selection: "",
-        prompt: "",
-        last: "",
-        error: "",
-        session: "",
-        session_file: "",
-        tab: "t2",
-        prev_tab: "t1",
-        agent: "codex",
-        inputs: {},
-      }),
-    ).toBe("t=t2 p=t1 a=codex");
-  });
-
-  test("{session} in prompt is load error", async () => {
+  test("empty for list rejected", async () => {
     const root = await repoWithWorkflows({
-      bad: `steps:\n  - agent: claude\n    prompt: "{session}"\n`,
+      bad: `steps:\n  - run: [echo, x]\n    for: []\n`,
     });
-    await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(
-      /\{session\}\/\{session_file\} only allowed in stdin/,
-    );
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/empty/);
   });
 
-  test("{session} in stdin ok; needsSession true", async () => {
+  test("retry: 0 rejected", async () => {
     const root = await repoWithWorkflows({
-      ok: `steps:\n  - shell: cat\n    stdin: "{session}"\n`,
+      bad: `steps:\n  - run: bun test\n    retry: 0\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/at least 1/);
+  });
+
+  test("retry on agent without reset rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - agent: claude\n    prompt: hi\n    retry: 3\n`,
+    });
+    await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(/strand/);
+  });
+
+  test("retry on local run without reset ok", async () => {
+    const root = await repoWithWorkflows({
+      ok: `steps:\n  - run: bun test\n    retry: 3\n`,
+    });
+    await expect(loadWorkflow("ok", root)).resolves.toBeTruthy();
+  });
+
+  test("retry on placed run with reset ok", async () => {
+    const root = await repoWithWorkflows({
+      ok: `steps:\n  - run: bun run dev\n    in: right\n    retry:\n      times: 2\n      reset: "true"\n`,
+    });
+    await expect(loadWorkflow("ok", root)).resolves.toBeTruthy();
+  });
+
+  test("for literal list parses", async () => {
+    const root = await repoWithWorkflows({
+      ok: `steps:\n  - run: [echo, "{item}"]\n    for: [a.ts, b.ts]\n`,
     });
     const m = await loadWorkflow("ok", root);
-    expect(m.needsSession).toBe(true);
-    expect(m.steps).toEqual([{ verb: "shell", command: "cat", stdin: "{session}" }]);
-  });
-
-  test("{session_file} in prompt is load error", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:\n  - agent: claude\n    prompt: "{session_file}"\n`,
-    });
-    await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(
-      /\{session\}\/\{session_file\} only allowed in stdin/,
-    );
-  });
-
-  test("{session_file} in stdin ok; needsSession true", async () => {
-    const root = await repoWithWorkflows({
-      ok: `steps:\n  - shell: cat\n    stdin: "{session_file}"\n`,
-    });
-    const m = await loadWorkflow("ok", root);
-    expect(m.needsSession).toBe(true);
-  });
-
-  test("workflow without {session} has needsSession false", async () => {
-    const root = await repoWithWorkflows({
-      ok: `steps:\n  - shell: "true"\n`,
-    });
-    const m = await loadWorkflow("ok", root);
-    expect(m.needsSession).toBe(false);
+    expect(m.steps[0]!.for).toEqual({ kind: "list", items: ["a.ts", "b.ts"] });
   });
 });
 
 describe("composition", () => {
-  test("run splices steps in place", async () => {
+  test("use includes steps", async () => {
     const root = await repoWithWorkflows({
-      gate: `steps:\n  - shell: test\n`,
-      ship: `steps:\n  - shell: lint\n  - run: gate\n  - open: lazygit\n`,
+      gate: `steps:\n  - run: test\n`,
+      ship: `steps:\n  - run: lint\n  - use: gate\n  - run: git push\n`,
     });
     const m = await loadWorkflow("ship", root);
-    expect(m.steps.map((s) => ("command" in s ? s.command : s.verb))).toEqual([
-      "lint",
-      "test",
-      "lazygit",
-    ]);
+    expect(m.steps.map((s) => s.action.kind)).toEqual(["run", "include", "run"]);
   });
 
-  test("unknown run target rejected", async () => {
+  test("unknown use target rejected", async () => {
     const root = await repoWithWorkflows({
-      bad: `steps:\n  - run: nonexistent\n`,
+      bad: `steps:\n  - use: nonexistent\n`,
     });
     await expect(loadWorkflow("bad", root)).rejects.toThrow(/nonexistent/);
   });
 
   test("cycle rejected", async () => {
     const root = await repoWithWorkflows({
-      a: `steps:\n  - run: b\n`,
-      b: `steps:\n  - run: a\n`,
+      a: `steps:\n  - use: b\n`,
+      b: `steps:\n  - use: a\n`,
     });
     await expect(loadWorkflow("a", root)).rejects.toThrow(/cycle/);
   });
 
-  test("self-reference rejected", async () => {
+  test("with undeclared key rejected", async () => {
     const root = await repoWithWorkflows({
-      a: `steps:\n  - run: a\n`,
+      gate: `inputs:\n  suite: text = unit\nsteps:\n  - run: [echo, "{suite}"]\n`,
+      ship: `steps:\n  - use: gate\n    with: { suit: all }\n`,
     });
-    await expect(loadWorkflow("a", root)).rejects.toThrow(/cycle/);
+    await expect(loadWorkflow("ship", root)).rejects.toThrow(/undeclared/);
   });
 
-  test("on_fail on run target rejected", async () => {
+  test("required with missing rejected", async () => {
     const root = await repoWithWorkflows({
-      gate: `steps:\n  - shell: "true"\non_fail: handoff\n`,
-      handoff: `steps:\n  - shell: "true"\n`,
-      ship: `steps:\n  - run: gate\n`,
+      gate: `inputs:\n  branch: text\nsteps:\n  - run: [echo, "{branch}"]\n`,
+      ship: `steps:\n  - use: gate\n`,
     });
-    await expect(loadWorkflow("ship", root)).rejects.toThrow(/on_fail/);
+    await expect(loadWorkflow("ship", root)).rejects.toThrow(/branch/);
   });
 
-  test("on_fail on recovery target rejected", async () => {
+  test("default applied when with omitted", async () => {
     const root = await repoWithWorkflows({
-      nested: `steps:\n  - shell: "true"\non_fail: x\n`,
-      x: `steps:\n  - shell: "true"\n`,
-      ship: `steps:\n  - shell: "true"\non_fail: nested\n`,
+      gate: `inputs:\n  suite: [unit, all] = unit\nsteps:\n  - run: [echo, "{suite}"]\n`,
+      ship: `steps:\n  - use: gate\n`,
     });
-    await expect(loadWorkflow("ship", root)).rejects.toThrow(/on_fail/);
+    const m = await loadWorkflow("ship", root);
+    expect(m.steps[0]!.action).toMatchObject({
+      kind: "include",
+      defaults: { suite: "unit" },
+    });
   });
 
-  test("needsPrompt true when recovery references prompt", async () => {
+  test("no implicit inheritance into include", async () => {
     const root = await repoWithWorkflows({
-      handoff: `steps:\n  - agent: claude\n    prompt: "{prompt}"\n`,
-      ship: `steps:\n  - shell: "true"\non_fail: handoff\n`,
+      part: `steps:\n  - agent: claude\n    prompt: "{diff}"\n`,
+      ship: `steps:\n  - run: git diff\n    out: diff\n  - use: part\n`,
     });
-    const m = await loadWorkflow("ship", root, ["claude"]);
-    expect(m.needsPrompt).toBe(true);
-    expect(m.onFail).toBe("handoff");
+    await expect(loadWorkflow("ship", root, ["claude"])).rejects.toThrow(/diff/);
+  });
+
+  test("included out visible downstream", async () => {
+    const root = await repoWithWorkflows({
+      part: `steps:\n  - run: echo hi\n    out: report\n`,
+      ship: `steps:\n  - use: part\n  - run: [echo, "{report}"]\n`,
+    });
+    await expect(loadWorkflow("ship", root)).resolves.toBeTruthy();
+  });
+
+  test("collision across inclusion rejected", async () => {
+    const root = await repoWithWorkflows({
+      part: `steps:\n  - run: echo\n    out: diff\n`,
+      ship: `steps:\n  - run: echo\n    out: diff\n  - use: part\n`,
+    });
+    await expect(loadWorkflow("ship", root)).rejects.toThrow(/collides/);
+  });
+
+  test("recovery declaring inputs rejected", async () => {
+    const root = await repoWithWorkflows({
+      rescue: `inputs:\n  x: text\nsteps:\n  - run: [echo, "{x}"]\n`,
+      ship: `on_error: rescue\nsteps:\n  - run: "true"\n`,
+    });
+    await expect(loadWorkflow("ship", root)).rejects.toThrow(/cannot declare inputs/);
+  });
+
+  test("HWF_ env exact match still required", async () => {
+    const root = await repoWithWorkflows({
+      bad: `inputs:\n  foo: text\nsteps:\n  - run: 'printf %s "$HWF_foobar"'\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/never referenced/);
+  });
+
+  test("HWF_ exact env ref counts as use", async () => {
+    const root = await repoWithWorkflows({
+      ok: `inputs:\n  foo: text\nsteps:\n  - run: 'printf %s "$HWF_foo"'\n`,
+    });
+    await expect(loadWorkflow("ok", root)).resolves.toBeTruthy();
   });
 });
 
-describe("inputs", () => {
-  const values = (inputs: Record<string, string>) => ({
-    pane: "",
-    selection: "",
-    prompt: "",
-    last: "",
-    error: "",
-    session: "",
-    session_file: "",
-    tab: "",
-    prev_tab: "",
-    agent: "",
-    inputs,
+describe("primitives", () => {
+  test("denied method rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - server.stop:\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/server/);
   });
 
-  test("{input.x} substitutes from inputs map", () => {
-    expect(substitute("to {input.target}!", values({ target: "codex" }))).toBe("to codex!");
-    expect(substitute("{input.missing}", values({}))).toBe("");
+  test("unknown method rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - pane.splitt: { direction: right }\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/unknown herdr method/);
   });
 
-  test("params substitution descends through arrays and preserves non-strings", () => {
+  test("identifier out on primitive rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - tab.create: { label: logs }\n    out: tab\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/map-form/);
+  });
+
+  test("bad result path rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - pane.split: { direction: right }\n    out: { pane: pane.pane_ids }\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/unresolvable/);
+  });
+
+  test("notification.show allowed", async () => {
+    const root = await repoWithWorkflows({
+      ok: `steps:\n  - notification.show: { title: done }\n`,
+    });
+    await expect(loadWorkflow("ok", root)).resolves.toBeTruthy();
+  });
+});
+
+describe("substitution", () => {
+  test("flat namespace substitutes", () => {
+    expect(substitute("to {target}!", { ...emptyValues, target: "codex" })).toBe("to codex!");
+  });
+
+  test("params substitution descends", () => {
     expect(
       substituteParams(
-        { items: ["{input.target}", { prompt: "{prompt}", count: 3 }, false, null] },
-        { ...values({ target: "codex" }), prompt: "ship it" },
+        { items: ["{target}", { prompt: "{prompt}", count: 3 }] },
+        { ...emptyValues, target: "codex", prompt: "ship it" },
       ),
-    ).toEqual({ items: ["codex", { prompt: "ship it", count: 3 }, false, null] });
-  });
-
-  test("params substitution preserves __proto__ as data", () => {
-    const params = Bun.YAML.parse("payload:\n  __proto__:\n    preserved: yes\n") as Record<
-      string,
-      unknown
-    >;
-    const output = substituteParams(params, values({}))!;
-    const payload = output.payload as Record<string, unknown>;
-    expect(Object.hasOwn(payload, "__proto__")).toBe(true);
-    expect(payload.__proto__).toEqual({ preserved: "yes" });
-  });
-
-  test("input refs and prompt in params arrays are discovered", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:
-  target: {}
-steps:
-  - herdr: pane.send
-    params:
-      items: ["{input.target}", { prompt: "{prompt}" }]
-`,
-    });
-    const m = await loadWorkflow("wf", root);
-    expect(m.inputs.map((input) => input.name)).toEqual(["target"]);
-    expect(m.needsPrompt).toBe(true);
-  });
-
-  test("{session} in params arrays is load error", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:
-  - herdr: pane.send
-    params:
-      items: ["{session}"]
-`,
-    });
-    await expect(loadWorkflow("bad", root)).rejects.toThrow(
-      /\{session\}\/\{session_file\} only allowed in stdin/,
-    );
-  });
-
-  test("choice and text inputs resolve; agents sentinel expands", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:
-  target:
-    options: agents
-  focus:
-    label: focus area
-    default: ""
-steps:
-  - agent: "{input.target}"
-    prompt: "{input.focus}"
-`,
-    });
-    const m = await loadWorkflow("wf", root, ["claude", "codex"]);
-    expect(m.inputs).toEqual([
-      { name: "target", label: "target", options: ["claude", "codex"], default: undefined },
-      { name: "focus", label: "focus area", options: undefined, default: "" },
-    ]);
-  });
-
-  test("undeclared {input.x} rejected", async () => {
-    const root = await repoWithWorkflows({
-      wf: `steps:\n  - shell: cat\n    stdin: "{input.nope}"\n`,
-    });
-    await expect(loadWorkflow("wf", root)).rejects.toThrow(/undeclared input/);
-  });
-
-  test("declared but unused input rejected", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:\n  ghost: {}\nsteps:\n  - shell: "true"\n`,
-    });
-    await expect(loadWorkflow("wf", root)).rejects.toThrow(/never referenced/);
-  });
-
-  test("agent input option outside config rejected", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:\n  target:\n    options: [claude, ghost]\nsteps:\n  - agent: "{input.target}"\n`,
-    });
-    await expect(loadWorkflow("wf", root, ["claude"])).rejects.toThrow(/not a config agent/);
-  });
-
-  test("text input as agent rejected", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:\n  target: {}\nsteps:\n  - agent: "{input.target}"\n`,
-    });
-    await expect(loadWorkflow("wf", root, ["claude"])).rejects.toThrow(/needs options/);
-  });
-
-  test("{input.x} in shell command text rejected", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:\n  x: {}\nsteps:\n  - shell: "echo {input.x}"\n`,
-    });
-    await expect(loadWorkflow("wf", root)).rejects.toThrow(/input.x.*not allowed in command/);
-  });
-
-  test("spliced workflow with inputs rejected", async () => {
-    const root = await repoWithWorkflows({
-      part: `inputs:\n  x: {}\nsteps:\n  - shell: cat\n    stdin: "{input.x}"\n`,
-      wf: `steps:\n  - run: part\n`,
-    });
-    await expect(loadWorkflow("wf", root)).rejects.toThrow(/declares inputs/);
-  });
-
-  test("options agents with no configured agents rejected", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:\n  target:\n    options: agents\nsteps:\n  - agent: "{input.target}"\n`,
-    });
-    await expect(loadWorkflow("wf", root)).rejects.toThrow(/no agents configured/);
-  });
-
-  test("choice default outside options rejected", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:\n  target:\n    options: [a, b]\n    default: c\nsteps:\n  - shell: cat\n    stdin: "{input.target}"\n`,
-    });
-    await expect(loadWorkflow("wf", root)).rejects.toThrow(/not in options/);
-  });
-
-  test("recovery may reference entry inputs", async () => {
-    const root = await repoWithWorkflows({
-      rescue: `steps:\n  - shell: cat\n    stdin: "{input.focus}"\n`,
-      wf: `inputs:\n  focus: {}\non_fail: rescue\nsteps:\n  - shell: cat\n    stdin: "{input.focus}"\n`,
-    });
-    const m = await loadWorkflow("wf", root);
-    expect(m.inputs.map((i) => i.name)).toEqual(["focus"]);
-  });
-
-  test("options shell command expands stdout lines", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:
-  branch:
-    options: "printf 'main\\nfeat/x\\n'"
-steps:
-  - shell: cat
-    stdin: "{input.branch}"
-`,
-    });
-    const m = await loadWorkflow("wf", root);
-    expect(m.inputs[0]).toEqual({
-      name: "branch",
-      label: "branch",
-      options: ["main", "feat/x"],
-      default: undefined,
-    });
-  });
-
-  test("options shell command failure rejected", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:\n  branch:\n    options: "exit 1"\nsteps:\n  - shell: cat\n    stdin: "{input.branch}"\n`,
-    });
-    await expect(loadWorkflow("wf", root)).rejects.toThrow(/options command failed/);
-  });
-
-  test("options shell command empty stdout rejected", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:\n  branch:\n    options: "true"\nsteps:\n  - shell: cat\n    stdin: "{input.branch}"\n`,
-    });
-    await expect(loadWorkflow("wf", root)).rejects.toThrow(/no choices/);
-  });
-
-  test("dynamic options default outside resolved set rejected", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:\n  branch:\n    options: "printf 'main\\n'"\n    default: other\nsteps:\n  - shell: cat\n    stdin: "{input.branch}"\n`,
-    });
-    await expect(loadWorkflow("wf", root)).rejects.toThrow(/not in options/);
+    ).toEqual({ items: ["codex", { prompt: "ship it", count: 3 }] });
   });
 });
 

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { runWorkflow } from "../src/runner";
 import type { PickerState } from "../src/tui/picker-modes";
 import { acceptWorkflow, startRun } from "../src/tui/picker-run";
-import { listWorkflows, loadWorkflow, loadWorkflowEntry } from "../src/workflows";
+import { listWorkflows, loadWorkflow, loadWorkflowEntry } from "../src/workflows/load";
 
 const dirs: string[] = [];
 
@@ -55,11 +55,9 @@ describe("review regressions", () => {
   test("listing dynamic options does not execute their command", async () => {
     const root = await repoWith({
       dynamic: `inputs:
-  target:
-    options: "touch option-command-ran; printf main"
+  target: sh touch option-command-ran; printf main
 steps:
-  - shell: cat
-    stdin: "{input.target}"
+  - run: [echo, "{target}"]
 `,
     });
 
@@ -74,10 +72,9 @@ steps:
   test("listing validates dynamic workflows without executing choices", async () => {
     const root = await repoWith({
       invalid: `inputs:
-  unused:
-    options: "touch invalid-option-ran; printf value"
+  unused: sh touch invalid-option-ran; printf value
 steps:
-  - shell: "true"
+  - run: "true"
 `,
     });
 
@@ -89,15 +86,13 @@ steps:
   test("exact global entry cannot be replaced by repo shadow during load", async () => {
     const root = await repoWith({
       entry: `inputs:
-  target:
-    options: "touch repo-shadow-ran; printf value"
+  target: sh touch repo-shadow-ran; printf value
 steps:
-  - shell: cat
-    stdin: "{input.target}"
+  - run: [echo, "{target}"]
 `,
     });
     const globalFile = join(root, "global-entry.yaml");
-    await writeFile(globalFile, 'steps:\n  - shell: "true"\n');
+    await writeFile(globalFile, 'steps:\n  - run: "true"\n');
 
     const workflow = await loadWorkflowEntry(
       { name: "entry", source: "global", file: globalFile },
@@ -108,9 +103,9 @@ steps:
   });
 
   test("exact global entry records repo-owned composition", async () => {
-    const root = await repoWith({ child: 'steps:\n  - shell: "true"\n' });
+    const root = await repoWith({ child: 'steps:\n  - run: "true"\n' });
     const globalFile = join(root, "global-entry.yaml");
-    await writeFile(globalFile, "steps:\n  - run: child\n");
+    await writeFile(globalFile, "steps:\n  - use: child\n");
 
     const workflow = await loadWorkflowEntry(
       { name: "global-entry", source: "global", file: globalFile },
@@ -122,14 +117,13 @@ steps:
   test("validated recovery reuses entry input values", async () => {
     const root = await repoWith({
       rescue: `steps:
-  - shell: cat
-    stdin: "recovered {input.focus}"
+  - run: 'printf recovered\\ %s "$HWF_focus"'
 `,
       workflow: `inputs:
-  focus: {}
-on_fail: rescue
+  focus: text
+on_error: rescue
 steps:
-  - shell: exit 1
+  - run: exit 1
 `,
     });
 
@@ -145,7 +139,8 @@ steps:
       },
     });
 
-    expect(result).toEqual({ ok: true, last: "recovered value" });
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.error).toContain("step 1");
   });
 
   test("picker renders loader errors as terminal failures", async () => {

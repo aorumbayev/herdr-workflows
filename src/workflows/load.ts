@@ -5,13 +5,18 @@ import {
   type FlatStep,
   type LoadedWorkflow,
   type WorkflowListEntry,
-} from "./errors";
+} from "./types";
 
 import { checkInputRefs, resolveInputs } from "./inputs";
-import { flattenSteps, parseFile } from "./flatten";
+import { flattenSteps, loadRecovery, parseFile } from "./flatten";
 import { parseRaw, type RawWorkflow } from "./parse";
-import { loadRecovery } from "./recovery";
-import { checkAgents, flatNeedsInvokingAgent, flatNeedsPrompt, flatNeedsSession } from "./steps";
+import {
+  checkAgents,
+  flatNeedsInvokingAgent,
+  flatNeedsPrompt,
+  flatNeedsSession,
+  rawToFlat,
+} from "./steps";
 
 async function loadFromRaw(
   name: string,
@@ -24,15 +29,35 @@ async function loadFromRaw(
 ): Promise<LoadedWorkflow> {
   const agents = new Set(agentNames);
   const sources = new Set<"repo" | "global">([source]);
-  const steps = await flattenSteps(name, repoRoot, [], sources, { file, source }, raw);
-  checkAgents(file, steps, agents);
   const inputs = await resolveInputs(file, raw, agents, repoRoot, resolveDynamic);
   const declared = new Map(inputs.map((spec) => [spec.name, spec]));
-  const used = checkInputRefs(file, declared, steps, agents);
+  const bound = new Set(declared.keys());
+  const steps = await flattenSteps(
+    name,
+    repoRoot,
+    [],
+    agents,
+    bound,
+    sources,
+    { file, source },
+    raw,
+  );
+  checkAgents(file, steps, agents);
+  const used = checkInputRefs(file, declared, steps, agents, new Set(bound));
   let recovery: FlatStep[] | undefined;
-  if (raw.on_fail) {
-    recovery = await loadRecovery(file, raw.on_fail, repoRoot, agents, sources);
-    for (const name of checkInputRefs(file, declared, recovery, agents)) used.add(name);
+  let onErrorName: string | undefined;
+  if (typeof raw.on_error === "string") {
+    onErrorName = raw.on_error;
+    recovery = await loadRecovery(file, raw.on_error, repoRoot, agents, sources, bound);
+    for (const name of checkInputRefs(file, declared, recovery, agents, new Set(bound))) {
+      used.add(name);
+    }
+  } else if (Array.isArray(raw.on_error)) {
+    onErrorName = "<on_error>";
+    recovery = raw.on_error.map((step, i) => rawToFlat(file, i + 1, step));
+    for (const name of checkInputRefs(file, declared, recovery, agents, new Set(bound))) {
+      used.add(name);
+    }
   }
   const allSteps = recovery ? [...steps, ...recovery] : steps;
   for (const spec of inputs) {
@@ -45,10 +70,11 @@ async function loadFromRaw(
   return {
     name,
     file,
+    desc: raw.desc,
     steps,
     inputs,
-    onFail: raw.on_fail,
-    ...(recovery ? { recovery: { name: raw.on_fail!, steps: recovery } } : {}),
+    onError: onErrorName,
+    ...(recovery ? { recovery: { name: onErrorName!, steps: recovery } } : {}),
     repoOwned: sources.has("repo"),
     needsPrompt: flatNeedsPrompt(allSteps),
     needsSession: flatNeedsSession(allSteps),

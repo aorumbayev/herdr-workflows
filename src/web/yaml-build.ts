@@ -2,21 +2,14 @@ import type { RawStep, RawWorkflow } from "../workflows/parse";
 
 const IND = "  ";
 
-/** Inline scalar token — bare when YAML-safe, otherwise double-quoted. Multi-line input comes
- *  back as an escaped `"a\nb"` scalar, which is exactly what `field` wants for its fallback. */
 function scalar(v: string): string {
   return Bun.YAML.stringify(v);
 }
 
-/** Literal blocks survive intact only when no line has leading/trailing whitespace; anything
- *  else falls back to a double-quoted scalar so content round-trips byte-exact. */
 function blockSafe(v: string): boolean {
   return v.split("\n").every((ln) => ln === ln.trim() || ln === "");
 }
 
-/** Emit `key: value`, using a literal block scalar for multi-line strings so prompts stay readable.
- *  `|-` strips trailing newlines, so values ending in `\n` (or with ragged whitespace) fall back
- *  to a double-quoted scalar to round-trip byte-exact. */
 function field(lines: string[], indent: string, key: string, v: string): void {
   if (v.includes("\n")) {
     if (!v.endsWith("\n") && blockSafe(v)) {
@@ -32,28 +25,37 @@ function field(lines: string[], indent: string, key: string, v: string): void {
 
 function dumpStep(step: RawStep): string[] {
   const m: string[] = [];
-  const I = IND + IND; // step mapping keys sit at 4-space indent
-  if (step.shell !== undefined) {
-    field(m, I, "shell", step.shell);
-    if (step.stdin !== undefined) field(m, I, "stdin", step.stdin);
-  } else if (step.open !== undefined) {
-    field(m, I, "open", step.open);
-    if (step.wait_for !== undefined) field(m, I, "wait_for", step.wait_for);
-    if (step.timeout !== undefined) m.push(`${I}timeout: ${step.timeout}`);
-  } else if (step.agent !== undefined) {
-    field(m, I, "agent", step.agent);
-    if (step.prompt !== undefined) field(m, I, "prompt", step.prompt);
-    if (step.wait !== undefined) m.push(`${I}wait: done`);
-    if (step.timeout !== undefined) m.push(`${I}timeout: ${step.timeout}`);
-    if (step.close_source !== undefined) m.push(`${I}close_source: ${step.close_source}`);
-  } else if (step.herdr !== undefined) {
-    field(m, I, "herdr", step.herdr);
-    if (step.params !== undefined) m.push(`${I}params: ${JSON.stringify(step.params)}`);
-  } else if (step.run !== undefined) {
+  const I = IND + IND;
+  if (typeof step.run === "string") {
     field(m, I, "run", step.run);
+  } else if (Array.isArray(step.run)) {
+    m.push(`${I}run: ${JSON.stringify(step.run)}`);
+  } else if (typeof step.agent === "string") {
+    field(m, I, "agent", step.agent);
+    if (typeof step.prompt === "string") field(m, I, "prompt", step.prompt);
+    if (typeof step.timeout === "number") m.push(`${I}timeout: ${step.timeout}`);
+  } else {
+    const method = Object.keys(step).find((k) => k.includes("."));
+    if (method) {
+      const params = step[method];
+      if (params && typeof params === "object") {
+        m.push(`${I}${method}: ${JSON.stringify(params)}`);
+      } else {
+        m.push(`${I}${method}:`);
+      }
+    } else if (typeof step.use === "string") {
+      field(m, I, "use", step.use);
+    } else {
+      m.push(`${I}run: ""`);
+    }
   }
-  if (m.length === 0) m.push(`${I}shell: ""`);
-  // Fold the first key onto the sequence dash: "    shell: x" -> "  - shell: x".
+  if (typeof step.name === "string") field(m, I, "name", step.name);
+  if (typeof step.in === "string") m.push(`${I}in: ${step.in}`);
+  if (typeof step.shell === "string") m.push(`${I}shell: ${step.shell}`);
+  if (typeof step.out === "string") m.push(`${I}out: ${step.out}`);
+  if (step.wait === false) m.push(`${I}wait: false`);
+  if (typeof step.wait === "string") m.push(`${I}wait: ${step.wait}`);
+  if (m.length === 0) m.push(`${I}run: ""`);
   m[0] = `${IND}- ${m[0]!.slice(I.length)}`;
   return m;
 }
@@ -61,8 +63,18 @@ function dumpStep(step: RawStep): string[] {
 function dumpInputs(lines: string[], inputs: NonNullable<RawWorkflow["inputs"]>): void {
   lines.push("inputs:");
   for (const [name, inp] of Object.entries(inputs)) {
+    if (typeof inp === "string") {
+      lines.push(`${IND}${scalar(name)}: ${scalar(inp)}`);
+      continue;
+    }
+    if (Array.isArray(inp)) {
+      lines.push(`${IND}${scalar(name)}: ${JSON.stringify(inp)}`);
+      continue;
+    }
     lines.push(`${IND}${scalar(name)}:`);
     if (inp.label !== undefined) lines.push(`${IND}${IND}label: ${scalar(inp.label)}`);
+    if (inp.desc !== undefined) lines.push(`${IND}${IND}desc: ${scalar(inp.desc)}`);
+    if (inp.type !== undefined) lines.push(`${IND}${IND}type: ${inp.type}`);
     if (inp.options !== undefined) {
       if (Array.isArray(inp.options)) {
         lines.push(`${IND}${IND}options:`);
@@ -75,10 +87,12 @@ function dumpInputs(lines: string[], inputs: NonNullable<RawWorkflow["inputs"]>)
   }
 }
 
-/** Serialize a workflow to readable block YAML with a blank line between steps.
- *  Deliberately more generous with whitespace than the validator requires. */
 export function dumpWorkflow(doc: RawWorkflow): string {
   const lines: string[] = [];
+  if (doc.desc) {
+    field(lines, "", "desc", doc.desc);
+    lines.push("");
+  }
   if (doc.inputs && Object.keys(doc.inputs).length > 0) {
     dumpInputs(lines, doc.inputs);
     lines.push("");
@@ -88,9 +102,9 @@ export function dumpWorkflow(doc: RawWorkflow): string {
     if (i > 0) lines.push("");
     lines.push(...dumpStep(step));
   });
-  if (doc.on_fail !== undefined) {
+  if (typeof doc.on_error === "string") {
     lines.push("");
-    lines.push(`on_fail: ${scalar(doc.on_fail)}`);
+    lines.push(`on_error: ${scalar(doc.on_error)}`);
   }
   return `${lines.join("\n")}\n`;
 }

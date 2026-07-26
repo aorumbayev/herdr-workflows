@@ -3,16 +3,10 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../src/config";
-import {
-  detectAgents,
-  formatAgentsYaml,
-  parsePlaybookSeedScope,
-  PLAYBOOK_SEED_WORKFLOWS,
-  REPO_SEED_WORKFLOWS,
-  runInit,
-  seedWorkflows,
-} from "../src/init";
-import { loadWorkflow } from "../src/workflows";
+import { detectAgents, formatAgentsYaml, runInit } from "../src/init";
+import { parsePlaybookSeedScope } from "../src/playbook-scope";
+import { PLAYBOOK_SEED_WORKFLOWS, REPO_SEED_WORKFLOWS, seedWorkflows } from "../src/seed-workflows";
+import { loadWorkflow } from "../src/workflows/load";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -51,6 +45,25 @@ describe("herdr-workflows init", () => {
     expect(formatAgentsYaml({ claude: ["claude", "{prompt}"] })).toContain('"{prompt}"');
   });
 
+  test("force init preserves sessions in config", async () => {
+    const root = await mkdtemp(join(tmpdir(), "herdr-workflows-init-"));
+    const home = await mkdtemp(join(tmpdir(), "herdr-workflows-home-"));
+    dirs.push(root, home);
+    await mkdir(join(root, ".hwf"), { recursive: true });
+    const path = join(root, ".hwf", "config.yaml");
+    await writeFile(
+      path,
+      `agents:\n  claude: ["claude", "{prompt}"]\nsessions:\n  claude: ["claude", "-p", "--output-format", "json", "-"]\n`,
+    );
+    const result = await runInit(root, { force: true, home, playbookScope: "skip" });
+    expect(result.kind).toBe("overwritten");
+    const text = await readFile(path, "utf8");
+    expect(text).toContain("sessions:");
+    expect(text).toContain("claude:");
+    const cfg = await loadConfig(root);
+    expect(cfg.sessions.claude).toEqual(["claude", "-p", "--output-format", "json", "-"]);
+  });
+
   test("parsePlaybookSeedScope accepts aliases", () => {
     expect(parsePlaybookSeedScope("G")).toBe("global");
     expect(parsePlaybookSeedScope("repo")).toBe("repo");
@@ -74,8 +87,10 @@ describe("herdr-workflows init", () => {
 
     const handoff = await readFile(join(globalDir, "handoff.yaml"), "utf8");
     expect(handoff).toContain('agent: "{agent}"');
-    expect(handoff).toContain('stdin: "{session}"');
-    expect(handoff).toContain("close_source: true");
+    expect(handoff).toContain("{session}");
+    expect(handoff).toContain("tab.close:");
+    expect(handoff).not.toContain("close_source:");
+    expect(handoff).not.toContain("{last}");
 
     const prevHome = process.env.HOME;
     process.env.HOME = home;

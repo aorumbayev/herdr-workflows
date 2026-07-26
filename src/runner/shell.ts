@@ -1,9 +1,23 @@
 export const SHELL_TIMEOUT_MS = 300_000;
 
-// Single choke point for "run a command string in the system shell" — the only
-// place platform shell choice lives when Windows support lands (herdr win32 is beta-only).
-export function shellArgv(command: string): string[] {
-  return process.platform === "win32" ? ["cmd", "/c", command] : ["sh", "-c", command];
+export type ShellName = "sh" | "bash" | "zsh" | "pwsh" | "powershell" | "cmd";
+
+/** Single choke point for running a command string through an interpreter. */
+export function shellArgv(command: string, shell: ShellName = "sh"): string[] {
+  switch (shell) {
+    case "sh":
+      return ["sh", "-c", command];
+    case "bash":
+      return ["bash", "-c", command];
+    case "zsh":
+      return ["zsh", "-c", command];
+    case "pwsh":
+      return ["pwsh", "-NoProfile", "-Command", command];
+    case "powershell":
+      return ["powershell", "-NoProfile", "-Command", command];
+    case "cmd":
+      return ["cmd", "/c", command];
+  }
 }
 
 export async function spawnCapture(
@@ -56,6 +70,24 @@ export async function spawnCapture(
   return { timedOut, exitCode: exitCode ?? 1, stdout, stderr, timeoutMs };
 }
 
+function captureResult(r: {
+  timedOut: boolean;
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  timeoutMs: number;
+}): { ok: boolean; stdout: string; stderr: string } {
+  if (r.timedOut) {
+    return {
+      ok: false,
+      stdout: r.stdout,
+      stderr: r.stderr || `timed out after ${r.timeoutMs / 1000}s`,
+    };
+  }
+  if (r.exitCode !== 0) return { ok: false, stdout: r.stdout, stderr: r.stderr };
+  return { ok: true, stdout: r.stdout, stderr: r.stderr };
+}
+
 export async function runShellStep(
   command: string,
   opts: {
@@ -63,17 +95,32 @@ export async function runShellStep(
     stdin?: string;
     env?: NodeJS.ProcessEnv;
     timeoutMs?: number;
+    shell?: ShellName;
   },
 ): Promise<{ ok: boolean; stdout: string; stderr: string }> {
-  const { timedOut, exitCode, stdout, stderr, timeoutMs } = await spawnCapture(shellArgv(command), {
-    cwd: opts.cwd,
-    stdin: opts.stdin,
-    env: opts.env,
-    timeoutMs: opts.timeoutMs,
-  });
-  if (timedOut) {
-    return { ok: false, stdout, stderr: stderr || `timed out after ${timeoutMs / 1000}s` };
-  }
-  if (exitCode !== 0) return { ok: false, stdout, stderr };
-  return { ok: true, stdout, stderr };
+  return captureResult(
+    await spawnCapture(shellArgv(command, opts.shell ?? "sh"), {
+      cwd: opts.cwd,
+      stdin: opts.stdin,
+      env: opts.env,
+      timeoutMs: opts.timeoutMs,
+    }),
+  );
+}
+
+export async function runArgvStep(
+  argv: string[],
+  opts: {
+    cwd: string;
+    env?: NodeJS.ProcessEnv;
+    timeoutMs?: number;
+  },
+): Promise<{ ok: boolean; stdout: string; stderr: string }> {
+  return captureResult(
+    await spawnCapture(argv, {
+      cwd: opts.cwd,
+      env: opts.env,
+      timeoutMs: opts.timeoutMs,
+    }),
+  );
 }
