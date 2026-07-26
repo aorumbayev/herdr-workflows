@@ -84,7 +84,7 @@ Exactly one action key per step, top to bottom, foreground:
 
 | Action        | Value                      | Notes                                           |
 | ------------- | -------------------------- | ----------------------------------------------- |
-| `run`         | scalar / argv list / block | local subprocess, or a placed pane with `in:`   |
+| `run`         | scalar / argv list / block | local subprocess (waits), or a pane via `in:`   |
 | `agent`       | config agent name          | pane + `prompt:`, waits for the agent to finish |
 | `use`         | workflow name              | inline another workflow, params via `with:`     |
 | `method.name` | params object              | any allowed herdr method, e.g. `pane.split:`    |
@@ -149,7 +149,8 @@ These are the load failures that actually happen. Each is a hard error, not a wa
 6. **`out:`/`as:` names cannot shadow a builtin** (`pane`, `prompt`, `item`, …) or collide
    with an input.
 7. **`wait: /regex/` needs a placed step** (`in: tab|right|down`). `wait: false` (detached)
-   cannot bind `out:`.
+   cannot bind `out:`. A placed `run:` never waits for the command to exit — it returns once
+   the pane exists, so sequence on it with `wait: /regex/`.
 8. **`on_error:` takes a workflow name or an inline step list** — not a keyword. A recovery
    workflow may not declare `inputs:` or its own `on_error:`.
 9. **`{session}` / `{session_file}`** require launching from an agent pane, and are

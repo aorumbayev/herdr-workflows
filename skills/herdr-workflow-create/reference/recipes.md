@@ -212,7 +212,8 @@ steps:
 
 ## Detached process
 
-A detached step returns immediately and cannot bind `out:`.
+A placed `run:` returns as soon as its pane exists, so a long-running command in a pane
+never blocks the workflow. `wait: false` states that explicitly and cannot bind `out:`.
 
 ```yaml
 steps:

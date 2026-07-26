@@ -138,6 +138,10 @@ runtime when there is no invoking pane. `ratio:` (0–1) only with `right`/`down
 `timeout:` is **seconds**: bounds the wait (agent default 1800, regex wait default 60,
 local command default 300).
 
+Blocking means "wait for the process" only for `agent:` and local `run:`. A placed `run:`
+returns once its pane exists — the command keeps running in the pane and the workflow moves
+on. To sequence on it, use `wait: /regex/`; to say so explicitly, use `wait: false`.
+
 ## Outputs
 
 ```yaml
