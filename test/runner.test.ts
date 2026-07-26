@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HerdrError } from "../src/adapter/rpc";
+import { HerdrError } from "../src/herdr";
 import { appendRunLog, runLogPath, type RunLogEntry } from "../src/runlog";
 import { runWorkflow, resolveInputValues, type RunnerDeps } from "../src/run/runner";
 import { runShellStep, SHELL_TIMEOUT_MS } from "../src/run/steps/shell";

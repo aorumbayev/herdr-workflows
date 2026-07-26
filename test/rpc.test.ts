@@ -3,7 +3,7 @@ import { createServer } from "node:net";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { herdrRequest } from "../src/adapter/rpc";
+import { herdrRequest } from "../src/herdr";
 
 describe("herdrRequest socket failures", () => {
   test("rejects when socket closes without a response", async () => {

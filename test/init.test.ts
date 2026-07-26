@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../src/config";
 import { detectAgents, formatAgentsYaml, runInit } from "../src/init";
-import { parsePlaybookSeedScope } from "../src/playbook-scope";
-import { PLAYBOOK_SEED_WORKFLOWS, REPO_SEED_WORKFLOWS, seedWorkflows } from "../src/seed-workflows";
+import { parsePlaybookSeedScope } from "../src/init";
+import { PLAYBOOK_SEED_WORKFLOWS, REPO_SEED_WORKFLOWS, seedWorkflows } from "../src/init";
 import { loadWorkflow } from "../src/workflow/load";
 
 const dirs: string[] = [];

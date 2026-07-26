@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { parseRaw } from "../src/workflow/parse";
-import { dumpWorkflow } from "../src/web/yaml-build";
+import { dumpWorkflow } from "../src/web/server";
 
 function roundTrip(doc: Parameters<typeof dumpWorkflow>[0]) {
   return parseRaw("buf.yaml", dumpWorkflow(doc));

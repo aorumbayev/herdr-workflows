@@ -5,16 +5,21 @@ import { join } from "node:path";
 import {
   agentLabel,
   agentStatus,
+  HerdrError,
+  herdrCall,
   layoutApply,
   notificationShow,
   paneRead,
   reportToken,
   tabClose,
   waitOutput,
-} from "../adapter/client";
-import { HerdrError, herdrCall } from "../adapter/rpc";
-import type { AgentsConfig, SessionsConfig } from "../config";
-import { buildPlaceholders, type InvocationContext } from "../context";
+} from "../herdr";
+import {
+  buildPlaceholders,
+  type AgentsConfig,
+  type InvocationContext,
+  type SessionsConfig,
+} from "../config";
 import { appendRunLog } from "../runlog";
 import { sessionText } from "../session";
 import type {

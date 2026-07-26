@@ -1,8 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { agentSessionInfo, type AgentSessionInfo } from "./adapter/client";
-import { HerdrError } from "./adapter/rpc";
 import type { SessionsConfig } from "./config";
+import { agentSessionInfo, HerdrError, type AgentSessionInfo } from "./herdr";
 import { spawnCapture } from "./run/steps/shell";
 
 export function slug(cwd: string): string {

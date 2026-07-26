@@ -1,9 +1,13 @@
 import { fillAgentArgv } from "../../config";
-import { HerdrError } from "../../adapter/rpc";
-import { PANE_READ_LINES, PANE_READ_SOURCE } from "../../pane-read";
+import {
+  HerdrError,
+  PANE_READ_LINES,
+  PANE_READ_SOURCE,
+  placeCommand,
+  type PlaceOpts,
+} from "../../herdr";
 import type { FlatStep, PlaceholderValues } from "../../workflow/types";
 import { AGENT_NAME_RE, substitute } from "../../workflow/parse";
-import { placeCommand, type PlaceOpts } from "../place";
 import { substituteEnv } from "./shell";
 
 export const AGENT_WAIT_POLL_MS = 2000;

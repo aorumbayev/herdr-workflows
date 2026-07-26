@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { waitOutput } from "../src/adapter/client";
+import { waitOutput } from "../src/herdr";
 
 // Fake herdr that records argv, so we pin the CLI shape without a live server.
 // Regression guard: herdr 0.7.5 removed top-level `wait`; must call `pane wait-output`.

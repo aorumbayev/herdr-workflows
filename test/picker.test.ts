@@ -6,8 +6,8 @@ import {
   filterWorkflowEntries,
   formatInvalidLines,
   formatRunProgress,
-} from "../src/tui/picker-rows";
-import { truncate } from "../src/tui/text";
+} from "../src/tui/picker";
+import { truncate } from "../src/tui/picker";
 
 const entries: WorkflowListEntry[] = [
   { name: "chat-handoff", source: "repo", file: "/r/chat.yaml", needsPrompt: true },

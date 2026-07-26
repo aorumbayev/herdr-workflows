@@ -1,6 +1,9 @@
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { z } from "zod";
+import { paneRead, PANE_READ_LINES, PANE_READ_SOURCE, sanitizeDisplay } from "./herdr";
+import type { PlaceholderValues } from "./workflow/types";
 
 export type AgentsConfig = Record<string, string[]>;
 export type SessionsConfig = Record<string, string[]>;
@@ -94,4 +97,95 @@ export async function loadConfig(repoRoot: string): Promise<WorkflowsConfig> {
 
 export function fillAgentArgv(template: string[], prompt: string): string[] {
   return template.map((part) => (part === "{prompt}" ? prompt : part));
+}
+
+/** Walk up from cwd looking for `.git` or `.hwf`. */
+export function resolveRepoRoot(start = process.cwd()): string {
+  let dir = start;
+  for (;;) {
+    if (existsSync(join(dir, ".git")) || existsSync(join(dir, ".hwf"))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) return start;
+    dir = parent;
+  }
+}
+
+export type InvocationContext = {
+  workspaceId?: string;
+  tabId?: string;
+  paneId?: string;
+  selection: string;
+  cwd: string;
+};
+
+type CtxJson = {
+  workspace_id?: string;
+  tab_id?: string;
+  focused_pane_id?: string;
+  focused_pane_cwd?: string;
+  pane_id?: string;
+  selected_text?: string;
+  cwd?: string;
+  worktree?: { path?: string };
+  workspace?: { workspace_id?: string; cwd?: string };
+  tab?: { tab_id?: string };
+  pane?: { pane_id?: string };
+};
+
+export function readInvocationContext(): InvocationContext {
+  let json: CtxJson = {};
+  const raw = process.env.HERDR_PLUGIN_CONTEXT_JSON;
+  if (raw) {
+    try {
+      json = JSON.parse(raw) as CtxJson;
+    } catch {
+      json = {};
+    }
+  }
+  return {
+    workspaceId:
+      process.env.HERDR_WORKSPACE_ID || json.workspace_id || json.workspace?.workspace_id,
+    tabId: process.env.HERDR_TAB_ID || json.tab_id || json.tab?.tab_id,
+    paneId: process.env.HERDR_PANE_ID || json.focused_pane_id || json.pane_id || json.pane?.pane_id,
+    selection: json.selected_text ?? "",
+    cwd:
+      json.worktree?.path ||
+      json.focused_pane_cwd ||
+      json.cwd ||
+      json.workspace?.cwd ||
+      process.cwd(),
+  };
+}
+
+export async function buildPlaceholders(opts: {
+  ctx: InvocationContext;
+  prompt?: string;
+  error?: string;
+  session?: string;
+  sessionFile?: string;
+  agent?: string;
+  inputs?: Record<string, string>;
+}): Promise<PlaceholderValues> {
+  let pane = "";
+  if (opts.ctx.paneId) {
+    const scrollback = await paneRead(opts.ctx.paneId, {
+      source: PANE_READ_SOURCE,
+      lines: PANE_READ_LINES,
+    }).catch(() => "");
+    pane = sanitizeDisplay(scrollback);
+  }
+  const values: PlaceholderValues = {
+    pane,
+    selection: sanitizeDisplay(opts.ctx.selection),
+    prompt: opts.prompt ?? "",
+    error: opts.error ?? "",
+    session: opts.session ?? "",
+    session_file: opts.sessionFile ?? "",
+    source_tab: opts.ctx.tabId ?? "",
+    agent: opts.agent ?? "",
+  };
+  for (const [name, value] of Object.entries(opts.inputs ?? {})) {
+    values[name] = value;
+  }
+  return values;
 }
