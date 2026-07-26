@@ -1,7 +1,7 @@
 import { collectWorkflowEntries, resolveWorkflowFile } from "./discover";
 import {
+  bail,
   WorkflowLoadError,
-  positioned,
   type FlatStep,
   type LoadedWorkflow,
   type WorkflowListEntry,
@@ -62,9 +62,7 @@ async function loadFromRaw(
   const allSteps = recovery ? [...steps, ...recovery] : steps;
   for (const spec of inputs) {
     if (!used.has(spec.name)) {
-      throw new WorkflowLoadError(
-        positioned(file, undefined, `inputs.${spec.name}`, "declared but never referenced"),
-      );
+      bail(file, undefined, `inputs.${spec.name}`, "declared but never referenced");
     }
   }
   return {

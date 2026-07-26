@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { WorkflowLoadError, positioned } from "./types";
+import { bail, positioned, WorkflowLoadError } from "./types";
 import { INPUT_NAME_RE } from "./substitute";
 import { rawStepSchema, type RawStep } from "./step-schema";
 
@@ -102,22 +102,13 @@ export function parseRaw(file: string, text: string): RawWorkflow {
   try {
     data = Bun.YAML.parse(preprocessWorkflowYaml(text));
   } catch (error) {
-    throw new WorkflowLoadError(
-      positioned(
-        file,
-        undefined,
-        undefined,
-        error instanceof Error ? error.message : String(error),
-      ),
-    );
+    bail(file, undefined, undefined, error instanceof Error ? error.message : String(error));
   }
   if (data && typeof data === "object" && !Array.isArray(data) && "on_fail" in data) {
-    throw new WorkflowLoadError(
-      positioned(file, undefined, "on_fail", `'on_fail' is removed — use on_error`),
-    );
+    bail(file, undefined, "on_fail", `'on_fail' is removed — use on_error`);
   }
   if (data && typeof data === "object" && !Array.isArray(data) && !("steps" in data)) {
-    throw new WorkflowLoadError(positioned(file, undefined, "steps", "steps is required"));
+    bail(file, undefined, "steps", "steps is required");
   }
   const result = rawWorkflowSchema.safeParse(data);
   if (!result.success) {

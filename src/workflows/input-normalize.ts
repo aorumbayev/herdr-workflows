@@ -1,4 +1,4 @@
-import { WorkflowLoadError, positioned } from "./types";
+import { bail } from "./types";
 import type { RawWorkflow } from "./parse";
 
 const AGENTS_BUILTIN = "agents";
@@ -33,13 +33,11 @@ export function normalizeInput(
     if (textDef) return { text: true, default: unquoteDefault(textDef[1]!) };
     const sh = SH_OPTIONS_RE.exec(raw);
     if (sh) return { options: sh[1]! };
-    throw new WorkflowLoadError(
-      positioned(
-        file,
-        undefined,
-        `inputs.${name}`,
-        `unknown input shorthand '${raw}' (expected text, text = …, agents, sh <cmd>, or a list)`,
-      ),
+    bail(
+      file,
+      undefined,
+      `inputs.${name}`,
+      `unknown input shorthand '${raw}' (expected text, text = …, agents, sh <cmd>, or a list)`,
     );
   }
   if (Array.isArray(raw)) return { options: raw };

@@ -1,5 +1,5 @@
 import { shellArgv, spawnCapture } from "../runner/shell";
-import { WorkflowLoadError, positioned, type FlatStep, type InputSpec } from "./types";
+import { bail, type FlatStep, type InputSpec } from "./types";
 import type { RawWorkflow } from "./parse";
 import { isBuiltin } from "./substitute";
 import { AGENT_NAME_RE, stepOutNames, stepReferencedNames } from "./steps";
@@ -35,29 +35,23 @@ async function resolveOptionLines(
     timeoutMs: OPTIONS_CMD_TIMEOUT_MS,
   });
   if (result.timedOut) {
-    throw new WorkflowLoadError(
-      positioned(
-        file,
-        undefined,
-        `inputs.${inputName}`,
-        `options command timed out after ${OPTIONS_CMD_TIMEOUT_MS / 1000}s`,
-      ),
+    bail(
+      file,
+      undefined,
+      `inputs.${inputName}`,
+      `options command timed out after ${OPTIONS_CMD_TIMEOUT_MS / 1000}s`,
     );
   }
   if (result.exitCode !== 0) {
     const detail = result.stderr.trim() || `exit ${result.exitCode}`;
-    throw new WorkflowLoadError(
-      positioned(file, undefined, `inputs.${inputName}`, `options command failed: ${detail}`),
-    );
+    bail(file, undefined, `inputs.${inputName}`, `options command failed: ${detail}`);
   }
   const lines = result.stdout
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
   if (lines.length === 0) {
-    throw new WorkflowLoadError(
-      positioned(file, undefined, `inputs.${inputName}`, "options command produced no choices"),
-    );
+    bail(file, undefined, `inputs.${inputName}`, "options command produced no choices");
   }
   return lines;
 }
@@ -72,9 +66,7 @@ export async function resolveInputs(
   const specs: InputSpec[] = [];
   for (const [name, value] of Object.entries(raw.inputs ?? {})) {
     if (isBuiltin(name)) {
-      throw new WorkflowLoadError(
-        positioned(file, undefined, `inputs.${name}`, `name shadows builtin '{${name}}'`),
-      );
+      bail(file, undefined, `inputs.${name}`, `name shadows builtin '{${name}}'`);
     }
     const input = normalizeInput(file, name, value);
     let options: string[] | undefined;
@@ -84,14 +76,7 @@ export async function resolveInputs(
         options = input.options;
       } else if (input.options === AGENTS_BUILTIN) {
         if (agents.size === 0) {
-          throw new WorkflowLoadError(
-            positioned(
-              file,
-              undefined,
-              `inputs.${name}`,
-              "options: agents but no agents configured",
-            ),
-          );
+          bail(file, undefined, `inputs.${name}`, "options: agents but no agents configured");
         }
         options = [...agents];
       } else if (resolveDynamic) {
@@ -101,9 +86,7 @@ export async function resolveInputs(
       }
     }
     if (options && input.default !== undefined && !options.includes(input.default)) {
-      throw new WorkflowLoadError(
-        positioned(file, undefined, `inputs.${name}`, `default '${input.default}' not in options`),
-      );
+      bail(file, undefined, `inputs.${name}`, `default '${input.default}' not in options`);
     }
     specs.push({
       name,
@@ -120,20 +103,11 @@ export async function resolveInputs(
 function checkAgentInput(file: string, idx: number, spec: InputSpec, agents: Set<string>): void {
   if (spec.dynamicOptions) return;
   if (!spec.options) {
-    throw new WorkflowLoadError(
-      positioned(file, idx + 1, "agent", `input '${spec.name}' needs options: to be used as agent`),
-    );
+    bail(file, idx + 1, "agent", `input '${spec.name}' needs options: to be used as agent`);
   }
   for (const option of spec.options) {
     if (!agents.has(option)) {
-      throw new WorkflowLoadError(
-        positioned(
-          file,
-          idx + 1,
-          "agent",
-          `input '${spec.name}' option '${option}' is not a config agent`,
-        ),
-      );
+      bail(file, idx + 1, "agent", `input '${spec.name}' option '${option}' is not a config agent`);
     }
   }
 }
@@ -153,7 +127,7 @@ function checkIncludeNames(
   for (const name of stepReferencedNames(step)) {
     if (isBuiltin(name)) continue;
     if (!knownNames.has(name) && !inputs.has(name)) {
-      throw new WorkflowLoadError(positioned(file, stepIndex, "with", `unknown name '{${name}}'`));
+      bail(file, stepIndex, "with", `unknown name '{${name}}'`);
     }
     if (inputs.has(name) && markInputUse) used.add(name);
   }
@@ -177,17 +151,13 @@ function checkOneReferencedName(
 ): void {
   if (name === "item" || name === "index") {
     if (!step.for) {
-      throw new WorkflowLoadError(
-        positioned(file, stepIndex, undefined, `{${name}} requires for:`),
-      );
+      bail(file, stepIndex, undefined, `{${name}} requires for:`);
     }
     return;
   }
   if (name === "attempt") {
     if (!step.retry) {
-      throw new WorkflowLoadError(
-        positioned(file, stepIndex, undefined, `{attempt} requires retry:`),
-      );
+      bail(file, stepIndex, undefined, `{attempt} requires retry:`);
     }
     return;
   }
@@ -200,7 +170,7 @@ function checkOneReferencedName(
     if (markInputUse) used.add(name);
     return;
   }
-  throw new WorkflowLoadError(positioned(file, stepIndex, undefined, `unknown name '{${name}}'`));
+  bail(file, stepIndex, undefined, `unknown name '{${name}}'`);
 }
 
 function markRunEnvInputUses(
@@ -231,7 +201,7 @@ function checkAgentStepName(
   if (!m || isBuiltin(m[1]!)) return;
   const spec = inputs.get(m[1]!);
   if (!spec) {
-    throw new WorkflowLoadError(positioned(file, stepIndex, "agent", `unknown name '{${m[1]}}'`));
+    bail(file, stepIndex, "agent", `unknown name '{${m[1]}}'`);
   }
   if (markInputUse) used.add(m[1]!);
   checkAgentInput(file, idx, spec, agents);
@@ -246,21 +216,15 @@ function checkAsAndOutNames(
 ): void {
   if (step.as) {
     if (isBuiltin(step.as) || inputs.has(step.as) || knownNames.has(step.as)) {
-      throw new WorkflowLoadError(
-        positioned(file, stepIndex, "as", `name '${step.as}' collides with an existing name`),
-      );
+      bail(file, stepIndex, "as", `name '${step.as}' collides with an existing name`);
     }
   }
   for (const name of stepOutNames(step)) {
     if (isBuiltin(name)) {
-      throw new WorkflowLoadError(
-        positioned(file, stepIndex, "out", `name shadows a builtin '{${name}}'`),
-      );
+      bail(file, stepIndex, "out", `name shadows a builtin '{${name}}'`);
     }
     if (inputs.has(name) || knownNames.has(name)) {
-      throw new WorkflowLoadError(
-        positioned(file, stepIndex, "out", `name '${name}' collides with an existing name`),
-      );
+      bail(file, stepIndex, "out", `name '${name}' collides with an existing name`);
     }
     knownNames.add(name);
   }

@@ -1,11 +1,5 @@
 import { isResultDotPath, validateMethodParams } from "../herdr-methods";
-import {
-  WorkflowLoadError,
-  positioned,
-  type FlatStep,
-  type OutSpec,
-  type Placement,
-} from "./types";
+import { bail, type FlatStep, type OutSpec, type Placement } from "./types";
 import type { RawStep } from "./parse";
 import { COMPOSITE_KEYS, PLACEMENTS } from "./step-keys";
 import {
@@ -70,23 +64,19 @@ function flatRun(file: string, stepIndex: number, step: RawStep, out: OutSpec | 
   const payload = parseRunPayload(file, stepIndex, step);
   const place = placementOf("run", step);
   if (out?.kind === "map" && place === "here") {
-    throw new WorkflowLoadError(
-      positioned(
-        file,
-        stepIndex,
-        "out",
-        "map out: requires a placed run: or a primitive with a structured result",
-      ),
+    bail(
+      file,
+      stepIndex,
+      "out",
+      "map out: requires a placed run: or a primitive with a structured result",
     );
   }
   if (out?.kind === "text" && place !== "here") {
-    throw new WorkflowLoadError(
-      positioned(
-        file,
-        stepIndex,
-        "out",
-        "identifier out: on a placed run: is invalid — use map form { tab: tab_id, … }",
-      ),
+    bail(
+      file,
+      stepIndex,
+      "out",
+      "identifier out: on a placed run: is invalid — use map form { tab: tab_id, … }",
     );
   }
   return {
@@ -101,14 +91,12 @@ function flatRun(file: string, stepIndex: number, step: RawStep, out: OutSpec | 
 
 function flatAgent(file: string, stepIndex: number, step: RawStep, out: OutSpec | undefined) {
   if (typeof step.agent !== "string" || !step.agent) {
-    throw new WorkflowLoadError(positioned(file, stepIndex, "agent", "agent: value is required"));
+    bail(file, stepIndex, "agent", "agent: value is required");
   }
   rejectV1Placeholders(file, stepIndex, "agent", step.agent);
   if (typeof step.prompt === "string") rejectV1Placeholders(file, stepIndex, "prompt", step.prompt);
   if (out?.kind === "map") {
-    throw new WorkflowLoadError(
-      positioned(file, stepIndex, "out", "agent: produces text — use identifier out: form"),
-    );
+    bail(file, stepIndex, "out", "agent: produces text — use identifier out: form");
   }
   return {
     kind: "agent" as const,
@@ -135,45 +123,35 @@ function flatPrimitive(
         ? (step[method] as Record<string, unknown>)
         : undefined;
   if (step[method] !== null && step[method] !== undefined && params === undefined) {
-    throw new WorkflowLoadError(
-      positioned(file, stepIndex, method, "primitive value must be a params object"),
-    );
+    bail(file, stepIndex, method, "primitive value must be a params object");
   }
   const err = validateMethodParams(method, params);
-  if (err) throw new WorkflowLoadError(positioned(file, stepIndex, method, err));
+  if (err) bail(file, stepIndex, method, err);
   if (params) {
     for (const name of paramsPlaceholders(params)) {
       if (name === "last") {
-        throw new WorkflowLoadError(
-          positioned(
-            file,
-            stepIndex,
-            method,
-            `'{last}' is removed — bind a named out: on the producing step`,
-          ),
+        bail(
+          file,
+          stepIndex,
+          method,
+          `'{last}' is removed — bind a named out: on the producing step`,
         );
       }
     }
     for (const text of collectStrings(params)) {
       const v1 = findV1InputPlaceholder(text);
       if (v1) {
-        throw new WorkflowLoadError(
-          positioned(file, stepIndex, method, `'{input.${v1}}' is removed — use {${v1}}`),
-        );
+        bail(file, stepIndex, method, `'{input.${v1}}' is removed — use {${v1}}`);
       }
     }
   }
   if (out?.kind === "text") {
-    throw new WorkflowLoadError(
-      positioned(file, stepIndex, "out", "primitive steps require map-form out: (name: dot.path)"),
-    );
+    bail(file, stepIndex, "out", "primitive steps require map-form out: (name: dot.path)");
   }
   if (out?.kind === "map") {
     for (const [name, path] of Object.entries(out.fields)) {
       if (!isResultDotPath(path)) {
-        throw new WorkflowLoadError(
-          positioned(file, stepIndex, "out", `out.${name}: unresolvable result path '${path}'`),
-        );
+        bail(file, stepIndex, "out", `out.${name}: unresolvable result path '${path}'`);
       }
     }
   }
@@ -188,12 +166,10 @@ export function rawToFlat(file: string, stepIndex: number, step: RawStep): FlatS
   const forSource = step.for !== undefined ? parseFor(file, stepIndex, step.for) : undefined;
   if (step.as !== undefined) {
     if (!forSource) {
-      throw new WorkflowLoadError(positioned(file, stepIndex, "as", "as: requires for:"));
+      bail(file, stepIndex, "as", "as: requires for:");
     }
     if (typeof step.as !== "string" || !/^[a-z][a-z0-9_]{0,31}$/.test(step.as)) {
-      throw new WorkflowLoadError(
-        positioned(file, stepIndex, "as", "as: must match [a-z][a-z0-9_]{0,31}"),
-      );
+      bail(file, stepIndex, "as", "as: must match [a-z][a-z0-9_]{0,31}");
     }
   }
   const retry = step.retry !== undefined ? parseRetry(file, stepIndex, step.retry) : undefined;
@@ -203,22 +179,18 @@ export function rawToFlat(file: string, stepIndex: number, step: RawStep): FlatS
   if (action === "run") flatAction = flatRun(file, stepIndex, step, out);
   else if (action === "agent") flatAction = flatAgent(file, stepIndex, step, out);
   else if (action === "use") {
-    throw new WorkflowLoadError(
-      positioned(file, stepIndex, "use", "internal: use: must be flattened before rawToFlat"),
-    );
+    bail(file, stepIndex, "use", "internal: use: must be flattened before rawToFlat");
   } else flatAction = flatPrimitive(file, stepIndex, action, step, out);
 
   if (retry) {
     const createsPane =
       flatAction.kind === "agent" || (flatAction.kind === "run" && flatAction.in !== "here");
     if (createsPane && !retry.reset) {
-      throw new WorkflowLoadError(
-        positioned(
-          file,
-          stepIndex,
-          "retry",
-          "retry: on a pane-creating step requires reset: — herdr has no create-or-return-by-key method, so attempt 2 would strand attempt 1's pane; put the close in reset:",
-        ),
+      bail(
+        file,
+        stepIndex,
+        "retry",
+        "retry: on a pane-creating step requires reset: — herdr has no create-or-return-by-key method, so attempt 2 would strand attempt 1's pane; put the close in reset:",
       );
     }
   }
@@ -253,9 +225,7 @@ export function checkAgents(file: string, steps: FlatStep[], agents: Set<string>
       if (name === "{agent}") return;
       if (AGENT_NAME_RE.test(name)) return;
       if (!agents.has(name)) {
-        throw new WorkflowLoadError(
-          positioned(file, baseIndex + idx + 1, "agent", `unknown agent '${name}'`),
-        );
+        bail(file, baseIndex + idx + 1, "agent", `unknown agent '${name}'`);
       }
     });
   };

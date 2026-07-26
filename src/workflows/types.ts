@@ -17,6 +17,15 @@ export function positioned(
   return `${parts.join(", ")}: ${message}`;
 }
 
+export function bail(
+  file: string,
+  step: number | undefined,
+  key: string | undefined,
+  message: string,
+): never {
+  throw new WorkflowLoadError(positioned(file, step, key, message));
+}
+
 export const BUILTIN_NAMES = [
   "pane",
   "selection",

@@ -1,5 +1,5 @@
 import { resolveWorkflowFile } from "./discover";
-import { WorkflowLoadError, positioned, type FlatStep, type InputSpec } from "./types";
+import { bail, type FlatStep, type InputSpec } from "./types";
 import { parseFile } from "./flatten-parse";
 import type { FlattenFn } from "./flatten-types";
 import { resolveInputs } from "./inputs";
@@ -26,13 +26,11 @@ function parseWithMap(
       : {};
   for (const [k, v] of Object.entries(withMap)) {
     if (typeof v !== "string") {
-      throw new WorkflowLoadError(
-        positioned(file, stepIndex, "with", `with.${k} must be a string`),
-      );
+      bail(file, stepIndex, "with", `with.${k} must be a string`);
     }
     for (const ph of textPlaceholders(v)) {
       if (!isBuiltin(ph) && !localBound.has(ph)) {
-        throw new WorkflowLoadError(positioned(file, stepIndex, "with", `unknown name '{${ph}}'`));
+        bail(file, stepIndex, "with", `unknown name '{${ph}}'`);
       }
     }
   }
@@ -55,9 +53,7 @@ async function resolveIncludeTarget(opts: {
   const { file, stepIndex, useName, withMap, repoRoot, agents, sources } = opts;
   const target = await resolveWorkflowFile(useName, repoRoot);
   if (!target) {
-    throw new WorkflowLoadError(
-      positioned(file, stepIndex, "use", `unknown workflow '${useName}'`),
-    );
+    bail(file, stepIndex, "use", `unknown workflow '${useName}'`);
   }
   const targetParsed = await parseFile(target.file);
   sources?.add(target.source);
@@ -65,22 +61,13 @@ async function resolveIncludeTarget(opts: {
   const declared = new Set(targetInputs.map((s) => s.name));
   for (const key of Object.keys(withMap)) {
     if (!declared.has(key)) {
-      throw new WorkflowLoadError(
-        positioned(file, stepIndex, "with", `undeclared parameter '${key}'`),
-      );
+      bail(file, stepIndex, "with", `undeclared parameter '${key}'`);
     }
   }
   const defaults = defaultsFromInputs(targetInputs);
   for (const spec of targetInputs) {
     if (withMap[spec.name] === undefined && spec.default === undefined) {
-      throw new WorkflowLoadError(
-        positioned(
-          file,
-          stepIndex,
-          "with",
-          `required input '${spec.name}' of '${useName}' not supplied`,
-        ),
-      );
+      bail(file, stepIndex, "with", `required input '${spec.name}' of '${useName}' not supplied`);
     }
   }
   return { defaults, target, targetParsed };
@@ -99,13 +86,11 @@ function collectExportedOuts(
   for (const child of childSteps) {
     for (const n of stepOutNames(child)) {
       if (localBound.has(n) || parentBound.has(n)) {
-        throw new WorkflowLoadError(
-          positioned(
-            file,
-            stepIndex,
-            "use",
-            `out name '${n}' from '${useName}' collides with a name in '${parentName}'`,
-          ),
+        bail(
+          file,
+          stepIndex,
+          "use",
+          `out name '${n}' from '${useName}' collides with a name in '${parentName}'`,
         );
       }
       exportedOuts.push(n);
@@ -142,9 +127,7 @@ export async function flattenUseStep(opts: {
     flattenSteps,
   } = opts;
   if (typeof step.use !== "string" || !step.use) {
-    throw new WorkflowLoadError(
-      positioned(file, stepIndex, "use", "use: requires a workflow name"),
-    );
+    bail(file, stepIndex, "use", "use: requires a workflow name");
   }
   const withMap = parseWithMap(file, stepIndex, step, localBound);
   const { defaults, target, targetParsed } = await resolveIncludeTarget({

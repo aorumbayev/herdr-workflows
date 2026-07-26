@@ -1,5 +1,5 @@
 import { resolveWorkflowFile } from "./discover";
-import { WorkflowLoadError, positioned, type FlatStep } from "./types";
+import { bail, type FlatStep } from "./types";
 import { rawToFlat, stepOutNames } from "./steps";
 import { flattenUseStep } from "./flatten-include";
 import { parseFile } from "./flatten-parse";
@@ -18,26 +18,12 @@ export const flattenSteps: FlattenFn = async (
   rootRaw,
 ) => {
   if (stack.includes(name)) {
-    throw new WorkflowLoadError(
-      positioned(
-        `${name}.yaml`,
-        undefined,
-        "use",
-        `cycle detected: ${[...stack, name].join(" → ")}`,
-      ),
-    );
+    bail(`${name}.yaml`, undefined, "use", `cycle detected: ${[...stack, name].join(" → ")}`);
   }
   const resolved = stack.length === 0 && root ? root : await resolveWorkflowFile(name, repoRoot);
   if (!resolved) {
     const from = stack[stack.length - 1];
-    throw new WorkflowLoadError(
-      positioned(
-        from ? `${from}.yaml` : `${name}.yaml`,
-        undefined,
-        "use",
-        `unknown workflow '${name}'`,
-      ),
-    );
+    bail(from ? `${from}.yaml` : `${name}.yaml`, undefined, "use", `unknown workflow '${name}'`);
   }
   sources?.add(resolved.source);
   const parsed =
@@ -96,26 +82,15 @@ export async function loadRecovery(
 ): Promise<FlatStep[]> {
   const resolved = await resolveWorkflowFile(onError, repoRoot);
   if (!resolved) {
-    throw new WorkflowLoadError(
-      positioned(entryFile, undefined, "on_error", `unknown workflow '${onError}'`),
-    );
+    bail(entryFile, undefined, "on_error", `unknown workflow '${onError}'`);
   }
   const parsed = await parseFile(resolved.file);
   sources?.add(resolved.source);
   if (parsed.raw.on_error !== undefined) {
-    throw new WorkflowLoadError(
-      positioned(
-        entryFile,
-        undefined,
-        "on_error",
-        `recovery target '${onError}' declares on_error`,
-      ),
-    );
+    bail(entryFile, undefined, "on_error", `recovery target '${onError}' declares on_error`);
   }
   if (parsed.raw.inputs !== undefined) {
-    throw new WorkflowLoadError(
-      positioned(entryFile, undefined, "on_error", `recovery workflows cannot declare inputs`),
-    );
+    bail(entryFile, undefined, "on_error", `recovery workflows cannot declare inputs`);
   }
   return flattenSteps(onError, repoRoot, [], agents, bound, sources, resolved, parsed.raw);
 }
@@ -139,7 +114,5 @@ async function resolveStepOnError(
       steps: value.map((raw) => rawToFlat(file, stepIndex, raw as never)),
     };
   }
-  throw new WorkflowLoadError(
-    positioned(file, stepIndex, "on_error", "on_error: must be a workflow name or step list"),
-  );
+  bail(file, stepIndex, "on_error", "on_error: must be a workflow name or step list");
 }
