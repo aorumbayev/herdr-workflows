@@ -59,6 +59,18 @@ function field(lines: string[], indent: string, key: string, v: string): void {
   lines.push(`${indent}${key}: ${scalar(v)}`);
 }
 
+const DUMPED_KEYS = new Set([
+  "run",
+  "agent",
+  "use",
+  "prompt",
+  "name",
+  "in",
+  "shell",
+  "out",
+  "wait",
+]);
+
 function dumpStep(step: RawStep): string[] {
   const m: string[] = [];
   const I = IND + IND;
@@ -69,7 +81,6 @@ function dumpStep(step: RawStep): string[] {
   } else if (typeof step.agent === "string") {
     field(m, I, "agent", step.agent);
     if (typeof step.prompt === "string") field(m, I, "prompt", step.prompt);
-    if (typeof step.timeout === "number") m.push(`${I}timeout: ${step.timeout}`);
   } else {
     const method = Object.keys(step).find((k) => k.includes("."));
     if (method) {
@@ -89,8 +100,14 @@ function dumpStep(step: RawStep): string[] {
   if (typeof step.in === "string") m.push(`${I}in: ${step.in}`);
   if (typeof step.shell === "string") m.push(`${I}shell: ${step.shell}`);
   if (typeof step.out === "string") m.push(`${I}out: ${step.out}`);
+  else if (step.out && typeof step.out === "object") m.push(`${I}out: ${JSON.stringify(step.out)}`);
   if (step.wait === false) m.push(`${I}wait: false`);
   if (typeof step.wait === "string") m.push(`${I}wait: ${step.wait}`);
+  for (const [key, value] of Object.entries(step)) {
+    if (DUMPED_KEYS.has(key) || key.includes(".") || value === undefined) continue;
+    if (typeof value === "string") field(m, I, key, value);
+    else m.push(`${I}${key}: ${JSON.stringify(value)}`);
+  }
   if (m.length === 0) m.push(`${I}run: ""`);
   m[0] = `${IND}- ${m[0]!.slice(I.length)}`;
   return m;
