@@ -207,6 +207,27 @@ steps:
     expect(labels.some((l) => l.includes("[2]"))).toBe(true);
   });
 
+  test("HWF_ env carries out: bindings and loop items into later shell steps", async () => {
+    const root = await repoWith({
+      m: `steps:
+  - run: printf hello
+    out: greeting
+  - run: test "$HWF_greeting" = hello
+  - run: test "$HWF_item" = b
+    for: [b]
+`,
+    });
+    const { deps } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+  });
+
   test("as: alias and {item} both bind to the current item", async () => {
     const root = await repoWith({
       m: `steps:

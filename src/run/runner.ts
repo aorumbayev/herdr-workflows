@@ -399,9 +399,10 @@ async function runOneStep(
   values: PlaceholderValues,
   n: number,
   total: number,
-  env: NodeJS.ProcessEnv,
 ): Promise<StepExec> {
   const label = stepLabel(step);
+  // Rebuilt per step (and per item) so `out:` bindings from earlier steps reach HWF_<name>.
+  let env = namespaceEnv(values);
   if (step.when) {
     const pass = await evalGuard(step.when, values, opts, env);
     if (!pass) {
@@ -430,6 +431,7 @@ async function runOneStep(
       values.item = items.items[index]!;
       values[itemName] = values.item;
       values.index = String(index);
+      env = namespaceEnv(values);
     }
     opts.onProgress?.(n, total, loop ? `${label} [${index}]` : label);
     if (opts.ctx.paneId) {
@@ -475,12 +477,11 @@ async function runSteps(
 ): Promise<StepResult> {
   const total = countSteps(steps);
   let n = 0;
-  const env = namespaceEnv(values);
   const tolerated: string[] = [];
 
   for (const step of steps) {
     n++;
-    const exec = await runOneStep(step, opts, values, n, total, env);
+    const exec = await runOneStep(step, opts, values, n, total);
     if (exec.skipped) continue;
     if (exec.failures) tolerated.push(...exec.failures);
     if (exec.failed) {
