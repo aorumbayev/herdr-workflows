@@ -20,11 +20,15 @@ export function scopeOf(v: unknown): Scope | undefined {
   return v === "repo" || v === "global" ? v : undefined;
 }
 
+export async function agentsOf(repoRoot: string): Promise<string[]> {
+  return Object.keys((await loadConfig(repoRoot)).agents);
+}
+
 export async function getState(
   repoRoot: string,
   shortPath: (p: string) => string,
 ): Promise<Response> {
-  const agents = Object.keys((await loadConfig(repoRoot)).agents);
+  const agents = await agentsOf(repoRoot);
   const entries = await listWorkflows(repoRoot, agents);
   const mapped = await Promise.all(
     entries.map(async (e) => ({
@@ -49,8 +53,9 @@ export function handleParse(body: Record<string, unknown>): Response {
 
 export function handleFormat(body: Record<string, unknown>): Response {
   try {
-    const doc = parseRaw("buffer.yaml", dumpWorkflow(body.doc as never));
-    return json({ ok: true, text: dumpWorkflow(doc) });
+    const text = dumpWorkflow(body.doc as never);
+    parseRaw("buffer.yaml", text);
+    return json({ ok: true, text });
   } catch (error) {
     return json({ ok: false, error: errText(error) }, 400);
   }
@@ -62,7 +67,7 @@ export async function handleValidate(
 ): Promise<Response> {
   const name = String(body.name ?? "buffer");
   try {
-    const agents = Object.keys((await loadConfig(repoRoot)).agents);
+    const agents = await agentsOf(repoRoot);
     await parseWorkflowText(name, String(body.text ?? ""), agents, repoRoot, `${name}.yaml`);
     return json({ ok: true });
   } catch (error) {

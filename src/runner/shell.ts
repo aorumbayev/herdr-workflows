@@ -64,9 +64,7 @@ export async function runShellStep(
     env?: NodeJS.ProcessEnv;
     timeoutMs?: number;
   },
-): Promise<
-  { ok: true; stdout: string; stderr: string } | { ok: false; stdout: string; stderr: string }
-> {
+): Promise<{ ok: boolean; stdout: string; stderr: string }> {
   const { timedOut, exitCode, stdout, stderr, timeoutMs } = await spawnCapture(shellArgv(command), {
     cwd: opts.cwd,
     stdin: opts.stdin,

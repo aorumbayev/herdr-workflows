@@ -61,11 +61,19 @@ export async function pluginPaneOpen(params: {
 
 export async function paneRead(
   paneId: string,
-  opts: { source?: "visible" | "recent" | "recent-unwrapped"; lines?: number } = {},
+  opts: { source: "visible" | "recent" | "recent-unwrapped"; lines: number },
 ): Promise<string> {
-  const args = ["pane", "read", paneId, "--format", "text"];
-  if (opts.source) args.push("--source", opts.source);
-  if (opts.lines !== undefined) args.push("--lines", String(opts.lines));
+  const args = [
+    "pane",
+    "read",
+    paneId,
+    "--format",
+    "text",
+    "--source",
+    opts.source,
+    "--lines",
+    String(opts.lines),
+  ];
   const { stdout, stderr, exitCode } = await herdrCli(args);
   if (exitCode !== 0) throw new HerdrError("pane_read_failed", stderr.trim() || "pane read failed");
   return stdout;

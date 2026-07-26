@@ -85,9 +85,8 @@ export type WebServer = { url: string; token: string; stop: () => void };
 export async function startWebServer(opts: {
   repoRoot: string;
   port?: number;
-  token?: string;
 }): Promise<WebServer> {
-  const token = opts.token ?? crypto.randomUUID();
+  const token = crypto.randomUUID();
   let port = opts.port ?? 7317;
   for (;;) {
     try {

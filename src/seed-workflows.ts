@@ -108,7 +108,7 @@ export const REPO_SEED_WORKFLOWS: Seed[] = [
 export async function seedWorkflows(
   workflowsDir: string,
   agent: string,
-  seeds: Seed[] = [...PLAYBOOK_SEED_WORKFLOWS, ...REPO_SEED_WORKFLOWS],
+  seeds: Seed[],
 ): Promise<string[]> {
   const written: string[] = [];
   await mkdir(workflowsDir, { recursive: true });

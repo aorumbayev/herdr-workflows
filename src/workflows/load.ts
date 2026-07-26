@@ -10,7 +10,7 @@ import {
 import { checkInputRefs, resolveInputs } from "./inputs";
 import { flattenSteps, parseFile } from "./flatten";
 import { parseRaw, type RawWorkflow } from "./parse";
-import { assertNoOnFail, loadRecovery } from "./recovery";
+import { loadRecovery } from "./recovery";
 import { checkAgents, flatNeedsInvokingAgent, flatNeedsPrompt, flatNeedsSession } from "./steps";
 
 async function loadFromRaw(
@@ -24,26 +24,17 @@ async function loadFromRaw(
 ): Promise<LoadedWorkflow> {
   const agents = new Set(agentNames);
   const sources = new Set<"repo" | "global">([source]);
-  for (const [i, step] of raw.steps.entries()) {
-    if (step.run !== undefined) await assertNoOnFail(step.run, repoRoot, file, i + 1);
-  }
-
   const steps = await flattenSteps(name, repoRoot, [], sources, { file, source }, raw);
   checkAgents(file, steps, agents);
   const inputs = await resolveInputs(file, raw, agents, repoRoot, resolveDynamic);
   const declared = new Map(inputs.map((spec) => [spec.name, spec]));
   const used = checkInputRefs(file, declared, steps, agents);
-  let needsPrompt = flatNeedsPrompt(steps);
-  let needsSession = flatNeedsSession(steps);
-  let needsInvokingAgent = flatNeedsInvokingAgent(steps);
   let recovery: FlatStep[] | undefined;
   if (raw.on_fail) {
     recovery = await loadRecovery(file, raw.on_fail, repoRoot, agents, sources);
     for (const name of checkInputRefs(file, declared, recovery, agents)) used.add(name);
-    needsPrompt = needsPrompt || flatNeedsPrompt(recovery);
-    needsSession = needsSession || flatNeedsSession(recovery);
-    needsInvokingAgent = needsInvokingAgent || flatNeedsInvokingAgent(recovery);
   }
+  const allSteps = recovery ? [...steps, ...recovery] : steps;
   for (const spec of inputs) {
     if (!used.has(spec.name)) {
       throw new WorkflowLoadError(
@@ -59,29 +50,10 @@ async function loadFromRaw(
     onFail: raw.on_fail,
     ...(recovery ? { recovery: { name: raw.on_fail!, steps: recovery } } : {}),
     repoOwned: sources.has("repo"),
-    needsPrompt,
-    needsSession,
-    needsInvokingAgent,
+    needsPrompt: flatNeedsPrompt(allSteps),
+    needsSession: flatNeedsSession(allSteps),
+    needsInvokingAgent: flatNeedsInvokingAgent(allSteps),
   };
-}
-
-async function loadResolvedWorkflow(
-  name: string,
-  repoRoot: string,
-  agentNames: Iterable<string>,
-  resolved: { file: string; source: "repo" | "global" },
-  resolveDynamic: boolean,
-): Promise<LoadedWorkflow> {
-  const entry = await parseFile(resolved.file);
-  return loadFromRaw(
-    name,
-    resolved.file,
-    resolved.source,
-    entry.raw,
-    repoRoot,
-    agentNames,
-    resolveDynamic,
-  );
 }
 
 /**
@@ -95,10 +67,9 @@ export async function parseWorkflowText(
   agentNames: Iterable<string> = [],
   repoRoot: string = process.cwd(),
   file = `${name}.yaml`,
-  resolveDynamic = true,
 ): Promise<LoadedWorkflow> {
   const raw = parseRaw(file, yaml);
-  return loadFromRaw(name, file, "repo", raw, repoRoot, agentNames, resolveDynamic);
+  return loadFromRaw(name, file, "repo", raw, repoRoot, agentNames, true);
 }
 
 export async function loadWorkflow(
@@ -108,7 +79,7 @@ export async function loadWorkflow(
 ): Promise<LoadedWorkflow> {
   const resolved = await resolveWorkflowFile(name, repoRoot);
   if (!resolved) throw new WorkflowLoadError(`workflow '${name}' not found`);
-  return loadResolvedWorkflow(name, repoRoot, agentNames, resolved, true);
+  return loadWorkflowEntry({ name, ...resolved }, repoRoot, agentNames);
 }
 
 export async function loadWorkflowEntry(
@@ -117,7 +88,16 @@ export async function loadWorkflowEntry(
   agentNames: Iterable<string> = [],
   resolveDynamic = true,
 ): Promise<LoadedWorkflow> {
-  return loadResolvedWorkflow(entry.name, repoRoot, agentNames, entry, resolveDynamic);
+  const raw = await parseFile(entry.file);
+  return loadFromRaw(
+    entry.name,
+    entry.file,
+    entry.source,
+    raw.raw,
+    repoRoot,
+    agentNames,
+    resolveDynamic,
+  );
 }
 
 export async function listWorkflows(

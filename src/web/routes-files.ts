@@ -1,13 +1,14 @@
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { globalConfigPath, loadConfig, parseConfigText, repoConfigPath } from "../config";
+import { globalConfigPath, parseConfigText, repoConfigPath } from "../config";
 import { parseWorkflowText, workflowPath } from "../workflows";
-import { errText, json, scopeOf, type Scope } from "./routes";
+import { agentsOf, errText, json, scopeOf, type Scope } from "./routes";
 
 const WORKFLOW_NAME_RE = /^[a-z0-9][a-z0-9-_]*$/;
 
-async function agentsOf(repoRoot: string): Promise<string[]> {
-  return Object.keys((await loadConfig(repoRoot)).agents);
+function requireNameScope(name: string, scope: Scope | undefined): Response | undefined {
+  if (!WORKFLOW_NAME_RE.test(name) || !scope)
+    return json({ ok: false, error: "name and scope required" }, 400);
 }
 
 async function writeWorkflow(
@@ -37,9 +38,9 @@ export async function handleWorkflow(
   if (req.method === "GET") {
     const name = url.searchParams.get("name") ?? "";
     const scope = scopeOf(url.searchParams.get("scope"));
-    if (!WORKFLOW_NAME_RE.test(name) || !scope)
-      return json({ error: "valid name and scope required" }, 400);
-    const text = await Bun.file(workflowPath(scope, repoRoot, name))
+    const bad = requireNameScope(name, scope);
+    if (bad) return bad;
+    const text = await Bun.file(workflowPath(scope!, repoRoot, name))
       .text()
       .catch(() => "");
     let valid = true;
@@ -62,9 +63,9 @@ export async function handleWorkflow(
   if (req.method === "DELETE") {
     const name = String(body.name ?? "");
     const scope = scopeOf(body.scope);
-    if (!WORKFLOW_NAME_RE.test(name) || !scope)
-      return json({ ok: false, error: "name and scope required" }, 400);
-    await Bun.file(workflowPath(scope, repoRoot, name))
+    const bad = requireNameScope(name, scope);
+    if (bad) return bad;
+    await Bun.file(workflowPath(scope!, repoRoot, name))
       .delete()
       .catch(() => {});
     return json({ ok: true });
@@ -79,11 +80,11 @@ export async function handlePromote(
   const name = String(body.name ?? "");
   const from = scopeOf(body.from);
   const to = scopeOf(body.to);
-  if (!WORKFLOW_NAME_RE.test(name) || !from || !to)
-    return json({ ok: false, error: "name, from, to required" }, 400);
-  const src = Bun.file(workflowPath(from, repoRoot, name));
+  const bad = requireNameScope(name, from) ?? requireNameScope(name, to);
+  if (bad) return bad;
+  const src = Bun.file(workflowPath(from!, repoRoot, name));
   if (!(await src.exists())) return json({ ok: false, error: "source not found" }, 404);
-  const dstPath = workflowPath(to, repoRoot, name);
+  const dstPath = workflowPath(to!, repoRoot, name);
   if (body.force !== true && (await Bun.file(dstPath).exists()))
     return json({ ok: false, error: `'${name}' already exists in ${to}` }, 409);
   await mkdir(dirname(dstPath), { recursive: true });

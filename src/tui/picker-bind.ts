@@ -4,6 +4,7 @@ import {
   Input,
   InputRenderable,
   InputRenderableEvents,
+  Select,
   SelectRenderable,
   SelectRenderableEvents,
   Text,
@@ -15,7 +16,6 @@ import { handlePickerKey } from "./picker-actions";
 import { acceptWorkflow, submitInputChoice, submitInputText, submitPrompt } from "./picker-run";
 import { applyChoiceFilter, applyFilter, LIST_HINT, type PickerState } from "./picker-modes";
 import type { PickerRowValue } from "./picker-rows";
-import { SelectList } from "./select-list";
 import type { HostTheme } from "./theme";
 
 export function mountPickerUi(
@@ -53,7 +53,16 @@ export function mountPickerUi(
       },
       Text({ content: `Launch · ${basename(repoRoot)}`, ...theme.text }),
       Input({ id: "filter", width: "100%", placeholder: "filter…", ...theme.input }),
-      SelectList("list", { theme: theme.select, showDescription: false, flexGrow: 1 }),
+      Select({
+        id: "list",
+        flexGrow: 1,
+        options: [],
+        showDescription: false,
+        showScrollIndicator: true,
+        wrapSelection: true,
+        itemSpacing: 0,
+        ...theme.select,
+      }),
       Text({
         id: "status",
         content: "",

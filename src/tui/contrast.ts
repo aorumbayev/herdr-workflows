@@ -17,11 +17,9 @@ function channel(c: number): number {
 }
 
 function relativeLuminance(hex: string): number {
-  const h = hexOrNull(hex);
-  if (!h) return 0;
-  const r = Number.parseInt(h.slice(1, 3), 16);
-  const g = Number.parseInt(h.slice(3, 5), 16);
-  const b = Number.parseInt(h.slice(5, 7), 16);
+  const r = Number.parseInt(hex.slice(1, 3), 16);
+  const g = Number.parseInt(hex.slice(3, 5), 16);
+  const b = Number.parseInt(hex.slice(5, 7), 16);
   return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
 }
 
@@ -38,9 +36,7 @@ function mix(a: string, b: string, t: number): string {
   const [ar, ag, ab] = parse(a);
   const [br, bg, bb] = parse(b);
   const c = (x: number, y: number) => Math.round(x + (y - x) * t);
-  return `#${[c(ar, br), c(ag, bg), c(ab, bb)]
-    .map((n) => n.toString(16).padStart(2, "0"))
-    .join("")}`;
+  return rgbHex([c(ar, br), c(ag, bg), c(ab, bb)]);
 }
 
 /** Soften fg toward bg only while contrast against bg stays usable. */

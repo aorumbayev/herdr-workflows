@@ -48,8 +48,10 @@ export async function readRunLog(): Promise<RunLogEntry[]> {
   }
 }
 
+const RECENT_RUNS_LIMIT = 40;
+
 /** Final per-run entries (no step), newest first. */
-export function recentRuns(entries: RunLogEntry[], limit = 40): RunLogEntry[] {
+export function recentRuns(entries: RunLogEntry[]): RunLogEntry[] {
   const finals = entries.filter((e) => e.step === undefined);
-  return finals.slice(-limit).reverse();
+  return finals.slice(-RECENT_RUNS_LIMIT).reverse();
 }

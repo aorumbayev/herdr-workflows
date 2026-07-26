@@ -61,11 +61,6 @@ export async function readClaudeTranscript(
   }
 }
 
-function stderrTail(stderr: string): string {
-  const trimmed = stderr.trim();
-  return trimmed.length > 500 ? trimmed.slice(-500) : trimmed;
-}
-
 async function runSessionCommand(argv: string[], info: AgentSessionInfo): Promise<string> {
   const { timedOut, exitCode, stdout, stderr, timeoutMs } = await spawnCapture(argv, {
     cwd: info.cwd,
@@ -84,7 +79,7 @@ async function runSessionCommand(argv: string[], info: AgentSessionInfo): Promis
     );
   }
   if (exitCode !== 0) {
-    const tail = stderrTail(stderr) || `exit ${exitCode}`;
+    const tail = stderr.trim().slice(-500) || `exit ${exitCode}`;
     throw new HerdrError(
       "session_command_failed",
       `session command for '${info.agent}' failed: ${tail}`,

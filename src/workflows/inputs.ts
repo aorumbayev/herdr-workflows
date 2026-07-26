@@ -56,27 +56,33 @@ export async function resolveInputs(
   const specs: InputSpec[] = [];
   for (const [name, input] of Object.entries(raw.inputs ?? {})) {
     let options: string[] | undefined;
-    if (input.options === undefined) {
-      options = undefined;
-    } else if (Array.isArray(input.options)) {
-      options = input.options;
-    } else if (input.options === AGENTS_BUILTIN) {
-      if (agents.size === 0) {
-        throw new WorkflowLoadError(
-          positioned(file, undefined, `inputs.${name}`, "options: agents but no agents configured"),
-        );
+    let dynamicOptions = false;
+    if (input.options !== undefined) {
+      if (Array.isArray(input.options)) {
+        options = input.options;
+      } else if (input.options === AGENTS_BUILTIN) {
+        if (agents.size === 0) {
+          throw new WorkflowLoadError(
+            positioned(
+              file,
+              undefined,
+              `inputs.${name}`,
+              "options: agents but no agents configured",
+            ),
+          );
+        }
+        options = [...agents];
+      } else if (resolveDynamic) {
+        options = await resolveOptionLines(file, name, input.options, repoRoot);
+      } else {
+        dynamicOptions = true;
       }
-      options = [...agents];
-    } else if (resolveDynamic) {
-      options = await resolveOptionLines(file, name, input.options, repoRoot);
     }
     if (options && input.default !== undefined && !options.includes(input.default)) {
       throw new WorkflowLoadError(
         positioned(file, undefined, `inputs.${name}`, `default '${input.default}' not in options`),
       );
     }
-    const dynamicOptions =
-      typeof input.options === "string" && input.options !== AGENTS_BUILTIN && !resolveDynamic;
     specs.push({
       name,
       label: input.label ?? name,

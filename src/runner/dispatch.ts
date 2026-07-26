@@ -41,10 +41,6 @@ function stepLabel(step: FlatStep): string {
   return `herdr: ${step.method}`;
 }
 
-function pushTab(values: PlaceholderValues, tabId: string): PlaceholderValues {
-  return { ...values, prev_tab: values.tab, tab: tabId };
-}
-
 function inputEnv(inputs: Record<string, string>): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
   for (const [name, value] of Object.entries(inputs)) {
@@ -63,6 +59,7 @@ export async function runSteps(
   let prev_tab = values.prev_tab;
   const total = steps.length;
   const paneId = opts.ctx.paneId;
+  const env = inputEnv(values.inputs);
   const logStep = (step: number, label: string, error?: string) =>
     appendRunLog({
       ts: new Date().toISOString(),
@@ -87,7 +84,7 @@ export async function runSteps(
       const result = await opts.deps.runShell(step.command, {
         cwd: opts.ctx.cwd,
         stdin,
-        env: inputEnv(current.inputs),
+        env,
       });
       if (result.stderr) opts.onStderr?.(result.stderr);
       if (!result.ok) {
@@ -107,9 +104,8 @@ export async function runSteps(
     }
     if (outcome?.last !== undefined) last = outcome.last;
     if (outcome?.tabId !== undefined) {
-      const next = pushTab({ ...current, last }, outcome.tabId);
-      tab = next.tab;
-      prev_tab = next.prev_tab;
+      prev_tab = tab;
+      tab = outcome.tabId;
     }
     await logStep(i, label);
   }

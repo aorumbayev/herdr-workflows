@@ -2,26 +2,10 @@ import type { RawStep, RawWorkflow } from "../workflows/parse";
 
 const IND = "  ";
 
-/** A scalar is safe unquoted in block context when it starts with no YAML indicator, carries no
- *  `: `/` #`/trailing-`:` that would flip it into a mapping or comment, and would not be
- *  re-parsed as a bool/null/number. */
-function plainOk(s: string): boolean {
-  if (s === "") return false;
-  if (/^[-?:,[\]{}#&*!|>'"%@`\s]/.test(s)) return false;
-  if (/:\s/.test(s) || /\s#/.test(s)) return false;
-  if (s.endsWith(":") || /\s$/.test(s)) return false;
-  if (/^(true|false|null|~)$/i.test(s)) return false;
-  if (/^[-+]?(\d[\d_]*(\.\d+)?([eE][-+]?\d+)?|0x[0-9a-f]+|\.(nan|inf))$/i.test(s)) return false;
-  return true;
-}
-
-function quoted(v: string): string {
-  return `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")}"`;
-}
-
+/** Inline scalar token — bare when YAML-safe, otherwise double-quoted. Multi-line input comes
+ *  back as an escaped `"a\nb"` scalar, which is exactly what `field` wants for its fallback. */
 function scalar(v: string): string {
-  if (plainOk(v)) return v;
-  return quoted(v);
+  return Bun.YAML.stringify(v);
 }
 
 /** Literal blocks survive intact only when no line has leading/trailing whitespace; anything
@@ -40,7 +24,7 @@ function field(lines: string[], indent: string, key: string, v: string): void {
       for (const ln of v.split("\n")) lines.push(`${indent}${IND}${ln}`);
       return;
     }
-    lines.push(`${indent}${key}: ${quoted(v)}`);
+    lines.push(`${indent}${key}: ${scalar(v)}`);
     return;
   }
   lines.push(`${indent}${key}: ${scalar(v)}`);

@@ -11,7 +11,7 @@ export type FireOutcome = { failed?: StepResult; last?: string; tabId?: string }
 
 const INVOKING_AGENT = "{agent}";
 
-async function fail(
+export async function fail(
   deps: RunnerDeps,
   workflow: string,
   step: number,
@@ -65,7 +65,7 @@ async function fireAgent(
   values: PlaceholderValues,
   n: number,
   last: string,
-): Promise<FireOutcome | undefined> {
+): Promise<FireOutcome> {
   const name = resolveAgentName(step.name, values);
   if (step.name === INVOKING_AGENT && !name) {
     return {
@@ -144,5 +144,3 @@ export async function fire(
     return { failed: { ok: false, error: await fail(opts.deps, opts.name, n, detail), last } };
   }
 }
-
-export { fail };

@@ -9,7 +9,7 @@ export function substitute(template: string, values: PlaceholderValues): string 
   return template.replace(RE, (_, name: string | undefined, input?: string) =>
     input !== undefined
       ? (values.inputs[input] ?? "")
-      : String(values[name as keyof Omit<PlaceholderValues, "inputs">] ?? ""),
+      : values[name as keyof Omit<PlaceholderValues, "inputs">],
   );
 }
 
@@ -66,22 +66,23 @@ export function paramsInputRefs(params: Record<string, unknown> | undefined): st
   return refs;
 }
 
-export function paramsHavePrompt(params: Record<string, unknown> | undefined): boolean {
+function paramsAnyText(
+  params: Record<string, unknown> | undefined,
+  pred: (text: string) => boolean,
+): boolean {
   if (!params) return false;
   let found = false;
   walkParams(params, (text) => {
-    found ||= textHasPrompt(text);
+    found ||= pred(text);
     return text;
   });
   return found;
 }
 
+export function paramsHavePrompt(params: Record<string, unknown> | undefined): boolean {
+  return paramsAnyText(params, textHasPrompt);
+}
+
 export function paramsHaveSession(params: Record<string, unknown> | undefined): boolean {
-  if (!params) return false;
-  let found = false;
-  walkParams(params, (text) => {
-    found ||= textHasSession(text);
-    return text;
-  });
-  return found;
+  return paramsAnyText(params, textHasSession);
 }

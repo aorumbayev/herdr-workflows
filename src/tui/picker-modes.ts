@@ -1,4 +1,10 @@
-import type { CliRenderer, InputRenderable, SelectRenderable, TextRenderable } from "@opentui/core";
+import type {
+  CliRenderer,
+  InputRenderable,
+  SelectOption,
+  SelectRenderable,
+  TextRenderable,
+} from "@opentui/core";
 import type { AgentsConfig, SessionsConfig } from "../config";
 import type { InvocationContext } from "../context";
 import type { InputSpec, LoadedWorkflow, WorkflowListEntry } from "../workflows";
@@ -44,14 +50,18 @@ export const LIST_HINT = "type filter · ↑↓ move · enter run · esc cancel"
 const PROMPT_HINT = "enter submit · esc back";
 const CHOICE_HINT = "type filter · ↑↓ move · enter select · esc back";
 
-export function applyFilter(state: PickerState): void {
-  const { valid, invalid } = filterWorkflowEntries(state.entries, state.filter.value);
-  state.list.options = buildPickerOptions(valid);
+function setListOptions(state: PickerState, options: SelectOption[]): void {
+  state.list.options = options;
   if (state.list.options.length > 0) {
     state.list.setSelectedIndex(
       Math.min(state.list.getSelectedIndex(), state.list.options.length - 1),
     );
   }
+}
+
+export function applyFilter(state: PickerState): void {
+  const { valid, invalid } = filterWorkflowEntries(state.entries, state.filter.value);
+  setListOptions(state, buildPickerOptions(valid));
   const lines = formatInvalidLines(invalid);
   state.invalid.content = lines;
   state.invalid.visible = lines.length > 0;
@@ -59,16 +69,14 @@ export function applyFilter(state: PickerState): void {
 
 export function applyChoiceFilter(state: PickerState): void {
   const matched = filterChoiceOptions(state.choiceOptions, state.filter.value);
-  state.list.options = matched.map((option) => ({
-    name: option,
-    description: "",
-    value: option,
-  }));
-  if (state.list.options.length > 0) {
-    state.list.setSelectedIndex(
-      Math.min(state.list.getSelectedIndex(), state.list.options.length - 1),
-    );
-  }
+  setListOptions(
+    state,
+    matched.map((option) => ({
+      name: option,
+      description: "",
+      value: option,
+    })),
+  );
 }
 
 export function setListMode(state: PickerState): void {
@@ -80,13 +88,8 @@ export function setListMode(state: PickerState): void {
   state.inputValues = {};
   state.choiceOptions = [];
   state.progressLines = [];
-  state.promptInput.visible = false;
+  showBrowserChrome(state);
   state.promptInput.value = "";
-  state.filter.visible = true;
-  state.filter.placeholder = "filter…";
-  state.filter.value = "";
-  state.list.visible = true;
-  state.list.flexGrow = 1;
   state.status.visible = false;
   state.status.content = "";
   state.status.flexGrow = 0;
@@ -103,6 +106,21 @@ function hideBrowserChrome(state: PickerState): void {
   state.promptInput.visible = false;
 }
 
+function showBrowserChrome(state: PickerState): void {
+  state.promptInput.visible = false;
+  state.filter.visible = true;
+  state.filter.placeholder = "filter…";
+  state.filter.value = "";
+  state.list.visible = true;
+  state.list.flexGrow = 1;
+}
+
+function showStatus(state: PickerState, content: string, flexGrow = 0): void {
+  state.status.visible = true;
+  state.status.flexGrow = flexGrow;
+  state.status.content = content;
+}
+
 function focusTextField(state: PickerState, placeholder: string, value: string): void {
   state.promptInput.visible = true;
   state.promptInput.placeholder = placeholder;
@@ -115,9 +133,7 @@ export function setConfirmMode(state: PickerState, entry: WorkflowListEntry): vo
   state.mode = "confirm";
   state.pending = entry;
   hideBrowserChrome(state);
-  state.status.visible = true;
-  state.status.flexGrow = 0;
-  state.status.content = `${entry.name} · workflow may run shell commands`;
+  showStatus(state, `${entry.name} · workflow may run shell commands`);
   state.footer.content = "enter run · esc cancel";
 }
 
@@ -125,9 +141,7 @@ export function setPromptMode(state: PickerState, entry: WorkflowListEntry): voi
   state.mode = "prompt";
   state.pending = entry;
   hideBrowserChrome(state);
-  state.status.visible = true;
-  state.status.flexGrow = 0;
-  state.status.content = entry.name;
+  showStatus(state, entry.name);
   focusTextField(state, "prompt…", "");
 }
 
@@ -135,17 +149,10 @@ export function setInputMode(state: PickerState, entry: WorkflowListEntry, spec:
   state.mode = "input";
   state.pending = entry;
   state.invalid.visible = false;
-  state.status.visible = true;
-  state.status.flexGrow = 0;
-  state.status.content = `${entry.name} · ${spec.label}`;
+  showStatus(state, `${entry.name} · ${spec.label}`);
   if (spec.options) {
     state.choiceOptions = spec.options;
-    state.promptInput.visible = false;
-    state.filter.visible = true;
-    state.filter.placeholder = "filter…";
-    state.filter.value = "";
-    state.list.visible = true;
-    state.list.flexGrow = 1;
+    showBrowserChrome(state);
     applyChoiceFilter(state);
     const preselect = spec.default
       ? state.list.options.findIndex((o) => o.value === spec.default)
@@ -167,9 +174,7 @@ export function setRunMode(state: PickerState, entry: WorkflowListEntry): void {
   state.running = true;
   state.progressLines = [];
   hideBrowserChrome(state);
-  state.status.visible = true;
-  state.status.flexGrow = 1;
-  state.status.content = formatRunProgress(entry.name, []);
+  showStatus(state, formatRunProgress(entry.name, []), 1);
   state.footer.content = "running…";
 }
 

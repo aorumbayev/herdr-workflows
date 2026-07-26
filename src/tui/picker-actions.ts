@@ -22,37 +22,15 @@ function navigateSelectList(state: PickerState, key: KeyEvent): boolean {
 }
 
 function handleListKey(state: PickerState, key: KeyEvent): void {
-  if (key.name === "escape") {
-    key.preventDefault();
-    finish(state, 0);
-    return;
-  }
   navigateSelectList(state, key);
 }
 
-function handlePromptKey(state: PickerState, key: KeyEvent): void {
-  if (key.name === "escape") {
-    key.preventDefault();
-    setListMode(state);
-  }
-}
-
 function handleInputKey(state: PickerState, key: KeyEvent): void {
-  if (key.name === "escape") {
-    key.preventDefault();
-    setListMode(state);
-    return;
-  }
   if (!state.inputQueue[state.inputIndex]?.options) return;
   navigateSelectList(state, key);
 }
 
 function handleConfirmKey(state: PickerState, key: KeyEvent): void {
-  if (key.name === "escape") {
-    key.preventDefault();
-    setListMode(state);
-    return;
-  }
   if (key.name === "return" || key.name === "linefeed") {
     key.preventDefault();
     const entry = state.pending;
@@ -70,10 +48,16 @@ function handleRunKey(state: PickerState, key: KeyEvent): void {
 }
 
 export function handlePickerKey(state: PickerState, key: KeyEvent): void {
+  if (state.mode === "run") return handleRunKey(state, key);
+  if (key.name === "escape") {
+    key.preventDefault();
+    if (state.mode === "list") finish(state, 0);
+    else setListMode(state);
+    return;
+  }
   if (state.mode === "confirm") return handleConfirmKey(state, key);
   if (state.mode === "input") return handleInputKey(state, key);
-  if (state.mode === "prompt") return handlePromptKey(state, key);
-  if (state.mode === "run") return handleRunKey(state, key);
+  if (state.mode === "prompt") return;
   handleListKey(state, key);
 }
 

@@ -28,15 +28,6 @@ export type HostTheme = {
     descriptionColor: ColorInput;
     selectedDescriptionColor: ColorInput;
   };
-  tab: {
-    backgroundColor: ColorInput;
-    textColor: ColorInput;
-    focusedBackgroundColor: ColorInput;
-    focusedTextColor: ColorInput;
-    selectedBackgroundColor: ColorInput;
-    selectedTextColor: ColorInput;
-    selectedDescriptionColor: ColorInput;
-  };
 };
 
 function modeFallback(mode: ThemeMode | null): { fg: string; bg: string } {
@@ -109,15 +100,6 @@ export function themeFromPalette(
       selectedBackgroundColor: selectedBg,
       selectedTextColor: selectedFg,
       descriptionColor: muted,
-      selectedDescriptionColor: selectedFg,
-    },
-    tab: {
-      backgroundColor: "transparent",
-      textColor: fg,
-      focusedBackgroundColor: "transparent",
-      focusedTextColor: fg,
-      selectedBackgroundColor: selectedBg,
-      selectedTextColor: selectedFg,
       selectedDescriptionColor: selectedFg,
     },
   };

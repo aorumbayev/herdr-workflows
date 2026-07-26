@@ -45,15 +45,23 @@ export async function flattenSteps(
     stack.length === 0 && rootRaw
       ? { file: resolved.file, raw: rootRaw }
       : await parseFile(resolved.file);
-  if (stack.length > 0 && parsed.raw.inputs !== undefined) {
-    throw new WorkflowLoadError(
-      positioned(
-        `${stack[stack.length - 1]}.yaml`,
-        undefined,
-        "run",
-        `spliced workflow '${name}' declares inputs — declare them on the entry workflow`,
-      ),
-    );
+  if (stack.length > 0) {
+    const from = `${stack[stack.length - 1]}.yaml`;
+    if (parsed.raw.inputs !== undefined) {
+      throw new WorkflowLoadError(
+        positioned(
+          from,
+          undefined,
+          "run",
+          `spliced workflow '${name}' declares inputs — declare them on the entry workflow`,
+        ),
+      );
+    }
+    if (parsed.raw.on_fail !== undefined) {
+      throw new WorkflowLoadError(
+        positioned(from, undefined, "run", `run target '${name}' declares on_fail`),
+      );
+    }
   }
   const next = [...stack, name];
   const out: FlatStep[] = [];

@@ -17,22 +17,12 @@ function hasBareEsc(raw: string): boolean {
 
 /** herdr prefix leaks into popup stdin — strip C0 controls (keep tab/CR/LF/ESC). */
 function sanitizePromptInput(raw: string): string {
-  let out = "";
-  for (let i = 0; i < raw.length; i++) {
-    const c = raw.charCodeAt(i);
-    if (c === 0x09 || c === 0x0a || c === 0x0d || c === 0x1b || c >= 0x20) out += raw[i]!;
-  }
-  return out;
+  return raw.replace(/[\x00-\x08\x0b\x0c\x0e-\x1a\x1c-\x1f]/g, "");
 }
 
 /** Strip C0 controls from AI/evidence text before writing to the terminal (keep tab/CR/LF). */
 export function sanitizeDisplay(raw: string): string {
-  let out = "";
-  for (let i = 0; i < raw.length; i++) {
-    const c = raw.charCodeAt(i);
-    if (c === 0x09 || c === 0x0a || c === 0x0d || c >= 0x20) out += raw[i]!;
-  }
-  return out;
+  return raw.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
 }
 
 function interpretLine(raw: string): PromptResult {

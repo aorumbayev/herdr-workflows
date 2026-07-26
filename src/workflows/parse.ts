@@ -1,25 +1,7 @@
 import { z } from "zod";
 import { WorkflowLoadError, positioned } from "./errors";
-import { refineStepVerbs } from "./refine";
 import { INPUT_NAME_RE } from "./substitute";
-
-const rawStepSchema = z
-  .object({
-    shell: z.string().optional(),
-    open: z.string().optional(),
-    agent: z.string().optional(),
-    herdr: z.string().optional(),
-    run: z.string().optional(),
-    stdin: z.string().optional(),
-    prompt: z.string().optional(),
-    params: z.record(z.string(), z.unknown()).optional(),
-    wait: z.literal("done").optional(),
-    wait_for: z.string().min(1).optional(),
-    timeout: z.number().int().positive().optional(),
-    close_source: z.boolean().optional(),
-  })
-  .strict()
-  .superRefine(refineStepVerbs);
+import { rawStepSchema } from "./step-schema";
 
 const rawInputSchema = z
   .object({
