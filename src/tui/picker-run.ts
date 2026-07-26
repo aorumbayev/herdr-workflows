@@ -1,6 +1,6 @@
 import { sanitizeDisplay } from "../adapter/stdin";
 import { runWorkflow } from "../runner";
-import type { WorkflowListEntry } from "../workflows/types";
+import type { WorkflowListEntry } from "../workflow/types";
 import {
   finish,
   setConfirmMode,

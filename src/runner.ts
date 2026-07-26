@@ -10,8 +10,8 @@ import { fail } from "./runner/fire";
 import { resolveInputValues } from "./runner/inputs";
 import { resolvePreflight } from "./runner/preflight";
 import type { RunnerDeps, StepResult } from "./runner/types";
-import type { LoadedWorkflow } from "./workflows/types";
-import { loadWorkflow } from "./workflows/load";
+import type { LoadedWorkflow } from "./workflow/types";
+import { loadWorkflow } from "./workflow/load";
 
 export type RunOptions = {
   name: string;

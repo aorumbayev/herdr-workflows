@@ -1,7 +1,7 @@
 import { paneRead } from "./adapter/client";
 import { sanitizeDisplay } from "./adapter/stdin";
 import { PANE_READ_LINES, PANE_READ_SOURCE } from "./pane-read";
-import type { PlaceholderValues } from "./workflows/types";
+import type { PlaceholderValues } from "./workflow/types";
 
 export type InvocationContext = {
   workspaceId?: string;

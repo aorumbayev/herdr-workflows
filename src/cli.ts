@@ -9,7 +9,7 @@ import { parseArgs } from "./cli-args";
 import { cmdInit } from "./cmd-init";
 import { loadConfig } from "./config";
 import { readInvocationContext } from "./context";
-import { WorkflowLoadError } from "./workflows/types";
+import { WorkflowLoadError } from "./workflow/types";
 import { resolveRepoRoot } from "./repo";
 import { ensureHerdrProtocol } from "./herdr-protocol";
 import { runWorkflow } from "./runner";

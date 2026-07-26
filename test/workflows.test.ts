@@ -2,9 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadWorkflow } from "../src/workflows/load";
-import { substitute, substituteParams } from "../src/workflows/substitute";
-import { WorkflowLoadError } from "../src/workflows/types";
+import { loadWorkflow } from "../src/workflow/load";
+import { substitute, substituteParams } from "../src/workflow/parse";
+import { WorkflowLoadError } from "../src/workflow/types";
 
 const dirs: string[] = [];
 afterEach(async () => {

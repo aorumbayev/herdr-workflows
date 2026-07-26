@@ -1,5 +1,5 @@
-import type { FlatStep, Guard, PlaceholderValues } from "../workflows/types";
-import { substitute } from "../workflows/substitute";
+import type { FlatStep, Guard, PlaceholderValues } from "../workflow/types";
+import { substitute } from "../workflow/parse";
 import type { StepRunOptions } from "./types";
 
 const FOR_CAP = 100;

@@ -1,6 +1,6 @@
 import type { SessionsConfig } from "../config";
 import type { InvocationContext } from "../context";
-import type { LoadedWorkflow } from "../workflows/types";
+import type { LoadedWorkflow } from "../workflow/types";
 import type { RunnerDeps } from "./types";
 
 export type Preflight =

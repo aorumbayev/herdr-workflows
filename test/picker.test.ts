@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { WorkflowListEntry } from "../src/workflows/types";
+import type { WorkflowListEntry } from "../src/workflow/types";
 import {
   buildPickerOptions,
   filterChoiceOptions,

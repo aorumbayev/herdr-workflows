@@ -7,7 +7,7 @@ import type {
 } from "@opentui/core";
 import type { AgentsConfig, SessionsConfig } from "../config";
 import type { InvocationContext } from "../context";
-import type { InputSpec, LoadedWorkflow, WorkflowListEntry } from "../workflows/types";
+import type { InputSpec, LoadedWorkflow, WorkflowListEntry } from "../workflow/types";
 import {
   buildPickerOptions,
   filterChoiceOptions,

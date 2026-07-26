@@ -11,8 +11,8 @@ import {
 import { herdrCall } from "../adapter/rpc";
 import { appendRunLog } from "../runlog";
 import { sessionText } from "../session";
-import type { FlatStep, PlaceholderValues } from "../workflows/types";
-import { substitute } from "../workflows/substitute";
+import type { FlatStep, PlaceholderValues } from "../workflow/types";
+import { substitute } from "../workflow/parse";
 import { fail, fire } from "./fire";
 import { bindSkippedOuts, evalGuard, resolveForItems } from "./guards";
 import { runArgvStep, runShellStep } from "./shell";

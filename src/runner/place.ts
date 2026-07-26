@@ -1,5 +1,5 @@
 import { HerdrError } from "../adapter/rpc";
-import type { Placement } from "../workflows/types";
+import type { Placement } from "../workflow/types";
 import type { StepRunOptions } from "./types";
 
 export async function placeCommand(

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadWorkflow, parseWorkflowText } from "../src/workflows/load";
+import { loadWorkflow, parseWorkflowText } from "../src/workflow/load";
 
 const dirs: string[] = [];
 afterEach(async () => {

@@ -1,4 +1,4 @@
-import type { RawStep, RawWorkflow } from "../workflows/parse";
+import type { RawStep, RawWorkflow } from "../workflow/parse";
 
 const IND = "  ";
 

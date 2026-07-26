@@ -1,8 +1,8 @@
 import { loadConfig } from "../config";
 import { readRunLog, recentRuns } from "../runlog";
-import { workflowPath } from "../workflows/discover";
-import { listWorkflows, parseWorkflowText } from "../workflows/load";
-import { normalizeSteps, parseRaw, rawWorkflowSchema } from "../workflows/parse";
+import { workflowPath } from "../workflow/load";
+import { listWorkflows, parseWorkflowText } from "../workflow/load";
+import { normalizeSteps, parseRaw, rawWorkflowSchema } from "../workflow/parse";
 import { dumpWorkflow } from "./yaml-build";
 
 export type Scope = "repo" | "global";

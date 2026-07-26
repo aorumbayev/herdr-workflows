@@ -1,6 +1,6 @@
 import { loadConfig } from "../config";
 import { readInvocationContext } from "../context";
-import { listWorkflows } from "../workflows/load";
+import { listWorkflows } from "../workflow/load";
 import { resolveRepoRoot } from "../repo";
 import { runPickerSession } from "../tui/picker";
 import { die } from "./popup";

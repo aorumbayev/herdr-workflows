@@ -1,5 +1,5 @@
 import type { SelectOption } from "@opentui/core";
-import type { WorkflowListEntry } from "../workflows/types";
+import type { WorkflowListEntry } from "../workflow/types";
 import { stripFilePrefix, truncate } from "./text";
 
 export type PickerRowValue = { entry: WorkflowListEntry };

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { runWorkflow } from "../src/runner";
 import type { PickerState } from "../src/tui/picker-modes";
 import { acceptWorkflow, startRun } from "../src/tui/picker-run";
-import { listWorkflows, loadWorkflow, loadWorkflowEntry } from "../src/workflows/load";
+import { listWorkflows, loadWorkflow, loadWorkflowEntry } from "../src/workflow/load";
 
 const dirs: string[] = [];
 

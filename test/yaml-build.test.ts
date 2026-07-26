@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseRaw } from "../src/workflows/parse";
+import { parseRaw } from "../src/workflow/parse";
 import { dumpWorkflow } from "../src/web/yaml-build";
 
 function roundTrip(doc: Parameters<typeof dumpWorkflow>[0]) {

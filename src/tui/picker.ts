@@ -1,8 +1,8 @@
 import { createCliRenderer } from "@opentui/core";
 import type { AgentsConfig, SessionsConfig } from "../config";
 import type { InvocationContext } from "../context";
-import { loadWorkflowEntry } from "../workflows/load";
-import type { WorkflowListEntry } from "../workflows/types";
+import { loadWorkflowEntry } from "../workflow/load";
+import type { WorkflowListEntry } from "../workflow/types";
 import { stdinLeakHandlers } from "./picker-actions";
 import { bindPickerEvents, mountPickerUi } from "./picker-bind";
 import { setListMode, type PickerState } from "./picker-modes";

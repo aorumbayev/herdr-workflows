@@ -1,8 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { globalConfigPath, parseConfigText, repoConfigPath } from "../config";
-import { workflowPath } from "../workflows/discover";
-import { parseWorkflowText } from "../workflows/load";
+import { parseWorkflowText, workflowPath } from "../workflow/load";
 import { agentsOf, errText, json, scopeOf, type Scope } from "./routes";
 
 const WORKFLOW_NAME_RE = /^[a-z0-9][a-z0-9-_]*$/;
