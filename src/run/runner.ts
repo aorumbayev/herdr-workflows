@@ -427,7 +427,8 @@ async function runOneStep(
 
   for (let index = 0; index < items.items.length; index++) {
     if (loop) {
-      values[itemName] = items.items[index]!;
+      values.item = items.items[index]!;
+      values[itemName] = values.item;
       values.index = String(index);
     }
     opts.onProgress?.(n, total, loop ? `${label} [${index}]` : label);

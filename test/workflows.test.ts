@@ -321,6 +321,20 @@ describe("step control flow load rules", () => {
     await expect(loadWorkflow("ok", root)).resolves.toBeTruthy();
   });
 
+  test("as: alias is referenceable inside its own step", async () => {
+    const root = await repoWithWorkflows({
+      ok: `steps:\n  - run: [echo, "{path}"]\n    for: [a.ts, b.ts]\n    as: path\n`,
+    });
+    await expect(loadWorkflow("ok", root)).resolves.toBeTruthy();
+  });
+
+  test("as: alias outside the loop step rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - run: [echo, x]\n    for: [a]\n    as: path\n  - run: [echo, "{path}"]\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/unknown name/);
+  });
+
   test("for literal list parses", async () => {
     const root = await repoWithWorkflows({
       ok: `steps:\n  - run: [echo, "{item}"]\n    for: [a.ts, b.ts]\n`,

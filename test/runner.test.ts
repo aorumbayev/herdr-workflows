@@ -207,6 +207,25 @@ steps:
     expect(labels.some((l) => l.includes("[2]"))).toBe(true);
   });
 
+  test("as: alias and {item} both bind to the current item", async () => {
+    const root = await repoWith({
+      m: `steps:
+  - run: [sh, -c, 'test "{p}" = "{item}"']
+    for: [a, b]
+    as: p
+`,
+    });
+    const { deps } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+  });
+
   test("for fail-fast aborts remaining items", async () => {
     const root = await repoWith({
       m: `steps:

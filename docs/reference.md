@@ -1,6 +1,6 @@
 # Reference
 
-`hwf` ≡ `herdr-workflows`. Syntax v2 — hard break from v1 (see [Changelog](/guide#breaking-change-syntax-v2) / `CHANGELOG.md`).
+Every key and rule. `hwf` ≡ `herdr-workflows`. Syntax v2 — a hard break from v1 ([key map](#v1-to-v2-keys)).
 
 ## CLI
 
@@ -103,20 +103,22 @@ Blocking is the default. `wait: false` detaches. `wait: /regex/` waits for pane 
 ### Outputs (`out:`)
 
 - Identifier: text result (`run` here → stdout; `agent` → final message) → `{name}`
-- Map: `out: { pane: pane.pane_id }` for structured primitive results (dot-paths checked against herdr result union at load; exact at run)
+- Map: `out: { p: pane.pane_id }` for structured primitive results (dot-paths checked against herdr result union at load; exact at run)
 
-Detached steps cannot bind `out:`.
+Detached steps cannot bind `out:`. Placed `run:` steps take the map form; their result exposes `pane_id`, `workspace_id`, and `layout.tab_id` (bare `tab_id` is not a union path).
+
+Loops bind `{item}` and `{index}`; `as:` renames the item inside that step, and both spellings resolve.
 
 ### Guards, loops, retry
 
-| Key            | Role                                                                        |
-| -------------- | --------------------------------------------------------------------------- |
-| `when:`        | skip when false — `{name}` / `!{name}`, argv list, or shell string          |
-| `for:` / `as:` | sequential loop (literal list, `sh …`, or `{name}`); cap 100; no nesting    |
-| `retry:`       | int or `{times, delay, until, reset}`; pane-creating steps require `reset:` |
-| `allow_fail:`  | record failure, continue; never triggers `on_error:`                        |
-| `on_error:`    | workflow or step recovery (one-shot)                                        |
-| `name:`        | progress label                                                              |
+| Key            | Role                                                                                                            |
+| -------------- | --------------------------------------------------------------------------------------------------------------- |
+| `when:`        | skip when false — `{name}` / `!{name}`, argv list, or shell string                                              |
+| `for:` / `as:` | sequential loop (literal list, `sh …`, or `{name}`); cap 100; no nesting                                        |
+| `retry:`       | int or `{times, delay, until, reset}` (`reset` is a shell command string); pane-creating steps require `reset:` |
+| `allow_fail:`  | record failure, continue; never triggers `on_error:`                                                            |
+| `on_error:`    | workflow or step recovery (one-shot)                                                                            |
+| `name:`        | progress label                                                                                                  |
 
 Skip is a third outcome (not success, not failure). Skipped `out:` names bind empty so downstream `when:` chains.
 
@@ -155,7 +157,7 @@ Non-identifier braces (`{"json": true}`) pass through. Unknown `{word}` is a loa
 - herdr ≥ 0.7.5, POSIX. Parallelism and Windows are out of scope.
 - Schema regen: `bun run schema` (workflow JSON Schema) and `bun run schema:herdr` (method validators) — release-time; plugin build does not call `herdr api schema`.
 
-## v1 → v2 keys
+## v1 to v2 keys
 
 | v1                   | v2                                      |
 | -------------------- | --------------------------------------- |

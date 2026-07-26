@@ -278,7 +278,7 @@ function checkOneReferencedName(
   used: Set<string>,
   markInputUse: boolean,
 ): void {
-  if (name === "item" || name === "index") {
+  if (name === "item" || name === "index" || name === step.as) {
     if (!step.for) {
       bail(file, stepIndex, undefined, `{${name}} requires for:`);
     }

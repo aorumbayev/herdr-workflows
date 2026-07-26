@@ -13,6 +13,22 @@ steps:
 
 `prefix+k` → `scratch` → enter.
 
+## Continue — hand the current pane to an agent
+
+`{pane}` is the visible text of the pane you launched from; `{prompt}` is the line the picker asks for.
+
+```yaml
+# continue.yaml
+steps:
+  - agent: claude
+    prompt: |
+      Continue from this pane:
+
+      {pane}
+
+      Focus: {prompt}
+```
+
 ## Gate & ship — compose, recover on failure
 
 ```yaml
@@ -31,18 +47,6 @@ steps:
   - use: gate
     with: { suite: all }
   - run: git push
-```
-
-```yaml
-# continue.yaml
-steps:
-  - agent: claude
-    prompt: |
-      Continue from this pane:
-
-      {pane}
-
-      Focus: {prompt}
 ```
 
 ## Inputs — ask the user
@@ -124,8 +128,7 @@ steps:
     retry:
       times: 3
       until: bun test
-      reset:
-        - run: git stash
+      reset: git stash
   - agent: claude
     when: "{failures}"
     prompt: "Tests failed:\n{failures}"
