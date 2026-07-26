@@ -74,7 +74,7 @@ The one literal `{prompt}` element is where the step's `prompt:` text lands. `ag
 
 ## Placeholders
 
-One flat namespace: `{branch}`, `{diff}`, `{session}`, builtins. **Not** `{input.branch}` or `{last}`.
+One flat namespace: inputs, `out:` names, and builtins all read as `{name}` — `{branch}`, `{diff}`, `{session}`.
 
 Scalar/block `run:` reject placeholders — pass values as `HWF_<name>` env, or use argv form:
 
@@ -143,10 +143,6 @@ Text editor with live validation, or visual mode (drag-reorderable step cards). 
 ```bash
 npx skills add aorumbayev/herdr-workflows --skill herdr-workflow-create --global
 ```
-
-## Coming from v1
-
-v1 files fail to load, with errors naming the v2 spelling. There is no migrate command — the [key map](/reference#v1-to-v2-keys) is a short rename table.
 
 ## Next
 

@@ -1,6 +1,6 @@
 ---
 name: herdr-workflow-create
-description: Interactive wizard that turns a described task into a valid herdr-workflows YAML file at .hwf/workflows/<name>.yaml, then validates it against the real loader before writing. Covers syntax v2 action keys (run, agent, use, dotted herdr methods), inputs, placeholders, guards, loops, retry, recovery, and the herdr plugin API allowlist. Use when the user wants to automate a task in herdr, asks to create/edit/debug an hwf workflow or .hwf YAML, mentions herdr-workflows, hwf run, the prefix+k picker, or hits a workflow load error.
+description: Interactive wizard that turns a described task into a valid herdr-workflows YAML file at .hwf/workflows/<name>.yaml, then validates it against the real loader before writing. Covers action keys (run, agent, use, dotted herdr methods), inputs, placeholders, guards, loops, retry, recovery, and the herdr plugin API allowlist. Use when the user wants to automate a task in herdr, asks to create/edit/debug an hwf workflow or .hwf YAML, mentions herdr-workflows, hwf run, the prefix+k picker, or hits a workflow load error.
 ---
 
 # Create a herdr-workflows workflow
@@ -161,6 +161,6 @@ external engine (no Dagu/Taskfile). `for:` caps at 100 items. Needs herdr ≥ 0.
 
 ## Keywords
 
-herdr workflow, herdr-workflows, hwf, .hwf/workflows, workflow yaml, syntax v2, hwf run,
+herdr workflow, herdr-workflows, hwf, .hwf/workflows, workflow yaml, hwf run,
 prefix+k picker, herdr plugin api, pane.split, worktree.create, agent handoff, workflow
 load error

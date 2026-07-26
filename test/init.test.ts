@@ -89,8 +89,6 @@ describe("herdr-workflows init", () => {
     expect(handoff).toContain('agent: "{agent}"');
     expect(handoff).toContain("{session}");
     expect(handoff).toContain("tab.close:");
-    expect(handoff).not.toContain("close_source:");
-    expect(handoff).not.toContain("{last}");
 
     const prevHome = process.env.HOME;
     process.env.HOME = home;

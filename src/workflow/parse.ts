@@ -21,18 +21,8 @@ const COMPOSITE_KEYS = ["run", "agent", "use"] as const;
 const PLACEMENTS = ["here", "tab", "right", "down"] as const;
 const SHELLS = ["sh", "bash", "zsh", "pwsh", "powershell", "cmd"] as const;
 
-const V1_STEP_REASONS: Record<string, string> = {
-  open: "run: with in: tab",
-  wait_for: "wait: /regex/",
-  close_source: "a tab.close: step",
-  params: "the dotted method's own value map",
-  herdr: "a dotted method key (e.g. pane.split:)",
-  on_fail: "on_error:",
-};
-
 const INPUT_NAME_RE = /^[a-z][a-z0-9_]{0,31}$/;
 const IDENT_PLACEHOLDER_RE = /\{([a-z][a-z0-9_]{0,31})\}/g;
-const V1_INPUT_PLACEHOLDER_RE = /\{input\.([a-z][a-z0-9_]{0,31})\}/g;
 
 const BUILTIN_SET = new Set<string>(BUILTIN_NAMES);
 
@@ -121,16 +111,6 @@ function paramsHaveSession(params: Record<string, unknown> | undefined): boolean
   return paramsAnyText(params, textHasSession);
 }
 
-function findV1InputPlaceholder(text: string): string | undefined {
-  V1_INPUT_PLACEHOLDER_RE.lastIndex = 0;
-  const m = V1_INPUT_PLACEHOLDER_RE.exec(text);
-  return m?.[1];
-}
-
-function findV1Last(text: string): boolean {
-  return textPlaceholders(text).includes("last");
-}
-
 function isMethodKey(key: string): boolean {
   return key.includes(".") && !key.includes(" ");
 }
@@ -161,36 +141,9 @@ const MODIFIER_KEYS = [
 
 type RefineCtx = z.core.$RefinementCtx<Record<string, unknown>>;
 
-function refineV1Removals(step: Record<string, unknown>, ctx: RefineCtx): void {
-  for (const key of Object.keys(step)) {
-    if (key in V1_STEP_REASONS) {
-      ctx.addIssue({
-        code: "custom",
-        message: `'${key}:' is removed — use ${V1_STEP_REASONS[key]}`,
-        path: [key],
-      });
-    }
-  }
-  if (step.wait === "done") {
-    ctx.addIssue({
-      code: "custom",
-      message: `'wait: done' is removed — blocking is the default; omit wait: or use wait: false / wait: /regex/`,
-      path: ["wait"],
-    });
-  }
-}
-
 function resolveActionKey(step: Record<string, unknown>, ctx: RefineCtx): string | undefined {
   const actionKeys = Object.keys(step).filter(isActionKey);
   if (actionKeys.length === 0) {
-    if (step.shell !== undefined && step.run === undefined) {
-      ctx.addIssue({
-        code: "custom",
-        message: `'shell:' as a step verb is removed — use run:`,
-        path: ["shell"],
-      });
-      return undefined;
-    }
     ctx.addIssue({
       code: "custom",
       message: `step has no action key (expected run, agent, use, or a dotted method)`,
@@ -211,7 +164,6 @@ function refineUnknownKeys(step: Record<string, unknown>, action: string, ctx: R
   for (const key of Object.keys(step)) {
     if (key === action) continue;
     if ((MODIFIER_KEYS as readonly string[]).includes(key)) continue;
-    if (key in V1_STEP_REASONS) continue;
     ctx.addIssue({ code: "custom", message: `unknown step key '${key}'`, path: [key] });
   }
 }
@@ -331,7 +283,6 @@ function refineRawStep(
   step: Record<string, unknown>,
   ctx: z.core.$RefinementCtx<Record<string, unknown>>,
 ): void {
-  refineV1Removals(step, ctx);
   const action = resolveActionKey(step, ctx);
   if (action === undefined) return;
   refineUnknownKeys(step, action, ctx);
@@ -342,10 +293,6 @@ function refineRawStep(
 const rawStepSchema = z.record(z.string(), z.unknown()).superRefine(refineRawStep);
 
 export type RawStep = z.infer<typeof rawStepSchema>;
-
-const V1_TOP_KEYS: Record<string, string> = {
-  on_fail: "on_error",
-};
 
 const rawInputMapSchema = z
   .object({
@@ -377,16 +324,7 @@ export const rawWorkflowSchema = z
     on_error: onErrorSchema.optional(),
     steps: z.union([z.string().min(1), rawStepSchema, z.array(rawStepSchema).min(1)]),
   })
-  .strict()
-  .superRefine((doc, ctx) => {
-    if (doc.on_error === undefined && "on_fail" in (doc as object)) {
-      ctx.addIssue({
-        code: "custom",
-        message: `'on_fail' is removed — use on_error`,
-        path: ["on_fail"],
-      });
-    }
-  });
+  .strict();
 
 export type RawWorkflow = {
   desc?: string;
@@ -419,10 +357,7 @@ function formatIssue(file: string, issue: z.core.$ZodIssue): string {
   let message = issue.message;
   if (issue.code === "unrecognized_keys") {
     const keys = (issue as { keys: string[] }).keys;
-    const hints = keys.map((k) =>
-      k in V1_TOP_KEYS ? `'${k}' is removed — use ${V1_TOP_KEYS[k]}` : `unknown key '${k}'`,
-    );
-    message = hints.join("; ");
+    message = keys.map((k) => `unknown key '${k}'`).join("; ");
     key = keys[0];
   }
   return positioned(file, step, key, message);
@@ -440,9 +375,6 @@ export function parseRaw(file: string, text: string): RawWorkflow {
     data = Bun.YAML.parse(preprocessWorkflowYaml(text));
   } catch (error) {
     bail(file, undefined, undefined, error instanceof Error ? error.message : String(error));
-  }
-  if (data && typeof data === "object" && !Array.isArray(data) && "on_fail" in data) {
-    bail(file, undefined, "on_fail", `'on_fail' is removed — use on_error`);
   }
   if (data && typeof data === "object" && !Array.isArray(data) && !("steps" in data)) {
     bail(file, undefined, "steps", "steps is required");
@@ -466,28 +398,12 @@ const NONEMPTY_GUARD_RE = /^(!?)\{([a-z][a-z0-9_]{0,31})\}$/;
 const FOR_BINDING_RE = /^\{([a-z][a-z0-9_]{0,31})\}$/;
 const FOR_SH_RE = /^sh\s+(.+)$/s;
 
-function rejectV1Placeholders(
-  file: string,
-  stepIndex: number,
-  key: string | undefined,
-  text: string,
-): void {
-  if (findV1Last(text)) {
-    bail(file, stepIndex, key, `'{last}' is removed — bind a named out: on the producing step`);
-  }
-  const input = findV1InputPlaceholder(text);
-  if (input) {
-    bail(file, stepIndex, key, `'{input.${input}}' is removed — use {${input}}`);
-  }
-}
-
 function rejectShellPlaceholders(
   file: string,
   stepIndex: number,
   key: string | undefined,
   text: string,
 ): void {
-  rejectV1Placeholders(file, stepIndex, key, text);
   if (firstPlaceholder(text)) {
     bail(file, stepIndex, key, PLACEHOLDER_SHELL);
   }
@@ -498,13 +414,11 @@ function parseGuard(file: string, stepIndex: number, key: string, value: unknown
     if (!value.every((v) => typeof v === "string")) {
       bail(file, stepIndex, key, "argv guard elements must be strings");
     }
-    for (const el of value) rejectV1Placeholders(file, stepIndex, key, el);
     return { kind: "argv", argv: value };
   }
   if (typeof value !== "string") {
     bail(file, stepIndex, key, "when:/until: must be a string or argv list");
   }
-  rejectV1Placeholders(file, stepIndex, key, value);
   const m = NONEMPTY_GUARD_RE.exec(value);
   if (m) return { kind: "nonempty", name: m[2]!, negate: m[1] === "!" };
   rejectShellPlaceholders(file, stepIndex, key, value);
@@ -524,7 +438,6 @@ function parseFor(file: string, stepIndex: number, value: unknown): ForSource {
   if (typeof value !== "string") {
     bail(file, stepIndex, "for", "for: must be a list, sh <cmd>, or {name}");
   }
-  rejectV1Placeholders(file, stepIndex, "for", value);
   const bind = FOR_BINDING_RE.exec(value);
   if (bind) return { kind: "binding", name: bind[1]! };
   const sh = FOR_SH_RE.exec(value);
@@ -618,7 +531,6 @@ function parseRunPayload(file: string, stepIndex: number, step: RawStep): RunPay
     if (!value.every((v) => typeof v === "string")) {
       bail(file, stepIndex, "run", "argv elements must be strings");
     }
-    for (const el of value) rejectV1Placeholders(file, stepIndex, "run", el);
     return { form: "argv", argv: value };
   }
   if (typeof value !== "string") {
@@ -711,13 +623,6 @@ function outNames(out: OutSpec | undefined): string[] {
   return Object.keys(out.fields);
 }
 
-function collectStrings(value: unknown): string[] {
-  if (typeof value === "string") return [value];
-  if (Array.isArray(value)) return value.flatMap(collectStrings);
-  if (value && typeof value === "object") return Object.values(value).flatMap(collectStrings);
-  return [];
-}
-
 function envMap(step: RawStep): Record<string, string> | undefined {
   return step.env && typeof step.env === "object" && !Array.isArray(step.env)
     ? (step.env as Record<string, string>)
@@ -757,8 +662,6 @@ function flatAgent(file: string, stepIndex: number, step: RawStep, out: OutSpec 
   if (typeof step.agent !== "string" || !step.agent) {
     bail(file, stepIndex, "agent", "agent: value is required");
   }
-  rejectV1Placeholders(file, stepIndex, "agent", step.agent);
-  if (typeof step.prompt === "string") rejectV1Placeholders(file, stepIndex, "prompt", step.prompt);
   if (out?.kind === "map") {
     bail(file, stepIndex, "out", "agent: produces text — use identifier out: form");
   }
@@ -791,24 +694,6 @@ function flatPrimitive(
   }
   const err = validateMethodParams(method, params);
   if (err) bail(file, stepIndex, method, err);
-  if (params) {
-    for (const name of paramsPlaceholders(params)) {
-      if (name === "last") {
-        bail(
-          file,
-          stepIndex,
-          method,
-          `'{last}' is removed — bind a named out: on the producing step`,
-        );
-      }
-    }
-    for (const text of collectStrings(params)) {
-      const v1 = findV1InputPlaceholder(text);
-      if (v1) {
-        bail(file, stepIndex, method, `'{input.${v1}}' is removed — use {${v1}}`);
-      }
-    }
-  }
   if (out?.kind === "text") {
     bail(file, stepIndex, "out", "primitive steps require map-form out: (name: dot.path)");
   }

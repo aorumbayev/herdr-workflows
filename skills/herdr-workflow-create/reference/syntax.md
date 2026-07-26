@@ -1,4 +1,4 @@
-# Workflow syntax (v2)
+# Workflow syntax
 
 ## Contents
 
@@ -11,7 +11,6 @@
 - Placeholders and the flat namespace
 - Config (`agents:` / `sessions:`)
 - Load-error catalogue
-- Removed v1 keys
 
 ## File shape
 
@@ -48,7 +47,7 @@ inputs:
 ```
 
 - Names match `[a-z][a-z0-9_]{0,31}` and may not shadow a builtin.
-- Reference as `{name}` — one flat namespace, never `{input.name}`.
+- Reference as `{name}` — one flat namespace.
 - **Every declared input must be referenced somewhere**, else load fails. A `$HWF_<name>`
   mention inside scalar/block `run:` text counts as a reference.
 - A `default` outside `options` is a load error.
@@ -249,19 +248,3 @@ Errors are positioned as `<file>, step <n>, <key>: <message>`.
 | `required input 'x' of 'y' not supplied`                     | add it to `with:`                            |
 | `recovery workflows cannot declare inputs`                   | strip `inputs:` from the `on_error:` target  |
 | `for: resolved N items — cap is 100`                         | narrow the list (runtime error)              |
-
-## Removed v1 keys
-
-| v1                   | v2                                          |
-| -------------------- | ------------------------------------------- |
-| `shell:` as the verb | `run:` (`shell:` now picks the interpreter) |
-| `open:`              | `run:` with `in: tab`                       |
-| `wait_for:`          | `wait: /regex/`                             |
-| `wait: done`         | default blocking                            |
-| `close_source:`      | `tab.close: { tab_id: "{source_tab}" }`     |
-| `herdr:` + `params:` | dotted method key                           |
-| `run: <workflow>`    | `use:` + `with:`                            |
-| `on_fail:`           | `on_error:`                                 |
-| `{last}`             | a named `out:`                              |
-| `{input.<name>}`     | `{name}`                                    |
-| `HWF_INPUT_*`        | `HWF_*`                                     |

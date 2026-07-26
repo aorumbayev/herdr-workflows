@@ -1,6 +1,6 @@
 # Reference
 
-Every key and rule. `hwf` ≡ `herdr-workflows`. Syntax v2 — a hard break from v1 ([key map](#v1-to-v2-keys)).
+Every key and rule. `hwf` ≡ `herdr-workflows`.
 
 ## CLI
 
@@ -67,7 +67,7 @@ inputs:
     default: ""
 ```
 
-Names: `[a-z][a-z0-9_]{0,31}`. Reference as `{name}` (flat namespace — not `{input.name}`). Unused declared inputs are load errors. Default outside options is a load error. Only the entry workflow prompts; `use:` targets get values via `with:`.
+Names: `[a-z][a-z0-9_]{0,31}`. Reference as `{name}` (one flat namespace). Unused declared inputs are load errors. Default outside options is a load error. Only the entry workflow prompts; `use:` targets get values via `with:`.
 
 Scalar/block `run:` steps receive every bound name as `HWF_<name>` env (inputs and `out:` names). Prefer argv-form `run:` when values must be arguments.
 
@@ -98,7 +98,7 @@ On `run:` / `agent:`: `here` \| `tab` \| `right` \| `down`. Defaults: `here` for
 
 ### Wait
 
-Blocking is the default. `wait: false` detaches. `wait: /regex/` waits for pane output (placed steps only). `timeout:` bounds the wait.
+Blocking is the default for `agent:` and for local `run:` (`in: here`) — the step ends when the process does. A **placed** `run:` (`in: tab` / `right` / `down`) hands the command to a herdr pane and returns as soon as that pane exists; herdr owns its lifetime. Gate on its progress with `wait: /regex/` (pane output). `wait: false` detaches. `timeout:` bounds the wait.
 
 ### Outputs (`out:`)
 
@@ -148,7 +148,7 @@ Builtins: `{pane}` `{selection}` `{prompt}` `{session}` `{session_file}` `{sourc
 
 `{session}` / `{session_file}` legal in `prompt:`, argv, and primitive params — rejected in scalar/block `run:` under the general placeholder rule.
 
-Non-identifier braces (`{"json": true}`) pass through. Unknown `{word}` is a load error. No `{last}` / `{input.*}` — use named `out:` and `{name}`.
+Non-identifier braces (`{"json": true}`) pass through. Unknown `{word}` is a load error. To reuse a step's result, bind `out:` and reference it as `{name}`.
 
 ## Semantics
 
@@ -156,19 +156,3 @@ Non-identifier braces (`{"json": true}`) pass through. Unknown `{word}` is a loa
 - Skip / success / failure are distinct in progress and the run log.
 - herdr ≥ 0.7.5, POSIX. Parallelism and Windows are out of scope.
 - Schema regen: `bun run schema` (workflow JSON Schema) and `bun run schema:herdr` (method validators) — release-time; plugin build does not call `herdr api schema`.
-
-## v1 to v2 keys
-
-| v1                   | v2                                      |
-| -------------------- | --------------------------------------- |
-| `shell:` (payload)   | `run:` (+ `shell:` = interpreter)       |
-| `open:`              | `run:` with `in: tab`                   |
-| `wait_for:`          | `wait: /regex/`                         |
-| `wait: done`         | default blocking                        |
-| `close_source:`      | `tab.close: { tab_id: "{source_tab}" }` |
-| `herdr:` + `params:` | dotted method key                       |
-| `run: <workflow>`    | `use:` + `with:`                        |
-| `on_fail:`           | `on_error:`                             |
-| `{last}`             | named `out:`                            |
-| `{input.<name>}`     | `{name}`                                |
-| `HWF_INPUT_*`        | `HWF_*` (inputs and outs)               |

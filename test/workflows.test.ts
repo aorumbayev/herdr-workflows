@@ -51,11 +51,11 @@ describe("workflow grammar", () => {
     await expect(loadWorkflow("bad", root)).rejects.toThrow(/retries/);
   });
 
-  test("on_fail points to on_error", async () => {
+  test("unknown top-level key rejected", async () => {
     const root = await repoWithWorkflows({
-      bad: `on_fail: continue\nsteps: bun test\n`,
+      bad: `nope: continue\nsteps: bun test\n`,
     });
-    await expect(loadWorkflow("bad", root)).rejects.toThrow(/on_error/);
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/unknown key 'nope'/);
   });
 
   test("missing steps rejected", async () => {
@@ -220,30 +220,13 @@ describe("workflow grammar", () => {
     await expect(loadWorkflow("bad", root)).rejects.toThrow(/placeholders are not allowed/);
   });
 
-  test("v1 shell key rejected", async () => {
-    const root = await repoWithWorkflows({ bad: `steps:\n  - shell: bun test\n` });
-    await expect(loadWorkflow("bad", root)).rejects.toThrow(/run:/);
-  });
-
-  test("v1 last placeholder rejected", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:\n  - agent: claude\n    prompt: "{last}"\n`,
-    });
-    await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(/out:/);
-  });
-
-  test("v1 input namespace rejected", async () => {
-    const root = await repoWithWorkflows({
-      bad: `inputs:\n  focus: text\nsteps:\n  - agent: claude\n    prompt: "{input.focus}"\n`,
-    });
-    await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(/\{focus\}/);
-  });
-
-  test("wait: done rejected", async () => {
+  test("non-regex wait string rejected", async () => {
     const root = await repoWithWorkflows({
       bad: `steps:\n  - agent: claude\n    prompt: hi\n    wait: done\n`,
     });
-    await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(/wait: done/);
+    await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(
+      /wait: must be true, false, or \/regex\//,
+    );
   });
 
   test("agent defaults to in: tab and blocking", async () => {
