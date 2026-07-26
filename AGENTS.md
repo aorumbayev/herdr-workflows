@@ -25,22 +25,24 @@ bun run install:dev                      # compile + herdr plugin link + keybind
 
 ## Layout
 
-| Path                             | Role                                                           |
-| -------------------------------- | -------------------------------------------------------------- |
-| `src/cli.ts`                     | entry, args, subcommands                                       |
-| `src/herdr.ts`                   | socket RPC, CLI wrappers, protocol check, pane placement       |
-| `src/herdr-methods.ts`           | method param validation                                        |
-| `src/herdr-methods.generated.ts` | generated — do not hand-edit                                   |
-| `src/config.ts`                  | config load, repo root, invocation context                     |
-| `src/session.ts`                 | session helpers                                                |
-| `src/runlog.ts`                  | run log                                                        |
-| `src/init.ts`                    | init + workflow seeds                                          |
-| `src/workflow/`                  | types, parse (YAML → FlatStep[]), load (name → LoadedWorkflow) |
-| `src/run/`                       | runner orchestration + one file per step kind (`steps/`)       |
-| `src/tui/`                       | picker, theme                                                  |
-| `src/web/`                       | server (+ page.html)                                           |
-| `herdr-plugin.toml`              | plugin manifest (build + `prefix+k` → picker)                  |
-| `knip.json`                      | unused-code (package.bin → `src/cli.ts`)                       |
+19 `.ts` files under `src/` (+ `web/page.html`).
+
+| Path                             | Role                                                                    |
+| -------------------------------- | ----------------------------------------------------------------------- |
+| `src/cli.ts`                     | entry, args, subcommands                                                |
+| `src/herdr.ts`                   | socket RPC, CLI wrappers, protocol check, pane placement                |
+| `src/herdr-methods.ts`           | method param validation                                                 |
+| `src/herdr-methods.generated.ts` | generated — do not hand-edit                                            |
+| `src/config.ts`                  | config load, repo root, invocation context                              |
+| `src/session.ts`                 | session helpers                                                         |
+| `src/runlog.ts`                  | run log                                                                 |
+| `src/init.ts`                    | init + workflow seeds                                                   |
+| `src/workflow/`                  | types.ts, parse.ts (YAML → FlatStep[]), load.ts (name → LoadedWorkflow) |
+| `src/run/`                       | runner.ts + steps/{shell,agent,primitive,include}.ts                    |
+| `src/tui/`                       | picker.ts, theme.ts                                                     |
+| `src/web/`                       | server.ts (+ page.html)                                                 |
+| `herdr-plugin.toml`              | plugin manifest (build + `prefix+k` → picker)                           |
+| `knip.json`                      | unused-code (package.bin → `src/cli.ts`)                                |
 
 Gitignored local-only: `openspec/`, `references/`, `.plans/`, `.claude/`, `.opencode/`, `.cursor/`. Do not commit them.
 
