@@ -29,10 +29,9 @@ const MODIFIER_KEYS = [
   "prompt",
 ] as const;
 
-export function refineRawStep(
-  step: Record<string, unknown>,
-  ctx: z.core.$RefinementCtx<Record<string, unknown>>,
-): void {
+type RefineCtx = z.core.$RefinementCtx<Record<string, unknown>>;
+
+function refineV1Removals(step: Record<string, unknown>, ctx: RefineCtx): void {
   for (const key of Object.keys(step)) {
     if (key in V1_STEP_REASONS) {
       ctx.addIssue({
@@ -49,7 +48,9 @@ export function refineRawStep(
       path: ["wait"],
     });
   }
+}
 
+function resolveActionKey(step: Record<string, unknown>, ctx: RefineCtx): string | undefined {
   const actionKeys = Object.keys(step).filter(isActionKey);
   if (actionKeys.length === 0) {
     if (step.shell !== undefined && step.run === undefined) {
@@ -58,30 +59,34 @@ export function refineRawStep(
         message: `'shell:' as a step verb is removed — use run:`,
         path: ["shell"],
       });
-      return;
+      return undefined;
     }
     ctx.addIssue({
       code: "custom",
       message: `step has no action key (expected run, agent, use, or a dotted method)`,
     });
-    return;
+    return undefined;
   }
   if (actionKeys.length > 1) {
     ctx.addIssue({
       code: "custom",
       message: `step has multiple action keys: ${actionKeys.join(", ")}`,
     });
-    return;
+    return undefined;
   }
+  return actionKeys[0]!;
+}
 
-  const action = actionKeys[0]!;
+function refineUnknownKeys(step: Record<string, unknown>, action: string, ctx: RefineCtx): void {
   for (const key of Object.keys(step)) {
     if (key === action) continue;
     if ((MODIFIER_KEYS as readonly string[]).includes(key)) continue;
     if (key in V1_STEP_REASONS) continue;
     ctx.addIssue({ code: "custom", message: `unknown step key '${key}'`, path: [key] });
   }
+}
 
+function refineShell(step: Record<string, unknown>, action: string, ctx: RefineCtx): void {
   if (step.shell !== undefined && action !== "run") {
     ctx.addIssue({
       code: "custom",
@@ -105,6 +110,14 @@ export function refineRawStep(
       });
     }
   }
+}
+
+function refineActionModifiers(
+  step: Record<string, unknown>,
+  action: string,
+  ctx: RefineCtx,
+): void {
+  refineShell(step, action, ctx);
   if (step.prompt !== undefined && action !== "agent") {
     ctx.addIssue({
       code: "custom",
@@ -157,7 +170,9 @@ export function refineRawStep(
       path: ["in"],
     });
   }
+}
 
+function refineWaitOut(step: Record<string, unknown>, action: string, ctx: RefineCtx): void {
   const waitRegex =
     typeof step.wait === "string" &&
     step.wait.length >= 2 &&
@@ -180,4 +195,16 @@ export function refineRawStep(
       path: ["out"],
     });
   }
+}
+
+export function refineRawStep(
+  step: Record<string, unknown>,
+  ctx: z.core.$RefinementCtx<Record<string, unknown>>,
+): void {
+  refineV1Removals(step, ctx);
+  const action = resolveActionKey(step, ctx);
+  if (action === undefined) return;
+  refineUnknownKeys(step, action, ctx);
+  refineActionModifiers(step, action, ctx);
+  refineWaitOut(step, action, ctx);
 }

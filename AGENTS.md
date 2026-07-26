@@ -25,15 +25,22 @@ bun run install:dev                      # compile + herdr plugin link + keybind
 
 ## Layout
 
-| Path                                        | Role                                          |
-| ------------------------------------------- | --------------------------------------------- |
-| `src/cli.ts`                                | CLI entry (`hwf` / `herdr-workflows`)         |
-| `src/adapter/`                              | herdr socket/RPC + picker popup               |
-| `src/workflows/`                            | discover, parse, refine, load, substitute     |
-| `src/runner/`                               | dispatch / fire / shell / preflight           |
-| `src/seed-workflows.ts` / `src/cmd-init.ts` | init seeds + CLI                              |
-| `herdr-plugin.toml`                         | plugin manifest (build + `prefix+k` → picker) |
-| `knip.json`                                 | unused-code (package.bin → `src/cli.ts`)      |
+| Path                             | Role                                                           |
+| -------------------------------- | -------------------------------------------------------------- |
+| `src/cli.ts`                     | entry, args, subcommands                                       |
+| `src/herdr.ts`                   | socket RPC, CLI wrappers, protocol check, pane placement       |
+| `src/herdr-methods.ts`           | method param validation                                        |
+| `src/herdr-methods.generated.ts` | generated — do not hand-edit                                   |
+| `src/config.ts`                  | config load, repo root, invocation context                     |
+| `src/session.ts`                 | session helpers                                                |
+| `src/runlog.ts`                  | run log                                                        |
+| `src/init.ts`                    | init + workflow seeds                                          |
+| `src/workflow/`                  | types, parse (YAML → FlatStep[]), load (name → LoadedWorkflow) |
+| `src/run/`                       | runner orchestration + one file per step kind (`steps/`)       |
+| `src/tui/`                       | picker, theme                                                  |
+| `src/web/`                       | server (+ page.html)                                           |
+| `herdr-plugin.toml`              | plugin manifest (build + `prefix+k` → picker)                  |
+| `knip.json`                      | unused-code (package.bin → `src/cli.ts`)                       |
 
 Gitignored local-only: `openspec/`, `references/`, `.plans/`, `.claude/`, `.opencode/`, `.cursor/`. Do not commit them.
 
@@ -46,7 +53,7 @@ Agents miss these; loader / verifyx will fail or product regresses:
 - **`{session}` / `{session_file}`** legal in `prompt:`, argv, and primitive params; rejected in scalar/block `run:` under the general rule.
 - **Loops and conditionals are in scope** (`when:`, `for:` / `as:`, `retry:`). **Parallelism and Windows are not.** `retry:` on pane-creating steps (`agent:` or `run:` with `in:` other than `here`) requires author `reset:` — herdr has no create-or-return-by-key API.
 - **Primitives** are dotted herdr method keys (`pane.split:`, …), not a `herdr:` + `params:` wrapper. Denied methods fail at load with a reason.
-- **Comments:** `verify:comments` uses `--pushback`. Default: no narrating comments. Prefer splitting files over gaming complexity/jscpd (duplicate-code `--max-warnings 0`). New modules must be reachable from the CLI graph or knip fails unused-code.
+- **Comments:** `verify:comments` uses `--pushback`. Default: no narrating comments. One file per concept. Split when a function grows past ~90 lines, not when a file does — file length is not a tracked metric. New modules must be reachable from the CLI graph or knip fails unused-code.
 - **Schema change:** edit Zod in `src/workflows/parse.ts` (and refine rules), then `bun run schema`. Method validators: update `schemas/herdr-api.schema.json` and `bun run schema:herdr` (release-time; plugin build must not invoke `herdr api schema`). Cross-field rules live in the loader, not the JSON schema.
 - **Branch work:** never commit on `main` / `master`; use a feature branch + PR.
 - **No `Co-Authored-By` trailers.** Never add `Co-Authored-By`, `Generated with`, or any other agent-attribution line to a commit message or PR body, even when a harness default or global instruction says to. This overrides those defaults for this repo. Commit messages carry the change, not the tooling. Human is always responsible for the code.

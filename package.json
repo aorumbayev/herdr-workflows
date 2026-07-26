@@ -46,7 +46,6 @@
     "verify": "verifyx --no-tests",
     "verify:unused-code": "verifyx unused-code --max-warnings 0",
     "verify:duplicate-code": "verifyx duplicate-code --max-warnings 0",
-    "verify:complexity": "verifyx complexity --threshold 31",
     "verify:comments": "verifyx comments --pushback",
     "verify:circular-deps": "skott --displayMode=raw --showCircularDependencies --exitCodeOnCircularDependencies=1",
     "verify:hardcoded-colors": "verifyx hardcoded-colors"

@@ -138,6 +138,134 @@ function checkAgentInput(file: string, idx: number, spec: InputSpec, agents: Set
   }
 }
 
+function checkIncludeNames(
+  file: string,
+  step: FlatStep,
+  stepIndex: number,
+  inputs: Map<string, InputSpec>,
+  agents: Set<string>,
+  knownNames: Set<string>,
+  used: Set<string>,
+  markInputUse: boolean,
+): void {
+  if (step.action.kind !== "include") return;
+  const action = step.action;
+  for (const name of stepReferencedNames(step)) {
+    if (isBuiltin(name)) continue;
+    if (!knownNames.has(name) && !inputs.has(name)) {
+      throw new WorkflowLoadError(positioned(file, stepIndex, "with", `unknown name '{${name}}'`));
+    }
+    if (inputs.has(name) && markInputUse) used.add(name);
+  }
+  const childKnown = new Set<string>([
+    ...Object.keys(action.with),
+    ...Object.keys(action.defaults),
+  ]);
+  checkStepNames(file, new Map(), action.steps, agents, childKnown, used, false);
+  for (const n of action.exportedOuts) knownNames.add(n);
+}
+
+function checkOneReferencedName(
+  file: string,
+  step: FlatStep,
+  stepIndex: number,
+  name: string,
+  inputs: Map<string, InputSpec>,
+  knownNames: Set<string>,
+  used: Set<string>,
+  markInputUse: boolean,
+): void {
+  if (name === "item" || name === "index") {
+    if (!step.for) {
+      throw new WorkflowLoadError(
+        positioned(file, stepIndex, undefined, `{${name}} requires for:`),
+      );
+    }
+    return;
+  }
+  if (name === "attempt") {
+    if (!step.retry) {
+      throw new WorkflowLoadError(
+        positioned(file, stepIndex, undefined, `{attempt} requires retry:`),
+      );
+    }
+    return;
+  }
+  if (isBuiltin(name)) return;
+  if (knownNames.has(name)) {
+    if (inputs.has(name) && markInputUse) used.add(name);
+    return;
+  }
+  if (inputs.has(name)) {
+    if (markInputUse) used.add(name);
+    return;
+  }
+  throw new WorkflowLoadError(positioned(file, stepIndex, undefined, `unknown name '{${name}}'`));
+}
+
+function markRunEnvInputUses(
+  step: FlatStep,
+  inputs: Map<string, InputSpec>,
+  used: Set<string>,
+  markInputUse: boolean,
+): void {
+  if (step.action.kind !== "run" || step.action.payload.form === "argv") return;
+  const command = step.action.payload.command;
+  for (const name of inputs.keys()) {
+    if (commandUsesEnv(command, name) && markInputUse) used.add(name);
+  }
+}
+
+function checkAgentStepName(
+  file: string,
+  step: FlatStep,
+  idx: number,
+  stepIndex: number,
+  inputs: Map<string, InputSpec>,
+  agents: Set<string>,
+  used: Set<string>,
+  markInputUse: boolean,
+): void {
+  if (step.action.kind !== "agent") return;
+  const m = AGENT_NAME_RE.exec(step.action.agent);
+  if (!m || isBuiltin(m[1]!)) return;
+  const spec = inputs.get(m[1]!);
+  if (!spec) {
+    throw new WorkflowLoadError(positioned(file, stepIndex, "agent", `unknown name '{${m[1]}}'`));
+  }
+  if (markInputUse) used.add(m[1]!);
+  checkAgentInput(file, idx, spec, agents);
+}
+
+function checkAsAndOutNames(
+  file: string,
+  step: FlatStep,
+  stepIndex: number,
+  inputs: Map<string, InputSpec>,
+  knownNames: Set<string>,
+): void {
+  if (step.as) {
+    if (isBuiltin(step.as) || inputs.has(step.as) || knownNames.has(step.as)) {
+      throw new WorkflowLoadError(
+        positioned(file, stepIndex, "as", `name '${step.as}' collides with an existing name`),
+      );
+    }
+  }
+  for (const name of stepOutNames(step)) {
+    if (isBuiltin(name)) {
+      throw new WorkflowLoadError(
+        positioned(file, stepIndex, "out", `name shadows a builtin '{${name}}'`),
+      );
+    }
+    if (inputs.has(name) || knownNames.has(name)) {
+      throw new WorkflowLoadError(
+        positioned(file, stepIndex, "out", `name '${name}' collides with an existing name`),
+      );
+    }
+    knownNames.add(name);
+  }
+}
+
 function checkStepNames(
   file: string,
   inputs: Map<string, InputSpec>,
@@ -151,96 +279,18 @@ function checkStepNames(
   for (const step of steps) {
     const stepIndex = idx + 1;
     if (step.action.kind === "include") {
-      for (const name of stepReferencedNames(step)) {
-        if (isBuiltin(name)) continue;
-        if (!knownNames.has(name) && !inputs.has(name)) {
-          throw new WorkflowLoadError(
-            positioned(file, stepIndex, "with", `unknown name '{${name}}'`),
-          );
-        }
-        if (inputs.has(name) && markInputUse) used.add(name);
-      }
-      const childKnown = new Set<string>([
-        ...Object.keys(step.action.with),
-        ...Object.keys(step.action.defaults),
-      ]);
-      checkStepNames(file, new Map(), step.action.steps, agents, childKnown, used, false);
-      for (const n of step.action.exportedOuts) knownNames.add(n);
+      checkIncludeNames(file, step, stepIndex, inputs, agents, knownNames, used, markInputUse);
       idx++;
       continue;
     }
 
     for (const name of stepReferencedNames(step)) {
-      if (name === "item" || name === "index") {
-        if (!step.for) {
-          throw new WorkflowLoadError(
-            positioned(file, stepIndex, undefined, `{${name}} requires for:`),
-          );
-        }
-        continue;
-      }
-      if (name === "attempt") {
-        if (!step.retry) {
-          throw new WorkflowLoadError(
-            positioned(file, stepIndex, undefined, `{attempt} requires retry:`),
-          );
-        }
-        continue;
-      }
-      if (isBuiltin(name)) continue;
-      if (knownNames.has(name)) {
-        if (inputs.has(name) && markInputUse) used.add(name);
-        continue;
-      }
-      if (inputs.has(name)) {
-        if (markInputUse) used.add(name);
-        continue;
-      }
-      throw new WorkflowLoadError(
-        positioned(file, stepIndex, undefined, `unknown name '{${name}}'`),
-      );
+      checkOneReferencedName(file, step, stepIndex, name, inputs, knownNames, used, markInputUse);
     }
 
-    if (step.action.kind === "run" && step.action.payload.form !== "argv") {
-      for (const name of inputs.keys()) {
-        if (commandUsesEnv(step.action.payload.command, name)) {
-          if (markInputUse) used.add(name);
-        }
-      }
-    }
-    if (step.action.kind === "agent") {
-      const m = AGENT_NAME_RE.exec(step.action.agent);
-      if (m && !isBuiltin(m[1]!)) {
-        const spec = inputs.get(m[1]!);
-        if (!spec) {
-          throw new WorkflowLoadError(
-            positioned(file, stepIndex, "agent", `unknown name '{${m[1]}}'`),
-          );
-        }
-        if (markInputUse) used.add(m[1]!);
-        checkAgentInput(file, idx, spec, agents);
-      }
-    }
-    if (step.as) {
-      if (isBuiltin(step.as) || inputs.has(step.as) || knownNames.has(step.as)) {
-        throw new WorkflowLoadError(
-          positioned(file, stepIndex, "as", `name '${step.as}' collides with an existing name`),
-        );
-      }
-    }
-    for (const name of stepOutNames(step)) {
-      if (isBuiltin(name)) {
-        throw new WorkflowLoadError(
-          positioned(file, stepIndex, "out", `name shadows a builtin '{${name}}'`),
-        );
-      }
-      if (inputs.has(name) || knownNames.has(name)) {
-        throw new WorkflowLoadError(
-          positioned(file, stepIndex, "out", `name '${name}' collides with an existing name`),
-        );
-      }
-      knownNames.add(name);
-    }
+    markRunEnvInputUses(step, inputs, used, markInputUse);
+    checkAgentStepName(file, step, idx, stepIndex, inputs, agents, used, markInputUse);
+    checkAsAndOutNames(file, step, stepIndex, inputs, knownNames);
     idx++;
   }
 }
