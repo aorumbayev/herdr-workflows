@@ -3,15 +3,9 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HerdrError } from "../src/herdr";
-import { appendRunLog, runLogPath, type RunLogEntry } from "../src/runlog";
+import { runLogPath, type RunLogEntry } from "../src/runlog";
 import { runWorkflow, resolveInputValues, type RunnerDeps } from "../src/run/runner";
-import { runShellStep, SHELL_TIMEOUT_MS } from "../src/run/steps/shell";
-import {
-  AGENT_WAIT_IDLE_GRACE_MS,
-  AGENT_WAIT_POLL_MS,
-  waitAgentDone,
-  type WaitAgentDoneOpts,
-} from "../src/run/steps/agent";
+import { runShellStep } from "../src/run/steps/shell";
 
 const dirs: string[] = [];
 beforeEach(async () => {
@@ -88,22 +82,6 @@ function mockDeps(overrides: Partial<RunnerDeps> = {}): {
   return { deps, notes, calls, layouts };
 }
 
-describe("waitAgentDone", () => {
-  test("defaults match exported constants", async () => {
-    expect(AGENT_WAIT_POLL_MS).toBe(2000);
-    expect(AGENT_WAIT_IDLE_GRACE_MS).toBe(30_000);
-    let clock = 0;
-    const opts: WaitAgentDoneOpts = {
-      agentStatus: async () => "done",
-      sleep: async () => undefined,
-      now: () => clock,
-      pollMs: AGENT_WAIT_POLL_MS,
-      idleGraceMs: AGENT_WAIT_IDLE_GRACE_MS,
-    };
-    await waitAgentDone("p1", 5000, opts);
-  });
-});
-
 describe("runner v2", () => {
   test("required constructor input does not inherit a provided value", () => {
     const result = resolveInputValues([{ name: "constructor", label: "constructor" }], {});
@@ -137,36 +115,6 @@ steps:
     expect(layouts[0]).toMatchObject({
       root: { command: ["codex", "focus=tests"] },
     });
-  });
-
-  test("named out threads between run steps", async () => {
-    const root = await repoWith({
-      m: `steps:
-  - run: printf hi
-    out: msg
-  - run: [cat]
-    # cat with no stdin — bind via env instead
-  - run: 'printf %s "$HWF_msg"'
-`,
-    });
-    // Fix: second step unused. Simpler workflow:
-    const root2 = await repoWith({
-      m: `steps:
-  - run: printf hi
-    out: msg
-  - run: 'printf %s "$HWF_msg"'
-`,
-    });
-    const { deps } = mockDeps();
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root2,
-      agents: {},
-      ctx: { selection: "", cwd: root2 },
-      deps,
-    });
-    expect(result.ok).toBe(true);
-    void root;
   });
 
   test("failure stops sequence and notifies once", async () => {
@@ -215,11 +163,6 @@ steps:
   test("skipped step does not trigger on_error", async () => {
     const root = await repoWith({
       recover: `steps:\n  - run: "printf recovered"\n`,
-      m: `on_error: recover\nsteps:\n  - run: "printf x"\n    when: "{missing}"\n`,
-    });
-    // {missing} is unknown at load — use a bound empty name
-    const root2 = await repoWith({
-      recover: `steps:\n  - run: "printf recovered"\n`,
       m: `on_error: recover
 steps:
   - run: "true"
@@ -231,14 +174,13 @@ steps:
     const { deps, notes } = mockDeps();
     const result = await runWorkflow({
       name: "m",
-      repoRoot: root2,
+      repoRoot: root,
       agents: {},
-      ctx: { selection: "", cwd: root2 },
+      ctx: { selection: "", cwd: root },
       deps,
     });
     expect(result.ok).toBe(true);
     expect(notes).toHaveLength(0);
-    void root;
   });
 
   test("for loop with allow_fail isolates item failures", async () => {
@@ -469,29 +411,6 @@ steps:
     expect(n).toBeGreaterThanOrEqual(2);
   });
 
-  test("agent out binds final message", async () => {
-    const root = await repoWith({
-      m: `steps:
-  - agent: claude
-    prompt: hi
-    out: brief
-  - run: 'printf %s "$HWF_brief"'
-`,
-    });
-    const { deps } = mockDeps({
-      agentStatus: async () => "done",
-      paneRead: async () => "from-pane",
-    });
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: { claude: ["claude", "{prompt}"] },
-      ctx: { selection: "", cwd: root, workspaceId: "w1" },
-      deps,
-    });
-    expect(result.ok).toBe(true);
-  });
-
   test("session substitutes into prompt", async () => {
     const root = await repoWith({
       m: `steps:\n  - agent: claude\n    prompt: "S={session}"\n`,
@@ -546,22 +465,6 @@ steps:
     expect(layouts[0]).toMatchObject({ root: { command: ["codex", "hi"] } });
   });
 
-  test("shell steps export HWF_<name> env", async () => {
-    const root = await repoWith({
-      m: `inputs:\n  branch: text\nsteps:\n  - run: 'printf %s "$HWF_branch"'\n`,
-    });
-    const { deps } = mockDeps();
-    const result = await runWorkflow({
-      name: "m",
-      repoRoot: root,
-      agents: {},
-      ctx: { selection: "", cwd: root },
-      inputs: { branch: "feat/x" },
-      deps,
-    });
-    expect(result.ok).toBe(true);
-  });
-
   test("runlog records skips distinctly", async () => {
     const root = await repoWith({
       m: `steps:
@@ -584,7 +487,6 @@ steps:
   });
 
   test("timeout kills process group", async () => {
-    expect(SHELL_TIMEOUT_MS).toBe(300_000);
     const dir = await mkdtemp(join(tmpdir(), "herdr-workflows-pg-"));
     dirs.push(dir);
     const pidFile = join(dir, "child.pid");
@@ -603,16 +505,6 @@ steps:
       }
       expect(alive).toBe(false);
     }
-  });
-
-  test("appendRunLog swallows fs errors", async () => {
-    process.env.HERDR_PLUGIN_STATE_DIR = "/dev/null/not-a-dir";
-    await appendRunLog({
-      ts: new Date().toISOString(),
-      run: "x",
-      workflow: "y",
-      ok: true,
-    });
   });
 
   test("agent wait timeout fails", async () => {

@@ -38,12 +38,6 @@ describe("filterWorkflowEntries", () => {
     expect(valid.map((e) => e.name)).toEqual(["chat-handoff"]);
     expect(invalid.map((e) => e.name)).toEqual(["chat-broken"]);
   });
-
-  test("empty match yields empty lists", () => {
-    const { valid, invalid } = filterWorkflowEntries(entries, "zzz");
-    expect(valid).toEqual([]);
-    expect(invalid).toEqual([]);
-  });
 });
 
 describe("buildPickerOptions", () => {

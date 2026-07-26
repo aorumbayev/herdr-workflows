@@ -2,7 +2,7 @@ import type { FlatStep, PlaceholderValues } from "../../workflow/types";
 import { substitute } from "../../workflow/parse";
 import { placeCommand, type PlaceOpts } from "../../herdr";
 
-export const SHELL_TIMEOUT_MS = 300_000;
+const SHELL_TIMEOUT_MS = 300_000;
 
 export type ShellName = "sh" | "bash" | "zsh" | "pwsh" | "powershell" | "cmd";
 

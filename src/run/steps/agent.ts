@@ -10,10 +10,10 @@ import type { FlatStep, PlaceholderValues } from "../../workflow/types";
 import { AGENT_NAME_RE, substitute } from "../../workflow/parse";
 import { substituteEnv } from "./shell";
 
-export const AGENT_WAIT_POLL_MS = 2000;
-export const AGENT_WAIT_IDLE_GRACE_MS = 30_000;
+const AGENT_WAIT_POLL_MS = 2000;
+const AGENT_WAIT_IDLE_GRACE_MS = 30_000;
 
-export type WaitAgentDoneOpts = {
+type WaitAgentDoneOpts = {
   agentStatus: (paneId: string) => Promise<string>;
   sleep: (ms: number) => Promise<void>;
   now?: () => number;
@@ -22,7 +22,7 @@ export type WaitAgentDoneOpts = {
   onBlocked?: () => Promise<void>;
 };
 
-export async function waitAgentDone(
+async function waitAgentDone(
   paneId: string,
   timeoutMs: number,
   opts: WaitAgentDoneOpts,

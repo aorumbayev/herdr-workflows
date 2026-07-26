@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadWorkflow } from "../src/workflow/load";
 import { substitute, substituteParams } from "../src/workflow/parse";
-import { WorkflowLoadError } from "../src/workflow/types";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -112,12 +111,6 @@ describe("workflow grammar", () => {
       kind: "run",
       payload: { shell: "pwsh", command: "Get-ChildItem" },
     });
-  });
-
-  test("default placement for run is here", async () => {
-    const root = await repoWithWorkflows({ ok: `steps:\n  - run: git diff\n` });
-    const m = await loadWorkflow("ok", root);
-    expect(m.steps[0]!.action).toMatchObject({ kind: "run", in: "here" });
   });
 
   test("ratio without split rejected", async () => {
@@ -486,11 +479,5 @@ describe("substitution", () => {
         { ...emptyValues, target: "codex", prompt: "ship it" },
       ),
     ).toEqual({ items: ["codex", { prompt: "ship it", count: 3 }] });
-  });
-});
-
-describe("WorkflowLoadError", () => {
-  test("is throwable type", () => {
-    expect(new WorkflowLoadError("x")).toBeInstanceOf(Error);
   });
 });

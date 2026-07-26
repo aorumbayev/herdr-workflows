@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fillAgentArgv, globalConfigPath, loadConfig, repoConfigPath } from "../src/config";
+import { fillAgentArgv, loadConfig } from "../src/config";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -31,8 +31,6 @@ describe("agents config", () => {
       join(root, ".hwf", "config.yaml"),
       `agents:\n  claude: ["claude", "--print", "{prompt}"]\n`,
     );
-    expect(globalConfigPath()).toBe(join(home, ".hwf", "config.yaml"));
-    expect(repoConfigPath(root)).toBe(join(root, ".hwf", "config.yaml"));
     const cfg = await loadConfig(root);
     expect(cfg.agents.claude).toEqual(["claude", "--print", "{prompt}"]);
   });

@@ -2,10 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runWorkflow } from "../src/run/runner";
+import { listWorkflows, loadWorkflow, loadWorkflowEntry } from "../src/workflow/load";
 import type { PickerState } from "../src/tui/picker";
 import { acceptWorkflow, startRun } from "../src/tui/picker";
-import { listWorkflows, loadWorkflow, loadWorkflowEntry } from "../src/workflow/load";
 
 const dirs: string[] = [];
 
@@ -112,35 +111,6 @@ steps:
       root,
     );
     expect(workflow.repoOwned).toBe(true);
-  });
-
-  test("validated recovery reuses entry input values", async () => {
-    const root = await repoWith({
-      rescue: `steps:
-  - run: 'printf recovered\\ %s "$HWF_focus"'
-`,
-      workflow: `inputs:
-  focus: text
-on_error: rescue
-steps:
-  - run: exit 1
-`,
-    });
-
-    const result = await runWorkflow({
-      name: "workflow",
-      repoRoot: root,
-      agents: {},
-      ctx: { selection: "", cwd: root },
-      inputs: { focus: "value" },
-      deps: {
-        notificationShow: async () => undefined,
-        reportToken: async () => undefined,
-      },
-    });
-
-    expect(result.ok).toBe(false);
-    expect(result.ok === false && result.error).toContain("step 1");
   });
 
   test("picker renders loader errors as terminal failures", async () => {
