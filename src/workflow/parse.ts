@@ -1,188 +1,271 @@
 import { z } from "zod";
-import { isResultDotPath, validateMethodParams } from "../herdr-methods";
+import { validateMethodParams } from "../herdr-methods";
 import {
   bail,
-  BUILTIN_NAMES,
+  DURATION_RE,
+  IDENT_RE,
   positioned,
+  WORKFLOW_FORMAT,
   WorkflowLoadError,
-  type FlatStep,
-  type ForSource,
-  type Guard,
-  type OutSpec,
-  type Placement,
-  type PlaceholderValues,
+  type PaneSpec,
+  type RawInputValue,
+  type RecoveryAction,
+  type ReturnsSpec,
   type RetrySpec,
   type RunPayload,
   type ShellName,
-  type WaitSpec,
+  type StepAction,
+  type TemplateNamespace,
+  type TemplatePath,
+  type TemplateRoot,
+  type WhenSpec,
+  type WorkflowStep,
 } from "./types";
 
-const COMPOSITE_KEYS = ["run", "agent", "use"] as const;
-const PLACEMENTS = ["here", "tab", "right", "down"] as const;
 const SHELLS = ["sh", "bash", "zsh", "pwsh", "powershell", "cmd"] as const;
+const ACTION_KEYS = ["agent", "run", "herdr", "workflow"] as const;
+const PATH_SEGMENT_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+const TEMPLATE_PATH_RE = /^(inputs|steps|context)(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*$/;
+const TEMPLATE_FIND_RE = /\{\{\s*((?:inputs|steps|context)(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\}\}/g;
+const WHOLE_TEMPLATE_RE = /^\{\{\s*((?:inputs|steps|context)(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\}\}$/;
+const WHEN_EQ_RE =
+  /^\{\{\s*((?:inputs|steps|context)(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\}\}\s*(==|!=)\s*(?:"([^"]*)"|'([^']*)')$/;
+const ANY_MUSTACHE_RE = /\{\{/;
 
-const INPUT_NAME_RE = /^[a-z][a-z0-9_]{0,31}$/;
-const IDENT_PLACEHOLDER_RE = /\{([a-z][a-z0-9_]{0,31})\}/g;
+const identSchema = z.string().regex(IDENT_RE, "must match [a-z][a-z0-9_]{0,31}");
 
-const BUILTIN_SET = new Set<string>(BUILTIN_NAMES);
+const durationSchema = z
+  .string()
+  .regex(DURATION_RE, "duration must be positive <integer><ms|s|m|h>");
 
-export function isBuiltin(name: string): boolean {
-  return BUILTIN_SET.has(name);
-}
-
-export function substitute(template: string, values: PlaceholderValues): string {
-  return template.replace(IDENT_PLACEHOLDER_RE, (match, name: string) =>
-    Object.hasOwn(values, name) ? values[name]! : match,
-  );
-}
-
-function walkParams(value: unknown, mapText: (text: string) => string): unknown {
-  if (typeof value === "string") return mapText(value);
-  if (Array.isArray(value)) return value.map((item) => walkParams(item, mapText));
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, walkParams(item, mapText)]),
-    );
+const readyWhenSchema = z.string().superRefine((value, ctx) => {
+  if (!value.startsWith("/") || !value.endsWith("/") || value.length < 3) {
+    ctx.addIssue({
+      code: "custom",
+      message: "ready_when: must be a non-empty /regex/ with no flags",
+    });
+    return;
   }
-  return value;
-}
-
-export function substituteParams(
-  params: Record<string, unknown> | undefined,
-  values: PlaceholderValues,
-): Record<string, unknown> | undefined {
-  if (!params) return undefined;
-  return walkParams(params, (text) => substitute(text, values)) as Record<string, unknown>;
-}
-
-/** Identifier-shaped placeholders in text (excludes non-identifier braces like `{"a":1}`). */
-export function textPlaceholders(text: string): string[] {
-  IDENT_PLACEHOLDER_RE.lastIndex = 0;
-  const names: string[] = [];
-  for (let m = IDENT_PLACEHOLDER_RE.exec(text); m; m = IDENT_PLACEHOLDER_RE.exec(text)) {
-    names.push(m[1]!);
+  if (value.slice(1, -1).length === 0) {
+    ctx.addIssue({
+      code: "custom",
+      message: "ready_when: regex must be non-empty",
+    });
+    return;
   }
-  return names;
-}
+  try {
+    new RegExp(value.slice(1, -1));
+  } catch {
+    ctx.addIssue({
+      code: "custom",
+      message: "ready_when: invalid regex",
+    });
+  }
+});
 
-function firstPlaceholder(text: string): string | undefined {
-  IDENT_PLACEHOLDER_RE.lastIndex = 0;
-  const m = IDENT_PLACEHOLDER_RE.exec(text);
-  return m?.[1];
-}
-
-function textHasPrompt(text: string): boolean {
-  return textPlaceholders(text).includes("prompt");
-}
-
-function textHasSession(text: string): boolean {
-  const names = textPlaceholders(text);
-  return names.includes("session") || names.includes("session_file");
-}
-
-function paramsPlaceholders(params: Record<string, unknown> | undefined): string[] {
-  if (!params) return [];
-  const refs: string[] = [];
-  walkParams(params, (text) => {
-    refs.push(...textPlaceholders(text));
-    return text;
+const paneSchema = z
+  .object({
+    open: z.enum(["tab", "beside", "below"]),
+    target: z.string().min(1).optional(),
+    workspace: z.string().min(1).optional(),
+    size: z.number().int().min(1).max(99).optional(),
+    focus: z.boolean().optional(),
+    close: z.enum(["success", "always"]).optional(),
+  })
+  .strict()
+  .superRefine((pane, ctx) => {
+    if (pane.open === "tab") {
+      if (pane.target !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: "pane.target applies only to beside/below",
+          path: ["target"],
+        });
+      }
+      if (pane.size !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: "pane.size applies only to beside/below",
+          path: ["size"],
+        });
+      }
+    } else if (pane.workspace !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "pane.workspace applies only to tab",
+        path: ["workspace"],
+      });
+    }
   });
-  return refs;
-}
 
-function paramsAnyText(
-  params: Record<string, unknown> | undefined,
-  pred: (text: string) => boolean,
-): boolean {
-  if (!params) return false;
-  let found = false;
-  walkParams(params, (text) => {
-    found ||= pred(text);
-    return text;
+const retrySchema = z
+  .object({
+    attempts: z.number().int().min(2),
+    delay: durationSchema.optional(),
+  })
+  .strict();
+
+const envSchema = z.record(z.string(), z.string());
+
+const dynamicChoiceSchema = z
+  .object({
+    run: z.array(z.string().min(1)).min(1),
+  })
+  .strict();
+
+const rawInputMapSchema = z
+  .object({
+    type: z.enum(["text", "choice", "profile"]).optional(),
+    description: z.string().optional(),
+    default: z.string().optional(),
+    options: z.union([z.array(z.string().min(1)).min(1), dynamicChoiceSchema]).optional(),
+  })
+  .strict()
+  .superRefine((map, ctx) => {
+    const type = map.type ?? (map.options !== undefined ? "choice" : "text");
+    if (type === "choice" && map.options === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "choice input requires options",
+        path: ["options"],
+      });
+    }
+    if ((type === "text" || type === "profile") && map.options !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: `${type} input rejects options`,
+        path: ["options"],
+      });
+    }
   });
-  return found;
-}
 
-function paramsHavePrompt(params: Record<string, unknown> | undefined): boolean {
-  return paramsAnyText(params, textHasPrompt);
-}
-
-function paramsHaveSession(params: Record<string, unknown> | undefined): boolean {
-  return paramsAnyText(params, textHasSession);
-}
-
-function isMethodKey(key: string): boolean {
-  return key.includes(".") && !key.includes(" ");
-}
-
-function isActionKey(key: string): boolean {
-  return (COMPOSITE_KEYS as readonly string[]).includes(key) || isMethodKey(key);
-}
-
-const MODIFIER_KEYS = [
-  "name",
-  "in",
-  "ratio",
-  "cwd",
-  "shell",
-  "env",
-  "out",
-  "with",
-  "when",
-  "for",
-  "as",
-  "retry",
-  "wait",
-  "timeout",
-  "allow_fail",
-  "on_error",
-  "prompt",
-  "focus",
-  "close",
-] as const;
+const rawInputValueSchema = z.union([
+  z.literal("text"),
+  z.literal("profile"),
+  z.array(z.string().min(1)).min(1),
+  rawInputMapSchema,
+]);
 
 type RefineCtx = z.core.$RefinementCtx<Record<string, unknown>>;
 
-function resolveActionKey(step: Record<string, unknown>, ctx: RefineCtx): string | undefined {
-  const actionKeys = Object.keys(step).filter(isActionKey);
-  if (actionKeys.length === 0) {
-    ctx.addIssue({
-      code: "custom",
-      message: `step has no action key (expected run, agent, use, or a dotted method)`,
-    });
-    return undefined;
-  }
-  if (actionKeys.length > 1) {
-    ctx.addIssue({
-      code: "custom",
-      message: `step has multiple action keys: ${actionKeys.join(", ")}`,
-    });
-    return undefined;
-  }
-  return actionKeys[0]!;
+function actionKeysOf(step: Record<string, unknown>): string[] {
+  return Object.keys(step).filter((k) => (ACTION_KEYS as readonly string[]).includes(k));
 }
 
-function refineUnknownKeys(step: Record<string, unknown>, action: string, ctx: RefineCtx): void {
+function refineStepUnknownKeys(
+  step: Record<string, unknown>,
+  action: string,
+  allowed: readonly string[],
+  ctx: RefineCtx,
+): void {
   for (const key of Object.keys(step)) {
     if (key === action) continue;
-    if ((MODIFIER_KEYS as readonly string[]).includes(key)) continue;
-    ctx.addIssue({ code: "custom", message: `unknown step key '${key}'`, path: [key] });
+    if (allowed.includes(key)) continue;
+    ctx.addIssue({ code: "custom", message: `Unrecognized key: "${key}"`, path: [key] });
   }
 }
 
-function refineShell(step: Record<string, unknown>, action: string, ctx: RefineCtx): void {
-  if (step.shell !== undefined && action !== "run") {
+function refineAgentCore(step: Record<string, unknown>, ctx: RefineCtx): void {
+  if (typeof step.agent !== "string" || step.agent.length === 0) {
+    ctx.addIssue({ code: "custom", message: "agent: prompt text is required", path: ["agent"] });
+  }
+  if (step.using !== undefined && step.target !== undefined) {
     ctx.addIssue({
       code: "custom",
-      message: "shell: is only allowed on run: steps",
-      path: ["shell"],
+      message: "using: and target: are mutually exclusive",
+      path: ["using"],
     });
   }
-  if (step.shell !== undefined && Array.isArray(step.run)) {
+}
+
+function refineAgentStep(step: Record<string, unknown>, ctx: RefineCtx): void {
+  refineStepUnknownKeys(
+    step,
+    "agent",
+    [
+      "id",
+      "when",
+      "continue_on_error",
+      "using",
+      "target",
+      "cwd",
+      "env",
+      "pane",
+      "background",
+      "timeout",
+    ],
+    ctx,
+  );
+  refineAgentCore(step, ctx);
+  if (step.target !== undefined) {
+    for (const key of ["pane", "cwd", "env"] as const) {
+      if (step[key] !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: `target: rejects ${key}:`,
+          path: [key],
+        });
+      }
+    }
+  }
+  if (step.background === true && step.timeout !== undefined) {
     ctx.addIssue({
       code: "custom",
-      message: "argv form does not use a shell",
-      path: ["shell"],
+      message: "background: rejects timeout",
+      path: ["timeout"],
+    });
+  }
+  if (step.background === true && step.pane && typeof step.pane === "object") {
+    const pane = step.pane as Record<string, unknown>;
+    if (pane.close !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "background: rejects pane.close",
+        path: ["pane", "close"],
+      });
+    }
+  }
+}
+
+function refineRunPayload(step: Record<string, unknown>, ctx: RefineCtx): void {
+  const run = step.run;
+  const isArgv = Array.isArray(run);
+  const isShell = typeof run === "string";
+  if (!isArgv && !isShell) {
+    ctx.addIssue({
+      code: "custom",
+      message: "run: must be a non-empty string or string list",
+      path: ["run"],
+    });
+  }
+  if (isShell && run.length === 0) {
+    ctx.addIssue({ code: "custom", message: "run: must be non-empty", path: ["run"] });
+  }
+  if (isArgv) {
+    if (run.length === 0) {
+      ctx.addIssue({ code: "custom", message: "run: argv must be non-empty", path: ["run"] });
+    }
+    if (!run.every((v) => typeof v === "string")) {
+      ctx.addIssue({
+        code: "custom",
+        message: "run: argv elements must be strings",
+        path: ["run"],
+      });
+    }
+    if (step.shell !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "argv form does not use a shell",
+        path: ["shell"],
+      });
+    }
+  }
+  if (isShell && ANY_MUSTACHE_RE.test(run)) {
+    ctx.addIssue({
+      code: "custom",
+      message:
+        "templates are not allowed in shell command text — use argv form or explicit env values",
+      path: ["run"],
     });
   }
   if (step.shell !== undefined && typeof step.shell === "string") {
@@ -196,187 +279,275 @@ function refineShell(step: Record<string, unknown>, action: string, ctx: RefineC
   }
 }
 
-function refineActionModifiers(
-  step: Record<string, unknown>,
-  action: string,
-  ctx: RefineCtx,
-): void {
-  refineShell(step, action, ctx);
-  if (step.prompt !== undefined && action !== "agent") {
+function refineRunLifecycle(step: Record<string, unknown>, ctx: RefineCtx): void {
+  if (step.background === true && step.ready_when !== undefined) {
     ctx.addIssue({
       code: "custom",
-      message: "prompt: is only allowed on agent:",
-      path: ["prompt"],
+      message: "background: and ready_when: are mutually exclusive",
+      path: ["ready_when"],
     });
   }
-  if (step.with !== undefined && action !== "use") {
+  if (step.background === true && step.timeout !== undefined) {
     ctx.addIssue({
       code: "custom",
-      message: "with: is only allowed on use:",
-      path: ["with"],
+      message: "background: rejects timeout",
+      path: ["timeout"],
     });
   }
-  if (step.in !== undefined && action !== "run" && action !== "agent") {
+  if (step.background === true && step.retry !== undefined) {
     ctx.addIssue({
       code: "custom",
-      message: "in: is only allowed on run: and agent:",
-      path: ["in"],
+      message: "background: rejects retry",
+      path: ["retry"],
     });
   }
-  if (step.cwd !== undefined && action !== "run" && action !== "agent") {
-    ctx.addIssue({
-      code: "custom",
-      message: "cwd: is only allowed on run: and agent:",
-      path: ["cwd"],
-    });
-  }
-  if (step.env !== undefined && action !== "run" && action !== "agent") {
-    ctx.addIssue({
-      code: "custom",
-      message: "env: is only allowed on run: and agent:",
-      path: ["env"],
-    });
-  }
-  if (step.ratio !== undefined) {
-    const place = step.in ?? (action === "agent" ? "tab" : action === "run" ? "here" : undefined);
-    if (place !== "right" && place !== "down") {
+  if (step.pane !== undefined) {
+    if (step.background !== true && step.ready_when === undefined) {
       ctx.addIssue({
         code: "custom",
-        message: "ratio: requires in: right or in: down",
-        path: ["ratio"],
+        message: "placed run requires background: or ready_when:",
+        path: ["pane"],
+      });
+    }
+    if (typeof step.pane === "object" && step.pane && "close" in step.pane) {
+      ctx.addIssue({
+        code: "custom",
+        message: "run: rejects pane.close",
+        path: ["pane", "close"],
       });
     }
   }
-  if (step.focus !== undefined) {
-    if (action !== "run" && action !== "agent") {
+  if (step.ready_when !== undefined) {
+    if (step.pane === undefined) {
       ctx.addIssue({
         code: "custom",
-        message: "focus: is only allowed on run: and agent:",
-        path: ["focus"],
+        message: "ready_when: requires pane:",
+        path: ["ready_when"],
       });
-    } else {
-      const place = step.in ?? (action === "agent" ? "tab" : "here");
-      if (place === "here") {
-        ctx.addIssue({
-          code: "custom",
-          message: "focus: requires a placed step (in: tab, right, or down)",
-          path: ["focus"],
-        });
-      }
+    }
+    if (step.timeout === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "ready_when: requires timeout",
+        path: ["timeout"],
+      });
+    }
+    if (step.retry !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "ready_when: rejects retry",
+        path: ["retry"],
+      });
     }
   }
-  if (step.close !== undefined && action !== "agent") {
+  if (step.background === true && step.pane === undefined) {
     ctx.addIssue({
       code: "custom",
-      message: "close: is only allowed on agent:",
-      path: ["close"],
-    });
-  }
-  if (typeof step.in === "string" && !(PLACEMENTS as readonly string[]).includes(step.in)) {
-    ctx.addIssue({
-      code: "custom",
-      message: `in: must be one of ${PLACEMENTS.join(", ")}`,
-      path: ["in"],
+      message: "background: requires pane:",
+      path: ["background"],
     });
   }
 }
 
-function refineWaitOut(step: Record<string, unknown>, action: string, ctx: RefineCtx): void {
-  const waitRegex =
-    typeof step.wait === "string" &&
-    step.wait.length >= 2 &&
-    step.wait.startsWith("/") &&
-    step.wait.endsWith("/");
-  if (waitRegex) {
-    const place = step.in ?? (action === "agent" ? "tab" : action === "run" ? "here" : "here");
-    if (place === "here") {
-      ctx.addIssue({
-        code: "custom",
-        message: "wait: /regex/ requires a placed step (in: tab, right, or down)",
-        path: ["wait"],
-      });
-    }
+function refineRunStep(step: Record<string, unknown>, ctx: RefineCtx): void {
+  refineStepUnknownKeys(
+    step,
+    "run",
+    [
+      "id",
+      "when",
+      "continue_on_error",
+      "shell",
+      "cwd",
+      "env",
+      "pane",
+      "background",
+      "ready_when",
+      "timeout",
+      "retry",
+    ],
+    ctx,
+  );
+  refineRunPayload(step, ctx);
+  refineRunLifecycle(step, ctx);
+}
+
+function refineHerdrStep(step: Record<string, unknown>, ctx: RefineCtx): void {
+  refineStepUnknownKeys(step, "herdr", ["id", "when", "continue_on_error", "params", "retry"], ctx);
+  if (typeof step.herdr !== "string" || step.herdr.length === 0) {
+    ctx.addIssue({ code: "custom", message: "herdr: method is required", path: ["herdr"] });
   }
-  if (step.wait === false && step.out !== undefined) {
+}
+
+function refineWorkflowStep(step: Record<string, unknown>, ctx: RefineCtx): void {
+  refineStepUnknownKeys(step, "workflow", ["id", "when", "continue_on_error", "inputs"], ctx);
+  if (typeof step.workflow !== "string" || step.workflow.length === 0) {
     ctx.addIssue({
       code: "custom",
-      message: "a detached step produces nothing to capture — remove out: or wait:",
-      path: ["out"],
-    });
-  }
-  if (step.wait === false && step.close === true) {
-    ctx.addIssue({
-      code: "custom",
-      message: "a detached step cannot be closed after the wait — remove close: or wait:",
-      path: ["close"],
+      message: "workflow: name is required",
+      path: ["workflow"],
     });
   }
 }
 
-function refineRawStep(
-  step: Record<string, unknown>,
-  ctx: z.core.$RefinementCtx<Record<string, unknown>>,
-): void {
-  const action = resolveActionKey(step, ctx);
-  if (action === undefined) return;
-  refineUnknownKeys(step, action, ctx);
-  refineActionModifiers(step, action, ctx);
-  refineWaitOut(step, action, ctx);
+function refineRawStep(step: Record<string, unknown>, ctx: RefineCtx): void {
+  const actions = actionKeysOf(step);
+  if (actions.length === 0) {
+    ctx.addIssue({
+      code: "custom",
+      message: "step has no action key (expected agent, run, herdr, or workflow)",
+    });
+    return;
+  }
+  if (actions.length > 1) {
+    ctx.addIssue({
+      code: "custom",
+      message: `step has multiple action keys: ${actions.join(", ")}`,
+    });
+    return;
+  }
+  const action = actions[0]!;
+  if (action === "agent") refineAgentStep(step, ctx);
+  else if (action === "run") refineRunStep(step, ctx);
+  else if (action === "herdr") refineHerdrStep(step, ctx);
+  else refineWorkflowStep(step, ctx);
 }
 
-const rawStepSchema = z.record(z.string(), z.unknown()).superRefine(refineRawStep);
+const sharedActionFields = {
+  agent: z.string().optional(),
+  using: z.string().min(1).optional(),
+  target: z.string().min(1).optional(),
+  run: z.union([z.string().min(1), z.array(z.string()).min(1)]).optional(),
+  shell: z.enum(SHELLS).optional(),
+  herdr: z.string().optional(),
+  params: z.record(z.string(), z.unknown()).optional(),
+  workflow: z.string().optional(),
+  inputs: z.record(z.string(), z.string()).optional(),
+  cwd: z.string().min(1).optional(),
+  env: envSchema.optional(),
+  pane: paneSchema.optional(),
+  ready_when: readyWhenSchema.optional(),
+  timeout: durationSchema.optional(),
+};
 
-export type RawStep = z.infer<typeof rawStepSchema>;
-
-const rawInputMapSchema = z
+const rawStepSchema = z
   .object({
-    type: z.enum(["text", "agents"]).optional(),
-    label: z.string().min(1).optional(),
-    desc: z.string().optional(),
-    options: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]).optional(),
-    default: z.string().optional(),
+    id: identSchema.optional(),
+    when: z.string().min(1).optional(),
+    continue_on_error: z.boolean().optional(),
+    ...sharedActionFields,
+    background: z.boolean().optional(),
+    retry: retrySchema.optional(),
   })
-  .strict();
+  .passthrough()
+  .superRefine((step, ctx) => refineRawStep(step, ctx));
 
-const rawInputValueSchema = z.union([
-  z.string(),
-  z.array(z.string().min(1)).min(1),
-  rawInputMapSchema,
+function refineRecoveryStep(step: Record<string, unknown>, ctx: RefineCtx): void {
+  for (const key of ["id", "when", "continue_on_error", "background", "retry"] as const) {
+    if (step[key] !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: `on_failure rejects ${key}:`,
+        path: [key],
+      });
+    }
+  }
+  const actions = actionKeysOf(step);
+  if (actions.length !== 1) {
+    refineRawStep(step, ctx);
+    return;
+  }
+  const action = actions[0]!;
+  if (action === "agent") {
+    refineStepUnknownKeys(step, "agent", ["using", "target", "cwd", "env", "pane", "timeout"], ctx);
+    refineAgentCore(step, ctx);
+  } else if (action === "run") {
+    refineStepUnknownKeys(
+      step,
+      "run",
+      ["shell", "cwd", "env", "pane", "ready_when", "timeout"],
+      ctx,
+    );
+    refineRunStep(
+      {
+        ...step,
+        background: undefined,
+        retry: undefined,
+        continue_on_error: undefined,
+        id: undefined,
+        when: undefined,
+      },
+      ctx,
+    );
+  } else if (action === "herdr") {
+    refineStepUnknownKeys(step, "herdr", ["params"], ctx);
+    if (typeof step.herdr !== "string" || step.herdr.length === 0) {
+      ctx.addIssue({ code: "custom", message: "herdr: method is required", path: ["herdr"] });
+    }
+  } else {
+    refineStepUnknownKeys(step, "workflow", ["inputs"], ctx);
+    if (typeof step.workflow !== "string" || step.workflow.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: "workflow: name is required",
+        path: ["workflow"],
+      });
+    }
+  }
+}
+
+const recoveryStepSchema = z
+  .object({
+    ...sharedActionFields,
+    id: z.unknown().optional(),
+    when: z.unknown().optional(),
+    continue_on_error: z.unknown().optional(),
+    background: z.unknown().optional(),
+    retry: z.unknown().optional(),
+  })
+  .passthrough()
+  .superRefine((step, ctx) => refineRecoveryStep(step, ctx));
+
+const returnsSchema = z.union([
+  z.string().min(1),
+  z.record(identSchema, z.string().min(1)).refine((m) => Object.keys(m).length > 0, {
+    message: "returns: map must be non-empty",
+  }),
 ]);
-
-const onErrorSchema = z.union([z.string().min(1), z.array(rawStepSchema).min(1)]);
 
 export const rawWorkflowSchema = z
   .object({
-    desc: z.string().optional(),
+    version: z.string().superRefine((value, ctx) => {
+      if (value !== WORKFLOW_FORMAT) {
+        ctx.addIssue({
+          code: "custom",
+          message: `unsupported workflow format '${value}' — supported format is ${WORKFLOW_FORMAT}; rewrite the workflow or upgrade herdr-workflows`,
+        });
+      }
+    }),
+    title: z.string().optional(),
+    description: z.string().optional(),
     hidden: z.boolean().optional(),
-    inputs: z
-      .record(
-        z.string().regex(INPUT_NAME_RE, "input name must match [a-z][a-z0-9_]{0,31}"),
-        rawInputValueSchema,
-      )
-      .optional(),
-    on_error: onErrorSchema.optional(),
-    steps: z.union([z.string().min(1), rawStepSchema, z.array(rawStepSchema).min(1)]),
+    inputs: z.record(identSchema, rawInputValueSchema).optional(),
+    returns: returnsSchema.optional(),
+    on_failure: recoveryStepSchema.optional(),
+    steps: z.array(rawStepSchema).min(1),
   })
   .strict();
 
-export type RawWorkflow = {
-  desc?: string;
-  hidden?: boolean;
-  inputs?: Record<string, z.infer<typeof rawInputValueSchema>>;
-  on_error?: string | RawStep[];
-  steps: RawStep[];
-};
+export type RawStep = z.infer<typeof rawStepSchema>;
+export type RawWorkflowDoc = z.infer<typeof rawWorkflowSchema>;
 
-/** Rewrite `name: [a, b] = def` (invalid YAML) into a map form before parse. */
-function preprocessWorkflowYaml(text: string): string {
-  return text.replace(
-    /^([ \t]*)([a-z][a-z0-9_]*):[ \t]*(\[[^\]]*\])[ \t]*=[ \t]*(.+)$/gm,
-    (_m, indent: string, key: string, list: string, def: string) =>
-      `${indent}${key}:\n${indent}  options: ${list}\n${indent}  default: ${def.trim()}`,
-  );
-}
+export type RawWorkflow = {
+  version: typeof WORKFLOW_FORMAT;
+  title?: string;
+  description?: string;
+  hidden?: boolean;
+  inputs?: Record<string, RawInputValue>;
+  returns?: ReturnsSpec;
+  onFailure?: RecoveryAction;
+  steps: WorkflowStep[];
+};
 
 function formatIssue(file: string, issue: z.core.$ZodIssue): string {
   const path = issue.path;
@@ -385,450 +556,373 @@ function formatIssue(file: string, issue: z.core.$ZodIssue): string {
   if (path[0] === "steps" && typeof path[1] === "number") {
     step = path[1] + 1;
     if (path.length >= 3) key = String(path[2]);
+  } else if (path[0] === "on_failure") {
+    key = path.length >= 2 ? `on_failure.${String(path[1])}` : "on_failure";
   } else if (path.length > 0) {
     key = String(path[0]);
-  } else if (issue.code === "unrecognized_keys") {
-    key = (issue as { keys: string[] }).keys.join(", ");
   }
   let message = issue.message;
   if (issue.code === "unrecognized_keys") {
     const keys = (issue as { keys: string[] }).keys;
-    message = keys.map((k) => `unknown key '${k}'`).join("; ");
-    key = keys[0];
+    message = keys.map((k) => `Unrecognized key: "${k}"`).join("; ");
+    key = key ?? keys[0];
   }
   return positioned(file, step, key, message);
 }
 
-export function normalizeSteps(steps: z.infer<typeof rawWorkflowSchema>["steps"]): RawStep[] {
-  if (typeof steps === "string") return [{ run: steps }];
-  if (Array.isArray(steps)) return steps;
-  return [steps];
+export function parseDurationMs(text: string): number {
+  const m = DURATION_RE.exec(text);
+  if (!m) {
+    throw new WorkflowLoadError(`duration must be positive <integer><ms|s|m|h> (got '${text}')`);
+  }
+  const n = Number(m[1]);
+  const unit = m[2]!;
+  if (unit === "ms") return n;
+  if (unit === "s") return n * 1000;
+  if (unit === "m") return n * 60_000;
+  return n * 3_600_000;
 }
+
+export function parseTemplatePath(path: string): TemplatePath | undefined {
+  const trimmed = path.trim();
+  if (!TEMPLATE_PATH_RE.test(trimmed)) return undefined;
+  const parts = trimmed.split(".");
+  const root = parts[0] as TemplateRoot;
+  const segments = parts.slice(1);
+  if (!segments.every((s) => PATH_SEGMENT_RE.test(s))) return undefined;
+  return { root, segments };
+}
+
+export function isWholeValueTemplate(text: string): boolean {
+  return WHOLE_TEMPLATE_RE.test(text);
+}
+
+export function textTemplates(text: string): TemplatePath[] {
+  TEMPLATE_FIND_RE.lastIndex = 0;
+  const out: TemplatePath[] = [];
+  for (let m = TEMPLATE_FIND_RE.exec(text); m; m = TEMPLATE_FIND_RE.exec(text)) {
+    const parsed = parseTemplatePath(m[1]!);
+    if (parsed) out.push(parsed);
+  }
+  return out;
+}
+
+function templateHasUnsafeMustache(text: string): boolean {
+  TEMPLATE_FIND_RE.lastIndex = 0;
+  let last = 0;
+  for (let m = TEMPLATE_FIND_RE.exec(text); m; m = TEMPLATE_FIND_RE.exec(text)) {
+    if (text.slice(last, m.index).includes("{{")) return true;
+    last = m.index + m[0].length;
+  }
+  return text.slice(last).includes("{{");
+}
+
+function resolvePath(ns: TemplateNamespace, path: TemplatePath): unknown {
+  let cur: unknown = ns[path.root];
+  for (const seg of path.segments) {
+    if (cur === null || cur === undefined || typeof cur !== "object") return undefined;
+    cur = (cur as Record<string, unknown>)[seg];
+  }
+  return cur;
+}
+
+export function renderScalar(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return "";
+    return String(value);
+  }
+  return JSON.stringify(value);
+}
+
+export function substituteText(template: string, ns: TemplateNamespace): string {
+  return template.replace(TEMPLATE_FIND_RE, (_match, path: string) => {
+    const parsed = parseTemplatePath(path);
+    if (!parsed) return _match;
+    return renderScalar(resolvePath(ns, parsed));
+  });
+}
+
+export function substituteValue(template: string, ns: TemplateNamespace): unknown {
+  const whole = WHOLE_TEMPLATE_RE.exec(template);
+  if (whole) {
+    const parsed = parseTemplatePath(whole[1]!);
+    if (!parsed) return template;
+    return resolvePath(ns, parsed);
+  }
+  return substituteText(template, ns);
+}
+
+function walkParams(value: unknown, mapText: (text: string) => unknown): unknown {
+  if (typeof value === "string") return mapText(value);
+  if (Array.isArray(value)) return value.map((item) => walkParams(item, mapText));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, walkParams(item, mapText)]),
+    );
+  }
+  return value;
+}
+
+export function substituteParams(
+  params: Record<string, unknown> | undefined,
+  ns: TemplateNamespace,
+): Record<string, unknown> | undefined {
+  if (!params) return undefined;
+  return walkParams(params, (text) => substituteValue(text, ns)) as Record<string, unknown>;
+}
+
+function parseWhen(file: string, stepIndex: number, value: string): WhenSpec {
+  const eq = WHEN_EQ_RE.exec(value);
+  if (eq) {
+    return {
+      kind: "eq",
+      path: eq[1]!,
+      value: eq[3] ?? eq[4] ?? "",
+      negate: eq[2] === "!=",
+    };
+  }
+  const truthy = WHOLE_TEMPLATE_RE.exec(value);
+  if (truthy) {
+    return { kind: "truthy", path: truthy[1]! };
+  }
+  bail(
+    file,
+    stepIndex,
+    "when",
+    "when: must be a whole-value template or '{{path}} == \"value\"' / '!=' comparison",
+  );
+}
+
+function parseRetry(value: { attempts: number; delay?: string }): RetrySpec {
+  return {
+    attempts: value.attempts,
+    delayMs: value.delay !== undefined ? parseDurationMs(value.delay) : undefined,
+  };
+}
+
+function parsePane(pane: z.infer<typeof paneSchema>): PaneSpec {
+  return {
+    open: pane.open,
+    ...(pane.target !== undefined ? { target: pane.target } : {}),
+    ...(pane.workspace !== undefined ? { workspace: pane.workspace } : {}),
+    ...(pane.size !== undefined ? { size: pane.size } : {}),
+    ...(pane.focus !== undefined ? { focus: pane.focus } : {}),
+    ...(pane.close !== undefined ? { close: pane.close } : {}),
+  };
+}
+
+function parseRunPayload(file: string, stepIndex: number, step: RawStep): RunPayload {
+  const value = step.run;
+  if (Array.isArray(value)) {
+    return { form: "argv", argv: value };
+  }
+  if (typeof value !== "string") {
+    bail(file, stepIndex, "run", "run: must be a string or argv list");
+  }
+  return step.shell
+    ? { form: "shell", command: value, shell: step.shell as ShellName }
+    : { form: "shell", command: value };
+}
+
+function parseReturns(value: string | Record<string, string>): ReturnsSpec {
+  if (typeof value === "string") return { kind: "template", template: value };
+  return { kind: "map", fields: value };
+}
+
+function optionalCwdEnvPane(step: {
+  cwd?: string;
+  env?: Record<string, string>;
+  pane?: z.infer<typeof paneSchema>;
+}): { cwd?: string; env?: Record<string, string>; pane?: PaneSpec } {
+  return {
+    ...(step.cwd !== undefined ? { cwd: step.cwd } : {}),
+    ...(step.env !== undefined ? { env: step.env } : {}),
+    ...(step.pane !== undefined ? { pane: parsePane(step.pane) } : {}),
+  };
+}
+
+function toAction(file: string, stepIndex: number, step: RawStep): StepAction {
+  if (step.agent !== undefined) {
+    return {
+      kind: "agent",
+      prompt: step.agent,
+      ...(step.using !== undefined ? { using: step.using } : {}),
+      ...(step.target !== undefined ? { target: step.target } : {}),
+      ...optionalCwdEnvPane(step),
+      ...(step.background === true ? { background: true } : {}),
+      ...(step.timeout !== undefined ? { timeoutMs: parseDurationMs(step.timeout) } : {}),
+    };
+  }
+  if (step.run !== undefined) {
+    return {
+      kind: "run",
+      payload: parseRunPayload(file, stepIndex, step),
+      ...optionalCwdEnvPane(step),
+      ...(step.background === true ? { background: true } : {}),
+      ...(step.ready_when !== undefined ? { readyWhen: step.ready_when.slice(1, -1) } : {}),
+      ...(step.timeout !== undefined ? { timeoutMs: parseDurationMs(step.timeout) } : {}),
+      ...(step.retry !== undefined ? { retry: parseRetry(step.retry) } : {}),
+    };
+  }
+  if (step.herdr !== undefined) {
+    const params = step.params;
+    const err = validateMethodParams(step.herdr, params);
+    if (err) bail(file, stepIndex, "herdr", err);
+    return {
+      kind: "herdr",
+      method: step.herdr,
+      ...(params !== undefined ? { params } : {}),
+      ...(step.retry !== undefined ? { retry: parseRetry(step.retry) } : {}),
+    };
+  }
+  if (step.workflow !== undefined) {
+    return {
+      kind: "workflow",
+      name: step.workflow,
+      ...(step.inputs !== undefined ? { inputs: step.inputs } : {}),
+    };
+  }
+  bail(file, stepIndex, undefined, "step has no action key");
+}
+
+function toStep(file: string, stepIndex: number, step: RawStep): WorkflowStep {
+  return {
+    ...(step.id !== undefined ? { id: step.id } : {}),
+    ...(step.when !== undefined ? { when: parseWhen(file, stepIndex, step.when) } : {}),
+    ...(step.continue_on_error === true ? { continueOnError: true } : {}),
+    action: toAction(file, stepIndex, step),
+  };
+}
+
+function toRecovery(file: string, step: z.infer<typeof recoveryStepSchema>): RecoveryAction {
+  const asStep = toAction(file, 0, step as RawStep);
+  if (asStep.kind === "agent") {
+    const { background: _b, ...rest } = asStep as AgentWithBackground;
+    return rest;
+  }
+  if (asStep.kind === "run") {
+    const { background: _b, retry: _r, ...rest } = asStep as RunWithExtras;
+    return rest;
+  }
+  if (asStep.kind === "herdr") {
+    const { retry: _r, ...rest } = asStep as HerdrWithRetry;
+    return rest;
+  }
+  return asStep;
+}
+
+type AgentWithBackground = Extract<StepAction, { kind: "agent" }> & { background?: boolean };
+type RunWithExtras = Extract<StepAction, { kind: "run" }> & {
+  background?: boolean;
+  retry?: RetrySpec;
+};
+type HerdrWithRetry = Extract<StepAction, { kind: "herdr" }> & { retry?: RetrySpec };
 
 export function parseRaw(file: string, text: string): RawWorkflow {
   let data: unknown;
   try {
-    data = Bun.YAML.parse(preprocessWorkflowYaml(text));
+    data = Bun.YAML.parse(text);
   } catch (error) {
     bail(file, undefined, undefined, error instanceof Error ? error.message : String(error));
   }
-  if (data && typeof data === "object" && !Array.isArray(data) && !("steps" in data)) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    bail(file, undefined, undefined, "workflow document must be a mapping");
+  }
+  const doc = data as Record<string, unknown>;
+  if (!("version" in doc)) {
+    bail(
+      file,
+      undefined,
+      "version",
+      `version is required — supported format is ${WORKFLOW_FORMAT}`,
+    );
+  }
+  if (!("steps" in doc)) {
     bail(file, undefined, "steps", "steps is required");
   }
   const result = rawWorkflowSchema.safeParse(data);
   if (!result.success) {
     throw new WorkflowLoadError(result.error.issues.map((i) => formatIssue(file, i)).join("; "));
   }
+  const raw = result.data;
   return {
-    desc: result.data.desc,
-    hidden: result.data.hidden,
-    inputs: result.data.inputs,
-    on_error: result.data.on_error,
-    steps: normalizeSteps(result.data.steps),
+    version: WORKFLOW_FORMAT,
+    ...(raw.title !== undefined ? { title: raw.title } : {}),
+    ...(raw.description !== undefined ? { description: raw.description } : {}),
+    ...(raw.hidden !== undefined ? { hidden: raw.hidden } : {}),
+    ...(raw.inputs !== undefined ? { inputs: raw.inputs as Record<string, RawInputValue> } : {}),
+    ...(raw.returns !== undefined ? { returns: parseReturns(raw.returns) } : {}),
+    ...(raw.on_failure !== undefined ? { onFailure: toRecovery(file, raw.on_failure) } : {}),
+    steps: raw.steps.map((step, i) => toStep(file, i + 1, step)),
   };
 }
 
-const PLACEHOLDER_SHELL =
-  'placeholders are not allowed in shell command text — use argv form (run: [cmd, "{name}"]) or HWF_<name> env vars';
-
-const NONEMPTY_GUARD_RE = /^(!?)\{([a-z][a-z0-9_]{0,31})\}$/;
-const EQ_GUARD_RE = /^\{([a-z][a-z0-9_]{0,31})\}\s*(==|!=)\s*(?:"([^"]*)"|'([^']*)')$/;
-const EQ_GUARD_UNQUOTED_RE = /^\{[a-z][a-z0-9_]{0,31}\}\s*(?:==|!=)/;
-const FOR_BINDING_RE = /^\{([a-z][a-z0-9_]{0,31})\}$/;
-const FOR_SH_RE = /^sh\s+(.+)$/s;
-
-function rejectShellPlaceholders(
-  file: string,
-  stepIndex: number,
-  key: string | undefined,
-  text: string,
-): void {
-  if (firstPlaceholder(text)) {
-    bail(file, stepIndex, key, PLACEHOLDER_SHELL);
-  }
-}
-
-export function parseGuard(file: string, stepIndex: number, key: string, value: unknown): Guard {
-  if (Array.isArray(value)) {
-    if (!value.every((v) => typeof v === "string")) {
-      bail(file, stepIndex, key, "argv guard elements must be strings");
-    }
-    return { kind: "argv", argv: value };
-  }
-  if (typeof value !== "string") {
-    bail(file, stepIndex, key, "when:/until: must be a string or argv list");
-  }
-  const m = NONEMPTY_GUARD_RE.exec(value);
-  if (m) return { kind: "nonempty", name: m[2]!, negate: m[1] === "!" };
-  const eq = EQ_GUARD_RE.exec(value);
-  if (eq) {
-    return { kind: "eq", name: eq[1]!, value: eq[3] ?? eq[4] ?? "", negate: eq[2] === "!=" };
-  }
-  if (EQ_GUARD_UNQUOTED_RE.test(value)) {
-    bail(file, stepIndex, key, `quote the comparison value: when: '{name} == "value"'`);
-  }
-  rejectShellPlaceholders(file, stepIndex, key, value);
-  return { kind: "shell", command: value };
-}
-
-function parseFor(file: string, stepIndex: number, value: unknown): ForSource {
-  if (Array.isArray(value)) {
-    if (value.length === 0) {
-      bail(file, stepIndex, "for", "for: list is empty");
-    }
-    if (!value.every((v) => typeof v === "string")) {
-      bail(file, stepIndex, "for", "for: list elements must be strings");
-    }
-    return { kind: "list", items: value };
-  }
-  if (typeof value !== "string") {
-    bail(file, stepIndex, "for", "for: must be a list, sh <cmd>, or {name}");
-  }
-  const bind = FOR_BINDING_RE.exec(value);
-  if (bind) return { kind: "binding", name: bind[1]! };
-  const sh = FOR_SH_RE.exec(value);
-  if (sh) {
-    rejectShellPlaceholders(file, stepIndex, "for", sh[1]!);
-    return { kind: "sh", command: sh[1]! };
-  }
-  bail(file, stepIndex, "for", "for: must be a list, sh <cmd>, or {name}");
-}
-
-function parseRetry(file: string, stepIndex: number, value: unknown): RetrySpec {
-  if (typeof value === "number") {
-    if (!Number.isInteger(value) || value < 1) {
-      bail(file, stepIndex, "retry", "times must be at least 1");
-    }
-    return { times: value };
-  }
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    bail(file, stepIndex, "retry", "retry: must be an integer or map");
-  }
-  const map = value as Record<string, unknown>;
-  const times = map.times;
-  if (typeof times !== "number" || !Number.isInteger(times) || times < 1) {
-    bail(file, stepIndex, "retry", "times must be at least 1");
-  }
-  const spec: RetrySpec = { times };
-  if (map.delay !== undefined) {
-    if (typeof map.delay !== "number" || map.delay < 0) {
-      bail(file, stepIndex, "retry", "delay must be a non-negative number");
-    }
-    spec.delaySec = map.delay;
-  }
-  if (map.until !== undefined) spec.until = parseGuard(file, stepIndex, "until", map.until);
-  if (map.reset !== undefined) {
-    if (typeof map.reset !== "string") {
-      bail(file, stepIndex, "retry", "reset: must be a shell command string");
-    }
-    rejectShellPlaceholders(file, stepIndex, "reset", map.reset);
-    spec.reset = map.reset;
-  }
-  return spec;
-}
-
-function parseWait(file: string, stepIndex: number, value: unknown): WaitSpec {
-  if (value === undefined || value === true) return { kind: "block" };
-  if (value === false) return { kind: "detach" };
-  if (
-    typeof value === "string" &&
-    value.length >= 2 &&
-    value.startsWith("/") &&
-    value.endsWith("/")
-  ) {
-    return { kind: "regex", pattern: value.slice(1, -1) };
-  }
-  bail(file, stepIndex, "wait", "wait: must be true, false, or /regex/");
-}
-
-function parseOut(file: string, stepIndex: number, value: unknown): OutSpec {
+function collectTemplatesFromValue(value: unknown, out: TemplatePath[]): void {
   if (typeof value === "string") {
-    if (!/^[a-z][a-z0-9_]{0,31}$/.test(value)) {
-      bail(file, stepIndex, "out", "out: name must match [a-z][a-z0-9_]{0,31}");
-    }
-    return { kind: "text", name: value };
-  }
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    const fields: Record<string, string> = {};
-    for (const [name, path] of Object.entries(value as Record<string, unknown>)) {
-      if (!/^[a-z][a-z0-9_]{0,31}$/.test(name)) {
-        bail(file, stepIndex, "out", `out: name '${name}' must match [a-z][a-z0-9_]{0,31}`);
-      }
-      if (typeof path !== "string" || !path) {
-        bail(file, stepIndex, "out", `out.${name} must be a dot-path string`);
-      }
-      if (!isResultDotPath(path)) {
-        bail(file, stepIndex, "out", `out.${name}: unresolvable result path '${path}'`);
-      }
-      fields[name] = path;
-    }
-    return { kind: "map", fields };
-  }
-  bail(file, stepIndex, "out", "out: must be an identifier or map");
-}
-
-function parseRunPayload(file: string, stepIndex: number, step: RawStep): RunPayload {
-  const value = step.run;
-  const shell = typeof step.shell === "string" ? step.shell : undefined;
-  if (shell !== undefined && !(SHELLS as readonly string[]).includes(shell)) {
-    bail(file, stepIndex, "shell", `shell: must be one of ${SHELLS.join(", ")}`);
+    out.push(...textTemplates(value));
+    return;
   }
   if (Array.isArray(value)) {
-    if (!value.every((v) => typeof v === "string")) {
-      bail(file, stepIndex, "run", "argv elements must be strings");
-    }
-    return { form: "argv", argv: value };
+    for (const item of value) collectTemplatesFromValue(item, out);
+    return;
   }
-  if (typeof value !== "string") {
-    bail(file, stepIndex, "run", "run: must be a string or argv list");
+  if (value && typeof value === "object") {
+    for (const item of Object.values(value)) collectTemplatesFromValue(item, out);
   }
-  rejectShellPlaceholders(file, stepIndex, "run", value);
-  const form = value.includes("\n") ? ("block" as const) : ("scalar" as const);
-  return shell ? { form, command: value, shell: shell as ShellName } : { form, command: value };
 }
 
-export function stepReferencedNames(step: FlatStep): string[] {
-  const names: string[] = [];
-  const addText = (text: string | undefined) => {
-    if (text) names.push(...textPlaceholders(text));
-  };
+function stepTemplates(step: WorkflowStep): TemplatePath[] {
+  const out: TemplatePath[] = [];
+  if (step.when?.kind === "truthy") {
+    const p = parseTemplatePath(step.when.path);
+    if (p) out.push(p);
+  }
+  if (step.when?.kind === "eq") {
+    const p = parseTemplatePath(step.when.path);
+    if (p) out.push(p);
+  }
   const a = step.action;
-  if (a.kind === "run") {
-    if (a.payload.form === "argv") for (const el of a.payload.argv) addText(el);
-    if (a.cwd) addText(a.cwd);
-    if (a.env) for (const v of Object.values(a.env)) addText(v);
-  } else if (a.kind === "agent") {
-    addText(a.agent);
-    addText(a.prompt);
-    if (a.cwd) addText(a.cwd);
-    if (a.env) for (const v of Object.values(a.env)) addText(v);
-  } else if (a.kind === "primitive") {
-    names.push(...paramsPlaceholders(a.params));
-  } else if (a.kind === "include") {
-    for (const v of Object.values(a.with)) addText(v);
+  if (a.kind === "agent") {
+    out.push(...textTemplates(a.prompt));
+    if (a.using) out.push(...textTemplates(a.using));
+    if (a.target) out.push(...textTemplates(a.target));
+    if (a.cwd) out.push(...textTemplates(a.cwd));
+    if (a.env) collectTemplatesFromValue(a.env, out);
+    if (a.pane) collectTemplatesFromValue(a.pane, out);
+  } else if (a.kind === "run") {
+    if (a.payload.form === "argv") for (const el of a.payload.argv) out.push(...textTemplates(el));
+    if (a.cwd) out.push(...textTemplates(a.cwd));
+    if (a.env) collectTemplatesFromValue(a.env, out);
+    if (a.pane) collectTemplatesFromValue(a.pane, out);
+  } else if (a.kind === "herdr") {
+    collectTemplatesFromValue(a.params, out);
+  } else {
+    if (a.inputs) collectTemplatesFromValue(a.inputs, out);
   }
-  if (step.when?.kind === "nonempty") names.push(step.when.name);
-  if (step.when?.kind === "eq") names.push(step.when.name);
-  if (step.when?.kind === "argv") for (const el of step.when.argv) addText(el);
-  if (step.for?.kind === "binding") names.push(step.for.name);
-  if (step.retry?.until?.kind === "nonempty") names.push(step.retry.until.name);
-  if (step.retry?.until?.kind === "eq") names.push(step.retry.until.name);
-  if (step.retry?.until?.kind === "argv") for (const el of step.retry.until.argv) addText(el);
-  return names;
+  return out;
 }
 
-export function flatNeedsPrompt(steps: FlatStep[]): boolean {
-  return steps.some((s) => {
-    if (s.action.kind === "agent" && s.action.prompt && textHasPrompt(s.action.prompt)) return true;
-    if (s.action.kind === "primitive" && paramsHavePrompt(s.action.params)) return true;
-    if (s.action.kind === "run" && s.action.payload.form === "argv") {
-      return s.action.payload.argv.some(textHasPrompt);
-    }
-    if (s.action.kind === "include") return flatNeedsPrompt(s.action.steps);
-    return stepReferencedNames(s).includes("prompt");
-  });
-}
-
-export function flatNeedsSession(steps: FlatStep[]): boolean {
-  return steps.some((s) => {
-    if (s.action.kind === "agent" && s.action.prompt && textHasSession(s.action.prompt))
-      return true;
-    if (s.action.kind === "primitive" && paramsHaveSession(s.action.params)) return true;
-    if (s.action.kind === "run" && s.action.payload.form === "argv") {
-      return s.action.payload.argv.some(textHasSession);
-    }
-    if (s.action.kind === "include") return flatNeedsSession(s.action.steps);
-    return false;
-  });
-}
-
-export function flatNeedsInvokingAgent(steps: FlatStep[]): boolean {
-  return steps.some((s) => {
-    if (s.action.kind === "agent" && s.action.agent === "{agent}") return true;
-    if (s.action.kind === "include") return flatNeedsInvokingAgent(s.action.steps);
-    return stepReferencedNames(s).includes("agent");
-  });
-}
-
-export const AGENT_NAME_RE = /^\{([a-z][a-z0-9_]{0,31})\}$/;
-
-function actionKeyOf(step: RawStep): string {
-  const keys = Object.keys(step).filter(
-    (k) => (COMPOSITE_KEYS as readonly string[]).includes(k) || isMethodKey(k),
+export function workflowNeedsTranscript(steps: WorkflowStep[], returns?: ReturnsSpec): boolean {
+  const refs = steps.flatMap(stepTemplates);
+  if (returns?.kind === "template") refs.push(...textTemplates(returns.template));
+  if (returns?.kind === "map") {
+    for (const t of Object.values(returns.fields)) refs.push(...textTemplates(t));
+  }
+  return refs.some(
+    (p) =>
+      p.root === "context" &&
+      (p.segments[0] === "transcript" || p.segments[0] === "transcript_file"),
   );
-  return keys[0]!;
 }
 
-function placementOf(action: string, step: RawStep): Placement {
-  if (typeof step.in === "string" && (PLACEMENTS as readonly string[]).includes(step.in)) {
-    return step.in as Placement;
-  }
-  return action === "agent" ? "tab" : "here";
-}
-
-function outNames(out: OutSpec | undefined): string[] {
-  if (!out) return [];
-  if (out.kind === "text") return [out.name];
-  return Object.keys(out.fields);
-}
-
-function envMap(step: RawStep): Record<string, string> | undefined {
-  return step.env && typeof step.env === "object" && !Array.isArray(step.env)
-    ? (step.env as Record<string, string>)
-    : undefined;
-}
-
-function flatRun(file: string, stepIndex: number, step: RawStep, out: OutSpec | undefined) {
-  const payload = parseRunPayload(file, stepIndex, step);
-  const place = placementOf("run", step);
-  if (out?.kind === "map" && place === "here") {
-    bail(
-      file,
-      stepIndex,
-      "out",
-      "map out: requires a placed run: or a primitive with a structured result",
+export function workflowNeedsInvokingAgent(steps: WorkflowStep[]): boolean {
+  return steps.some((s) => {
+    if (s.action.kind !== "agent" || !s.action.target) return false;
+    return textTemplates(s.action.target).some(
+      (p) => p.root === "context" && p.segments[0] === "agent" && p.segments.length === 1,
     );
-  }
-  if (out?.kind === "text" && place !== "here") {
-    bail(
-      file,
-      stepIndex,
-      "out",
-      "identifier out: on a placed run: is invalid — use map form { tab: tab_id, … }",
-    );
-  }
-  return {
-    kind: "run" as const,
-    payload,
-    in: place,
-    cwd: typeof step.cwd === "string" ? step.cwd : undefined,
-    env: envMap(step),
-    ratio: typeof step.ratio === "number" ? step.ratio : undefined,
-    focus: step.focus === false ? false : undefined,
-  };
-}
-
-function flatAgent(file: string, stepIndex: number, step: RawStep, out: OutSpec | undefined) {
-  if (typeof step.agent !== "string" || !step.agent) {
-    bail(file, stepIndex, "agent", "agent: value is required");
-  }
-  if (out?.kind === "map") {
-    bail(file, stepIndex, "out", "agent: produces text — use identifier out: form");
-  }
-  return {
-    kind: "agent" as const,
-    agent: step.agent,
-    prompt: typeof step.prompt === "string" ? step.prompt : undefined,
-    in: placementOf("agent", step),
-    cwd: typeof step.cwd === "string" ? step.cwd : undefined,
-    env: envMap(step),
-    ratio: typeof step.ratio === "number" ? step.ratio : undefined,
-    focus: step.focus === false ? false : undefined,
-    close: step.close === true ? true : undefined,
-  };
-}
-
-function flatPrimitive(
-  file: string,
-  stepIndex: number,
-  method: string,
-  step: RawStep,
-  out: OutSpec | undefined,
-) {
-  const params =
-    step[method] === null || step[method] === undefined
-      ? undefined
-      : typeof step[method] === "object" && !Array.isArray(step[method])
-        ? (step[method] as Record<string, unknown>)
-        : undefined;
-  if (step[method] !== null && step[method] !== undefined && params === undefined) {
-    bail(file, stepIndex, method, "primitive value must be a params object");
-  }
-  const err = validateMethodParams(method, params);
-  if (err) bail(file, stepIndex, method, err);
-  if (out?.kind === "text") {
-    bail(file, stepIndex, "out", "primitive steps require map-form out: (name: dot.path)");
-  }
-  if (out?.kind === "map") {
-    for (const [name, path] of Object.entries(out.fields)) {
-      if (!isResultDotPath(path)) {
-        bail(file, stepIndex, "out", `out.${name}: unresolvable result path '${path}'`);
-      }
-    }
-  }
-  return { kind: "primitive" as const, method, params };
-}
-
-export function rawToFlat(file: string, stepIndex: number, step: RawStep): FlatStep {
-  const action = actionKeyOf(step);
-  const wait = parseWait(file, stepIndex, step.wait);
-  const out = step.out !== undefined ? parseOut(file, stepIndex, step.out) : undefined;
-  const when = step.when !== undefined ? parseGuard(file, stepIndex, "when", step.when) : undefined;
-  const forSource = step.for !== undefined ? parseFor(file, stepIndex, step.for) : undefined;
-  if (step.as !== undefined) {
-    if (!forSource) {
-      bail(file, stepIndex, "as", "as: requires for:");
-    }
-    if (typeof step.as !== "string" || !/^[a-z][a-z0-9_]{0,31}$/.test(step.as)) {
-      bail(file, stepIndex, "as", "as: must match [a-z][a-z0-9_]{0,31}");
-    }
-  }
-  const retry = step.retry !== undefined ? parseRetry(file, stepIndex, step.retry) : undefined;
-  const timeoutMs = typeof step.timeout === "number" ? step.timeout * 1000 : undefined;
-
-  let flatAction: FlatStep["action"];
-  if (action === "run") flatAction = flatRun(file, stepIndex, step, out);
-  else if (action === "agent") flatAction = flatAgent(file, stepIndex, step, out);
-  else if (action === "use") {
-    bail(file, stepIndex, "use", "internal: use: must be flattened before rawToFlat");
-  } else flatAction = flatPrimitive(file, stepIndex, action, step, out);
-
-  if (retry) {
-    const createsPane =
-      flatAction.kind === "agent" || (flatAction.kind === "run" && flatAction.in !== "here");
-    if (createsPane && !retry.reset) {
-      bail(
-        file,
-        stepIndex,
-        "retry",
-        "retry: on a pane-creating step requires reset: — herdr has no create-or-return-by-key method, so attempt 2 would strand attempt 1's pane; put the close in reset:",
-      );
-    }
-  }
-
-  return {
-    name: typeof step.name === "string" ? step.name : undefined,
-    action: flatAction,
-    out,
-    when,
-    for: forSource,
-    as: typeof step.as === "string" ? step.as : undefined,
-    retry,
-    wait,
-    timeoutMs,
-    allowFail: step.allow_fail === true ? true : undefined,
-  };
-}
-
-export function stepOutNames(step: FlatStep): string[] {
-  return outNames(step.out);
-}
-
-export function checkAgents(file: string, steps: FlatStep[], agents: Set<string>): void {
-  const walk = (list: FlatStep[], baseIndex: number) => {
-    list.forEach((step, idx) => {
-      if (step.action.kind === "include") {
-        walk(step.action.steps, baseIndex);
-        return;
-      }
-      if (step.action.kind !== "agent") return;
-      const name = step.action.agent;
-      if (name === "{agent}") return;
-      if (AGENT_NAME_RE.test(name)) return;
-      if (!agents.has(name)) {
-        bail(file, baseIndex + idx + 1, "agent", `unknown agent '${name}'`);
-      }
-    });
-  };
-  walk(steps, 0);
+  });
 }

@@ -64,11 +64,13 @@ describe("web server security", () => {
   });
 });
 
+const V1 = "version: v1alpha1\n";
+
 describe("web visual round-trip", () => {
   test("parse then format returns readable YAML with blank-line separated steps", async () => {
     const root = await repo();
     const { base, token } = await serve(root);
-    const yaml = "steps:\n  - run: echo hi\n  - agent: claude\n    prompt: go\n";
+    const yaml = `${V1}steps:\n  - run: echo hi\n  - agent: go\n`;
     const parsed = (await (
       await fetch(`${base}/api/parse`, {
         method: "POST",
@@ -86,7 +88,7 @@ describe("web visual round-trip", () => {
     ).json()) as { ok: boolean; text: string };
     expect(formatted.ok).toBe(true);
     expect(formatted.text).toContain("run: echo hi");
-    expect(formatted.text).toContain("\n\n  - agent: claude");
+    expect(formatted.text).toContain("\n\n  - agent:");
   });
 
   test("format rejects a doc with no steps", async () => {
@@ -95,7 +97,7 @@ describe("web visual round-trip", () => {
     const res = await fetch(`${base}/api/format`, {
       method: "POST",
       headers: { "x-hwf-token": token, "content-type": "application/json" },
-      body: JSON.stringify({ doc: { steps: [] } }),
+      body: JSON.stringify({ doc: { version: "v1alpha1", steps: [] } }),
     });
     expect(((await res.json()) as { ok: boolean }).ok).toBe(false);
   });
@@ -108,7 +110,7 @@ describe("web server writes", () => {
     const res = await fetch(`${base}/api/validate`, {
       method: "POST",
       headers: { "x-hwf-token": token, "content-type": "application/json" },
-      body: JSON.stringify({ name: "buf", text: "steps:\n  - run: echo hi\n" }),
+      body: JSON.stringify({ name: "buf", text: `${V1}steps:\n  - run: echo hi\n` }),
     });
     expect(((await res.json()) as { ok: boolean }).ok).toBe(true);
     expect(await Bun.file(join(root, ".hwf", "workflows", "buf.yaml")).exists()).toBe(false);
@@ -123,12 +125,12 @@ describe("web server writes", () => {
       body: JSON.stringify({
         name: "bad",
         scope: "repo",
-        text: 'steps:\n  - run: "echo {pane}"\n',
+        text: `${V1}steps:\n  - run: true\n    out: x\n`,
       }),
     });
     const data = (await res.json()) as { ok: boolean; error?: string };
     expect(data.ok).toBe(false);
-    expect(data.error).toMatch(/step 1/);
+    expect(data.error).toMatch(/Unrecognized key|Invalid input|out/);
     expect(await Bun.file(join(root, ".hwf", "workflows", "bad.yaml")).exists()).toBe(false);
   });
 
@@ -138,7 +140,11 @@ describe("web server writes", () => {
     const res = await fetch(`${base}/api/workflow`, {
       method: "PUT",
       headers: { "x-hwf-token": token, "content-type": "application/json" },
-      body: JSON.stringify({ name: "good", scope: "repo", text: "steps:\n  - run: echo hi\n" }),
+      body: JSON.stringify({
+        name: "good",
+        scope: "repo",
+        text: `${V1}steps:\n  - run: echo hi\n`,
+      }),
     });
     expect(((await res.json()) as { ok: boolean }).ok).toBe(true);
     expect(await Bun.file(join(root, ".hwf", "workflows", "good.yaml")).exists()).toBe(true);
@@ -147,7 +153,7 @@ describe("web server writes", () => {
   test("promote refuses clobber without force, overwrites with force", async () => {
     const root = await repo();
     const wdir = join(root, ".hwf", "workflows");
-    await writeFile(join(wdir, "shared.yaml"), "steps:\n  - run: echo repo\n");
+    await writeFile(join(wdir, "shared.yaml"), `${V1}steps:\n  - run: echo repo\n`);
     // point HOME at a temp so global writes stay isolated
     const home = await mkdtemp(join(tmpdir(), "herdr-workflows-home-"));
     dirs.push(home);
@@ -157,7 +163,7 @@ describe("web server writes", () => {
       await mkdir(join(home, ".hwf", "workflows"), { recursive: true });
       await writeFile(
         join(home, ".hwf", "workflows", "shared.yaml"),
-        "steps:\n  - run: echo global\n",
+        `${V1}steps:\n  - run: echo global\n`,
       );
       const { base, token } = await serve(root);
       const call = (force?: boolean) =>

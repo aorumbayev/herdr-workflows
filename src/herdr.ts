@@ -1,7 +1,9 @@
 import { connect } from "node:net";
 import { randomUUID } from "node:crypto";
 import { checkHerdrProtocol } from "./herdr-methods";
-import type { Placement } from "./workflow/types";
+import type { PaneOpen } from "./workflow/types";
+
+type Placement = "here" | PaneOpen | "right" | "down" | "beside" | "below";
 
 export type HerdrResponse = {
   id: string;
@@ -160,8 +162,8 @@ export async function readLine(): Promise<PromptResult> {
 }
 
 /** Request ceiling for pane scrollback. Actual text still capped by herdr retention. */
-export const PANE_READ_LINES = 100_000;
-export const PANE_READ_SOURCE = "recent-unwrapped" as const;
+const PANE_READ_LINES = 100_000;
+const PANE_READ_SOURCE = "recent-unwrapped" as const;
 
 export async function tabClose(tabId: string): Promise<void> {
   await herdrCall("tab.close", { tab_id: tabId });
@@ -236,7 +238,10 @@ export async function pluginPaneOpen(params: {
 
 export async function paneRead(
   paneId: string,
-  opts: { source: "visible" | "recent" | "recent-unwrapped"; lines: number },
+  opts: {
+    source?: "visible" | "recent" | "recent-unwrapped";
+    lines?: number;
+  } = {},
 ): Promise<string> {
   const args = [
     "pane",
@@ -245,9 +250,9 @@ export async function paneRead(
     "--format",
     "text",
     "--source",
-    opts.source,
+    opts.source ?? PANE_READ_SOURCE,
     "--lines",
-    String(opts.lines),
+    String(opts.lines ?? PANE_READ_LINES),
   ];
   const { stdout, stderr, exitCode } = await herdrCli(args);
   if (exitCode !== 0) throw new HerdrError("pane_read_failed", stderr.trim() || "pane read failed");
@@ -393,7 +398,7 @@ type PlaceLayoutApply = (params: {
   focus?: boolean;
 }) => Promise<{ tabId: string; paneId: string; workspaceId: string }>;
 
-export type PlaceOpts = {
+type PlaceOpts = {
   deps: { layoutApply: PlaceLayoutApply };
   ctx: {
     workspaceId?: string;
@@ -426,15 +431,21 @@ export async function placeCommand(
       focus: focus ?? true,
     });
   }
-  if (place === "right" || place === "down") {
+  if (place === "right" || place === "down" || place === "beside" || place === "below") {
     if (!opts.ctx.paneId || !opts.ctx.tabId) {
       throw new HerdrError("placement_failed", `in: ${place} requires an invoking pane`);
     }
+    const direction =
+      place === "beside" || place === "right"
+        ? "right"
+        : place === "below" || place === "down"
+          ? "down"
+          : place;
     return opts.deps.layoutApply({
       tabId: opts.ctx.tabId,
       root: {
         type: "split",
-        direction: place,
+        direction,
         ratio: ratio ?? 0.5,
         first: { type: "pane", pane_id: opts.ctx.paneId },
         second: {

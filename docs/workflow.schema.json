@@ -2,7 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
-    "desc": {
+    "version": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "description": {
       "type": "string"
     },
     "hidden": {
@@ -17,7 +23,12 @@
       "additionalProperties": {
         "anyOf": [
           {
-            "type": "string"
+            "type": "string",
+            "const": "text"
+          },
+          {
+            "type": "string",
+            "const": "profile"
           },
           {
             "minItems": 1,
@@ -32,21 +43,16 @@
             "properties": {
               "type": {
                 "type": "string",
-                "enum": ["text", "agents"]
+                "enum": ["text", "choice", "profile"]
               },
-              "label": {
-                "type": "string",
-                "minLength": 1
+              "description": {
+                "type": "string"
               },
-              "desc": {
+              "default": {
                 "type": "string"
               },
               "options": {
                 "anyOf": [
-                  {
-                    "type": "string",
-                    "minLength": 1
-                  },
                   {
                     "minItems": 1,
                     "type": "array",
@@ -54,11 +60,23 @@
                       "type": "string",
                       "minLength": 1
                     }
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "run": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    },
+                    "required": ["run"],
+                    "additionalProperties": false
                   }
                 ]
-              },
-              "default": {
-                "type": "string"
               }
             },
             "additionalProperties": false
@@ -66,26 +84,7 @@
         ]
       }
     },
-    "on_error": {
-      "anyOf": [
-        {
-          "type": "string",
-          "minLength": 1
-        },
-        {
-          "minItems": 1,
-          "type": "array",
-          "items": {
-            "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
-            "additionalProperties": {}
-          }
-        }
-      ]
-    },
-    "steps": {
+    "returns": {
       "anyOf": [
         {
           "type": "string",
@@ -94,27 +93,277 @@
         {
           "type": "object",
           "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,31}$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
+    },
+    "on_failure": {
+      "type": "object",
+      "properties": {
+        "agent": {
+          "type": "string"
+        },
+        "using": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "run": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "shell": {
+          "type": "string",
+          "enum": ["sh", "bash", "zsh", "pwsh", "powershell", "cmd"]
+        },
+        "herdr": {
+          "type": "string"
+        },
+        "params": {
+          "type": "object",
+          "propertyNames": {
             "type": "string"
           },
           "additionalProperties": {}
         },
-        {
-          "minItems": 1,
-          "type": "array",
-          "items": {
+        "workflow": {
+          "type": "string"
+        },
+        "inputs": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "cwd": {
+          "type": "string",
+          "minLength": 1
+        },
+        "env": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "pane": {
+          "type": "object",
+          "properties": {
+            "open": {
+              "type": "string",
+              "enum": ["tab", "beside", "below"]
+            },
+            "target": {
+              "type": "string",
+              "minLength": 1
+            },
+            "workspace": {
+              "type": "string",
+              "minLength": 1
+            },
+            "size": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 99
+            },
+            "focus": {
+              "type": "boolean"
+            },
+            "close": {
+              "type": "string",
+              "enum": ["success", "always"]
+            }
+          },
+          "required": ["open"],
+          "additionalProperties": false
+        },
+        "ready_when": {
+          "type": "string"
+        },
+        "timeout": {
+          "type": "string",
+          "pattern": "^([1-9]\\d*)(ms|s|m|h)$"
+        },
+        "id": {},
+        "when": {},
+        "continue_on_error": {},
+        "background": {},
+        "retry": {}
+      },
+      "additionalProperties": {}
+    },
+    "steps": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,31}$"
+          },
+          "when": {
+            "type": "string",
+            "minLength": 1
+          },
+          "continue_on_error": {
+            "type": "boolean"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "using": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1
+          },
+          "run": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "shell": {
+            "type": "string",
+            "enum": ["sh", "bash", "zsh", "pwsh", "powershell", "cmd"]
+          },
+          "herdr": {
+            "type": "string"
+          },
+          "params": {
             "type": "object",
             "propertyNames": {
               "type": "string"
             },
             "additionalProperties": {}
+          },
+          "workflow": {
+            "type": "string"
+          },
+          "inputs": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "cwd": {
+            "type": "string",
+            "minLength": 1
+          },
+          "env": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "pane": {
+            "type": "object",
+            "properties": {
+              "open": {
+                "type": "string",
+                "enum": ["tab", "beside", "below"]
+              },
+              "target": {
+                "type": "string",
+                "minLength": 1
+              },
+              "workspace": {
+                "type": "string",
+                "minLength": 1
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 99
+              },
+              "focus": {
+                "type": "boolean"
+              },
+              "close": {
+                "type": "string",
+                "enum": ["success", "always"]
+              }
+            },
+            "required": ["open"],
+            "additionalProperties": false
+          },
+          "ready_when": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "string",
+            "pattern": "^([1-9]\\d*)(ms|s|m|h)$"
+          },
+          "background": {
+            "type": "boolean"
+          },
+          "retry": {
+            "type": "object",
+            "properties": {
+              "attempts": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 9007199254740991
+              },
+              "delay": {
+                "type": "string",
+                "pattern": "^([1-9]\\d*)(ms|s|m|h)$"
+              }
+            },
+            "required": ["attempts"],
+            "additionalProperties": false
           }
-        }
-      ]
+        },
+        "additionalProperties": {}
+      }
     }
   },
-  "required": ["steps"],
+  "required": ["version", "steps"],
   "additionalProperties": false,
   "$id": "https://raw.githubusercontent.com/aorumbayev/herdr-workflows/main/docs/workflow.schema.json",
   "title": "herdr-workflows workflow",
-  "description": "Linear YAML workflow for the herdr-workflows herdr plugin (syntax v2). Cross-field rules (one action key per step; placeholder legality by run: form; when/for/retry; primitives) are enforced by the loader, not this schema."
+  "description": "Linear YAML workflow for the herdr-workflows herdr plugin (format v1alpha1). Cross-field rules are enforced by the parser and loader, not this schema."
 }

@@ -11,7 +11,7 @@ import {
 import { truncate } from "../src/tui/picker";
 
 const entries: WorkflowListEntry[] = [
-  { name: "chat-handoff", source: "repo", file: "/r/chat.yaml", needsPrompt: true },
+  { name: "chat-handoff", source: "repo", file: "/r/chat.yaml", needsTranscript: true },
   { name: "deploy", source: "global", file: "/g/deploy.yaml" },
   {
     name: "broken",
@@ -69,18 +69,18 @@ describe("buildPickerOptions", () => {
       name: "handover",
       source: "repo",
       file: "/r/handover.yaml",
-      inputs: [{ name: "target", label: "target", options: ["claude"] }],
+      inputs: [{ name: "target", type: "choice", options: ["claude"] }],
     };
     const options = buildPickerOptions([entry]);
     expect(options[0]!.name).toBe("handover · repo · inputs");
   });
 
-  test("single-line name with source; prompt flagged", () => {
+  test("single-line name with source; transcript flagged", () => {
     const { valid } = filterWorkflowEntries(entries, "");
     const options = buildPickerOptions(valid);
     expect(options).toEqual([
       {
-        name: "chat-handoff · repo · prompt",
+        name: "chat-handoff · repo · transcript",
         description: "",
         value: { entry: entries[0]! },
       },

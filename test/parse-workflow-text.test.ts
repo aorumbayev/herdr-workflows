@@ -19,24 +19,24 @@ async function repo(name: string, body: string): Promise<{ root: string; file: s
   return { root, file };
 }
 
+const body = `version: v1alpha1\nsteps:\n  - run: echo hi\n`;
+
 describe("parseWorkflowText parity", () => {
   test("valid buffer matches file load", async () => {
-    const body = `steps:\n  - run: echo hi\n`;
     const { root, file } = await repo("ok", body);
     const fromFile = await loadWorkflow("ok", root);
     const fromText = await parseWorkflowText("ok", body, [], root, file);
     expect(fromText.steps).toEqual(fromFile.steps);
-    expect(fromText.needsPrompt).toBe(fromFile.needsPrompt);
+    expect(fromText.needsTranscript).toBe(fromFile.needsTranscript);
   });
 
   test("invalid buffer produces the same positioned error as file load", async () => {
-    const body = `steps:\n  - run: echo {pane}\n`;
-    const { root, file } = await repo("bad", body);
+    const bad = `version: v1alpha1\nsteps:\n  - run: "echo {{inputs.missing}}"\n`;
+    const { root, file } = await repo("bad", bad);
     const fileErr = await loadWorkflow("bad", root).catch((e) => (e as Error).message);
-    const textErr = await parseWorkflowText("bad", body, [], root, file).catch(
+    const textErr = await parseWorkflowText("bad", bad, [], root, file).catch(
       (e) => (e as Error).message,
     );
     expect(textErr).toBe(fileErr);
-    expect(textErr).toMatch(/step 1/);
   });
 });

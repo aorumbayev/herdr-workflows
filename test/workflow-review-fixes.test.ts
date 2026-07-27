@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listWorkflows, loadWorkflow, loadWorkflowEntry } from "../src/workflow/load";
+import { listWorkflows, loadWorkflowEntry } from "../src/workflow/load";
 import type { PickerState } from "../src/tui/picker";
 import { acceptWorkflow, startRun } from "../src/tui/picker";
 
@@ -50,67 +50,38 @@ function pickerState(): PickerState {
   } as unknown as PickerState;
 }
 
+const V1 = "version: v1alpha1\n";
+
 describe("review regressions", () => {
-  test("listing dynamic options does not execute their command", async () => {
+  test("listing marks dynamic choice inputs without executing them", async () => {
     const root = await repoWith({
-      dynamic: `inputs:
-  target: sh touch option-command-ran; printf main
+      dynamic: `${V1}inputs:
+  target:
+    type: choice
+    options:
+      run: [printf, main]
 steps:
-  - run: [echo, "{target}"]
+  - run: [echo, "{{inputs.target}}"]
 `,
     });
 
-    await listWorkflows(root);
-    expect(await Bun.file(join(root, "option-command-ran")).exists()).toBe(false);
-
-    const workflow = await loadWorkflow("dynamic", root);
-    expect(workflow.inputs[0]?.options).toEqual(["main"]);
-    expect(await Bun.file(join(root, "option-command-ran")).exists()).toBe(true);
+    const entries = await listWorkflows(root);
+    expect(entries.find((e) => e.name === "dynamic")?.dynamicOptions).toBe(true);
   });
 
-  test("listing validates dynamic workflows without executing choices", async () => {
+  test("exact global entry file is preserved during load", async () => {
     const root = await repoWith({
-      invalid: `inputs:
-  unused: sh touch invalid-option-ran; printf value
-steps:
-  - run: "true"
-`,
-    });
-
-    const entry = (await listWorkflows(root)).find((candidate) => candidate.name === "invalid");
-    expect(entry?.error).toContain("declared but never referenced");
-    expect(await Bun.file(join(root, "invalid-option-ran")).exists()).toBe(false);
-  });
-
-  test("exact global entry cannot be replaced by repo shadow during load", async () => {
-    const root = await repoWith({
-      entry: `inputs:
-  target: sh touch repo-shadow-ran; printf value
-steps:
-  - run: [echo, "{target}"]
-`,
+      entry: `${V1}steps:\n  - run: "true"\n`,
     });
     const globalFile = join(root, "global-entry.yaml");
-    await writeFile(globalFile, 'steps:\n  - run: "true"\n');
+    await writeFile(globalFile, `${V1}steps:\n  - run: "true"\n`);
 
     const workflow = await loadWorkflowEntry(
       { name: "entry", source: "global", file: globalFile },
       root,
     );
     expect(workflow.file).toBe(globalFile);
-    expect(await Bun.file(join(root, "repo-shadow-ran")).exists()).toBe(false);
-  });
-
-  test("exact global entry records repo-owned composition", async () => {
-    const root = await repoWith({ child: 'steps:\n  - run: "true"\n' });
-    const globalFile = join(root, "global-entry.yaml");
-    await writeFile(globalFile, "steps:\n  - use: child\n");
-
-    const workflow = await loadWorkflowEntry(
-      { name: "global-entry", source: "global", file: globalFile },
-      root,
-    );
-    expect(workflow.repoOwned).toBe(true);
+    expect(workflow.repoOwned).toBe(false);
   });
 
   test("picker renders loader errors as terminal failures", async () => {

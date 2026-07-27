@@ -58,7 +58,7 @@ export function buildPickerOptions(valid: WorkflowListEntry[]): SelectOption[] {
   return valid.map((entry) => {
     const parts = [entry.name, entry.source];
     if (entry.inputs?.length) parts.push("inputs");
-    if (entry.needsPrompt) parts.push("prompt");
+    if (entry.needsTranscript) parts.push("transcript");
     return {
       name: parts.join(" · "),
       description: "",
@@ -211,19 +211,11 @@ function setConfirmMode(state: PickerState, entry: WorkflowListEntry): void {
   state.footer.content = "enter run · esc cancel";
 }
 
-function setPromptMode(state: PickerState, entry: WorkflowListEntry): void {
-  state.mode = "prompt";
-  state.pending = entry;
-  hideBrowserChrome(state);
-  showStatus(state, entry.name);
-  focusTextField(state, "prompt…", "");
-}
-
 function setInputMode(state: PickerState, entry: WorkflowListEntry, spec: InputSpec): void {
   state.mode = "input";
   state.pending = entry;
   state.invalid.visible = false;
-  showStatus(state, `${entry.name} · ${spec.label}`);
+  showStatus(state, `${entry.name} · ${spec.name}`);
   if (spec.options) {
     state.choiceOptions = spec.options;
     showBrowserChrome(state);
@@ -240,7 +232,7 @@ function setInputMode(state: PickerState, entry: WorkflowListEntry, spec: InputS
   state.filter.visible = false;
   state.list.visible = false;
   state.list.flexGrow = 0;
-  focusTextField(state, `${spec.label}…`, spec.default ?? "");
+  focusTextField(state, `${spec.name}…`, spec.default ?? "");
 }
 
 function setRunMode(state: PickerState, entry: WorkflowListEntry): void {
@@ -340,11 +332,10 @@ function showFailure(state: PickerState, entry: WorkflowListEntry, error: unknow
   state.footer.content = FAIL_HINT;
 }
 
-/** Declared inputs first, then {prompt} if used, then run. */
+/** Declared inputs first, then run. */
 function advanceInput(state: PickerState, entry: WorkflowListEntry): void {
   const spec = state.inputQueue[state.inputIndex];
   if (spec) return setInputMode(state, entry, spec);
-  if (entry.needsPrompt) return setPromptMode(state, entry);
   void startRun(state, entry, "");
 }
 
@@ -385,7 +376,7 @@ async function prepareWorkflow(
     const workflow =
       state.workflow ??
       (await state.loadWorkflow(entry, state.repoRoot, Object.keys(state.agents)));
-    entry.needsPrompt = workflow.needsPrompt;
+    entry.needsTranscript = workflow.needsTranscript;
     entry.inputs = workflow.inputs;
     entry.repoOwned = workflow.repoOwned;
     state.pending = entry;

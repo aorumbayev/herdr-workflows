@@ -1,17 +1,14 @@
-import type { FlatStep, PlaceholderValues } from "../../workflow/types";
-import { substitute } from "../../workflow/parse";
-import { placeCommand, type PlaceOpts } from "../../herdr";
+import type { ShellName, TemplateNamespace, WorkflowStep } from "../../workflow/types";
+import { substituteText } from "../../workflow/parse";
 
 const SHELL_TIMEOUT_MS = 300_000;
 
-export type ShellName = "sh" | "bash" | "zsh" | "pwsh" | "powershell" | "cmd";
+export type { ShellName };
 
-/** Platform default for scalar/block run: — cmd on Windows, sh elsewhere. */
 export function defaultShell(platform: string = process.platform): ShellName {
   return platform === "win32" ? "cmd" : "sh";
 }
 
-/** Single choke point for running a command string through an interpreter. */
 export function shellArgv(command: string, shell: ShellName = defaultShell()): string[] {
   switch (shell) {
     case "sh":
@@ -29,10 +26,6 @@ export function shellArgv(command: string, shell: ShellName = defaultShell()): s
   }
 }
 
-/**
- * Timeout kill. POSIX: kill the detached process group. Windows has no process groups
- * (negative pid) — kill the child; cmd /c orphans grandchildren, accepted for a timeout path.
- */
 export function killSpawn(
   proc: { pid: number; kill: () => void },
   platform: string = process.platform,
@@ -99,20 +92,6 @@ export async function spawnCapture(
   return { timedOut, exitCode: exitCode ?? 1, stdout, stderr, timeoutMs };
 }
 
-/** Fire-and-forget spawn: ignored stdio (nothing drains pipes after return), no timeout, unref'd. */
-function spawnDetach(argv: string[], opts: { cwd: string; env?: NodeJS.ProcessEnv }): void {
-  const proc = Bun.spawn(argv, {
-    cwd: opts.cwd,
-    stdin: "ignore",
-    stdout: "ignore",
-    stderr: "ignore",
-    env: opts.env,
-    detached: true,
-    windowsHide: true,
-  });
-  proc.unref();
-}
-
 function captureResult(r: {
   timedOut: boolean;
   exitCode: number;
@@ -168,126 +147,50 @@ export async function runArgvStep(
   );
 }
 
-export function substituteEnv(
+function substituteEnv(
   env: Record<string, string> | undefined,
-  values: PlaceholderValues,
+  ns: TemplateNamespace,
 ): Record<string, string> | undefined {
   if (!env) return undefined;
-  return Object.fromEntries(Object.entries(env).map(([k, v]) => [k, substitute(v, values)]));
+  return Object.fromEntries(Object.entries(env).map(([k, v]) => [k, substituteText(v, ns)]));
 }
 
-export function mapOut(
-  out: FlatStep["out"],
-  result: Record<string, unknown>,
-): { ok: true; bindings?: Record<string, string> } | { ok: false; error: string } {
-  if (out?.kind !== "map") return { ok: true };
-  const bindings: Record<string, string> = {};
-  for (const [name, path] of Object.entries(out.fields)) {
-    let cur: unknown = result;
-    for (const part of path.split(".")) {
-      if (cur === null || cur === undefined || typeof cur !== "object") {
-        cur = undefined;
-        break;
-      }
-      cur = (cur as Record<string, unknown>)[part];
-    }
-    if (cur === undefined) {
-      const type = typeof result.type === "string" ? result.type : "unknown";
-      return { ok: false, error: `out.${name}: path '${path}' missing on result.type '${type}'` };
-    }
-    bindings[name] = typeof cur === "string" ? cur : JSON.stringify(cur);
-  }
-  return { ok: true, bindings };
-}
-
-type ShellStepCtx = {
-  step: FlatStep;
-  values: PlaceholderValues;
-  env: NodeJS.ProcessEnv;
-  opts: PlaceOpts & {
-    ctx: PlaceOpts["ctx"] & { cwd: string };
-    deps: PlaceOpts["deps"] & {
+export async function shellStep(c: {
+  step: WorkflowStep;
+  values: TemplateNamespace;
+  env?: NodeJS.ProcessEnv;
+  opts?: {
+    ctx: { cwd: string };
+    deps: {
       runArgv: typeof runArgvStep;
       runShell: typeof runShellStep;
-      waitOutput: (paneId: string, pattern: string, timeoutMs: number) => Promise<unknown>;
     };
     onStderr?: (text: string) => void;
   };
-};
-
-export async function shellStep(
-  c: ShellStepCtx,
-): Promise<{ ok: true; bindings?: Record<string, string> } | { ok: false; error: string }> {
-  const step = c.step as FlatStep & { action: { kind: "run" } };
-  const cwd =
-    step.action.cwd !== undefined ? substitute(step.action.cwd, c.values) : c.opts.ctx.cwd;
-  const stepEnv = substituteEnv(step.action.env, c.values);
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const action = c.step.action;
+  if (action.kind !== "run") return { ok: false, error: "internal: not a run step" };
+  if (action.pane || action.background || action.readyWhen) {
+    return { ok: false, error: "v1alpha1 placed run execution is not implemented yet" };
+  }
+  if (!c.opts) return { ok: false, error: "v1alpha1 run execution is not implemented yet" };
+  const cwd = action.cwd !== undefined ? substituteText(action.cwd, c.values) : c.opts.ctx.cwd;
+  const stepEnv = substituteEnv(action.env, c.values);
   const mergedEnv = { ...c.env, ...stepEnv };
-
-  if (step.action.in === "here") {
-    const payload = step.action.payload;
-    if (step.wait.kind === "detach") {
-      const argv =
-        payload.form === "argv"
-          ? payload.argv.map((el) => substitute(el, c.values))
-          : shellArgv(payload.command, payload.shell);
-      spawnDetach(argv, { cwd, env: mergedEnv });
-      return { ok: true };
-    }
-    const result =
-      payload.form === "argv"
-        ? await c.opts.deps.runArgv(
-            payload.argv.map((el) => substitute(el, c.values)),
-            { cwd, env: mergedEnv, timeoutMs: step.timeoutMs },
-          )
-        : await c.opts.deps.runShell(payload.command, {
-            cwd,
-            env: mergedEnv,
-            timeoutMs: step.timeoutMs,
-            shell: payload.shell,
-          });
-    if (result.stderr) c.opts.onStderr?.(result.stderr);
-    if (!result.ok) return { ok: false, error: result.stderr.trim() || "nonzero exit" };
-    const bindings: Record<string, string> = {};
-    if (step.out?.kind === "text") bindings[step.out.name] = result.stdout;
-    return { ok: true, bindings };
-  }
-
-  const label =
-    step.name ??
-    (step.action.payload.form === "argv"
-      ? step.action.payload.argv[0] || "run"
-      : step.action.payload.command.split(/\s+/)[0] || "run");
-  const payload = step.action.payload;
-  const argv =
+  const payload = action.payload;
+  const result =
     payload.form === "argv"
-      ? payload.argv.map((el) => substitute(el, c.values))
-      : shellArgv(payload.command, payload.shell);
-  const placed = await placeCommand(
-    c.opts,
-    step.action.in,
-    argv,
-    label,
-    cwd,
-    stepEnv,
-    step.action.ratio,
-    step.action.focus,
-  );
-
-  if (step.wait.kind === "detach") return { ok: true };
-  if (step.wait.kind === "regex") {
-    await c.opts.deps.waitOutput(placed.paneId, step.wait.pattern, step.timeoutMs ?? 60_000);
-  }
-
-  return mapOut(step.out, {
-    tab_id: placed.tabId,
-    pane_id: placed.paneId,
-    workspace_id: placed.workspaceId,
-    type: "layout",
-    layout: {
-      tab_id: placed.tabId,
-      focused_pane_id: placed.paneId,
-      workspace_id: placed.workspaceId,
-    },
-  });
+      ? await c.opts.deps.runArgv(
+          payload.argv.map((el) => substituteText(el, c.values)),
+          { cwd, env: mergedEnv, timeoutMs: action.timeoutMs },
+        )
+      : await c.opts.deps.runShell(payload.command, {
+          cwd,
+          env: mergedEnv,
+          timeoutMs: action.timeoutMs,
+          shell: payload.shell,
+        });
+  if (result.stderr) c.opts.onStderr?.(result.stderr);
+  if (!result.ok) return { ok: false, error: result.stderr.trim() || "nonzero exit" };
+  return { ok: true };
 }

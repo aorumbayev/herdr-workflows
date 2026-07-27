@@ -44,7 +44,10 @@ describe("cli run", () => {
     const elsewhere = await mkdtemp(join(tmpdir(), "hwf-cli-elsewhere-"));
     dirs.push(root, elsewhere);
     await mkdir(join(root, ".hwf", "workflows"), { recursive: true });
-    await writeFile(join(root, ".hwf", "workflows", "hi.yaml"), 'steps:\n  - run: "printf ok"\n');
+    await writeFile(
+      join(root, ".hwf", "workflows", "hi.yaml"),
+      'version: v1alpha1\nsteps:\n  - run: "printf ok"\n',
+    );
 
     const result = await runCli(["run", "hi"], elsewhere, {
       HERDR_WORKFLOWS_REPO_ROOT: root,
@@ -58,7 +61,10 @@ describe("cli run", () => {
     const elsewhere = await mkdtemp(join(tmpdir(), "hwf-cli-elsewhere-"));
     dirs.push(root, elsewhere);
     await mkdir(join(root, ".hwf", "workflows"), { recursive: true });
-    await writeFile(join(root, ".hwf", "workflows", "hi.yaml"), 'steps:\n  - run: "printf ok"\n');
+    await writeFile(
+      join(root, ".hwf", "workflows", "hi.yaml"),
+      'version: v1alpha1\nsteps:\n  - run: "printf ok"\n',
+    );
 
     const result = await runCli(["run", "hi"], elsewhere);
     expect(result.code).toBe(1);
@@ -69,7 +75,10 @@ describe("cli run", () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-cli-repo-"));
     dirs.push(root);
     await mkdir(join(root, ".hwf", "workflows"), { recursive: true });
-    await writeFile(join(root, ".hwf", "workflows", "hi.yaml"), 'steps:\n  - run: "printf ok"\n');
+    await writeFile(
+      join(root, ".hwf", "workflows", "hi.yaml"),
+      'version: v1alpha1\nsteps:\n  - run: "printf ok"\n',
+    );
 
     const result = await runCli(["run", "hi"], root, { HERDR_WORKFLOWS_REPO_ROOT: "" });
     expect(result.code).toBe(0);

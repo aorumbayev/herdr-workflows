@@ -2,8 +2,8 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { paneRead, PANE_READ_LINES, PANE_READ_SOURCE, sanitizeDisplay } from "./herdr";
-import type { PlaceholderValues } from "./workflow/types";
+import { sanitizeDisplay } from "./herdr";
+import type { PlatformName, TemplateNamespace } from "./workflow/types";
 
 export type AgentsConfig = Record<string, string[]>;
 export type SessionsConfig = Record<string, string[]>;
@@ -122,6 +122,7 @@ export type InvocationContext = {
   workspaceId?: string;
   tabId?: string;
   paneId?: string;
+  worktreePath?: string;
   selection: string;
   cwd: string;
 };
@@ -155,6 +156,7 @@ export function readInvocationContext(): InvocationContext {
       process.env.HERDR_WORKSPACE_ID || json.workspace_id || json.workspace?.workspace_id,
     tabId: process.env.HERDR_TAB_ID || json.tab_id || json.tab?.tab_id,
     paneId: process.env.HERDR_PANE_ID || json.focused_pane_id || json.pane_id || json.pane?.pane_id,
+    worktreePath: json.worktree?.path,
     selection: json.selected_text ?? "",
     cwd:
       json.worktree?.path ||
@@ -165,36 +167,32 @@ export function readInvocationContext(): InvocationContext {
   };
 }
 
-export async function buildPlaceholders(opts: {
+function platformValue(): PlatformName {
+  const p = platformName();
+  if (p === "macos" || p === "linux" || p === "windows") return p;
+  return "linux";
+}
+
+export async function buildTemplateNamespace(opts: {
   ctx: InvocationContext;
-  prompt?: string;
-  error?: string;
-  session?: string;
-  sessionFile?: string;
-  agent?: string;
   inputs?: Record<string, string>;
-}): Promise<PlaceholderValues> {
-  let pane = "";
-  if (opts.ctx.paneId) {
-    const scrollback = await paneRead(opts.ctx.paneId, {
-      source: PANE_READ_SOURCE,
-      lines: PANE_READ_LINES,
-    }).catch(() => "");
-    pane = sanitizeDisplay(scrollback);
-  }
-  const values: PlaceholderValues = {
-    pane,
-    selection: sanitizeDisplay(opts.ctx.selection),
-    prompt: opts.prompt ?? "",
-    error: opts.error ?? "",
-    session: opts.session ?? "",
-    session_file: opts.sessionFile ?? "",
-    source_tab: opts.ctx.tabId ?? "",
-    agent: opts.agent ?? "",
-    platform: platformName(),
+  steps?: Record<string, unknown>;
+  transcript?: string;
+  transcriptFile?: string;
+}): Promise<TemplateNamespace> {
+  return {
+    inputs: { ...opts.inputs },
+    steps: { ...opts.steps },
+    context: {
+      workspace: opts.ctx.workspaceId ?? "",
+      tab: opts.ctx.tabId ?? "",
+      pane: opts.ctx.paneId ?? "",
+      worktree: opts.ctx.worktreePath ?? "",
+      agent: "",
+      selection: sanitizeDisplay(opts.ctx.selection),
+      platform: platformValue(),
+      ...(opts.transcript !== undefined ? { transcript: opts.transcript } : {}),
+      ...(opts.transcriptFile !== undefined ? { transcript_file: opts.transcriptFile } : {}),
+    },
   };
-  for (const [name, value] of Object.entries(opts.inputs ?? {})) {
-    values[name] = value;
-  }
-  return values;
 }

@@ -23,7 +23,7 @@ function stateDir(): string {
   return process.env.HERDR_PLUGIN_STATE_DIR ?? join(homedir(), ".hwf", "state");
 }
 
-export function runLogPath(): string {
+function runLogPath(): string {
   return join(stateDir(), "runs.jsonl");
 }
 

@@ -4,13 +4,7 @@ import { dirname } from "node:path";
 import { globalConfigPath, loadConfig, parseConfigText, repoConfigPath } from "../config";
 import { readRunLog, recentRuns } from "../runlog";
 import { listWorkflows, parseWorkflowText, workflowPath } from "../workflow/load";
-import {
-  normalizeSteps,
-  parseRaw,
-  rawWorkflowSchema,
-  type RawStep,
-  type RawWorkflow,
-} from "../workflow/parse";
+import { parseRaw, rawWorkflowSchema, type RawStep, type RawWorkflowDoc } from "../workflow/parse";
 import pageHtml from "./page.html" with { type: "text" };
 
 const PAGE = pageHtml as unknown as string;
@@ -60,60 +54,61 @@ function field(lines: string[], indent: string, key: string, v: string): void {
 }
 
 const DUMPED_KEYS = new Set([
-  "run",
   "agent",
-  "use",
-  "prompt",
-  "name",
-  "in",
+  "run",
+  "herdr",
+  "workflow",
+  "id",
+  "using",
+  "target",
   "shell",
-  "out",
-  "wait",
+  "params",
+  "inputs",
+  "cwd",
+  "env",
+  "pane",
+  "background",
+  "ready_when",
+  "timeout",
+  "retry",
+  "when",
+  "continue_on_error",
 ]);
 
 function dumpStep(step: RawStep): string[] {
   const m: string[] = [];
   const I = IND + IND;
-  if (typeof step.run === "string") {
+  if (typeof step.agent === "string") {
+    field(m, I, "agent", step.agent);
+  } else if (typeof step.run === "string") {
     field(m, I, "run", step.run);
   } else if (Array.isArray(step.run)) {
     m.push(`${I}run: ${JSON.stringify(step.run)}`);
-  } else if (typeof step.agent === "string") {
-    field(m, I, "agent", step.agent);
-    if (typeof step.prompt === "string") field(m, I, "prompt", step.prompt);
-  } else {
-    const method = Object.keys(step).find((k) => k.includes("."));
-    if (method) {
-      const params = step[method];
-      if (params && typeof params === "object") {
-        m.push(`${I}${method}: ${JSON.stringify(params)}`);
-      } else {
-        m.push(`${I}${method}:`);
-      }
-    } else if (typeof step.use === "string") {
-      field(m, I, "use", step.use);
-    } else {
-      m.push(`${I}run: ""`);
+  } else if (typeof step.herdr === "string") {
+    field(m, I, "herdr", step.herdr);
+    if (step.params && typeof step.params === "object") {
+      m.push(`${I}params: ${JSON.stringify(step.params)}`);
     }
+  } else if (typeof step.workflow === "string") {
+    field(m, I, "workflow", step.workflow);
+  } else {
+    m.push(`${I}run: ""`);
   }
-  if (typeof step.name === "string") field(m, I, "name", step.name);
-  if (typeof step.in === "string") m.push(`${I}in: ${step.in}`);
-  if (typeof step.shell === "string") m.push(`${I}shell: ${step.shell}`);
-  if (typeof step.out === "string") m.push(`${I}out: ${step.out}`);
-  else if (step.out && typeof step.out === "object") m.push(`${I}out: ${JSON.stringify(step.out)}`);
-  if (step.wait === false) m.push(`${I}wait: false`);
-  if (typeof step.wait === "string") m.push(`${I}wait: ${step.wait}`);
   for (const [key, value] of Object.entries(step)) {
-    if (DUMPED_KEYS.has(key) || key.includes(".") || value === undefined) continue;
-    if (typeof value === "string") field(m, I, key, value);
-    else m.push(`${I}${key}: ${JSON.stringify(value)}`);
+    if (DUMPED_KEYS.has(key) && !["agent", "run", "herdr", "workflow", "params"].includes(key)) {
+      if (typeof value === "string") field(m, I, key, value);
+      else if (value !== undefined) m.push(`${I}${key}: ${JSON.stringify(value)}`);
+    } else if (!DUMPED_KEYS.has(key) && value !== undefined) {
+      if (typeof value === "string") field(m, I, key, value);
+      else m.push(`${I}${key}: ${JSON.stringify(value)}`);
+    }
   }
   if (m.length === 0) m.push(`${I}run: ""`);
   m[0] = `${IND}- ${m[0]!.slice(I.length)}`;
   return m;
 }
 
-function dumpInputs(lines: string[], inputs: NonNullable<RawWorkflow["inputs"]>): void {
+function dumpInputs(lines: string[], inputs: NonNullable<RawWorkflowDoc["inputs"]>): void {
   lines.push("inputs:");
   for (const [name, inp] of Object.entries(inputs)) {
     if (typeof inp === "string") {
@@ -125,39 +120,53 @@ function dumpInputs(lines: string[], inputs: NonNullable<RawWorkflow["inputs"]>)
       continue;
     }
     lines.push(`${IND}${scalar(name)}:`);
-    if (inp.label !== undefined) lines.push(`${IND}${IND}label: ${scalar(inp.label)}`);
-    if (inp.desc !== undefined) lines.push(`${IND}${IND}desc: ${scalar(inp.desc)}`);
     if (inp.type !== undefined) lines.push(`${IND}${IND}type: ${inp.type}`);
+    if (inp.description !== undefined)
+      lines.push(`${IND}${IND}description: ${scalar(inp.description)}`);
     if (inp.options !== undefined) {
       if (Array.isArray(inp.options)) {
         lines.push(`${IND}${IND}options:`);
         for (const o of inp.options) lines.push(`${IND}${IND}${IND}- ${scalar(o)}`);
       } else {
-        lines.push(`${IND}${IND}options: ${scalar(inp.options)}`);
+        lines.push(`${IND}${IND}options: ${JSON.stringify(inp.options)}`);
       }
     }
     if (inp.default !== undefined) lines.push(`${IND}${IND}default: ${scalar(inp.default)}`);
   }
 }
 
-export function dumpWorkflow(doc: RawWorkflow): string {
+export function dumpWorkflow(doc: RawWorkflowDoc): string {
   const lines: string[] = [];
-  if (doc.desc) {
-    field(lines, "", "desc", doc.desc);
-    lines.push("");
+  lines.push(`version: ${scalar(doc.version)}`);
+  if (doc.title) {
+    field(lines, "", "title", doc.title);
   }
+  if (doc.description) {
+    field(lines, "", "description", doc.description);
+  }
+  if (doc.hidden === true) lines.push("hidden: true");
   if (doc.inputs && Object.keys(doc.inputs).length > 0) {
-    dumpInputs(lines, doc.inputs);
     lines.push("");
+    dumpInputs(lines, doc.inputs);
   }
+  if (doc.returns !== undefined) {
+    lines.push("");
+    if (typeof doc.returns === "string") field(lines, "", "returns", doc.returns);
+    else lines.push(`returns: ${JSON.stringify(doc.returns)}`);
+  }
+  lines.push("");
   lines.push("steps:");
   doc.steps.forEach((step, i) => {
     if (i > 0) lines.push("");
     lines.push(...dumpStep(step));
   });
-  if (typeof doc.on_error === "string") {
+  if (doc.on_failure) {
     lines.push("");
-    lines.push(`on_error: ${scalar(doc.on_error)}`);
+    lines.push("on_failure:");
+    const recovery = dumpStep(doc.on_failure as RawStep).map((ln) =>
+      ln.startsWith(`${IND}- `) ? `${IND}${ln.slice(IND.length + 2)}` : ln,
+    );
+    lines.push(...recovery);
   }
   return `${lines.join("\n")}\n`;
 }
@@ -200,8 +209,19 @@ async function getState(repoRoot: string): Promise<Response> {
 
 function handleParse(body: Record<string, unknown>): Response {
   try {
-    const doc = parseRaw("buffer.yaml", String(body.text ?? ""));
-    return json({ ok: true, doc });
+    const text = String(body.text ?? "");
+    parseRaw("buffer.yaml", text);
+    let data: unknown;
+    try {
+      data = Bun.YAML.parse(text);
+    } catch (error) {
+      return json({ ok: false, error: errText(error) }, 400);
+    }
+    const parsed = rawWorkflowSchema.safeParse(data);
+    if (!parsed.success) {
+      return json({ ok: false, error: parsed.error.issues.map((i) => i.message).join("; ") }, 400);
+    }
+    return json({ ok: true, doc: parsed.data });
   } catch (error) {
     return json({ ok: false, error: errText(error) }, 400);
   }
@@ -219,10 +239,7 @@ function handleFormat(body: Record<string, unknown>): Response {
         400,
       );
     }
-    const text = dumpWorkflow({
-      ...parsed.data,
-      steps: normalizeSteps(parsed.data.steps),
-    });
+    const text = dumpWorkflow(parsed.data);
     parseRaw("buffer.yaml", text);
     return json({ ok: true, text });
   } catch (error) {
