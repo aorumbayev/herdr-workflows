@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+set -e
+# AGENTS.md: commit messages carry the change, not the tooling.
+grep -viE '^(co-authored-by|generated with|assisted-by|created-by):.*(cursor|claude|copilot|codex|agent|ai)' "$1" > "$1.tmp" || true
+mv "$1.tmp" "$1"
