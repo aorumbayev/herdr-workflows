@@ -5,7 +5,7 @@ import { globalConfigPath, loadConfig, parseConfigText, repoConfigPath } from ".
 import { readRunLog, recentRuns } from "../runlog";
 import { listWorkflows, parseWorkflowText, workflowPath } from "../workflow/load";
 import { parseRaw, rawWorkflowSchema, type RawStep, type RawWorkflowDoc } from "../workflow/parse";
-import { analyzeYamlBody, sensitivityLabels, workflowDisplayTitle } from "../workflow/trust";
+import { analyzeYamlTree, sensitivityLabels, workflowDisplayTitle } from "../workflow/trust";
 import pageHtml from "./page.html" with { type: "text" };
 
 const PAGE = pageHtml as unknown as string;
@@ -202,6 +202,7 @@ async function getState(repoRoot: string): Promise<Response> {
         hasCommands: e.hasCommands === true,
         hasTranscript: e.needsTranscript === true,
         sensitiveMethods: e.sensitiveMethods ?? [],
+        unresolvedChildren: e.unresolvedChildren ?? [],
       });
       return {
         name: e.name,
@@ -333,7 +334,7 @@ async function handleWorkflow(
     let flags: string[] = [];
     if (text) {
       try {
-        flags = sensitivityLabels(analyzeYamlBody(`${name}.yaml`, text));
+        flags = sensitivityLabels(await analyzeYamlTree(`${name}.yaml`, text, name, repoRoot));
       } catch {
         flags = [];
       }

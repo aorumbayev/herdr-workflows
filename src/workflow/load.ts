@@ -22,7 +22,7 @@ import {
   type WorkflowListEntry,
   type WorkflowStep,
 } from "./types";
-import { analyzeWorkflowSensitivity } from "./trust";
+import { analyzeResolvedSensitivity } from "./trust";
 import { assertChildInputContract, assertWorkflowReferences, workflowChildNames } from "./validate";
 
 const DYNAMIC_CHOICE_TIMEOUT_MS = 10_000;
@@ -464,13 +464,19 @@ export async function listWorkflows(
       entry.inputs = workflow.inputs;
       entry.repoOwned = workflow.repoOwned;
       entry.dynamicOptions = workflow.inputs.some((input) => input.dynamicOptions !== undefined);
-      const flags = analyzeWorkflowSensitivity(
-        workflow.steps,
-        workflow.returns,
-        workflow.onFailure,
+      const flags = await analyzeResolvedSensitivity(
+        {
+          name: workflow.name,
+          steps: workflow.steps,
+          returns: workflow.returns,
+          onFailure: workflow.onFailure,
+        },
+        repoRoot,
       );
       entry.hasCommands = flags.hasCommands;
+      entry.needsTranscript = flags.hasTranscript || workflow.needsTranscript;
       entry.sensitiveMethods = flags.sensitiveMethods;
+      entry.unresolvedChildren = flags.unresolvedChildren;
     } catch (error) {
       entry.error = error instanceof Error ? error.message : String(error);
     }

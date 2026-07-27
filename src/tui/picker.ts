@@ -19,7 +19,11 @@ import type { InvocationContext, WorkflowsConfig } from "../config";
 import { sanitizeDisplay } from "../herdr";
 import { runWorkflow } from "../run/runner";
 import { loadWorkflowEntry } from "../workflow/load";
-import { sensitivityLabels, workflowDisplayTitle } from "../workflow/trust";
+import {
+  analyzeResolvedSensitivity,
+  sensitivityLabels,
+  workflowDisplayTitle,
+} from "../workflow/trust";
 import type { InputSpec, LoadedWorkflow, WorkflowListEntry } from "../workflow/types";
 import { resolveHostTheme, type HostTheme } from "./theme";
 
@@ -60,6 +64,7 @@ export function entrySensitivity(entry: WorkflowListEntry): string[] {
     hasCommands: entry.hasCommands === true,
     hasTranscript: entry.needsTranscript === true,
     sensitiveMethods: entry.sensitiveMethods ?? [],
+    unresolvedChildren: entry.unresolvedChildren ?? [],
   });
 }
 
@@ -365,17 +370,24 @@ async function prepareWorkflow(state: PickerState, entry: WorkflowListEntry): Pr
   try {
     const workflow =
       state.workflow ?? (await state.loadWorkflow(entry, state.repoRoot, state.config));
-    entry.needsTranscript = workflow.needsTranscript;
     entry.title = workflow.title;
     entry.description = workflow.description;
     entry.inputs = workflow.inputs;
     entry.repoOwned = workflow.repoOwned;
-    const flags = sensitivityLabels({
-      hasCommands: workflow.steps.some((s) => s.action.kind === "run"),
-      hasTranscript: workflow.needsTranscript,
-      sensitiveMethods: entry.sensitiveMethods ?? [],
-    });
-    entry.hasCommands = flags.includes("commands");
+    const resolved = await analyzeResolvedSensitivity(
+      {
+        name: workflow.name,
+        steps: workflow.steps,
+        returns: workflow.returns,
+        onFailure: workflow.onFailure,
+      },
+      state.repoRoot,
+    );
+    entry.hasCommands = resolved.hasCommands;
+    entry.needsTranscript = resolved.hasTranscript;
+    entry.sensitiveMethods = resolved.sensitiveMethods;
+    entry.unresolvedChildren = resolved.unresolvedChildren;
+    const flags = entrySensitivity(entry);
     state.pending = entry;
     state.workflow = workflow;
     state.inputQueue = entry.inputs ?? [];

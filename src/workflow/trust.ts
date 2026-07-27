@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { HERDR_METHOD_BY_NAME } from "../herdr-methods.generated";
 import { isSensitiveContextPath, parseRaw, workflowTemplateRefs, type RawWorkflow } from "./parse";
 import type { RecoveryAction, ReturnsSpec, WorkflowStep } from "./types";
@@ -19,6 +21,7 @@ export type WorkflowSensitivity = {
   hasCommands: boolean;
   hasTranscript: boolean;
   sensitiveMethods: string[];
+  unresolvedChildren: string[];
 };
 
 export function humanizeWorkflowName(name: string): string {
@@ -47,7 +50,17 @@ function collectHerdrMethods(steps: WorkflowStep[], onFailure?: RecoveryAction):
   return methods;
 }
 
-export function analyzeWorkflowSensitivity(
+function childWorkflowNames(steps: WorkflowStep[], onFailure?: RecoveryAction): string[] {
+  const names: string[] = [];
+  for (const step of steps) {
+    if (step.action.kind === "workflow") names.push(step.action.name);
+  }
+  if (onFailure?.kind === "workflow") names.push(onFailure.name);
+  return names;
+}
+
+/** Local sensitivity only — used by import-bundle previews that stay per-file. */
+function analyzeWorkflowSensitivity(
   steps: WorkflowStep[],
   returns?: ReturnsSpec,
   onFailure?: RecoveryAction,
@@ -59,15 +72,103 @@ export function analyzeWorkflowSensitivity(
   const sensitiveMethods = [
     ...new Set(collectHerdrMethods(steps, onFailure).filter(isSensitiveHerdrMethod)),
   ].sort();
-  return { hasCommands, hasTranscript, sensitiveMethods };
+  return { hasCommands, hasTranscript, sensitiveMethods, unresolvedChildren: [] };
 }
 
 export function analyzeRawWorkflow(raw: RawWorkflow): WorkflowSensitivity {
   return analyzeWorkflowSensitivity(raw.steps, raw.returns, raw.onFailure);
 }
 
-export function analyzeYamlBody(file: string, body: string): WorkflowSensitivity {
-  return analyzeRawWorkflow(parseRaw(file, body));
+/** Same repo-over-global resolution the loader uses. */
+async function resolveWorkflowFile(name: string, repoRoot: string): Promise<string | undefined> {
+  const repo = join(repoRoot, ".hwf", "workflows", `${name}.yaml`);
+  if (await Bun.file(repo).exists()) return repo;
+  const global = join(process.env.HOME ?? homedir(), ".hwf", "workflows", `${name}.yaml`);
+  if (await Bun.file(global).exists()) return global;
+  return undefined;
+}
+
+function mergeSensitivity(into: WorkflowSensitivity, from: WorkflowSensitivity): void {
+  into.hasCommands ||= from.hasCommands;
+  into.hasTranscript ||= from.hasTranscript;
+  for (const method of from.sensitiveMethods) {
+    if (!into.sensitiveMethods.includes(method)) into.sensitiveMethods.push(method);
+  }
+  for (const name of from.unresolvedChildren) {
+    if (!into.unresolvedChildren.includes(name)) into.unresolvedChildren.push(name);
+  }
+}
+
+/**
+ * Aggregate sensitivity across resolvable `workflow:` children (and recovery), with cycle
+ * safety. Unresolvable children are listed rather than treated as clean.
+ */
+export async function analyzeResolvedSensitivity(
+  workflow: {
+    name: string;
+    steps: WorkflowStep[];
+    returns?: ReturnsSpec;
+    onFailure?: RecoveryAction;
+  },
+  repoRoot: string,
+  stack: string[] = [],
+): Promise<WorkflowSensitivity> {
+  const local = analyzeWorkflowSensitivity(workflow.steps, workflow.returns, workflow.onFailure);
+  if (stack.includes(workflow.name)) return local;
+
+  const nextStack = [...stack, workflow.name];
+  const aggregated: WorkflowSensitivity = {
+    hasCommands: local.hasCommands,
+    hasTranscript: local.hasTranscript,
+    sensitiveMethods: [...local.sensitiveMethods],
+    unresolvedChildren: [],
+  };
+
+  for (const childName of childWorkflowNames(workflow.steps, workflow.onFailure)) {
+    if (nextStack.includes(childName)) continue;
+    const file = await resolveWorkflowFile(childName, repoRoot);
+    if (!file) {
+      if (!aggregated.unresolvedChildren.includes(childName)) {
+        aggregated.unresolvedChildren.push(childName);
+      }
+      continue;
+    }
+    try {
+      const raw = parseRaw(file, await Bun.file(file).text());
+      const child = await analyzeResolvedSensitivity(
+        {
+          name: childName,
+          steps: raw.steps,
+          returns: raw.returns,
+          onFailure: raw.onFailure,
+        },
+        repoRoot,
+        nextStack,
+      );
+      mergeSensitivity(aggregated, child);
+    } catch {
+      if (!aggregated.unresolvedChildren.includes(childName)) {
+        aggregated.unresolvedChildren.push(childName);
+      }
+    }
+  }
+
+  aggregated.sensitiveMethods.sort();
+  aggregated.unresolvedChildren.sort();
+  return aggregated;
+}
+
+export async function analyzeYamlTree(
+  file: string,
+  body: string,
+  name: string,
+  repoRoot: string,
+): Promise<WorkflowSensitivity> {
+  const raw = parseRaw(file, body);
+  return analyzeResolvedSensitivity(
+    { name, steps: raw.steps, returns: raw.returns, onFailure: raw.onFailure },
+    repoRoot,
+  );
 }
 
 export function sensitivityLabels(flags: WorkflowSensitivity): string[] {
@@ -75,6 +176,7 @@ export function sensitivityLabels(flags: WorkflowSensitivity): string[] {
   if (flags.hasCommands) labels.push("commands");
   if (flags.hasTranscript) labels.push("transcript");
   for (const method of flags.sensitiveMethods) labels.push(`herdr:${method}`);
+  for (const name of flags.unresolvedChildren) labels.push(`unresolved:${name}`);
   return labels;
 }
 

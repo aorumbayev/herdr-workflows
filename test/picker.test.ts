@@ -125,8 +125,9 @@ describe("entrySensitivity", () => {
         hasCommands: true,
         needsTranscript: true,
         sensitiveMethods: ["layout.apply"],
+        unresolvedChildren: ["missing"],
       }),
-    ).toEqual(["commands", "transcript", "herdr:layout.apply"]);
+    ).toEqual(["commands", "transcript", "herdr:layout.apply", "unresolved:missing"]);
   });
 });
 
