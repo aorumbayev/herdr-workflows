@@ -1,11 +1,13 @@
-import { RESULT_DOT_PATHS } from "../herdr-methods";
-import { isWholeValueTemplate, parseTemplatePath, stepTemplates, textTemplates } from "./parse";
+import { isMethodResultDotPath, RESULT_DOT_PATHS } from "../herdr-methods";
+import { isWholeValueTemplate, parseTemplatePath, textTemplates } from "./parse";
 import {
   bail,
   IDENT_RE,
   type InputSpec,
   type LoadedWorkflow,
+  type RecoveryAction,
   type ReturnsSpec,
+  type StepAction,
   type TemplatePath,
   type WorkflowStep,
 } from "./types";
@@ -23,9 +25,19 @@ export type StepProducer = {
 
 type SourceType = "string" | "number" | "boolean" | "object" | "unknown";
 
+type TemplateOpts = {
+  producers: Map<string, StepProducer>;
+  inputNames: Set<string>;
+  earlierOnly: boolean;
+  maxStepIndex?: number;
+  rejectSensitiveContext?: boolean;
+  allowContextError?: boolean;
+};
+
 const COMMAND_FIELDS = new Set(["stdout", "stderr", "exit_code", "failed"]);
 const AGENT_STRING_FIELDS = new Set(["response", "pane_id"]);
 const READINESS_ID_FIELDS = new Set(["pane_id", "tab_id", "workspace_id"]);
+const READINESS_HERDR_METHOD = "pane.wait_for_output";
 const CONTEXT_STRING_FIELDS = new Set([
   "workspace",
   "tab",
@@ -110,13 +122,18 @@ function assertUniqueStepIds(file: string, steps: WorkflowStep[]): void {
   }
 }
 
-function herdrFieldAllowed(fieldPath: string): boolean {
-  if (RESULT_DOT_PATHS.has(fieldPath)) return true;
+function pathAllowed(paths: Iterable<string>, fieldPath: string): boolean {
+  const set = paths instanceof Set ? paths : new Set(paths);
+  if (set.has(fieldPath)) return true;
   const prefix = `${fieldPath}.`;
-  for (const path of RESULT_DOT_PATHS) {
+  for (const path of set) {
     if (path.startsWith(prefix)) return true;
   }
   return false;
+}
+
+function globalResultFieldAllowed(fieldPath: string): boolean {
+  return pathAllowed(RESULT_DOT_PATHS, fieldPath);
 }
 
 function unknownField(
@@ -165,7 +182,7 @@ function assertAgentField(
   }
   if (head === "agent") {
     if (fieldSegments.length === 1) return;
-    if (!herdrFieldAllowed(fieldSegments.join("."))) {
+    if (!globalResultFieldAllowed(fieldSegments.join("."))) {
       unknownField(file, stepIndex, key, "managed agent", producer, fieldSegments);
     }
     return;
@@ -182,7 +199,7 @@ function assertReadinessField(
 ): void {
   if (fieldSegments.length === 0) return;
   if (fieldSegments.length === 1 && READINESS_ID_FIELDS.has(fieldSegments[0]!)) return;
-  if (!herdrFieldAllowed(fieldSegments.join("."))) {
+  if (!isMethodResultDotPath(READINESS_HERDR_METHOD, fieldSegments.join("."))) {
     unknownField(file, stepIndex, key, "readiness", producer, fieldSegments);
   }
 }
@@ -195,7 +212,8 @@ function assertHerdrField(
   fieldSegments: string[],
 ): void {
   if (fieldSegments.length === 0) return;
-  if (!herdrFieldAllowed(fieldSegments.join("."))) {
+  const method = producer.herdrMethod;
+  if (!method || !isMethodResultDotPath(method, fieldSegments.join("."))) {
     unknownField(file, stepIndex, key, "herdr", producer, fieldSegments);
   }
 }
@@ -255,6 +273,7 @@ function assertContextPath(
   stepIndex: number | undefined,
   key: string,
   segments: string[],
+  allowContextError: boolean,
 ): void {
   if (segments.length === 0) {
     bail(file, stepIndex, key, "context reference requires a field");
@@ -267,6 +286,9 @@ function assertContextPath(
     return;
   }
   if (head === "error") {
+    if (!allowContextError) {
+      bail(file, stepIndex, key, "context.error is only available inside on_failure:");
+    }
     if (segments.length === 1) return;
     const field = segments[1]!;
     if (CONTEXT_ERROR_STRING.has(field)) {
@@ -339,13 +361,7 @@ function assertTemplatePath(
   stepIndex: number | undefined,
   key: string,
   path: TemplatePath,
-  opts: {
-    producers: Map<string, StepProducer>;
-    inputNames: Set<string>;
-    earlierOnly: boolean;
-    maxStepIndex?: number;
-    rejectSensitiveContext?: boolean;
-  },
+  opts: TemplateOpts,
 ): void {
   if (path.root === "inputs") {
     if (path.segments.length !== 1 || !opts.inputNames.has(path.segments[0]!)) {
@@ -361,7 +377,7 @@ function assertTemplatePath(
     ) {
       bail(file, stepIndex, key, `returns: cannot reference context.${path.segments[0]}`);
     }
-    assertContextPath(file, stepIndex, key, path.segments);
+    assertContextPath(file, stepIndex, key, path.segments, opts.allowContextError === true);
     return;
   }
 
@@ -387,13 +403,7 @@ function assertTemplates(
   stepIndex: number | undefined,
   key: string,
   text: string,
-  opts: {
-    producers: Map<string, StepProducer>;
-    inputNames: Set<string>;
-    earlierOnly: boolean;
-    maxStepIndex?: number;
-    rejectSensitiveContext?: boolean;
-  },
+  opts: TemplateOpts,
 ): void {
   for (const path of textTemplates(text)) {
     assertTemplatePath(file, stepIndex, key, path, opts);
@@ -405,12 +415,7 @@ function assertValueTemplates(
   stepIndex: number | undefined,
   key: string,
   value: unknown,
-  opts: {
-    producers: Map<string, StepProducer>;
-    inputNames: Set<string>;
-    earlierOnly: boolean;
-    maxStepIndex?: number;
-  },
+  opts: TemplateOpts,
 ): void {
   if (typeof value === "string") {
     assertTemplates(file, stepIndex, key, value, opts);
@@ -427,32 +432,96 @@ function assertValueTemplates(
   }
 }
 
+function assertUsingProfile(
+  file: string,
+  stepIndex: number | undefined,
+  key: string,
+  using: string,
+  profiles: Set<string>,
+): void {
+  if (using.includes("{{")) return;
+  if (profiles.has(using)) return;
+  const available = [...profiles].sort().join(", ");
+  bail(
+    file,
+    stepIndex,
+    key,
+    available
+      ? `unknown profile '${using}' (available: ${available})`
+      : `unknown profile '${using}' (no profiles configured)`,
+  );
+}
+
+function assertCwdEnvPane(
+  file: string,
+  stepIndex: number | undefined,
+  action: Extract<StepAction, { kind: "agent" | "run" }>,
+  opts: TemplateOpts,
+  key: (name: string) => string,
+): void {
+  if (action.cwd !== undefined) assertTemplates(file, stepIndex, key("cwd"), action.cwd, opts);
+  if (action.env !== undefined) assertValueTemplates(file, stepIndex, key("env"), action.env, opts);
+  if (action.pane?.target !== undefined) {
+    assertTemplates(file, stepIndex, key("pane.target"), action.pane.target, opts);
+  }
+  if (action.pane?.workspace !== undefined) {
+    assertTemplates(file, stepIndex, key("pane.workspace"), action.pane.workspace, opts);
+  }
+}
+
+function assertActionSites(
+  file: string,
+  stepIndex: number | undefined,
+  action: StepAction | RecoveryAction,
+  opts: TemplateOpts,
+  profiles: Set<string>,
+  keyPrefix?: string,
+): void {
+  const key = (name: string) => (keyPrefix ? `${keyPrefix}.${name}` : name);
+  if (action.kind === "agent") {
+    assertTemplates(file, stepIndex, key("agent"), action.prompt, opts);
+    if (action.using !== undefined) {
+      assertTemplates(file, stepIndex, key("using"), action.using, opts);
+      assertUsingProfile(file, stepIndex, key("using"), action.using, profiles);
+    }
+    if (action.target !== undefined) {
+      assertTemplates(file, stepIndex, key("target"), action.target, opts);
+    }
+    assertCwdEnvPane(file, stepIndex, action, opts, key);
+    return;
+  }
+  if (action.kind === "run") {
+    if (action.payload.form === "argv") {
+      action.payload.argv.forEach((el, i) => {
+        assertTemplates(file, stepIndex, key(`run[${i}]`), el, opts);
+      });
+    }
+    assertCwdEnvPane(file, stepIndex, action, opts, key);
+    return;
+  }
+  if (action.kind === "herdr") {
+    if (action.params !== undefined) {
+      assertValueTemplates(file, stepIndex, key("params"), action.params, opts);
+    }
+    return;
+  }
+  if (action.inputs !== undefined) {
+    assertValueTemplates(file, stepIndex, key("inputs"), action.inputs, opts);
+  }
+}
+
 function assertStepTemplates(
   file: string,
   stepIndex: number,
   step: WorkflowStep,
-  opts: {
-    producers: Map<string, StepProducer>;
-    inputNames: Set<string>;
-  },
+  opts: TemplateOpts,
+  profiles: Set<string>,
 ): void {
-  const common = {
-    producers: opts.producers,
-    inputNames: opts.inputNames,
-    earlierOnly: true,
-    maxStepIndex: stepIndex,
-  };
   if (step.when?.kind === "truthy" || step.when?.kind === "eq") {
     const path = parseTemplatePath(step.when.path);
-    if (path) assertTemplatePath(file, stepIndex, "when", path, common);
+    if (path) assertTemplatePath(file, stepIndex, "when", path, opts);
   }
-  for (const path of stepTemplates(step)) {
-    assertTemplatePath(file, stepIndex, "step", path, common);
-  }
-  const action = step.action;
-  if (action.kind === "herdr" && action.params) {
-    assertValueTemplates(file, stepIndex, "params", action.params, common);
-  }
+  assertActionSites(file, stepIndex, step.action, opts, profiles);
 }
 
 function buildProducers(
@@ -473,21 +542,35 @@ export function assertWorkflowReferences(
   file: string,
   workflow: LoadedWorkflow,
   childReturnsById: Map<string, ReturnsSpec | undefined>,
+  profiles: Set<string>,
 ): Map<string, StepProducer> {
   assertUniqueStepIds(file, workflow.steps);
   const producers = buildProducers(workflow.steps, childReturnsById);
   const inputNames = new Set(workflow.inputs.map((input) => input.name));
 
   for (let i = 0; i < workflow.steps.length; i++) {
-    assertStepTemplates(file, i + 1, workflow.steps[i]!, { producers, inputNames });
+    assertStepTemplates(
+      file,
+      i + 1,
+      workflow.steps[i]!,
+      {
+        producers,
+        inputNames,
+        earlierOnly: true,
+        maxStepIndex: i + 1,
+        allowContextError: false,
+      },
+      profiles,
+    );
   }
 
   if (workflow.returns) {
-    const opts = {
+    const opts: TemplateOpts = {
       producers,
       inputNames,
       earlierOnly: false,
       rejectSensitiveContext: true,
+      allowContextError: false,
     };
     if (workflow.returns.kind === "template") {
       if (!isWholeValueTemplate(workflow.returns.template)) {
@@ -505,13 +588,19 @@ export function assertWorkflowReferences(
   }
 
   if (workflow.onFailure) {
-    const opts = { producers, inputNames, earlierOnly: false };
-    for (const path of stepTemplates({ action: workflow.onFailure })) {
-      assertTemplatePath(file, undefined, "on_failure", path, opts);
-    }
-    if (workflow.onFailure.kind === "herdr" && workflow.onFailure.params) {
-      assertValueTemplates(file, undefined, "on_failure.params", workflow.onFailure.params, opts);
-    }
+    assertActionSites(
+      file,
+      undefined,
+      workflow.onFailure,
+      {
+        producers,
+        inputNames,
+        earlierOnly: false,
+        allowContextError: true,
+      },
+      profiles,
+      "on_failure",
+    );
   }
 
   return producers;
@@ -565,6 +654,7 @@ function assertChildInputValue(
       inputNames: parentInputNames,
       earlierOnly: true,
       maxStepIndex: stepIndex,
+      allowContextError: false,
     });
     const sourceType = sourceTypeOf(path, producers, parentInputNames);
     if (sourceType === "object" || sourceType === "number" || sourceType === "boolean") {
@@ -581,6 +671,7 @@ function assertChildInputValue(
       inputNames: parentInputNames,
       earlierOnly: true,
       maxStepIndex: stepIndex,
+      allowContextError: false,
     });
   }
 

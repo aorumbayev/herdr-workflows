@@ -687,4 +687,111 @@ steps:
       ),
     ).toThrow(/must be a whole-value template/);
   });
+
+  test("herdr result fields are method-scoped", async () => {
+    await expect(
+      parseWorkflowText(
+        "cross-method",
+        `version: v1alpha1\nsteps:\n  - id: notify\n    herdr: notification.show\n    params: { title: done }\n  - run: [echo, "{{steps.notify.worktree.path}}"]\n`,
+      ),
+    ).rejects.toThrow(/unknown herdr result field 'worktree\.path'/);
+
+    const ok = await parseWorkflowText(
+      "notify-ok",
+      `version: v1alpha1\nsteps:\n  - id: notify\n    herdr: notification.show\n    params: { title: done }\n  - run: [echo, "{{steps.notify.shown}}"]\n`,
+    );
+    expect(ok.steps).toHaveLength(2);
+  });
+
+  test("readiness result fields follow pane.wait_for_output plus created ids", async () => {
+    const ok = await parseWorkflowText(
+      "ready-ok",
+      `version: v1alpha1\nsteps:\n  - id: boot\n    run: [echo, ready]\n    pane: { open: tab }\n    ready_when: "/ready/"\n    timeout: 5s\n  - run: [echo, "{{steps.boot.matched_line}}", "{{steps.boot.pane_id}}", "{{steps.boot.tab_id}}"]\n`,
+    );
+    expect(ok.steps).toHaveLength(2);
+
+    await expect(
+      parseWorkflowText(
+        "ready-bad",
+        `version: v1alpha1\nsteps:\n  - id: boot\n    run: [echo, ready]\n    pane: { open: tab }\n    ready_when: "/ready/"\n    timeout: 5s\n  - run: [echo, "{{steps.boot.worktree.path}}"]\n`,
+      ),
+    ).rejects.toThrow(/unknown readiness result field 'worktree\.path'/);
+  });
+
+  test("context.error is recovery-only", async () => {
+    await expect(
+      parseWorkflowText(
+        "err-step",
+        `version: v1alpha1\nsteps:\n  - run: [echo, "{{context.error.message}}"]\n`,
+      ),
+    ).rejects.toThrow(/context\.error is only available inside on_failure/);
+
+    await expect(
+      parseWorkflowText(
+        "err-returns",
+        `version: v1alpha1\nreturns: "{{context.error}}"\nsteps:\n  - run: "true"\n`,
+      ),
+    ).rejects.toThrow(/context\.error is only available inside on_failure/);
+
+    const ok = await parseWorkflowText(
+      "err-recovery",
+      `version: v1alpha1
+on_failure:
+  herdr: notification.show
+  params: { title: "{{context.error.message}}" }
+steps:
+  - run: "true"
+`,
+    );
+    expect(ok.onFailure).toMatchObject({ kind: "herdr", method: "notification.show" });
+  });
+
+  test("literal using profile must exist; templates defer", async () => {
+    await expect(
+      parseWorkflowText(
+        "bad-using",
+        `version: v1alpha1\nsteps:\n  - agent: hi\n    using: nonexistent\n`,
+      ),
+    ).rejects.toThrow(/unknown profile 'nonexistent'/);
+
+    const withProfile: WorkflowsConfig = {
+      profiles: { review: { kind: "claude" } },
+      transcripts: {},
+    };
+    const ok = await parseWorkflowText(
+      "good-using",
+      `version: v1alpha1\nsteps:\n  - agent: hi\n    using: review\n`,
+      withProfile,
+    );
+    expect(ok.steps[0]?.action).toMatchObject({ kind: "agent", using: "review" });
+
+    const templated = await parseWorkflowText(
+      "tmpl-using",
+      `version: v1alpha1\ninputs:\n  role: text\nsteps:\n  - agent: hi\n    using: "{{inputs.role}}"\n`,
+    );
+    expect(templated.steps[0]?.action).toMatchObject({ kind: "agent", using: "{{inputs.role}}" });
+  });
+
+  test("action template errors name the precise key", async () => {
+    await expect(
+      parseWorkflowText(
+        "bad-cwd",
+        `version: v1alpha1\nsteps:\n  - run: [echo, hi]\n    cwd: "{{steps.missing.stdout}}"\n`,
+      ),
+    ).rejects.toThrow(/\.cwd:.*unknown step id 'missing'|cwd:.*unknown step id 'missing'/);
+
+    await expect(
+      parseWorkflowText(
+        "bad-env",
+        `version: v1alpha1\nsteps:\n  - run: [echo, hi]\n    env: { FOO: "{{steps.missing.stdout}}" }\n`,
+      ),
+    ).rejects.toThrow(/env\.FOO:.*unknown step id 'missing'/);
+
+    await expect(
+      parseWorkflowText(
+        "bad-run",
+        `version: v1alpha1\nsteps:\n  - run: [echo, "{{steps.missing.stdout}}"]\n`,
+      ),
+    ).rejects.toThrow(/run\[1\]:.*unknown step id 'missing'/);
+  });
 });

@@ -359,9 +359,14 @@ async function finalizeWorkflow(
     childReturnsById.set(step.id, child.returns);
   }
 
-  const producers = assertWorkflowReferences(withInputs.file, withInputs, childReturnsById);
   const parentInputNames = new Set(withInputs.inputs.map((input) => input.name));
   const profiles = new Set(profileNames(scope.config));
+  const producers = assertWorkflowReferences(
+    withInputs.file,
+    withInputs,
+    childReturnsById,
+    profiles,
+  );
 
   for (let i = 0; i < withInputs.steps.length; i++) {
     const step = withInputs.steps[i]!;

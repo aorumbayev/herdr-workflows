@@ -974,7 +974,7 @@ function collectTemplatesFromValue(value: unknown, out: TemplatePath[]): void {
   }
 }
 
-export function stepTemplates(step: WorkflowStep): TemplatePath[] {
+function stepTemplates(step: WorkflowStep): TemplatePath[] {
   const out: TemplatePath[] = [];
   if (step.when?.kind === "truthy") {
     const p = parseTemplatePath(step.when.path);

@@ -1,12 +1,13 @@
 import {
   HERDR_METHOD_BY_NAME,
   HERDR_PROTOCOL,
+  METHOD_RESULT_VARIANTS,
   MIN_HERDR_VERSION,
   RESULT_DOT_PATHS,
   type PropSpec,
 } from "./herdr-methods.generated";
 
-export { HERDR_PROTOCOL, MIN_HERDR_VERSION, RESULT_DOT_PATHS };
+export { HERDR_PROTOCOL, METHOD_RESULT_VARIANTS, MIN_HERDR_VERSION, RESULT_DOT_PATHS };
 
 type ParamKind = "string" | "number" | "integer" | "boolean" | "object" | "array";
 
@@ -68,6 +69,19 @@ export function validateMethodParams(
 
 export function isResultDotPath(path: string): boolean {
   return RESULT_DOT_PATHS.has(path);
+}
+
+function pathAllowed(paths: readonly string[], fieldPath: string): boolean {
+  if (paths.includes(fieldPath)) return true;
+  const prefix = `${fieldPath}.`;
+  return paths.some((path) => path.startsWith(prefix));
+}
+
+/** True when `fieldPath` exists on at least one success variant of `method`. */
+export function isMethodResultDotPath(method: string, fieldPath: string): boolean {
+  const variants = METHOD_RESULT_VARIANTS.get(method);
+  if (!variants) return false;
+  return variants.some((variant) => pathAllowed(variant.paths, fieldPath));
 }
 
 export type ProtocolCheckResult = { ok: true; protocol: number } | { ok: false; error: string };

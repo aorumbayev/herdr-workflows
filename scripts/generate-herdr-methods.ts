@@ -200,6 +200,7 @@ function collectDotPaths(
 
   if (resolved.properties) {
     for (const [key, child] of Object.entries(resolved.properties)) {
+      if (key === "type" && prefix === "") continue;
       const path = prefix ? `${prefix}.${key}` : key;
       out.add(path);
       collectDotPaths(root, child, path, out, new Set(seenRefs));
@@ -211,22 +212,121 @@ function collectDotPaths(
   if (resolved.items) collectDotPaths(root, resolved.items, prefix, out, new Set(seenRefs));
 }
 
+/** Schema result oneOf is keyed by `type`, not `method`. Map each request method to its success types. */
+const METHOD_RESULT_TYPE_OVERRIDES: Record<string, string[]> = {
+  ping: ["pong"],
+  "pane.wait_for_output": ["output_matched"],
+  "events.wait": ["wait_matched"],
+  "events.subscribe": ["subscription_started"],
+  "agent.wait": ["agent_info"],
+  "agent.start": ["agent_started"],
+  "agent.prompt": ["agent_prompted"],
+  "agent.read": ["pane_read"],
+  "agent.view.set": ["agent_view"],
+  "agent.view.clear": ["agent_view"],
+  "server.reload_config": ["config_reload"],
+  "server.reload_agent_manifests": ["agent_manifest_reload"],
+  "server.agent_manifests": ["agent_manifest_status"],
+  "client.window_title.set": ["client_window_title"],
+  "client.window_title.clear": ["client_window_title"],
+  "layout.set_split_ratio": ["layout_split_ratio_set"],
+  "plugin.link": ["plugin_linked"],
+  "plugin.unlink": ["plugin_unlinked"],
+  "plugin.pane.open": ["plugin_pane_opened"],
+  "plugin.pane.focus": ["plugin_pane_focused"],
+  "plugin.pane.close": ["plugin_pane_closed"],
+  "plugin.enable": ["plugin_enabled"],
+  "plugin.disable": ["plugin_disabled"],
+  "plugin.action.invoke": ["plugin_action_invoked"],
+  "pane.split": ["pane_info"],
+  "pane.get": ["pane_info"],
+  "workspace.get": ["workspace_info"],
+  "tab.get": ["tab_info"],
+  "agent.get": ["agent_info"],
+  "workspace.create": ["workspace_created"],
+  "tab.create": ["tab_created"],
+  "worktree.create": ["worktree_created"],
+  "worktree.open": ["worktree_opened"],
+  "worktree.remove": ["worktree_removed"],
+};
+
+const OK_RESULT_METHODS = new Set([
+  "server.stop",
+  "server.live_handoff",
+  "workspace.focus",
+  "workspace.rename",
+  "workspace.close",
+  "workspace.move",
+  "workspace.report_metadata",
+  "tab.focus",
+  "tab.rename",
+  "tab.close",
+  "tab.move",
+  "agent.send_keys",
+  "agent.rename",
+  "agent.focus",
+  "pane.focus",
+  "pane.rename",
+  "pane.send_text",
+  "pane.send_keys",
+  "pane.send_input",
+  "pane.close",
+  "pane.graphics.set",
+  "pane.graphics.clear",
+  "pane.report_agent",
+  "pane.report_agent_session",
+  "pane.report_metadata",
+  "pane.clear_agent_authority",
+  "pane.release_agent",
+  "popup.close",
+]);
+
+function resultTypesForMethod(method: string, knownTypes: Set<string>): string[] {
+  const override = METHOD_RESULT_TYPE_OVERRIDES[method];
+  if (override) return override;
+  if (OK_RESULT_METHODS.has(method)) return ["ok"];
+
+  const parts = method.split(".");
+  const snake = method.replace(/\./g, "_");
+  const last = parts[parts.length - 1]!;
+  const area = parts[0]!;
+  const candidates = [
+    snake,
+    last === "list" ? `${area}_list` : null,
+    last === "create" ? `${area}_created` : null,
+    last === "get" ? `${area}_info` : null,
+    last === "open" ? `${area}_opened` : null,
+    last === "remove" ? `${area}_removed` : null,
+  ].filter((value): value is string => value != null);
+
+  const hit = candidates.find((candidate) => knownTypes.has(candidate));
+  if (!hit) {
+    throw new Error(
+      `no success result type mapped for method '${method}' (tried ${candidates.join(", ")})`,
+    );
+  }
+  return [hit];
+}
+
 function js(value: unknown): string {
   return JSON.stringify(value);
 }
 
-async function main(): Promise<void> {
-  const rootSchema = (await Bun.file(schemaPath).json()) as RootSchema;
-  const request = rootSchema.schemas.request;
-  const variants = request.oneOf ?? [];
+type GeneratedMethod = {
+  method: string;
+  params: MethodParams;
+  denyReason?: string;
+};
+
+type MethodResultEntry = {
+  method: string;
+  variants: { type: string; paths: string[] }[];
+};
+
+function extractMethods(rootSchema: RootSchema): GeneratedMethod[] {
+  const variants = rootSchema.schemas.request.oneOf ?? [];
   if (variants.length === 0) throw new Error("request.oneOf empty");
-
-  const methods: {
-    method: string;
-    params: MethodParams;
-    denyReason?: string;
-  }[] = [];
-
+  const methods: GeneratedMethod[] = [];
   for (const variant of variants) {
     const method = variant.properties?.method?.const;
     if (typeof method !== "string") throw new Error("request variant missing method const");
@@ -239,18 +339,56 @@ async function main(): Promise<void> {
     });
   }
   methods.sort((a, b) => a.method.localeCompare(b.method));
+  return methods;
+}
 
+function extractResultVariantPaths(rootSchema: RootSchema): Map<string, string[]> {
   const resultRef = rootSchema.schemas.success_response.properties?.result?.$ref;
   if (!resultRef) throw new Error("success_response.properties.result.$ref missing");
   const resultSchema = resolveRef(rootSchema, resultRef, "success_response");
-  const resultPaths = new Set<string>();
-  collectDotPaths(rootSchema, resultSchema, "", resultPaths, new Set());
+  const resultVariants = resultSchema.oneOf ?? [];
+  if (resultVariants.length === 0) throw new Error("success result oneOf empty");
+  const variantPaths = new Map<string, string[]>();
+  for (const variant of resultVariants) {
+    const type = variant.properties?.type?.const;
+    if (typeof type !== "string") throw new Error("result variant missing type const");
+    const paths = new Set<string>();
+    collectDotPaths(rootSchema, variant, "", paths, new Set());
+    variantPaths.set(type, [...paths].sort());
+  }
+  return variantPaths;
+}
 
+function mapMethodResultVariants(
+  methods: GeneratedMethod[],
+  variantPaths: Map<string, string[]>,
+): MethodResultEntry[] {
+  const knownTypes = new Set(variantPaths.keys());
+  return methods.map((m) => {
+    const types = resultTypesForMethod(m.method, knownTypes);
+    for (const type of types) {
+      if (!variantPaths.has(type)) {
+        throw new Error(`method '${m.method}' maps to unknown result type '${type}'`);
+      }
+    }
+    return {
+      method: m.method,
+      variants: types.map((type) => ({ type, paths: variantPaths.get(type)! })),
+    };
+  });
+}
+
+function emitGenerated(
+  protocol: number,
+  methods: GeneratedMethod[],
+  methodVariants: MethodResultEntry[],
+  resultPaths: string[],
+): string {
   const lines: string[] = [];
   lines.push("// Generated by scripts/generate-herdr-methods.ts — do not edit.");
-  lines.push(`// Source: schemas/herdr-api.schema.json (protocol ${rootSchema.protocol})`);
+  lines.push(`// Source: schemas/herdr-api.schema.json (protocol ${protocol})`);
   lines.push("");
-  lines.push(`export const HERDR_PROTOCOL = ${rootSchema.protocol} as const;`);
+  lines.push(`export const HERDR_PROTOCOL = ${protocol} as const;`);
   lines.push(`export const MIN_HERDR_VERSION = "0.7.5";`);
   lines.push("");
   lines.push(
@@ -273,6 +411,11 @@ async function main(): Promise<void> {
   lines.push("  | { method: string; allowed: true; params: MethodParamsSpec }");
   lines.push("  | { method: string; allowed: false; reason: string; params: MethodParamsSpec };");
   lines.push("");
+  lines.push("export type MethodResultVariant = {");
+  lines.push("  type: string;");
+  lines.push("  paths: readonly string[];");
+  lines.push("};");
+  lines.push("");
   lines.push("const HERDR_METHODS: readonly MethodEntry[] = [");
   for (const m of methods) {
     const paramsLit = js(m.params);
@@ -290,15 +433,30 @@ async function main(): Promise<void> {
   lines.push("  HERDR_METHODS.map((m) => [m.method, m]),");
   lines.push(");");
   lines.push("");
-  lines.push(
-    `export const RESULT_DOT_PATHS: ReadonlySet<string> = new Set(${js([...resultPaths].sort())});`,
-  );
+  lines.push(`export const RESULT_DOT_PATHS: ReadonlySet<string> = new Set(${js(resultPaths)});`);
   lines.push("");
+  lines.push(
+    "export const METHOD_RESULT_VARIANTS: ReadonlyMap<string, readonly MethodResultVariant[]> = new Map([",
+  );
+  for (const entry of methodVariants) {
+    lines.push(`  [${js(entry.method)}, ${js(entry.variants)}],`);
+  }
+  lines.push("]);");
+  lines.push("");
+  return `${lines.join("\n")}\n`;
+}
 
+async function main(): Promise<void> {
+  const rootSchema = (await Bun.file(schemaPath).json()) as RootSchema;
+  const methods = extractMethods(rootSchema);
+  const variantPaths = extractResultVariantPaths(rootSchema);
+  const methodVariants = mapMethodResultVariants(methods, variantPaths);
+  const resultPaths = [...new Set([...variantPaths.values()].flat())].sort();
+  const source = emitGenerated(rootSchema.protocol, methods, methodVariants, resultPaths);
   await mkdir(dirname(outPath), { recursive: true });
-  await Bun.write(outPath, `${lines.join("\n")}\n`);
+  await Bun.write(outPath, source);
   process.stdout.write(
-    `wrote ${outPath} (protocol ${rootSchema.protocol}, ${methods.length} methods, ${resultPaths.size} result paths)\n`,
+    `wrote ${outPath} (protocol ${rootSchema.protocol}, ${methods.length} methods, ${variantPaths.size} result variants, ${resultPaths.length} result paths)\n`,
   );
 }
 

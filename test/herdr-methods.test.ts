@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import {
   checkHerdrProtocol,
   HERDR_PROTOCOL,
+  isMethodResultDotPath,
   isResultDotPath,
+  METHOD_RESULT_VARIANTS,
   MIN_HERDR_VERSION,
   RESULT_DOT_PATHS,
   validateMethodParams,
@@ -58,5 +60,17 @@ describe("herdr method validators", () => {
     expect(RESULT_DOT_PATHS.size).toBeGreaterThan(0);
     expect(isResultDotPath("pane.pane_id")).toBe(true);
     expect(isResultDotPath("pane.pane_ids")).toBe(false);
+  });
+
+  test("per-method result paths stay method-scoped", () => {
+    expect(HERDR_PROTOCOL).toBe(17);
+    expect(MIN_HERDR_VERSION).toBe("0.7.5");
+    const notify = METHOD_RESULT_VARIANTS.get("notification.show");
+    expect(notify?.map((v) => v.type)).toEqual(["notification_show"]);
+    expect(isMethodResultDotPath("notification.show", "shown")).toBe(true);
+    expect(isMethodResultDotPath("notification.show", "worktree.path")).toBe(false);
+    expect(isMethodResultDotPath("worktree.create", "worktree.path")).toBe(true);
+    expect(isMethodResultDotPath("pane.wait_for_output", "matched_line")).toBe(true);
+    expect(isMethodResultDotPath("pane.wait_for_output", "read.text")).toBe(true);
   });
 });
