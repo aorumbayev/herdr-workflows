@@ -137,6 +137,8 @@ export type LoadedWorkflow = {
   name: string;
   file: string;
   desc?: string;
+  /** Runnable via `hwf run`, kept out of the picker — the background half of a split workflow. */
+  hidden: boolean;
   steps: FlatStep[];
   inputs: InputSpec[];
   onError?: string;
@@ -152,6 +154,7 @@ export type WorkflowListEntry = {
   source: "repo" | "global";
   file: string;
   error?: string;
+  hidden?: boolean;
   needsPrompt?: boolean;
   inputs?: InputSpec[];
   repoOwned?: boolean;

@@ -33,6 +33,15 @@ const emptyValues = {
 };
 
 describe("workflow grammar", () => {
+  test("hidden defaults false and loads from the top level", async () => {
+    const root = await repoWithWorkflows({
+      plain: `steps: bun test\n`,
+      bg: `hidden: true\nsteps: bun test\n`,
+    });
+    expect((await loadWorkflow("plain", root)).hidden).toBe(false);
+    expect((await loadWorkflow("bg", root)).hidden).toBe(true);
+  });
+
   test("bare string steps shorthand", async () => {
     const root = await repoWithWorkflows({ ok: `steps: bun test\n` });
     const m = await loadWorkflow("ok", root);

@@ -5,6 +5,9 @@
     "desc": {
       "type": "string"
     },
+    "hidden": {
+      "type": "boolean"
+    },
     "inputs": {
       "type": "object",
       "propertyNames": {

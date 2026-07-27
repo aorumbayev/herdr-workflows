@@ -70,6 +70,8 @@ agents:
   claude: [claude, "{prompt}"]
 ```
 
+`hwf init` writes `.hwf/config.yaml` from your PATH every time it runs, so treat it as machine-local. Agents you want on every machine belong in `~/.hwf/config.yaml`; keep the repo file for agents this project actually needs, since it wins per name.
+
 The one literal `{prompt}` element is where the step's `prompt:` text lands. `agent: claude` then opens that command in a pane and waits for it to finish. With `out:`, the runner appends an instruction to write the final response to a temporary file; missing or empty output fails the step.
 
 ## Placeholders
@@ -137,14 +139,15 @@ steps:
 
 ## Background runs
 
-`wait: false` on a local `run:` step is fire-and-forget: the child inherits your invoking environment (`{agent}`, `{source_tab}`, `{session_file}` still resolve inside it) and the step returns immediately. The supported pattern is an entry workflow whose last step spawns a `_`-prefixed workflow — hidden from the picker, meant to be spawned:
+`wait: false` on a local `run:` step is fire-and-forget: the child inherits your invoking environment (`{agent}`, `{source_tab}`, `{session_file}` still resolve inside it) and the step returns immediately. The supported pattern is an entry workflow whose last step spawns a `hidden: true` workflow — kept out of the picker, meant to be spawned:
 
 ```yaml
 # ship.yaml — last step
-- run: [hwf, run, _ship-bg, --input, "branch={branch}"]
+- run: [hwf, run, ship-bg, --input, "branch={branch}"]
   wait: false
 
-# _ship-bg.yaml
+# ship-bg.yaml
+hidden: true
 inputs:
   branch: text
 steps:

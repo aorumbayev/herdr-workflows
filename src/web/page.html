@@ -911,7 +911,7 @@
         nu.style.width = "100%";
         nu.onclick = newWorkflow;
         list.appendChild(nu);
-        for (const e of state.entries) {
+        const addRow = (e) => {
           const row = document.createElement("button");
           row.type = "button";
           row.className =
@@ -927,6 +927,15 @@
             if (confirmLeave()) openWorkflow(e.name, e.source);
           };
           list.appendChild(row);
+        };
+        for (const e of state.entries) if (!e.hidden) addRow(e);
+        const hidden = state.entries.filter((e) => e.hidden);
+        if (hidden.length) {
+          const head = document.createElement("p");
+          head.className = "hint";
+          head.textContent = "background — not shown in the picker";
+          list.appendChild(head);
+          for (const e of hidden) addRow(e);
         }
         if (state.entries.length === 0) {
           const empty = document.createElement("p");
@@ -978,7 +987,7 @@
       const VERBS = ["run", "agent", "use", "primitive"];
 
       // Mirrors the Zod schema in src/workflow/parse.ts.
-      const TOP_KEYS = ["desc", "inputs", "on_error", "steps"];
+      const TOP_KEYS = ["desc", "hidden", "inputs", "on_error", "steps"];
       const STEP_KEYS = [
         "agent",
         "allow_fail",
@@ -2299,6 +2308,7 @@
             }
             extras = {};
             if (r.data.doc.desc) extras.desc = r.data.doc.desc;
+            if (r.data.doc.hidden) extras.hidden = r.data.doc.hidden;
             if (r.data.doc.inputs) extras.inputs = r.data.doc.inputs;
             if (r.data.doc.on_error) extras.on_error = r.data.doc.on_error;
             canvasHost.classList.remove("hide");

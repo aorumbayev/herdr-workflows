@@ -21,7 +21,7 @@ Localhost-only HTTP UI over the same core the CLI uses — browse repo + global 
 
 List: `type filter · ↑↓ move · enter run · esc cancel`. Choice input: `type filter · ↑↓ move · enter select · esc back`. Text input / prompt: `enter submit · esc back`.
 
-`_`-prefixed workflows are hidden from the picker — they're background halves meant to be spawned, not run by hand. `hwf run _name` runs them fine.
+Workflows with `hidden: true` are kept out of the picker — they're background halves meant to be spawned, not run by hand. `hwf run <name>` runs them fine, and the web workbench lists them under a separate _background_ heading.
 
 Declared `inputs:` ask one screen each (declaration order), then the prompt line only if the workflow uses `{prompt}`.
 
@@ -51,7 +51,7 @@ sessions:
 
 ## Workflow shape
 
-Top-level keys only: `desc`, `inputs`, `on_error`, `steps`. `steps` may be a bare command string (`steps: bun test` → one `run:` step), a single step map, or a list.
+Top-level keys only: `desc`, `hidden`, `inputs`, `on_error`, `steps`. `hidden: true` keeps the workflow out of the picker (see [Background runs](#background-runs)). `steps` may be a bare command string (`steps: bun test` → one `run:` step), a single step map, or a list.
 
 ## Inputs
 
@@ -176,10 +176,11 @@ inputs:
   branch: text = main
 steps:
   - run: bun test
-  - run: [hwf, run, _ship-bg, --input, "branch={branch}"]
+  - run: [hwf, run, ship-bg, --input, "branch={branch}"]
     wait: false
 
-# _ship-bg.yaml
+# ship-bg.yaml
+hidden: true
 inputs:
   branch: text
 steps:
@@ -189,7 +190,7 @@ steps:
     prompt: "Deploy {branch}. Report tersely."
 ```
 
-The detached `hwf run` child inherits the invoking environment, so `{agent}`, `{source_tab}`, and `{session_file}` resolve inside the background run. `_`-prefixed workflows are hidden from the picker. `focus: false` keeps background panes from stealing focus; `close: true` reaps the agent pane when it finishes.
+The detached `hwf run` child inherits the invoking environment, so `{agent}`, `{source_tab}`, and `{session_file}` resolve inside the background run. `hidden: true` keeps the background half out of the picker. `focus: false` keeps background panes from stealing focus; `close: true` reaps the agent pane when it finishes.
 
 ## Semantics
 

@@ -40,11 +40,11 @@ describe("filterWorkflowEntries", () => {
     expect(invalid.map((e) => e.name)).toEqual(["chat-broken"]);
   });
 
-  test("underscore-prefixed workflows are hidden", () => {
+  test("hidden workflows are kept out of the picker", () => {
     const withBg: WorkflowListEntry[] = [
       ...entries,
-      { name: "_ship-bg", source: "repo", file: "/r/_ship-bg.yaml" },
-      { name: "_broken-bg", source: "repo", file: "/r/_broken-bg.yaml", error: "boom" },
+      { name: "ship-bg", source: "repo", file: "/r/ship-bg.yaml", hidden: true },
+      { name: "broken-bg", source: "repo", file: "/r/broken-bg.yaml", hidden: true, error: "boom" },
     ];
     const { valid, invalid } = filterWorkflowEntries(withBg, "");
     expect(valid.map((e) => e.name)).toEqual(["chat-handoff", "deploy"]);
@@ -52,10 +52,10 @@ describe("filterWorkflowEntries", () => {
     expect(filterWorkflowEntries(withBg, "bg").valid).toEqual([]);
   });
 
-  test("hasVisibleEntries is false when every workflow is _-prefixed", () => {
+  test("hasVisibleEntries is false when every workflow is hidden", () => {
     const hidden: WorkflowListEntry[] = [
-      { name: "_ship-bg", source: "repo", file: "/r/_ship-bg.yaml" },
-      { name: "_broken-bg", source: "repo", file: "/r/_broken-bg.yaml", error: "boom" },
+      { name: "ship-bg", source: "repo", file: "/r/ship-bg.yaml", hidden: true },
+      { name: "broken-bg", source: "repo", file: "/r/broken-bg.yaml", hidden: true, error: "boom" },
     ];
     expect(hasVisibleEntries(hidden)).toBe(false);
     expect(hasVisibleEntries([])).toBe(false);

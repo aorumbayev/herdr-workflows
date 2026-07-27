@@ -190,6 +190,7 @@ async function getState(repoRoot: string): Promise<Response> {
       name: e.name,
       source: e.source,
       valid: !e.error,
+      hidden: e.hidden === true,
       inRepo: await Bun.file(workflowPath("repo", repoRoot, e.name)).exists(),
       inGlobal: await Bun.file(workflowPath("global", repoRoot, e.name)).exists(),
     })),

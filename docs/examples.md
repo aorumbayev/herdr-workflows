@@ -173,7 +173,7 @@ steps:
 
 ## Fire-and-forget background run
 
-Entry workflow tests, then spawns a hidden `_`-prefixed workflow and exits. The detached child
+Entry workflow tests, then spawns a `hidden: true` workflow and exits. The detached child
 inherits the invoking context, so `{source_tab}` resolves inside the background run:
 
 ```yaml
@@ -182,10 +182,11 @@ inputs:
   branch: text = main
 steps:
   - run: bun test
-  - run: [hwf, run, _ship-bg, --input, "branch={branch}"]
+  - run: [hwf, run, ship-bg, --input, "branch={branch}"]
     wait: false
 
-# _ship-bg.yaml — hidden from the picker
+# ship-bg.yaml
+hidden: true # kept out of the picker
 inputs:
   branch: text
 steps:

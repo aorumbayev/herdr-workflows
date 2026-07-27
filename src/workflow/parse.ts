@@ -349,6 +349,7 @@ const onErrorSchema = z.union([z.string().min(1), z.array(rawStepSchema).min(1)]
 export const rawWorkflowSchema = z
   .object({
     desc: z.string().optional(),
+    hidden: z.boolean().optional(),
     inputs: z
       .record(
         z.string().regex(INPUT_NAME_RE, "input name must match [a-z][a-z0-9_]{0,31}"),
@@ -362,6 +363,7 @@ export const rawWorkflowSchema = z
 
 export type RawWorkflow = {
   desc?: string;
+  hidden?: boolean;
   inputs?: Record<string, z.infer<typeof rawInputValueSchema>>;
   on_error?: string | RawStep[];
   steps: RawStep[];
@@ -419,6 +421,7 @@ export function parseRaw(file: string, text: string): RawWorkflow {
   }
   return {
     desc: result.data.desc,
+    hidden: result.data.hidden,
     inputs: result.data.inputs,
     on_error: result.data.on_error,
     steps: normalizeSteps(result.data.steps),

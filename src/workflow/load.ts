@@ -734,6 +734,7 @@ async function loadFromRaw(
     name,
     file,
     desc: raw.desc,
+    hidden: raw.hidden === true,
     steps,
     inputs,
     onError: onErrorName,
@@ -797,6 +798,7 @@ export async function listWorkflows(
   for (const entry of entries) {
     try {
       const workflow = await loadWorkflowEntry(entry, repoRoot, agentNames, false);
+      entry.hidden = workflow.hidden;
       entry.needsPrompt = workflow.needsPrompt;
       entry.inputs = workflow.inputs;
       entry.repoOwned = workflow.repoOwned;
