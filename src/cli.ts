@@ -11,7 +11,8 @@ import {
   readLine,
 } from "./herdr";
 import { loadConfig, readInvocationContext, resolveRepoRoot } from "./config";
-import { parsePlaybookSeedScope, runInit } from "./init";
+import { EXAMPLES_URL, runInit } from "./init";
+import { IMPORT_DISCLAIMER, parseImportScope, runImport } from "./workflow/import";
 import { listWorkflows } from "./workflow/load";
 import { WorkflowLoadError } from "./workflow/types";
 import { runWorkflow } from "./run/runner";
@@ -49,7 +50,9 @@ export function parseArgs(args: string[]): {
 }
 
 function usage(): never {
-  die("usage: hwf|herdr-workflows [<run|init|launch|picker|web>]  (no args: web UI)");
+  die(
+    "usage: hwf|herdr-workflows [<run|init|workflow import|launch|picker|web>]  (no args: web UI)",
+  );
 }
 
 function parseInputFlags(values: string[]): Record<string, string> {
@@ -63,48 +66,77 @@ function parseInputFlags(values: string[]): Record<string, string> {
 }
 
 async function cmdInit(args: string[]): Promise<void> {
-  const { bools, flags } = parseArgs(args);
+  const { bools } = parseArgs(args);
   const repoRoot = await resolveRepoRoot();
-  const seedFlag = flags.seed ?? flags["seed-playbooks"];
-  const playbookScope = seedFlag ? parsePlaybookSeedScope(seedFlag) : undefined;
-  if (seedFlag && !playbookScope) {
-    die("usage: hwf init [--force] [--seed=global|repo|none]");
-  }
   const result = await runInit(repoRoot, {
     force: bools.has("force") || bools.has("yes"),
-    playbookScope,
     confirm: async () => {
       if (!process.stdin.isTTY) return false;
       process.stdout.write(`.hwf/config.yaml exists — overwrite? [y/N] `);
       const line = await readLine();
       return line.kind === "line" && line.text.trim().toLowerCase() === "y";
     },
-    choosePlaybookScope:
-      playbookScope || !process.stdin.isTTY
-        ? undefined
-        : async () => {
-            process.stdout.write(
-              "Seed handoff + worktree? [g]lobal ~/.hwf / [r]epo .hwf / [n]one [G]: ",
-            );
-            const line = await readLine();
-            if (line.kind !== "line") return "global";
-            const parsed = parsePlaybookSeedScope(line.text || "g");
-            return parsed ?? "global";
-          },
   });
   if (result.kind === "exists") die(`${result.path} already exists (pass --force to overwrite)`);
   const agents = result.agents.length ? ` (${result.agents.join(", ")})` : " (no agents on PATH)";
-  const workflows = result.workflows.length
-    ? `seeded repo workflows: ${result.workflows.join(", ")}\n`
-    : "";
-  const global = result.globalWorkflows.length
-    ? `seeded global workflows (~/.hwf): ${result.globalWorkflows.join(", ")}\n`
-    : "";
-  const skipped =
-    result.playbookScope === "skip" && !result.globalWorkflows.length
-      ? "skipped handoff/worktree seeds\n"
-      : "";
-  process.stdout.write(`wrote ${result.path}${agents}\n${workflows}${global}${skipped}`);
+  process.stdout.write(
+    `wrote ${result.path}${agents}\n` +
+      `no workflows yet — pick ready-made ones at ${EXAMPLES_URL}\n` +
+      `each card copies an \`hwf workflow import\` command you can paste here\n`,
+  );
+}
+
+async function cmdWorkflowImport(args: string[]): Promise<void> {
+  const { bools, flags, positional } = parseArgs(args);
+  const payload = positional[0];
+  if (!payload) {
+    die('usage: hwf workflow import "<base64>" [--to=repo|global] [--yes] [--force]');
+  }
+  const scope = flags.to ? parseImportScope(flags.to) : undefined;
+  if (flags.to && !scope) die(`--to expects repo or global, got '${flags.to}'`);
+  const tty = process.stdin.isTTY && process.stdout.isTTY;
+  const preapproved = bools.has("yes") || bools.has("y");
+  if (!tty && !(preapproved && scope)) {
+    die("not a tty: pass --yes and --to=repo|global to import without the review prompts");
+  }
+  const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot());
+  try {
+    const outcome = await runImport(payload, {
+      repoRoot,
+      scope,
+      force: bools.has("force"),
+      prompts: preapproved
+        ? undefined
+        : {
+            confirm: async (preview) => {
+              process.stdout.write(`${IMPORT_DISCLAIMER}\n\n${preview}\n`);
+              process.stdout.write("Reviewed the workflows above and want them? [y/N] ");
+              const line = await readLine();
+              return line.kind === "line" && line.text.trim().toLowerCase() === "y";
+            },
+            chooseScope: async () => {
+              process.stdout.write(`Install into [r]epo ${repoRoot}/.hwf / [g]lobal ~/.hwf [R]: `);
+              const line = await readLine();
+              if (line.kind !== "line") return "repo";
+              return parseImportScope(line.text || "r") ?? "repo";
+            },
+          },
+    });
+    if ("aborted" in outcome) {
+      process.stdout.write("aborted — nothing written\n");
+      return;
+    }
+    for (const r of outcome.results) {
+      process.stdout.write(
+        r.status === "written"
+          ? `wrote ${r.path}\n`
+          : `kept existing ${r.path} (--force to replace)\n`,
+      );
+    }
+  } catch (error) {
+    if (error instanceof WorkflowLoadError) die(error.message);
+    throw error;
+  }
 }
 
 async function cmdLaunch(): Promise<void> {
@@ -231,6 +263,10 @@ async function main(): Promise<void> {
   }
   if (command === "run") return cmdRun(rest);
   if (command === "init") return cmdInit(rest);
+  if (command === "workflow") {
+    if (rest[0] !== "import") die('usage: hwf workflow import "<base64>"');
+    return cmdWorkflowImport(rest.slice(1));
+  }
   if (command === "web") return cmdWeb(rest);
   usage();
 }

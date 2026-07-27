@@ -1,0 +1,10 @@
+desc: distil this session and hand it to another agent (runs in the background)
+inputs:
+  target:
+    type: agents
+    label: hand over to
+  focus: text = ""
+steps:
+  - name: hand off in background
+    run: [hwf, run, handoff-bg, --input, "target={target}", --input, "focus={focus}"]
+    wait: false

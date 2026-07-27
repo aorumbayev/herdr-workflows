@@ -1,0 +1,57 @@
+desc: "background half of handoff — run `handoff`, not this"
+hidden: true
+inputs:
+  target: agents
+  focus: text = ""
+on_error:
+  - notification.show: { title: "handoff failed", body: "{error}", sound: request }
+steps:
+  - name: distil transcript
+    agent: "{agent}"
+    timeout: 900
+    focus: false
+    close: true
+    out: brief
+    prompt: |
+      Below the --- marker is a coding agent session transcript. Distil it into
+      a handoff prompt for a fresh agent session.
+
+      Keep (signal): architectural decisions with rationale; working solutions
+      adopted; configuration choices (versions, settings, flags, env vars);
+      files created/modified with paths and why; constraints discovered;
+      productive dead ends in one sentence each; open questions; anything the
+      next session would otherwise re-discover.
+
+      Drop (noise): corrections and retries, verbose tool output, permission
+      prompts, repeated attempts.
+
+      Use this shape, omitting empty sections:
+
+      Continue the work from the previous session. Here is the context you need:
+
+      **Project**: <path>
+      **Branch**: <branch, if known>
+
+      ## Background
+      ## What was done
+      ## Decisions in effect
+      ## Current state
+      ## Open questions
+      ## Your next steps
+      1. <directive>
+
+      Never invent decisions or context not present in the transcript; note
+      unclear items as open questions.
+
+      ---
+      {session}
+  - notification.show: { title: "handoff ready", body: "opening {target}", sound: done }
+  - name: hand over
+    agent: "{target}"
+    wait: false
+    prompt: |
+      Focus: {focus}
+
+      {brief}
+  - tab.close: { tab_id: "{source_tab}" }
+    allow_fail: true

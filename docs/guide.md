@@ -19,7 +19,7 @@ cd your-repo
 hwf init
 ```
 
-Writes `.hwf/config.yaml` (agent definitions) plus a starter `review` workflow, and asks where to seed the `handoff` / `worktree` recipes (`--seed=global|repo|none` to skip the prompt).
+Writes `.hwf/config.yaml` — the agents found on your PATH. No workflows: pick the ones you want from [Examples](/examples), where each card copies a `hwf workflow import "<base64>"` command. The command prints the YAML, asks whether you reviewed it, then asks for this repo's `.hwf/workflows` or your global `~/.hwf/workflows`.
 
 ## Run your first workflow
 

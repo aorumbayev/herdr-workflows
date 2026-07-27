@@ -1,0 +1,12 @@
+desc: refine a prompt in the background, copy the result to the clipboard
+inputs:
+  target:
+    type: agents
+    label: refine with
+  text:
+    type: text
+    label: prompt to refine
+steps:
+  - name: refine in background
+    run: [hwf, run, prompt-enhance-bg, --input, "target={target}", --input, "text={text}"]
+    wait: false

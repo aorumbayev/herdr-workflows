@@ -1,6 +1,16 @@
 # Examples
 
-Copy into `.hwf/workflows/<name>.yaml` (repo) or `~/.hwf/workflows/<name>.yaml` (global, every project). Ordered simple → complex.
+## Ready-made workflows
+
+Whole workflows, kept in [`examples/`](https://github.com/aorumbayev/herdr-workflows/tree/main/examples). **Copy import command** puts a `hwf workflow import "<base64>"` line on your clipboard; paste it in a terminal. The command shows you the YAML, asks whether you reviewed it, then asks for this repo's `.hwf/workflows` or your global `~/.hwf/workflows`. Nothing is written until you answer both.
+
+Read the YAML before you accept it — an imported workflow runs shell commands and agent prompts as you.
+
+<ExampleCards />
+
+## Recipes
+
+Snippets to copy by hand into `.hwf/workflows/<name>.yaml` (repo) or `~/.hwf/workflows/<name>.yaml` (global, every project). Ordered simple → complex.
 
 ## Scratch — open a tool
 

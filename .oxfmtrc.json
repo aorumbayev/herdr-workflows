@@ -4,6 +4,8 @@
     ".claude/**",
     ".cursor/**",
     ".opencode/**",
+    "docs/.vitepress/theme/examples.generated.ts",
+    "examples/**",
     "openspec/**",
     "references/**",
     "schemas/**",

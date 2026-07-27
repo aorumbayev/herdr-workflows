@@ -4,14 +4,15 @@ Every key and rule. `hwf` ≡ `herdr-workflows`.
 
 ## CLI
 
-| Command                                                 | Does                                                                                                      |
-| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `hwf` (TTY, no args)                                    | web workbench (same as `hwf web`)                                                                         |
-| `hwf run <name> [--prompt …] [--input k=v …]`           | run; live progress/stderr; nonzero on fail                                                                |
-| `hwf init [--force\|--yes] [--seed=global\|repo\|none]` | write `.hwf/config.yaml` + repo `review`; optionally seed `handoff`/`worktree` (TTY asks; default global) |
-| `hwf launch`                                            | open the picker in a herdr popup pane                                                                     |
-| `hwf picker`                                            | run the picker full-screen in the current terminal (the popup's internal entrypoint)                      |
-| `hwf web [--port <n>] [--no-open]`                      | localhost workbench: browse/edit/validate/share workflows + config; default port 7317, auto-increments    |
+| Command                                                                | Does                                                                                                          |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `hwf` (TTY, no args)                                                   | web workbench (same as `hwf web`)                                                                             |
+| `hwf run <name> [--prompt …] [--input k=v …]`                          | run; live progress/stderr; nonzero on fail                                                                    |
+| `hwf init [--force\|--yes]`                                            | write `.hwf/config.yaml` from the agents on PATH; seeds no workflows — [import an example](/examples) instead |
+| `hwf workflow import "<base64>" [--to=repo\|global] [--yes] [--force]` | install a workflow bundle from the docs: shows the YAML, asks for consent, then asks for repo or global       |
+| `hwf launch`                                                           | open the picker in a herdr popup pane                                                                         |
+| `hwf picker`                                                           | run the picker full-screen in the current terminal (the popup's internal entrypoint)                          |
+| `hwf web [--port <n>] [--no-open]`                                     | localhost workbench: browse/edit/validate/share workflows + config; default port 7317, auto-increments        |
 
 ### Web workbench
 

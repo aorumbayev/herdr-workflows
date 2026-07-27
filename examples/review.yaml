@@ -1,0 +1,11 @@
+desc: review the working tree diff, skipping the agent when it is clean
+steps:
+  - run: git diff HEAD
+    out: diff
+  - agent: claude
+    when: "{diff}"
+    timeout: 900
+    prompt: |
+      Review this diff. List blocking issues only.
+
+      {diff}

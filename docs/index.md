@@ -31,4 +31,6 @@ steps:
 
 Press `prefix+k`, pick `scratch`, hit enter — a lazygit tab opens. That's a workflow.
 
-Next: [Guide](/guide) for the concepts · [Examples](/examples) for copy-paste recipes · [Reference](/reference) for every rule.
+Want the ready-made ones (handoff, prompt-enhance, worktree, review)? Each card on [Examples](/examples) copies a `hwf workflow import` command — it shows you the YAML and asks before writing anything.
+
+Next: [Guide](/guide) for the concepts · [Examples](/examples) for whole workflows and recipes · [Reference](/reference) for every rule.

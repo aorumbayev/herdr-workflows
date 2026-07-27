@@ -40,8 +40,13 @@ Then, inside any repo:
 
 ```bash
 cd your-repo
-hwf init            # writes .hwf/config.yaml + a starter `review` workflow
+hwf init            # writes .hwf/config.yaml (the agents on your PATH)
 ```
+
+Ready-made workflows live in [`examples/`](examples) and on the
+[Examples page](https://aorumbayev.github.io/herdr-workflows/examples), where each card copies a
+`hwf workflow import "<base64>"` command — it prints the YAML, asks whether you reviewed it, then
+asks for this repo's `.hwf/workflows` or your global `~/.hwf/workflows`.
 
 Press `prefix+k` to pick and run a workflow, or use the CLI directly:
 

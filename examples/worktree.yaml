@@ -1,0 +1,8 @@
+desc: create a worktree and focus it
+inputs:
+  branch:
+    type: text
+    label: new branch name
+  base: [main, develop] = main
+steps:
+  - worktree.create: { branch: "{branch}", base: "{base}", label: "{branch}", focus: true }
