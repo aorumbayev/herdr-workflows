@@ -1,12 +1,11 @@
-desc: refine a prompt in the background, copy the result to the clipboard
+version: v1alpha1
+title: Prompt enhance
+description: Refine a prompt in the background, then copy the result to the clipboard
 inputs:
-  target:
-    type: agents
-    label: refine with
-  text:
-    type: text
-    label: prompt to refine
+  target: profile
+  text: text
 steps:
-  - name: refine in background
-    run: [hwf, run, prompt-enhance-bg, --input, "target={target}", --input, "text={text}"]
-    wait: false
+  - workflow: prompt-enhance-bg
+    inputs:
+      target: "{{inputs.target}}"
+      text: "{{inputs.text}}"

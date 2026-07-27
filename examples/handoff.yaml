@@ -1,10 +1,13 @@
-desc: distil this session and hand it to another agent (runs in the background)
+version: v1alpha1
+title: Handoff
+description: Distil this session and hand it to another agent
 inputs:
-  target:
-    type: agents
-    label: hand over to
-  focus: text = ""
+  target: profile
+  focus:
+    type: text
+    default: ""
 steps:
-  - name: hand off in background
-    run: [hwf, run, handoff-bg, --input, "target={target}", --input, "focus={focus}"]
-    wait: false
+  - workflow: handoff-bg
+    inputs:
+      target: "{{inputs.target}}"
+      focus: "{{inputs.focus}}"

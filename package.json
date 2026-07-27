@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/package.json",
   "name": "herdr-workflows",
   "version": "0.0.0-development",
-  "description": "Linear YAML workflow runner for herdr panes — run, agent, use, and dotted herdr primitives.",
+  "description": "Linear v1alpha1 YAML workflow runner for herdr — agent, run, herdr, and workflow actions.",
   "keywords": [
     "agent",
     "ai",

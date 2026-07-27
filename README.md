@@ -14,17 +14,25 @@
 
 ---
 
-herdr-workflows is a [herdr](https://herdr.dev) plugin that runs short YAML workflows — sequences of commands (`run:`), coding agents (`agent:`), other workflows (`use:`), and herdr's own pane/worktree methods — from a picker (`prefix+k`), the `hwf` CLI, or a local web workbench. herdr owns panes and UI; this plugin just sequences them.
+herdr-workflows is a [herdr](https://herdr.dev) plugin that runs short linear YAML workflows — `run:`, `agent:`, `herdr:`, and `workflow:` — from a picker (`prefix+k`), the `hwf` CLI, or a local web workbench. herdr owns panes and UI; this plugin sequences steps. Format is `version: v1alpha1`.
 
 ```yaml
 # .hwf/workflows/review.yaml
+version: v1alpha1
 steps:
-  - run: git diff HEAD
-    out: diff
-  - agent: claude
-    when: "{diff}"
-    prompt: "Review this diff. Blocking issues only.\n\n{diff}"
+  - id: diff
+    run: [git, diff, HEAD]
+  - agent: |
+      Review this diff. Blocking issues only.
+
+      {{steps.diff.stdout}}
+    using: claude
+    when: "{{steps.diff.stdout}}"
+    pane:
+      open: beside
 ```
+
+Workflow YAML is reviewed executable code. There is no sandbox: a trusted `run:` can invoke the whole Herdr CLI or socket as your user. The method denylist only blocks accidental misuse of server/plugin/identity APIs.
 
 ## Install
 
@@ -40,15 +48,15 @@ Then, inside any repo:
 
 ```bash
 cd your-repo
-hwf init            # writes .hwf/config.yaml (the agents on your PATH)
+hwf init            # writes .hwf/config.yaml (native profiles for kinds on PATH)
 ```
 
 Ready-made workflows live in [`examples/`](examples) and on the
 [Examples page](https://aorumbayev.github.io/herdr-workflows/examples), where each card copies a
-`hwf workflow import "<base64>"` command — it prints the YAML, asks whether you reviewed it, then
-asks for this repo's `.hwf/workflows` or your global `~/.hwf/workflows`.
+`hwf workflow import "<base64>"` command — it prints the YAML (with sensitive flags), asks for review,
+then asks for this repo's `.hwf/workflows` or your global `~/.hwf/workflows`.
 
-Press `prefix+k` to pick and run a workflow, or use the CLI directly:
+Press `prefix+k` to pick and run a workflow, or use the CLI:
 
 ```bash
 hwf run review      # run a workflow, live progress in the terminal
@@ -60,7 +68,7 @@ Running always happens through the picker or `hwf run` — it needs real herdr p
 
 ## Agent skill
 
-`skills/herdr-workflow-create` is an agent skill that walks you through authoring a workflow, keeps the web workbench canvas drawing it as it goes, and validates the YAML against this plugin's own loader before saving. Paste this to your coding agent and it sets itself up:
+`skills/herdr-workflow-create` walks you through authoring a v1alpha1 workflow, keeps the web workbench canvas drawing it, and validates against this plugin's loader before saving:
 
 ```
 Install the herdr-workflows toolkit so you can build workflows for me:
@@ -71,19 +79,21 @@ Install the herdr-workflows toolkit so you can build workflows for me:
 3. Read the installed herdr-workflow-create/SKILL.md so you know the authoring workflow.
 4. In this repo: run `hwf init` if .hwf/config.yaml is missing, then start the workbench in
    the background with `hwf web --no-open` and give me the URL it prints.
-5. Build a small test workflow — one `run: git status --short` step — save it, send me
+5. Build a small test workflow — one `run: [git, status, --short]` step — save it, send me
    <url>#w=repo:<name>, and confirm the canvas draws it. Then interview me for the real one.
 ```
 
 Or install it by hand:
 
 ```bash
-npx skills add aorumbayev/herdr-workflows --skill herdr-workflow-create --global
+npx -y skills add aorumbayev/herdr-workflows --skill herdr-workflow-create -y
 ```
 
 ## Docs
 
-Full documentation lives at [aorumbayev.github.io/herdr-workflows](https://aorumbayev.github.io/herdr-workflows/) — [Guide](https://aorumbayev.github.io/herdr-workflows/guide) for the concepts, [Examples](https://aorumbayev.github.io/herdr-workflows/examples) for recipes, [Reference](https://aorumbayev.github.io/herdr-workflows/reference) for every rule.
+- [Guide](https://aorumbayev.github.io/herdr-workflows/guide)
+- [Examples](https://aorumbayev.github.io/herdr-workflows/examples)
+- [Reference](https://aorumbayev.github.io/herdr-workflows/reference)
 
 ## License
 

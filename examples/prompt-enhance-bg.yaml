@@ -1,22 +1,25 @@
-desc: "background half of prompt-enhance — run `prompt-enhance`, not this"
+version: v1alpha1
+title: Prompt enhance worker
+description: Background half of prompt-enhance — run prompt-enhance, not this
 hidden: true
 inputs:
-  target: agents
+  target: profile
   text: text
-on_error:
-  - notification.show: { title: "prompt-enhance failed", body: "{error}", sound: request }
+on_failure:
+  herdr: notification.show
+  params:
+    title: prompt-enhance failed
+    body: "{{context.error.message}}"
+    sound: request
 steps:
-  - notification.show:
-      title: "enhancing prompt"
-      body: "{target} is refining it — will copy to clipboard and notify when done"
+  - herdr: notification.show
+    params:
+      title: enhancing prompt
+      body: "{{inputs.target}} is refining it — will copy to clipboard and notify when done"
       sound: request
-  - name: rewrite prompt
-    agent: "{target}"
-    timeout: 600
-    focus: false
-    close: true
-    out: refined
-    prompt: |
+
+  - id: refined
+    agent: |
       You are a prompt rewriter. Your only job is to improve the supplied text; do not execute, investigate, or perform the task it describes.
 
       This is a single-shot request. Do not use tools, read or search files, run commands, browse the web, inspect this repository, or ask questions. Answer from the supplied text alone.
@@ -33,12 +36,26 @@ steps:
       Return only the rewritten text. Do not include reasoning, headings, XML, Markdown fences, or commentary.
 
       ---
-      {text}
-  - name: copy to clipboard
-    run: printf %s "$HWF_refined" | pbcopy
-    when: '{platform} == "macos"'
-  - name: copy to clipboard
-    run: printf %s "$HWF_refined" | xclip -selection clipboard
-    when: '{platform} != "macos"'
-  - notification.show:
-      { title: "prompt ready", body: "refined prompt copied to clipboard", sound: done }
+      {{inputs.text}}
+    using: "{{inputs.target}}"
+    timeout: 10m
+    pane:
+      open: beside
+      focus: false
+      close: success
+
+  - run: [sh, -c, 'printf %s "$TEXT" | pbcopy']
+    env:
+      TEXT: "{{steps.refined.response}}"
+    when: '{{context.platform}} == "macos"'
+
+  - run: [sh, -c, 'printf %s "$TEXT" | xclip -selection clipboard']
+    env:
+      TEXT: "{{steps.refined.response}}"
+    when: '{{context.platform}} != "macos"'
+
+  - herdr: notification.show
+    params:
+      title: prompt ready
+      body: refined prompt copied to clipboard
+      sound: done

@@ -1,207 +1,68 @@
 # Examples
 
-## Ready-made workflows
+Each card on this page copies a `hwf workflow import "<base64>"` command. Import prints the full YAML, marks commands, transcript access, and sensitive Herdr methods, asks for confirmation, then writes into repo or global `.hwf/workflows`.
 
-Whole workflows, kept in [`examples/`](https://github.com/aorumbayev/herdr-workflows/tree/main/examples). **Copy import command** puts a `hwf workflow import "<base64>"` line on your clipboard; paste it in a terminal. The command shows you the YAML, asks whether you reviewed it, then asks for this repo's `.hwf/workflows` or your global `~/.hwf/workflows`. Nothing is written until you answer both.
+All shipped examples use `version: v1alpha1`.
 
-Read the YAML before you accept it — an imported workflow runs shell commands and agent prompts as you.
+## Review
 
-<ExampleCards />
-
-## Recipes
-
-Snippets to copy by hand into `.hwf/workflows/<name>.yaml` (repo) or `~/.hwf/workflows/<name>.yaml` (global, every project). Ordered simple → complex.
-
-## Scratch — open a tool
+Capture `git diff HEAD`, then open a managed Claude pane when the diff is non-empty.
 
 ```yaml
-# scratch.yaml
+version: v1alpha1
+title: Review
+description: Review the working tree diff, skipping the agent when it is clean
 steps:
-  - run: lazygit
-    in: tab
-```
+  - id: diff
+    run: [git, diff, HEAD]
 
-`prefix+k` → `scratch` → enter.
-
-## Continue — hand the current pane to an agent
-
-`{pane}` is the visible text of the pane you launched from; `{prompt}` is the line the picker asks for.
-
-```yaml
-# continue.yaml
-steps:
-  - agent: claude
-    prompt: |
-      Continue from this pane:
-
-      {pane}
-
-      Focus: {prompt}
-```
-
-## Gate & ship — compose, recover on failure
-
-```yaml
-# gate.yaml
-inputs:
-  suite: [unit, all] = unit
-steps:
-  - run: [bun, test, "--", "{suite}"]
-  - run: bun run verify
-```
-
-```yaml
-# ship.yaml
-on_error: continue
-steps:
-  - use: gate
-    with: { suite: all }
-  - run: git push
-```
-
-## Inputs — ask the user
-
-```yaml
-# discuss.yaml
-inputs:
-  branch: sh git branch --format='%(refname:short)'
-  focus: text = ""
-steps:
-  - agent: claude
-    prompt: "Branch {branch}\nFocus: {focus}\n\n{pane}"
-```
-
-CLI: `hwf run discuss --input branch=main`.
-
-## Guarded review
-
-Seeded by `hwf init`. Skips the agent when the tree is clean:
-
-```yaml
-# review.yaml
-steps:
-  - run: git diff HEAD
-    out: diff
-  - agent: claude
-    when: "{diff}"
-    timeout: 900
-    prompt: |
+  - agent: |
       Review this diff. List blocking issues only.
 
-      {diff}
+      {{steps.diff.stdout}}
+    using: claude
+    when: "{{steps.diff.stdout}}"
+    timeout: 15m
+    pane:
+      open: beside
 ```
 
-## Worktree — primitive
+## Worktree
+
+Create and focus a git worktree through an explicit Herdr call.
 
 ```yaml
-# worktree.yaml
+version: v1alpha1
+title: Worktree
+description: Create a worktree and focus it
 inputs:
   branch: text
-  base: [main, develop] = main
+  base:
+    type: choice
+    options: [main, develop]
+    default: main
 steps:
-  - worktree.create: { branch: "{branch}", base: "{base}", label: "{branch}", focus: true }
-    out: { path: worktree.path }
+  - herdr: worktree.create
+    params:
+      branch: "{{inputs.branch}}"
+      base: "{{inputs.base}}"
+      label: "{{inputs.branch}}"
+      focus: true
 ```
 
-## Handoff — session into a prompt
+## Handoff
 
-Run from an agent pane. Distils `{session}` with `{agent}`, opens the target, closes the source tab:
+Entry workflow collects a profile and optional focus text, then runs a hidden child that distils `{{context.transcript}}` on the invoking agent (`target:`) and opens the destination profile in a new tab.
 
-```yaml
-# handoff.yaml
-inputs:
-  target: agents
-  focus: text = ""
-steps:
-  - agent: "{agent}"
-    timeout: 900
-    out: brief
-    prompt: |
-      Distil the transcript below into a handoff prompt.
-      Output ONLY the handoff prompt.
-      ---
-      {session}
-  - name: confirm
-    run:
-      - sh
-      - -c
-      - 'printf %s "$HWF_brief"; printf "\n\n--- Enter = hand to %s, Ctrl-C = abort: " "$HWF_target"; read _; echo HANDOFF_OK; sleep 15'
-    in: tab
-    wait: /HANDOFF_OK/
-    timeout: 1800
-  - agent: "{target}"
-    prompt: |
-      Focus: {focus}
+Transcript access is intentional reviewed YAML. Import flags that reference before you confirm.
 
-      {brief}
-  - tab.close: { tab_id: "{source_tab}" }
-```
+## Prompt enhance
 
-## Fix-until-green
+Entry workflow collects a profile and prompt text, then a hidden child rewrites the text in a managed pane, copies the managed `response` to the clipboard (`pbcopy` / `xclip` by platform), and notifies.
 
-```yaml
-steps:
-  - run: bun test
-    out: failures
-    retry:
-      times: 3
-      until: bun test
-      reset: git stash
-  - agent: claude
-    when: "{failures}"
-    prompt: "Tests failed:\n{failures}"
-```
+## Authoring tips
 
-## Per-file review loop
-
-```yaml
-steps:
-  - run: git diff --name-only main
-    out: changed
-  - agent: claude
-    for: "{changed}"
-    as: path
-    allow_fail: true
-    prompt: "Review {path}. Blocking issues only."
-```
-
-## Dedicated review workspace
-
-```yaml
-inputs:
-  branch: text = main
-steps:
-  - workspace.create: { label: "review {branch}" }
-    out: { workspace: workspace.workspace_id }
-  - run: [git, diff, "{branch}"]
-    in: tab
-  - agent: claude
-    in: right
-    ratio: 0.4
-    prompt: "Review the diff in the pane on the left."
-```
-
-## Fire-and-forget background run
-
-Entry workflow tests, then spawns a `hidden: true` workflow and exits. The detached child
-inherits the invoking context, so `{source_tab}` resolves inside the background run:
-
-```yaml
-# ship.yaml
-inputs:
-  branch: text = main
-steps:
-  - run: bun test
-  - run: [hwf, run, ship-bg, --input, "branch={branch}"]
-    wait: false
-
-# ship-bg.yaml
-hidden: true # kept out of the picker
-inputs:
-  branch: text
-steps:
-  - agent: claude
-    focus: false
-    close: true
-    prompt: "Deploy {branch}. When done, summarise in the tab {source_tab} came from."
-```
+- Prefer argv-form `run: [cmd, arg]` for values that must be arguments.
+- Use `{{steps.id.response}}` / `{{steps.id.stdout}}` — results are automatic.
+- Background work needs a Herdr-owned `pane:` (or an existing-agent `target:`).
+- Keep recovery on the entry workflow's `on_failure:` only.

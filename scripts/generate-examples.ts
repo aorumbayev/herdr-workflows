@@ -34,7 +34,7 @@ export async function buildExamples(dir = EXAMPLES_DIR): Promise<ExampleCard[]> 
     const files = own.map((n) => ({ name: n, body: bodies.get(n)! }));
     cards.push({
       name,
-      desc: raws.get(name)!.desc ?? "",
+      desc: raws.get(name)!.description ?? "",
       files,
       payload: encodeBundle({ v: 1, files }),
     });

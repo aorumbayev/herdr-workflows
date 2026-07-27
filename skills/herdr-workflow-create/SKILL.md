@@ -1,12 +1,13 @@
 ---
 name: herdr-workflow-create
-description: Interactive wizard that turns a described task into a valid herdr-workflows YAML file at .hwf/workflows/<name>.yaml, then validates it against the real loader before writing. Covers action keys (run, agent, use, dotted herdr methods), inputs, placeholders, guards, loops, retry, recovery, and the herdr plugin API allowlist. Use when the user wants to automate a task in herdr, asks to create/edit/debug an hwf workflow or .hwf YAML, mentions herdr-workflows, hwf run, the prefix+k picker, or hits a workflow load error.
+description: Interactive wizard that turns a described task into a valid herdr-workflows v1alpha1 YAML file at .hwf/workflows/<name>.yaml, then validates it against the real loader before writing. Covers agent/run/herdr/workflow actions, templates, panes, recovery, and trust. Use when the user wants to automate a task in herdr, asks to create/edit/debug an hwf workflow or .hwf YAML, mentions herdr-workflows, hwf run, the prefix+k picker, or hits a workflow load error.
 ---
 
 # Create a herdr-workflows workflow
 
 Produces one YAML file that `hwf` (≡ `herdr-workflows`, a herdr plugin) runs as a linear
-sequence of steps. Everything needed is in this skill — do not read the plugin source.
+sequence of steps. Format is `version: v1alpha1`. Everything needed is in this skill — do
+not invent legacy keys (`out:`, `wait:`, `use:`, dotted method actions, `{name}` placeholders).
 
 Where files go:
 
@@ -14,142 +15,102 @@ Where files go:
 | ------------------------------ | ---------------------------------------------- |
 | `.hwf/workflows/<name>.yaml`   | repo workflow (shadows global on same name)    |
 | `~/.hwf/workflows/<name>.yaml` | global workflow (every project)                |
-| `.hwf/config.yaml`             | `agents:` argv templates, optional `sessions:` |
+| `.hwf/config.yaml`             | `profiles` / `default_profile` / `transcripts` |
+| `.hwf/config.local.yaml`       | gitignored whole-entry overrides               |
 
-`<name>`: lowercase, `[a-z0-9][a-z0-9-_]*`. How the user runs it afterwards: `prefix+k`
-(picker), `hwf run <name> [--input k=v] [--prompt …]`, or `hwf web` to edit.
+`<name>`: lowercase, `[a-z0-9][a-z0-9-_]*`. Run with `prefix+k`, `hwf run <name> [--input k=v]`,
+or edit in `hwf web`.
 
 ## Workflow
 
-Copy this checklist and tick as you go:
-
 ```
 - [ ] 1. Interview: goal, inputs, agent vs shell, placement, failure policy
-- [ ] 2. Survey: read config agents + existing workflows
+- [ ] 2. Survey: read profiles + existing workflows
 - [ ] 3. Open the workbench, hand the user the live canvas link
-- [ ] 4. Compose the YAML
+- [ ] 4. Compose v1alpha1 YAML only
 - [ ] 5. Validate through the real loader (MUST be ok:true)
 - [ ] 6. Save, then keep iterating on the live canvas
 ```
 
 ### 1. Interview
 
-Ask with one batched `AskUserQuestion` round (skip any question the request already answers):
+Ask with one batched `AskUserQuestion` round (skip answers already given):
 
 - **Scope** — repo (`.hwf/workflows/`) or global (`~/.hwf/workflows/`)?
-- **Shape** — shell commands only / one agent with a prompt / agent + shell context / herdr
-  layout (panes, tabs, worktrees)?
-- **Inputs** — what should the picker ask for each run? (branch, focus text, target agent, none)
-- **Failure policy** — stop on first failure (default) / keep going (`allow_fail:`) /
-  run a recovery step (`on_error:`) / retry (`retry:`)?
+- **Shape** — shell only / managed agent / agent + shell / explicit Herdr layout?
+- **Inputs** — what should the picker ask? (`text`, `choice`, `profile`)
+- **Failure policy** — stop (default) / `continue_on_error` / entry `on_failure` / `retry` on local run/herdr?
 
-Ask about placement (`in:`) only when panes matter. Prefer one working step over a
-speculative pipeline — a workflow is cheap to extend later.
+Workflow YAML is reviewed executable code. There is no sandbox. Prefer one working step over a
+speculative pipeline.
 
 ### 2. Survey
 
 ```bash
-cat .hwf/config.yaml ~/.hwf/config.yaml 2>/dev/null   # agent names usable in agent:
-ls .hwf/workflows ~/.hwf/workflows 2>/dev/null        # reusable targets for use:
+cat .hwf/config.yaml .hwf/config.local.yaml 2>/dev/null
+ls .hwf/workflows ~/.hwf/workflows 2>/dev/null
 ```
 
-`agent:` values must be keys under `agents:`. No config yet → tell the user to run
-`hwf init` first (it detects claude/codex/aider/cursor on PATH and seeds a `review`
-workflow). Existing workflow that already does a sub-task → compose with `use:` + `with:`
-instead of duplicating steps.
+`using:` values must be merged profile names. No config yet → `hwf init` first. Reuse work with
+`workflow:` + `inputs:` instead of duplicating steps.
 
 ### 3. Open the live canvas
-
-Start the workbench once per session, in the background:
 
 ```bash
 hwf web --no-open        # prints: herdr-workflows web · http://127.0.0.1:7317/?token=…
 ```
 
-Send the user that URL with the workflow pinned on the end — `<url>#w=repo:<name>` (or
-`#w=global:<name>`) — and tell them to press **canvas**. The link works before the file
-exists; the page waits for it. From then on every save you make redraws in front of them
-within ~1.5s, and it never clobbers edits they have open unsaved.
-
-Port 7317 is the default and `hwf web` steps to the next free port when it is taken, so
-reuse a URL you already handed over instead of starting a second server.
+Send `<url>#w=repo:<name>` (or `#w=global:<name>`) and tell them to press **canvas**.
 
 ### 4. Compose
 
-The shape that covers most requests:
-
 ```yaml
-desc: one line shown in the picker
+version: v1alpha1
+title: Review diff
+description: Skip the agent when the tree is clean
 inputs:
-  branch: sh git branch --format='%(refname:short)'
-  focus: text = ""
+  focus:
+    type: text
+    default: ""
 steps:
-  - run: git diff HEAD
-    out: diff
-  - agent: claude
-    when: "{diff}"
-    timeout: 900
-    prompt: |
-      Branch {branch}, focus: {focus}
+  - id: diff
+    run: [git, diff, HEAD]
+  - agent: |
+      Focus: {{inputs.focus}}
 
-      {diff}
+      {{steps.diff.stdout}}
+    using: claude
+    when: "{{steps.diff.stdout}}"
+    pane:
+      open: beside
 ```
 
-Floor case, one command: `steps: bun test`.
+Exactly one action per step: `run` | `agent` | `herdr` | `workflow`.
 
-Exactly one action key per step, top to bottom, foreground:
+Templates: `{{inputs.*}}` / `{{steps.*}}` / `{{context.*}}` only. Results are automatic.
 
-| Action        | Value                      | Notes                                           |
-| ------------- | -------------------------- | ----------------------------------------------- |
-| `run`         | scalar / argv list / block | local subprocess (waits), or a pane via `in:`   |
-| `agent`       | config agent name          | pane + `prompt:`, waits for the agent to finish |
-| `use`         | workflow name              | inline another workflow, params via `with:`     |
-| `method.name` | params object              | any allowed herdr method, e.g. `pane.split:`    |
-
-Modifiers (only these keys): `name in ratio cwd shell env out with when for as retry wait
-timeout allow_fail on_error prompt`.
-
-Full key semantics, every load-error message, and the placeholder rules:
-**[reference/syntax.md](reference/syntax.md)**.
-herdr methods, their params, denials, and `out:` dot-paths:
-**[reference/herdr-api.md](reference/herdr-api.md)**.
-Validated copy-paste recipes (review gate, worktree, handoff, fix-until-green, per-file
-loop, review workspace, notify):
-**[reference/recipes.md](reference/recipes.md)**.
+Full syntax: **[reference/syntax.md](reference/syntax.md)**.
+Herdr allowlist notes: **[reference/herdr-api.md](reference/herdr-api.md)**.
+Recipes: **[reference/recipes.md](reference/recipes.md)**.
 
 ### 5. Validate — mandatory gate
-
-Never write a workflow you have not validated. The bundled script runs the plugin's own
-loader, so its errors are exactly what `hwf run` would print:
 
 ```bash
 sh skills/herdr-workflow-create/scripts/validate.sh /tmp/draft.yaml <name>
 ```
 
-Prints `{"ok":true}` (exit 0) or `{"ok":false,"error":"<file>, step N, key: message"}`
-(exit 1). Draft to a temp file, validate, fix, repeat until it passes. Needs `hwf` on
-PATH, `curl`, `python3`; it starts a localhost `hwf web` server and stops it on exit.
-
-If `hwf` is not installed, say so and hand-check every rule in
-[reference/syntax.md](reference/syntax.md) instead — do not claim the file is valid.
+Prints `{"ok":true}` or `{"ok":false,"error":…}`. Draft → validate → fix until pass.
 
 ### 6. Save and iterate
 
-Write the validated YAML to the chosen scope as soon as it passes — the first step alone is
-worth saving, because that is what puts the workflow on the user's canvas. Then work in short
-rounds: change → validate → save → ask what to fix, so they watch it grow instead of reviewing
-a wall of YAML at the end.
-
-Before editing again, re-read the file: the user may have moved nodes or saved from the
-browser, and their copy wins.
-
-Report the run command once the shape is settled:
+Write validated YAML early so the canvas updates. Re-read the file before each edit — the user
+may have saved from the browser.
 
 ```
-hwf run <name> [--input k=v …] [--prompt "…"]     # or prefix+k → <name>
+hwf run <name> [--input k=v …]
 ```
 
-Add the editor schema line at the top only if the user wants IDE completion:
+Optional IDE schema line:
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/aorumbayev/herdr-workflows/main/docs/workflow.schema.json
@@ -157,44 +118,20 @@ Add the editor schema line at the top only if the user wants IDE completion:
 
 ## Rules that break workflows
 
-These are the failures that actually happen. Each is a hard error, not a warning; every one
-but the last is caught at load.
+1. **No templates in string `run:` text.** Use argv `run: [git, checkout, "{{inputs.branch}}"]` or `env:` / `$HWF_…`.
+2. **Every declared input must be referenced** (templates or `$HWF_<name>` in shell text).
+3. **No `out:`, `wait:`, `in:`, `use:`, `with:`, `for:`/`as:`, `allow_fail`, `on_error`, dotted method keys, flat `{name}`.**
+4. **`retry`** only on blocking local `run:` or `herdr:`.
+5. **`target:`** requires idle/done; rejects pane/cwd/env.
+6. **`background: true`** needs a Herdr-owned pane or existing-agent `target:`.
+7. **`ready_when`** needs `timeout`; scrapes recent 80 rows; does not detect process exit.
+8. **`on_failure`** is entry-only, one action, once.
+9. **Transcript / identity context** unavailable → preflight failure.
+10. **Denied Herdr methods** fail at load — denylist is a misuse rail, not a sandbox.
 
-1. **No placeholders in scalar/block `run:`.** `run: git checkout {branch}` fails. Use argv
-   form `run: [git, checkout, "{branch}"]`, or read `$HWF_branch` in the command text.
-2. **Every declared input must be referenced**, or the load fails with
-   `declared but never referenced`. `$HWF_<name>` inside shell text counts.
-3. **Loop bindings are step-scoped.** `{item}` / `{index}` (and an `as:` alias) resolve only
-   inside the looping step — referencing them anywhere else is `unknown name`.
-4. **`retry.reset:` is a shell command string**, not a step list. `retry:` on a
-   pane-creating step (`agent:`, or `run:` with `in:` other than `here`) _requires_
-   `reset:` — otherwise attempt 2 strands attempt 1's pane.
-5. **`out:` form follows the step**: identifier for `run` with `in: here` (stdout) and for
-   `agent` (final pane text); map form (`out: { p: pane_id }`) for primitives and placed
-   `run`. Bare `tab_id` is not a valid path — use `layout.tab_id`.
-6. **`out:`/`as:` names cannot shadow a builtin** (`pane`, `prompt`, `item`, …) or collide
-   with an input.
-7. **`wait: /regex/` needs a placed step** (`in: tab|right|down`). `wait: false` (detached)
-   cannot bind `out:`. A placed `run:` never waits for the command to exit — it returns once
-   the pane exists, so sequence on it with `wait: /regex/`.
-8. **`on_error:` takes a workflow name or an inline step list** — not a keyword. A recovery
-   workflow may not declare `inputs:` or its own `on_error:`.
-9. **`{session}` / `{session_file}`** require launching from an agent pane, and are
-   rejected in scalar/block `run:` under rule 1. `{agent}` (the invoking agent) must exist
-   in `agents:`.
-10. **`layout.apply`, `layout.export`, and `layout.set_split_ratio` need an id pinned to
-    `null`** — they each accept two of `pane_id`/`tab_id`/`workspace_id` and reject the pair,
-    but omitted ids get auto-filled from the invoking context, so they fail at run time no
-    matter how few you set. Write `layout.apply: { tab_id: null, workspace_id: "{ws}", … }`.
-    This one loads clean and only breaks on a live run — see
-    [reference/herdr-api.md](reference/herdr-api.md).
-
-Out of scope by design: parallel steps, nested loops beyond one level, any
-external engine (no Dagu/Taskfile). Windows is in scope — fork steps with
-`when: '{platform} == "windows"'`. `for:` caps at 100 items. Needs herdr ≥ 0.7.5.
+Out of scope: parallelism, loops, external engines. Windows via `{{context.platform}}` + `when:`. Needs herdr ≥ 0.7.5.
 
 ## Keywords
 
-herdr workflow, herdr-workflows, hwf, .hwf/workflows, workflow yaml, hwf run, hwf web,
-live canvas, workbench, prefix+k picker, herdr plugin api, pane.split, worktree.create,
-agent handoff, workflow load error
+herdr workflow, herdr-workflows, hwf, v1alpha1, .hwf/workflows, hwf run, hwf web, prefix+k,
+managed agent, pane, transcript, workflow load error

@@ -4,7 +4,7 @@ herdr ≥ 0.7.5 plugin. Sequences short linear YAML workflows (`agent` / `run` /
 
 Workflow format is `version: v1alpha1`; the package stays semver `0.x`. A later incompatible alpha increments `v1alphaN`. Workflow YAML never declares a herdr version — the plugin manifest and CLI own minimum version and protocol enforcement.
 
-Spec of record: `openspec/changes/redesign-workflow-v1-syntax/` (proposal, design, `specs/*/spec.md`). It outranks `docs/`, which still documents the removed experimental grammar until that change's documentation section lands. herdr runtime behavior comes from `references/herdr/docs/versions/0.7.5/`, never from memory.
+Spec of record: `openspec/changes/redesign-workflow-v1-syntax/` (proposal, design, `specs/*/spec.md`). Product docs in `docs/` describe the current v1alpha1 contract. herdr runtime behavior comes from `references/herdr/docs/versions/0.7.5/`, never from memory.
 
 ## Commands
 

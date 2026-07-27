@@ -4,7 +4,7 @@ layout: home
 hero:
   name: herdr-workflows
   text: Workflows for your agentic terminal
-  tagline: Short YAML sequences of commands, agents, and herdr panes — one keystroke.
+  tagline: Short linear YAML — commands, managed agents, and explicit Herdr calls.
   actions:
     - theme: brand
       text: Guide
@@ -24,13 +24,17 @@ cd your-repo && hwf init
 Write `.hwf/workflows/scratch.yaml`:
 
 ```yaml
+version: v1alpha1
 steps:
-  - run: lazygit
-    in: tab
+  - run: [lazygit]
+    pane:
+      open: tab
+    background: true
 ```
 
-Press `prefix+k`, pick `scratch`, hit enter — a lazygit tab opens. That's a workflow.
+Press `prefix+k`, pick `scratch`, hit enter — a lazygit tab opens.
 
-Want the ready-made ones (handoff, prompt-enhance, worktree, review)? Each card on [Examples](/examples) copies a `hwf workflow import` command — it shows you the YAML and asks before writing anything.
+Ready-made workflows (handoff, prompt-enhance, worktree, review) are on [Examples](/examples).
+Each card copies a `hwf workflow import` command that shows the YAML and asks before writing.
 
-Next: [Guide](/guide) for the concepts · [Examples](/examples) for whole workflows and recipes · [Reference](/reference) for every rule.
+Next: [Guide](/guide) · [Examples](/examples) · [Reference](/reference)

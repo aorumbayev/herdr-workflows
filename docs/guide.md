@@ -19,178 +19,143 @@ cd your-repo
 hwf init
 ```
 
-Writes `.hwf/config.yaml` — the agents found on your PATH. No workflows: pick the ones you want from [Examples](/examples), where each card copies a `hwf workflow import "<base64>"` command. The command prints the YAML, asks whether you reviewed it, then asks for this repo's `.hwf/workflows` or your global `~/.hwf/workflows`.
+Writes `.hwf/config.yaml` with native Herdr profiles for agent kinds found on your PATH. No workflows yet: pick ready-made ones from [Examples](/examples). Each card copies a `hwf workflow import "<base64>"` command. Import prints the full YAML, flags commands, transcript use, and sensitive Herdr methods, asks for explicit confirmation, then writes into this repo's `.hwf/workflows` or your global `~/.hwf/workflows`.
+
+Workflow YAML is reviewed executable code. Merely opening a repository never runs a workflow. There is no sandbox — a trusted `run:` can invoke the whole Herdr CLI or socket as your user.
 
 ## Run your first workflow
 
 ```yaml
 # .hwf/workflows/scratch.yaml
+version: v1alpha1
 steps:
-  - run: lazygit
-    in: tab
+  - run: [lazygit]
+    pane:
+      open: tab
+    background: true
 ```
 
-- `prefix+k` → type `scratch` → enter. Done.
-- Same thing from a terminal: `hwf run scratch` (live step output — best for debugging).
-- Workflows live in `.hwf/workflows/` (repo) or `~/.hwf/workflows/` (global, every project). Repo shadows global on the same name.
+- `prefix+k` → type `scratch` → enter.
+- From a terminal: `hwf run scratch`.
+- Workflows live in `.hwf/workflows/` (repo) or `~/.hwf/workflows/` (global). Repo shadows global on the same name.
 
-One-liner floor:
+Minimal document:
 
 ```yaml
-steps: bun test
+version: v1alpha1
+steps:
+  - run: [bun, test]
 ```
 
 ## Pick a surface
 
-| Where                     | Use it for                                                     |
-| ------------------------- | -------------------------------------------------------------- |
-| `prefix+k` (picker)       | running — collects inputs and a prompt line, then fires        |
-| `hwf run <name>`          | running from scripts/terminal, with `--input k=v` / `--prompt` |
-| `hwf web` (or bare `hwf`) | editing — browser workbench: build, validate, share, run log   |
+| Where                     | Use it for                                                   |
+| ------------------------- | ------------------------------------------------------------ |
+| `prefix+k` (picker)       | running — collects entry inputs, then fires                  |
+| `hwf run <name>`          | running from scripts/terminal, with `--input k=v`            |
+| `hwf web` (or bare `hwf`) | editing — browser workbench: build, validate, share, run log |
 
-The web workbench never runs workflows — running needs real herdr panes. It shows you the `hwf run <name>` line to paste instead.
+Running always goes through the picker or `hwf run`. The workbench builds and shares but never executes.
 
-## Action keys
+## Format
 
-Exactly one per step. Steps run top to bottom.
+Every workflow declares `version: v1alpha1`. The package stays semver `0.x`; a later incompatible alpha increments `v1alphaN`. Workflow YAML never declares a Herdr version — the plugin manifest and CLI own that.
 
-- `run:` — command. Shape decides shell involvement: scalar/block go through `shell:` (default `sh`, no placeholders); argv list is shell-free and accepts `{name}` per argument.
-- `agent:` — configured agent in a pane. Waits by default; `wait: false` detaches; `close: true` reaps the pane when the wait ends.
-- `use:` — include another workflow; pass params with `with:`.
-- `pane.split:` / `worktree.create:` / … — any allowed herdr method, spelled as herdr spells it.
+Optional `title` and `description` appear in the picker (title defaults from the humanized filename). `hidden: true` hides a workflow from the picker but still allows `hwf run`.
 
-Placement is a modifier: `in: here | tab | right | down` (defaults: `here` for `run:`, `tab` for `agent:`).
+## Four actions
 
-## Agents
+Exactly one action key per step:
 
-An agent is a named CLI in `.hwf/config.yaml`. `hwf init` detects `claude` / `codex` on your PATH and writes them for you:
+| Action      | Role                                                                   |
+| ----------- | ---------------------------------------------------------------------- |
+| `run:`      | local argv or shell command → `{stdout, stderr, exit_code, failed}`    |
+| `agent:`    | managed native agent turn → `{response, agent, pane_id}` when blocking |
+| `herdr:`    | explicit socket method + `params:` → that method's structured result   |
+| `workflow:` | isolated child workflow with its own inputs and optional `returns:`    |
 
-```yaml
-agents:
-  claude: [claude, "{prompt}"]
-```
+Templates use `{{inputs.*}}`, `{{steps.<id>.*}}`, and `{{context.*}}` only. Results are automatic and structured — there is no `out:` binding.
 
-`hwf init` writes `.hwf/config.yaml` from your PATH every time it runs, so treat it as machine-local. Agents you want on every machine belong in `~/.hwf/config.yaml`; keep the repo file for agents this project actually needs, since it wins per name.
+## Profiles and config
 
-The one literal `{prompt}` element is where the step's `prompt:` text lands. `agent: claude` then opens that command in a pane and waits for it to finish. With `out:`, the runner appends an instruction to write the final response to a temporary file; missing or empty output fails the step.
+Config accepts only `profiles`, `default_profile`, and `transcripts`. A profile is `{ kind, args? }`. Live Herdr `agent.start` is authoritative for which kinds work.
 
-## Placeholders
+Layers (whole-entry replacement by name):
 
-One flat namespace: inputs, `out:` names, and builtins all read as `{name}` — `{branch}`, `{diff}`, `{session}`.
-
-Scalar/block `run:` reject placeholders — pass values as `HWF_<name>` env, or use argv form:
-
-```yaml
-# ✗ load error                         # ✓
-- run: git checkout {branch}           - run: [git, checkout, "{branch}"]
-```
-
-`{session}` is legal in prompts, argv, and primitive params (no more `run: cat` hop).
-
-## Inputs
+1. `$HERDR_PLUGIN_CONFIG_DIR/config.yaml` (discovered via `herdr plugin config-dir` when standalone)
+2. committed `.hwf/config.yaml`
+3. gitignored `.hwf/config.local.yaml`
 
 ```yaml
-inputs:
-  branch: sh git branch --format='%(refname:short)'
-  focus: text = ""
-steps:
-  - agent: claude
-    prompt: "Branch {branch}\nFocus: {focus}\n\n{pane}"
+# .hwf/config.yaml
+profiles:
+  claude:
+    kind: claude
+  deep:
+    kind: claude
+    args: ["--model", "opus"]
+default_profile: claude
 ```
 
-Shorthands: `text`, `text = …`, `[a, b] = a`, `sh <cmd>`, `agents`. Map form still has `label` / `desc`.
+## Managed agents
+
+```yaml
+- agent: |
+    Review {{context.selection}}
+  using: deep
+  pane:
+    open: beside
+    size: 40
+```
+
+- `using:` starts a new managed agent in a created pane (profile kind/args → `agent.start`, then `agent.prompt`).
+- `target:` prompts an existing recognized agent that must already be `idle` or `done`. Busy targets fail before submission — use `herdr: agent.prompt` if you intentionally want to queue.
+
+Blocking turns append a managed response-file instruction and wait for that non-empty file plus `idle`/`done`. Result is `{response, agent, pane_id}` where `agent` is native Herdr AgentInfo. `blocked` notifies once per episode and keeps waiting. `unknown` never settles successfully. Turn timeout defaults to 30 minutes; native startup keeps its own 30-second default.
+
+Background agent or placed `run:` needs a Herdr-owned pane (or an existing-agent `target:`). Pane-owned processes survive client detach, are not stopped after a later workflow failure, and do not survive an ordinary server restart.
+
+## Panes and readiness
+
+Nested `pane:` on `agent:` / `run:`:
+
+```yaml
+pane:
+  open: beside # tab | beside | below
+  size: 40 # percent for the NEW pane (1–99)
+  focus: true
+  close: success # agent-only: success | always
+```
+
+Anchors are the immutable invocation pane/workspace or explicit `target` / `workspace` — never live UI focus. `beside` maps to Herdr's right split, `below` to down. Herdr clamps split ratios to 0.1–0.9, so a `pane.size` below 10 or above 90 is clamped rather than honored exactly.
+
+`ready_when: /regex/` on a placed `run:` waits through native `pane.wait_for_output` over the recent 80 rendered rows with ANSI stripped. Already-present snapshot text can match. It does not detect process exit. `timeout` is required with `ready_when`.
+
+## Context and transcripts
+
+`context` carries invocation `workspace`, `tab`, `pane`, `worktree`, `agent`, `selection`, `platform`, plus `transcript` / `transcript_file` when the workflow references them. Identity and transcript values that are unavailable fail preflight.
+
+Transcript extraction is kind-keyed under `transcripts:` (or built-in support). Referencing transcript context sends capped text to the selected profile's provider. Import and the workbench mark transcript references as sensitive. There is no per-run transcript confirmation and no sandbox claim.
 
 ## Control flow
 
-Skip with `when:`, loop with `for:` / `as:`, retry with `retry:` (pane-creating steps need `reset:`), soft-fail with `allow_fail:`, recover with `on_error:`.
+- Scalar `when:` — whole-value truthiness or `==` / `!=` text comparison
+- `continue_on_error: true` — record failure, continue, suppress recovery; run still exits nonzero
+- `retry: { attempts, delay? }` — only on blocking local `run:` or `herdr:`
+- Entry-only `on_failure:` — one recovery action after the first non-tolerated failure
+- Unexpected Herdr transport loss after dispatch is uncertain coordination loss: stop, keep panes, skip recovery
 
-```yaml
-steps:
-  - run: git diff HEAD
-    out: diff
-  - agent: claude
-    when: "{diff}"
-    prompt: "Review:\n{diff}"
-```
+## Caps
 
-`when:` also compares strings — `{name} == "v"` / `!= "v"`. With the `{platform}` builtin (`macos` / `linux` / `windows`) that forks steps per OS:
+| Limit                                                    | Value      |
+| -------------------------------------------------------- | ---------- |
+| Generated `HWF_*` environment                            | 24 KiB     |
+| Command / response / transcript / dynamic-choice capture | 8 MiB      |
+| Dynamic choices                                          | 1,000; 10s |
+| Transcript extractors                                    | 30s        |
 
-```yaml
-- run: [make, setup]
-  when: '{platform} != "windows"'
-```
+Crossing a cap fails naming the source and limit — never truncate.
 
-## Composition
+## Trust
 
-```yaml
-# gate.yaml
-inputs:
-  suite: [unit, all] = unit
-steps:
-  - run: [bun, test, "--", "{suite}"]
-
-# ship.yaml
-on_error: continue
-steps:
-  - use: gate
-    with: { suite: all }
-  - run: git push
-```
-
-## Background runs
-
-`wait: false` on a local `run:` step is fire-and-forget: the child inherits your invoking environment (`{agent}`, `{source_tab}`, `{session_file}` still resolve inside it) and the step returns immediately. The supported pattern is an entry workflow whose last step spawns a `hidden: true` workflow — kept out of the picker, meant to be spawned:
-
-```yaml
-# ship.yaml — last step
-- run: [hwf, run, ship-bg, --input, "branch={branch}"]
-  wait: false
-
-# ship-bg.yaml
-hidden: true
-inputs:
-  branch: text
-steps:
-  - agent: claude
-    focus: false   # don't steal focus
-    close: true    # close the pane when done
-    prompt: "Deploy {branch}. Report tersely."
-```
-
-## Web workbench
-
-```bash
-hwf web   # opens http://127.0.0.1:7317/?token=… — or just run bare `hwf`
-```
-
-Text editor with live validation, or visual mode (drag-reorderable step cards). Bound to `127.0.0.1` with a per-launch token.
-
-`<url>#w=repo:<name>` (or `#w=global:<name>`) opens straight onto one workflow, and waits for it if the file does not exist yet. The open workflow reloads from disk every 1.5s, so a workflow being written by an agent — or by your editor — redraws on the canvas as it changes. Anything you have unsaved is left alone.
-
-## Let an agent write it
-
-`herdr-workflow-create` is an agent skill that interviews you, starts the workbench so you watch the canvas fill in, and validates every YAML against this plugin's own loader before saving. Paste this to your coding agent:
-
-```
-Install the herdr-workflows toolkit so you can build workflows for me:
-
-1. If `hwf` is not on PATH: herdr plugin install aorumbayev/herdr-workflows
-2. Install the skill for this agent:
-   npx -y skills add aorumbayev/herdr-workflows --skill herdr-workflow-create -y
-3. Read the installed herdr-workflow-create/SKILL.md so you know the authoring workflow.
-4. In this repo: run `hwf init` if .hwf/config.yaml is missing, then start the workbench in
-   the background with `hwf web --no-open` and give me the URL it prints.
-5. Build a small test workflow — one `run: git status --short` step — save it, send me
-   <url>#w=repo:<name>, and confirm the canvas draws it. Then interview me for the real one.
-```
-
-Or install it by hand:
-
-```bash
-npx skills add aorumbayev/herdr-workflows --skill herdr-workflow-create --global
-```
-
-## Next
-
-- [Examples](/examples) — guarded review, fix-until-green, per-file loop, review workspace.
-- [Reference](/reference) — every key, deny table, ceilings.
+Repo workflows carry the repository's script trust. Imported global workflows show full YAML and require confirmation before writing. The Herdr method denylist blocks accidental server/plugin/identity misuse at load time; it is **not** an authorization boundary. Trusted `run:` can call the complete Herdr CLI or socket as the current user.

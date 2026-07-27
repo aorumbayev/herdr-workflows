@@ -1,18 +1,21 @@
-desc: "background half of handoff — run `handoff`, not this"
+version: v1alpha1
+title: Handoff worker
+description: Background half of handoff — run handoff, not this
 hidden: true
 inputs:
-  target: agents
-  focus: text = ""
-on_error:
-  - notification.show: { title: "handoff failed", body: "{error}", sound: request }
+  target: profile
+  focus:
+    type: text
+    default: ""
+on_failure:
+  herdr: notification.show
+  params:
+    title: handoff failed
+    body: "{{context.error.message}}"
+    sound: request
 steps:
-  - name: distil transcript
-    agent: "{agent}"
-    timeout: 900
-    focus: false
-    close: true
-    out: brief
-    prompt: |
+  - id: brief
+    agent: |
       Below the --- marker is a coding agent session transcript. Distil it into
       a handoff prompt for a fresh agent session.
 
@@ -44,14 +47,26 @@ steps:
       unclear items as open questions.
 
       ---
-      {session}
-  - notification.show: { title: "handoff ready", body: "opening {target}", sound: done }
-  - name: hand over
-    agent: "{target}"
-    wait: false
-    prompt: |
-      Focus: {focus}
+      {{context.transcript}}
+    target: "{{context.agent}}"
+    timeout: 15m
 
-      {brief}
-  - tab.close: { tab_id: "{source_tab}" }
-    allow_fail: true
+  - herdr: notification.show
+    params:
+      title: handoff ready
+      body: "opening {{inputs.target}}"
+      sound: done
+
+  - agent: |
+      Focus: {{inputs.focus}}
+
+      {{steps.brief.response}}
+    using: "{{inputs.target}}"
+    background: true
+    pane:
+      open: tab
+
+  - herdr: tab.close
+    params:
+      tab_id: "{{context.tab}}"
+    continue_on_error: true

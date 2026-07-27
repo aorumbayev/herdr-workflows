@@ -1,201 +1,149 @@
 # Reference
 
-Every key and rule. `hwf` ≡ `herdr-workflows`.
+Contract for `version: v1alpha1`. Cross-field rules are enforced by the loader; `docs/workflow.schema.json` covers shape only.
 
-## CLI
+## Document
 
-| Command                                                                | Does                                                                                                          |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `hwf` (TTY, no args)                                                   | web workbench (same as `hwf web`)                                                                             |
-| `hwf run <name> [--prompt …] [--input k=v …]`                          | run; live progress/stderr; nonzero on fail                                                                    |
-| `hwf init [--force\|--yes]`                                            | write `.hwf/config.yaml` from the agents on PATH; seeds no workflows — [import an example](/examples) instead |
-| `hwf workflow import "<base64>" [--to=repo\|global] [--yes] [--force]` | install a workflow bundle from the docs: shows the YAML, asks for consent, then asks for repo or global       |
-| `hwf launch`                                                           | open the picker in a herdr popup pane                                                                         |
-| `hwf picker`                                                           | run the picker full-screen in the current terminal (the popup's internal entrypoint)                          |
-| `hwf web [--port <n>] [--no-open]`                                     | localhost workbench: browse/edit/validate/share workflows + config; default port 7317, auto-increments        |
+| Key           | Required | Notes                                          |
+| ------------- | -------- | ---------------------------------------------- |
+| `version`     | yes      | Must be `v1alpha1`                             |
+| `steps`       | yes      | Non-empty list                                 |
+| `title`       | no       | Picker label; defaults from humanized filename |
+| `description` | no       | Picker subtitle                                |
+| `hidden`      | no       | Hide from picker; `hwf run` still works        |
+| `inputs`      | no       | Entry workflow only prompts                    |
+| `returns`     | no       | Child export map or template                   |
+| `on_failure`  | no       | Entry-only recovery action                     |
 
-### Web workbench
+Unsupported format versions fail load with rewrite-or-upgrade guidance. Package stays semver `0.x`; a later incompatible alpha uses `v1alphaN`. Workflow YAML never declares a Herdr version.
 
-Localhost-only HTTP UI over the same core the CLI uses — browse repo + global workflows, edit with live validation (same errors as `hwf run`), edit config, browse the run log, and share via copy/download/move. **It never runs workflows** (needs herdr panes); it surfaces `hwf run <name>` instead. Bound to `127.0.0.1` with a per-launch token (`x-hwf-token`) and `Origin`/`Host` allowlist on every route.
+## Actions
 
-## Picker
+Exactly one of `agent`, `run`, `herdr`, `workflow` per step. Optional on every step: `id`, `when`, `continue_on_error`.
 
-List: `type filter · ↑↓ move · enter run · esc cancel`. Choice input: `type filter · ↑↓ move · enter select · esc back`. Text input / prompt: `enter submit · esc back`.
+### `run:`
 
-Workflows with `hidden: true` are kept out of the picker — they're background halves meant to be spawned, not run by hand. `hwf run <name>` runs them fine, and the web workbench lists them under a separate _background_ heading.
+| Form   | Behavior                                                          |
+| ------ | ----------------------------------------------------------------- |
+| list   | argv, no shell; templates allowed per element                     |
+| string | shell (`sh` on macOS/Linux, `cmd` on Windows) unless `shell:` set |
 
-Declared `inputs:` ask one screen each (declaration order), then the prompt line only if the workflow uses `{prompt}`.
+Natural result: `{stdout, stderr, exit_code, failed}`. Inputs export as `HWF_<name>`. Explicit `env:` cannot use the reserved `HWF_` prefix. Omit `cwd` → invocation cwd. Omit `timeout` → no workflow timeout.
 
-## Files
+Also: `shell`, `cwd`, `env`, `pane`, `background`, `ready_when`, `timeout`, `retry`.
 
-| Path                                                              | Holds                      |
-| ----------------------------------------------------------------- | -------------------------- |
-| `.hwf/workflows/<name>.yaml`                                      | repo workflows             |
-| `~/.hwf/workflows/<name>.yaml`                                    | global (repo shadows)      |
-| `.hwf/config.yaml` / `~/.hwf/config.yaml`                         | agents + optional sessions |
-| `$HERDR_PLUGIN_STATE_DIR/runs.jsonl` or `~/.hwf/state/runs.jsonl` | append-only history        |
+### `agent:`
 
-Editor schema (optional): `# yaml-language-server: $schema=https://raw.githubusercontent.com/aorumbayev/herdr-workflows/main/docs/workflow.schema.json`
+Prompt text is the `agent:` value. Mutually exclusive `using:` (new managed agent) and `target:` (existing agent).
+
+| Mode                       | Behavior                                        |
+| -------------------------- | ----------------------------------------------- |
+| `using:` / default profile | Create pane → `agent.start` → `agent.prompt`    |
+| `target:`                  | Require idle/done, then prompt; no pane/cwd/env |
+
+Blocking result: `{response, agent, pane_id}`. Turn timeout default 30 minutes; native startup default 30 seconds. `blocked` notifies once per episode and keeps waiting. `unknown` never succeeds.
+
+Also: `cwd`, `env`, `pane`, `background`, `timeout`.
+
+### `herdr:`
+
+```yaml
+- herdr: notification.show
+  params:
+    title: done
+```
+
+No context autofill. Denied methods fail at load. Success result is the complete structured Herdr payload. Also: `params`, `retry`.
+
+### `workflow:`
+
+```yaml
+- workflow: child
+  inputs:
+    branch: "{{inputs.branch}}"
+```
+
+Child runs in isolation. Optional child `returns:` become this step's natural result. Child `on_failure` does not run during a parent invocation.
+
+## Pane block
+
+```yaml
+pane:
+  open: tab # tab | beside | below
+  target: "…" # split anchor; default invocation pane
+  workspace: "…" # tab workspace; default invocation workspace
+  size: 40 # percent for the NEW pane
+  focus: true
+  close: success # agent-only: success | always
+```
+
+`beside` → Herdr right split; `below` → down. Herdr clamps split ratios to 0.1–0.9 (`layout.rs` `valid_split_ratio`), so `pane.size` below 10 or above 90 is clamped. Background processes are pane-owned: they survive client detach, not an ordinary server restart, and are never implicitly stopped after a later workflow failure.
+
+## Readiness
+
+`ready_when: /regex/` on a placed `run:` delegates to `pane.wait_for_output` with source `recent`, 80 rendered rows, ANSI stripped, one logical-line regex. Required `timeout`. Succeeds only on native match. Already-present snapshot text can match. Does not detect process exit.
+
+## Templates
+
+`{{inputs.name}}`, `{{steps.id.field}}`, `{{context.key}}` only. Whole-value templates in structured YAML keep source type; embedded templates render text. `{{prompt}}` is config-only and is not a workflow template.
+
+### Context
+
+| Key                                             | Meaning                                  |
+| ----------------------------------------------- | ---------------------------------------- |
+| `workspace`, `tab`, `pane`, `worktree`, `agent` | Invocation identity                      |
+| `selection`                                     | Selected text (empty if none)            |
+| `platform`                                      | `macos` \| `linux` \| `windows`          |
+| `transcript`, `transcript_file`                 | Sensitive; fail preflight if unavailable |
+| `error`                                         | Recovery only (`on_failure`)             |
+
+## Inputs
+
+Names: `[a-z][a-z0-9_]{0,31}`. Types: `text`, `choice` (static list or `{run: argv}`), `profile` (merged profile names, never args). Choice/profile defaults must exist in available values. Only the entry workflow prompts, in declaration order.
+
+Dynamic choice: argv from repo root, 10s timeout, ≤1,000 options, 8 MiB capture cap.
 
 ## Config
 
 ```yaml
-agents:
-  <name>: [<argv>…] # exactly one literal "{prompt}" element
-sessions:
-  <agent>:
-    [<argv>…] # optional; stdout → {session}
-    # env: HERDR_WORKFLOWS_SESSION_{ID,CWD,AGENT}
+profiles:
+  name:
+    kind: claude # non-empty; live agent.start is authoritative
+    args: ["--model", "…"] # optional
+default_profile: name
+transcripts:
+  claude:
+    command: [extractor, argv…]
 ```
 
-`{session}` resolve order: `sessions:` command → built-in Claude JSONL → error.
+Layers: global plugin config dir → `.hwf/config.yaml` → `.hwf/config.local.yaml`. Whole-entry replacement by name. No `agents:` or `sessions:`.
 
-## Workflow shape
+## Control flow
 
-Top-level keys only: `desc`, `hidden`, `inputs`, `on_error`, `steps`. `hidden: true` keeps the workflow out of the picker (see [Background runs](#background-runs)). `steps` may be a bare command string (`steps: bun test` → one `run:` step), a single step map, or a list.
+| Construct           | Behavior                                                       |
+| ------------------- | -------------------------------------------------------------- |
+| `when:`             | Scalar truthiness or `==` / `!=`; false → skip (no recovery)   |
+| `continue_on_error` | Tolerate failure; suppress recovery; run exits nonzero         |
+| `retry`             | Total attempts including first; local `run:` / `herdr:` only   |
+| `on_failure`        | Entry-only, once, after first non-tolerated failure            |
+| Transport loss      | Stop, keep panes, skip recovery, report uncertain coordination |
 
-## Inputs
+## Caps
 
-```yaml
-inputs:
-  branch: text                              # required free text
-  focus: text = ""                          # optional free text
-  base: [main, develop] = main              # choice + default
-  ref: sh git branch --format='%(refname:short)'
-  target: agents                            # config agent names
-  fancy:                                    # map form when you need label/desc
-    type: text
-    label: focus area
-    desc: optional hint
-    default: ""
-```
+| Source                                                          | Limit  |
+| --------------------------------------------------------------- | ------ |
+| Generated `HWF_*` env block                                     | 24 KiB |
+| Command / managed response / transcript / dynamic-choice stdout | 8 MiB  |
+| Dynamic choices                                                 | 1,000  |
+| Dynamic choice timeout                                          | 10s    |
+| Transcript extractor timeout                                    | 30s    |
 
-Names: `[a-z][a-z0-9_]{0,31}`. Reference as `{name}` (one flat namespace). Unused declared inputs are load errors. Default outside options is a load error. Only the entry workflow prompts; `use:` targets get values via `with:`.
+## Trust and denylist
 
-Scalar/block `run:` steps receive bound names as `HWF_<name>` env (inputs and `out:` names) — except `{session}`, which holds a whole transcript and never enters the env; use `{session_file}` for shell access. The exported block is capped well under the ~32 KB platform ceiling; exceeding it fails the step with a named error instead of raw `E2BIG`. Prefer argv-form `run:` when values must be arguments.
+Workflow files are reviewed executable code. Import requires full YAML review and confirmation. Picker and workbench show repo vs global provenance and flag commands, transcript references, and sensitive Herdr methods.
 
-## Action keys
+The method denylist (server/plugin lifecycle, identity authority, experimental graphics, and similar) is an accidental-misuse and runtime-safety rail. It is not a sandbox. Trusted `run:` can invoke the complete Herdr CLI or socket as the current user.
 
-Exactly one per step:
+## Portability
 
-| Key           | Value                      | Role                                      |
-| ------------- | -------------------------- | ----------------------------------------- |
-| `run`         | scalar / argv list / block | local subprocess or placed command        |
-| `agent`       | config agent name          | pane + prompt; waits by default           |
-| `use`         | workflow name              | include another workflow (`with:` params) |
-| `method.name` | params object              | any allowed herdr socket method           |
-
-### `run:` forms
-
-| Form   | Example                            | Shell?         | Placeholders |
-| ------ | ---------------------------------- | -------------- | ------------ |
-| scalar | `run: git diff HEAD`               | yes (`shell:`) | **rejected** |
-| argv   | `run: [git, checkout, "{branch}"]` | no             | allowed      |
-| block  | `run: \|\n  set -eu\n  bun test`   | yes            | **rejected** |
-
-`shell:` selects `sh` / `bash` / `zsh` / `pwsh` / `powershell` / `cmd`; unset, it defaults to `sh` on POSIX and `cmd` on Windows. Illegal on argv form and on non-`run:` steps. Scalar form is shell-specific — `cmd` reads `%HWF_x%`, POSIX shells read `$HWF_x`; argv-form `run:` is the portable form.
-
-### Placement (`in:`)
-
-On `run:` / `agent:`: `here` \| `tab` \| `right` \| `down`. Defaults: `here` for `run:`, `tab` for `agent:`. `ratio:` only with `right`/`down`. `cwd:` / `env:` allowed on both. Placed steps take focus by default; `focus: false` opens the tab/split without stealing focus.
-
-### Wait
-
-Blocking is the default for `agent:` and for local `run:` (`in: here`) — the step ends when the process does. A **placed** `run:` (`in: tab` / `right` / `down`) hands the command to a herdr pane and returns as soon as that pane exists; herdr owns its lifetime. Gate on its progress with `wait: /regex/` (pane output). `wait: false` detaches: a placed step leaves the pane running, and an `in: here` step spawns the child fire-and-forget — ignored stdio, the parent's full environment, no timeout — and returns immediately. `timeout:` bounds the wait (never a detached step).
-
-`close: true` on an `agent:` step closes its pane (and its tab, when the step created it) once the wait ends — after `out:` is captured, on success and failure alike; close failures are ignored (the pane is already gone). `close:` with `wait: false` is a load error.
-
-### Outputs (`out:`)
-
-- Identifier: text result (`run` here → stdout; `agent` → final response written to a runner-managed file) → `{name}`
-- Map: `out: { p: pane.pane_id }` for structured primitive results (dot-paths checked against herdr result union at load; exact at run)
-
-Detached steps cannot bind `out:`. Placed `run:` steps take the map form; their result exposes `pane_id`, `workspace_id`, and `layout.tab_id` (bare `tab_id` is not a union path).
-
-An agent with identifier `out:` receives an appended instruction to write its final response to an absolute temporary path. The step fails if the agent does not create non-empty output. Terminal screen content is never used for the binding.
-
-Loops bind `{item}` and `{index}`; `as:` renames the item inside that step, and both spellings resolve.
-
-### Guards, loops, retry
-
-| Key            | Role                                                                                                            |
-| -------------- | --------------------------------------------------------------------------------------------------------------- |
-| `when:`        | skip when false — `{name}` / `!{name}`, `{name} == "v"` / `!= "v"`, argv list, or shell string                  |
-| `for:` / `as:` | sequential loop (literal list, `sh …`, or `{name}`); cap 100; no nesting                                        |
-| `retry:`       | int or `{times, delay, until, reset}` (`reset` is a shell command string); pane-creating steps require `reset:` |
-| `allow_fail:`  | record failure, continue; never triggers `on_error:`                                                            |
-| `on_error:`    | workflow or step recovery (one-shot)                                                                            |
-| `name:`        | progress label                                                                                                  |
-
-Skip is a third outcome (not success, not failure). Skipped `out:` names bind empty so downstream `when:` chains.
-
-### Primitives
-
-Dotted herdr methods (`pane.split:`, `worktree.create:`, `notification.show:`, …). Params validated from vendored `schemas/herdr-api.schema.json` (`bun run schema:herdr`). Caller context autofills omitted `pane_id` / `tab_id` / `workspace_id` — except `workspace_id` on `layout.apply` when `tab_id` is set (herdr rejects both). `notification.show` fails the step when herdr reports `shown: false` (reason included); `busy` is retried 3× at 2s first, since another toast holding the screen clears on its own.
-
-**Denied** (load error with reason): `server.*`, `plugin.*`, `events.subscribe`, `session.snapshot`, `popup.close`, `pane.graphics.*`, `pane.report_agent`, `pane.report_agent_session`, `pane.clear_agent_authority`, `pane.release_agent`.
-
-**Allowed areas:** `workspace.*`, `tab.*`, `pane.*` (minus denylist), `worktree.*`, `agent.*`, `layout.*`, `notification.show`, `client.window_title.*`, `ping`.
-
-Startup compares pinned protocol with live herdr; mismatch names both numbers and `min_herdr_version`.
-
-### Composition (`use:` / `with:`)
-
-```yaml
-steps:
-  - use: gate
-    with: { suite: all }
-```
-
-Repo shadows global. Cycles and unknown targets are load errors. Included workflows see only `with:` values + builtins; their `out:` names are visible downstream. A `use:` step accepts `name:`, `with:`, `when:`, and `allow_fail:` — `wait:` / `out:` / `timeout:` / `for:` / `as:` / `retry:` / `on_error:` on `use:` are load errors. A skipped `use:` binds its exported `out:` names empty, same as any skipped step.
-
-## Namespace
-
-Builtins: `{pane}` `{selection}` `{prompt}` `{session}` `{session_file}` `{source_tab}` `{agent}` `{error}` `{item}` `{index}` `{attempt}` `{platform}`.
-
-`{platform}` is `macos` / `linux` / `windows`. Fork steps per OS with `when:` comparisons:
-
-```yaml
-steps:
-  - run: [make, setup]
-    when: '{platform} != "windows"'
-  - run: [python, scripts/setup.py]
-    when: '{platform} == "windows"'
-```
-
-`{session}` / `{session_file}` legal in `prompt:`, argv, and primitive params — rejected in scalar/block `run:` under the general placeholder rule.
-
-Non-identifier braces (`{"json": true}`) pass through. Unknown `{word}` is a load error. To reuse a step's result, bind `out:` and reference it as `{name}`.
-
-## Background runs
-
-Fire-and-forget: an entry workflow whose last step re-invokes `hwf` detached.
-
-```yaml
-# ship.yaml
-inputs:
-  branch: text = main
-steps:
-  - run: bun test
-  - run: [hwf, run, ship-bg, --input, "branch={branch}"]
-    wait: false
-
-# ship-bg.yaml
-hidden: true
-inputs:
-  branch: text
-steps:
-  - agent: claude
-    focus: false
-    close: true
-    prompt: "Deploy {branch}. Report tersely."
-```
-
-The detached `hwf run` child inherits the invoking environment, so `{agent}`, `{source_tab}`, and `{session_file}` resolve inside the background run. `hidden: true` keeps the background half out of the picker. `focus: false` keeps background panes from stealing focus; `close: true` reaps the agent pane when it finishes.
-
-## Semantics
-
-- Linear foreground steps. First hard failure → optional `on_error` once. Preflight failures skip `on_error`.
-- Skip / success / failure are distinct in progress and the run log.
-- herdr ≥ 0.7.5; macOS, Linux, Windows (fork steps per OS with `when:` + `{platform}`). Parallelism is out of scope.
-- Schema regen: `bun run schema` (workflow JSON Schema) and `bun run schema:herdr` (method validators) — release-time; plugin build does not call `herdr api schema`.
+v1alpha1 syntax and argv behavior are cross-platform. Runtime capability follows the installed Herdr platform support. Native Windows is beta; use `{{context.platform}}` with `when:` for OS-specific steps.

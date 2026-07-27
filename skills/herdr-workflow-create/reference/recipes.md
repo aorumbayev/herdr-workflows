@@ -1,235 +1,91 @@
-# Recipes
+# Recipes (v1alpha1)
 
-Ordered simple → complex. Every snippet passes the loader as written (agent names assume
-`claude` is configured; `use:` targets assume those workflows exist). Adapt names, then
-re-validate.
-
-## Contents
-
-- Open a tool
-- Run a check
-- Guarded review
-- Ask the user for inputs
-- Fix until green
-- Per-file loop
-- Worktree
-- Review workspace
-- Session handoff
-- Compose with `use:`
-- Recover and notify
-- Detached process
-
-## Open a tool
+## Review gate
 
 ```yaml
-desc: lazygit in a new tab
+version: v1alpha1
+title: Review
 steps:
-  - run: lazygit
-    in: tab
-```
+  - id: diff
+    run: [git, diff, HEAD]
+  - agent: |
+      Review this diff. Blocking issues only.
 
-## Run a check
-
-```yaml
-steps: bun test
-```
-
-Multiple commands, one shell, fail fast:
-
-```yaml
-steps:
-  - run: |
-      set -eu
-      bun install --frozen-lockfile
-      bun test
-    shell: bash
-```
-
-## Guarded review
-
-Skips the agent when the tree is clean.
-
-```yaml
-desc: review uncommitted changes
-steps:
-  - run: git diff HEAD
-    out: diff
-  - agent: claude
-    when: "{diff}"
-    timeout: 900
-    prompt: |
-      Review this diff. List blocking issues only.
-
-      {diff}
-```
-
-## Ask the user for inputs
-
-```yaml
-desc: discuss a branch
-inputs:
-  branch: sh git branch --format='%(refname:short)'
-  focus: text = ""
-steps:
-  - run: [git, log, "--oneline", "-20", "{branch}"]
-    out: log
-  - agent: claude
-    prompt: |
-      Branch {branch}
-      Focus: {focus}
-
-      {log}
-```
-
-CLI equivalent: `hwf run discuss --input branch=main --input focus=perf`.
-
-## Fix until green
-
-`reset:` is a shell command string, and is mandatory when the retried step creates a pane.
-
-```yaml
-steps:
-  - run: bun test
-    out: failures
-    allow_fail: true
-    retry:
-      times: 3
-      delay: 2
-      until: bun test
-      reset: git stash
-  - agent: claude
-    when: "{failures}"
-    prompt: "Tests still failing:\n{failures}"
-```
-
-## Per-file loop
-
-`{item}` / `{index}` bind per iteration and only inside the looping step; `as:` renames
-`{item}`. Cap is 100 items.
-
-```yaml
-steps:
-  - run: git diff --name-only main
-    out: changed
-  - agent: claude
-    for: "{changed}"
-    as: path
-    allow_fail: true
-    prompt: "Review {path} (#{index}). Blocking issues only."
+      {{steps.diff.stdout}}
+    using: claude
+    when: "{{steps.diff.stdout}}"
+    pane: { open: beside }
 ```
 
 ## Worktree
 
 ```yaml
+version: v1alpha1
 inputs:
   branch: text
-  base: [main, develop] = main
 steps:
-  - worktree.create: { branch: "{branch}", base: "{base}", label: "{branch}", focus: true }
-    out: { path: worktree.path }
-  - agent: claude
-    cwd: "{path}"
-    prompt: "Start work on {branch}."
+  - herdr: worktree.create
+    params:
+      branch: "{{inputs.branch}}"
+      focus: true
 ```
 
-## Review workspace
-
-Dedicated workspace, diff on the left, agent on the right.
+## Notify on failure
 
 ```yaml
+version: v1alpha1
+on_failure:
+  herdr: notification.show
+  params:
+    title: "{{context.error.workflow}}"
+    body: "{{context.error.message}}"
+    sound: request
+steps:
+  - run: [bun, test]
+```
+
+## Child composition
+
+```yaml
+# parent.yaml
+version: v1alpha1
 inputs:
-  branch: text = main
+  branch: text
 steps:
-  - workspace.create: { label: "review {branch}" }
-    out: { ws: workspace.workspace_id }
-  - run: [git, diff, "{branch}"]
-    in: tab
-    out: { p: pane_id }
-  - agent: claude
-    in: right
-    ratio: 0.4
-    prompt: "Review the diff in the pane on the left (pane {p})."
+  - workflow: child
+    inputs:
+      branch: "{{inputs.branch}}"
 ```
 
-## Session handoff
-
-Run from an agent pane: the invoking agent distils its own transcript, a target agent picks
-it up, the source tab closes.
-
 ```yaml
+# child.yaml
+version: v1alpha1
 inputs:
-  target: agents
-  focus: text = ""
+  branch: text
+returns:
+  ok: "{{steps.check.exit_code}}"
 steps:
-  - agent: "{agent}"
-    timeout: 900
-    out: brief
-    prompt: |
-      Distil the transcript below into a handoff prompt for a fresh session.
-      Output ONLY the handoff prompt.
-      ---
-      {session}
-  - agent: "{target}"
-    prompt: |
-      Focus: {focus}
-
-      {brief}
-  - tab.close: { tab_id: "{source_tab}" }
+  - id: check
+    run: [git, rev-parse, "--verify", "{{inputs.branch}}"]
 ```
 
-## Compose with `use:`
+## Platform fork
 
 ```yaml
-# gate.yaml
-inputs:
-  suite: [unit, all] = unit
+version: v1alpha1
 steps:
-  - run: [bun, test, "--", "{suite}"]
+  - run: [pbcopy]
+    when: '{{context.platform}} == "macos"'
+  - run: [xclip, -selection, clipboard]
+    when: '{{context.platform}} != "macos"'
 ```
 
-```yaml
-# ship.yaml — on_error names another workflow, run once if a step fails
-on_error: rollback
-steps:
-  - use: gate
-    with: { suite: all }
-  - run: git push
-```
-
-The `on_error:` target may not declare `inputs:` or its own `on_error:`. Child `out:`
-names are visible to later steps in the parent.
-
-## Recover and notify
-
-Inline recovery on one step, with `{error}`:
+## Existing-agent target
 
 ```yaml
+version: v1alpha1
 steps:
-  - run: bun run deploy
-    on_error:
-      - notification.show: { title: "deploy failed", body: "{error}", sound: request }
-```
-
-## Detached process
-
-A placed `run:` returns as soon as its pane exists, so a long-running command in a pane
-never blocks the workflow. `wait: false` states that explicitly and cannot bind `out:`.
-
-```yaml
-steps:
-  - run: bun run dev
-    in: down
-    ratio: 0.3
-    wait: false
-  - run: bunx wait-on http://localhost:3000
-```
-
-Wait on pane output instead of exiting (placed steps only):
-
-```yaml
-steps:
-  - run: bun run dev
-    in: tab
-    wait: /ready in/
-    timeout: 120
+  - agent: |
+      Continue from here.
+    target: "{{context.agent}}"
 ```
