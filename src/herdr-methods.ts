@@ -9,6 +9,22 @@ import {
 
 export { HERDR_PROTOCOL, METHOD_RESULT_VARIANTS, MIN_HERDR_VERSION, RESULT_DOT_PATHS };
 
+function parseSemver(value: string): [number, number, number] | undefined {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(value.trim());
+  if (!match) return undefined;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function versionAtLeast(live: string, minimum: string): boolean {
+  const a = parseSemver(live);
+  const b = parseSemver(minimum);
+  if (!a || !b) return false;
+  for (let i = 0; i < 3; i++) {
+    if (a[i]! !== b[i]!) return a[i]! > b[i]!;
+  }
+  return true;
+}
+
 type ParamKind = "string" | "number" | "integer" | "boolean" | "object" | "array";
 
 function runtimeKind(value: unknown): ParamKind | "null" | "undefined" {
@@ -67,10 +83,6 @@ export function validateMethodParams(
   return undefined;
 }
 
-export function isResultDotPath(path: string): boolean {
-  return RESULT_DOT_PATHS.has(path);
-}
-
 function pathAllowed(paths: readonly string[], fieldPath: string): boolean {
   if (paths.includes(fieldPath)) return true;
   const prefix = `${fieldPath}.`;
@@ -84,21 +96,41 @@ export function isMethodResultDotPath(method: string, fieldPath: string): boolea
   return variants.some((variant) => pathAllowed(variant.paths, fieldPath));
 }
 
-export type ProtocolCheckResult = { ok: true; protocol: number } | { ok: false; error: string };
+export type StartupCheckResult =
+  | { ok: true; protocol: number; version: string }
+  | { ok: false; error: string };
 
-/** Compare the pinned protocol with a live herdr `ping` result. */
-export function checkHerdrProtocol(liveProtocol: unknown): ProtocolCheckResult {
-  if (typeof liveProtocol !== "number" || !Number.isFinite(liveProtocol)) {
+/** Compare live `ping` version/protocol with the pinned manifest minimum and protocol. */
+export function checkHerdrStartup(live: {
+  protocol: unknown;
+  version: unknown;
+}): StartupCheckResult {
+  const protocol = live.protocol;
+  const version = typeof live.version === "string" ? live.version : undefined;
+  const installed = version ?? "missing";
+  if (typeof protocol !== "number" || !Number.isFinite(protocol)) {
     return {
       ok: false,
-      error: `herdr protocol check failed: ping did not return a protocol number (need herdr ≥ ${MIN_HERDR_VERSION}, pinned ${HERDR_PROTOCOL})`,
+      error: `herdr protocol check failed: ping did not return a protocol number (installed=${installed}, required≥${MIN_HERDR_VERSION}; protocol connected=${String(protocol)}, pinned=${HERDR_PROTOCOL})`,
     };
   }
-  if (liveProtocol !== HERDR_PROTOCOL) {
+  if (!version || !parseSemver(version)) {
     return {
       ok: false,
-      error: `herdr protocol mismatch: connected=${liveProtocol}, pinned=${HERDR_PROTOCOL} (need herdr ≥ ${MIN_HERDR_VERSION})`,
+      error: `herdr version check failed: ping did not return a semver version (installed=${installed}, required≥${MIN_HERDR_VERSION}; protocol connected=${protocol}, pinned=${HERDR_PROTOCOL})`,
     };
   }
-  return { ok: true, protocol: liveProtocol };
+  if (!versionAtLeast(version, MIN_HERDR_VERSION)) {
+    return {
+      ok: false,
+      error: `herdr version too old: installed=${version}, required≥${MIN_HERDR_VERSION}; protocol connected=${protocol}, pinned=${HERDR_PROTOCOL}`,
+    };
+  }
+  if (protocol !== HERDR_PROTOCOL) {
+    return {
+      ok: false,
+      error: `herdr protocol mismatch: connected=${protocol}, pinned=${HERDR_PROTOCOL} (installed=${version}, required≥${MIN_HERDR_VERSION})`,
+    };
+  }
+  return { ok: true, protocol, version };
 }

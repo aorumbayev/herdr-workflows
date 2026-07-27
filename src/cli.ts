@@ -143,8 +143,7 @@ async function cmdWorkflowImport(args: string[]): Promise<void> {
 
 async function cmdLaunch(): Promise<void> {
   await ensureHerdrProtocol();
-  // The picker runs in a fresh popup pane rooted at the plugin dir, so forward the invoking
-  // pane's repo (and raw context) — otherwise workflow discovery and {pane} target the wrong place.
+  // Picker popup is rooted at the plugin dir; forward the invoking repo and context.
   const ctx = readInvocationContext();
   const repoRoot = await resolveRepoRoot(ctx.cwd);
   const env: Record<string, string> = { HERDR_WORKFLOWS_REPO_ROOT: repoRoot };

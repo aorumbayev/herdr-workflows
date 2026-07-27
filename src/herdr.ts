@@ -1,6 +1,6 @@
 import { connect } from "node:net";
 import { randomUUID } from "node:crypto";
-import { checkHerdrProtocol } from "./herdr-methods";
+import { checkHerdrStartup } from "./herdr-methods";
 
 export type HerdrResponse = {
   id: string;
@@ -293,7 +293,7 @@ export async function ensureHerdrProtocol(): Promise<void> {
   if (checked) return;
   if (!process.env.HERDR_SOCKET_PATH) return;
   const result = await herdrCall("ping", {});
-  const check = checkHerdrProtocol(result.protocol);
+  const check = checkHerdrStartup({ protocol: result.protocol, version: result.version });
   if (!check.ok) throw new HerdrError("protocol_mismatch", check.error);
   checked = true;
 }
