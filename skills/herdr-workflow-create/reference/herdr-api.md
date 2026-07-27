@@ -28,6 +28,29 @@ value all fail before anything runs. Placeholders may appear inside string value
 method accepts them and the step omits them — so `pane.split: { direction: right }`
 splits the pane the workflow was launched from.
 
+### Methods that take two context ids
+
+Three methods accept more than one of those three ids and treat them as _mutually
+exclusive_. Auto-fill supplies every one you leave out, so these fail at run time however
+few you set — the loader passes them, and the error only appears on a live run.
+
+| Method                   | Accepts              | Error when both arrive                        |
+| ------------------------ | -------------------- | --------------------------------------------- |
+| `layout.apply`           | tab_id, workspace_id | `use either tab_id or workspace_id, not both` |
+| `layout.export`          | pane_id, tab_id      | `layout target not found`                     |
+| `layout.set_split_ratio` | pane_id, tab_id      | `layout target not found`                     |
+
+Pin the one you do not want to `null`. Both ids are nullable in the schema, auto-fill only
+fires on a _missing_ key, and herdr reads null as absent:
+
+```yaml
+- layout.apply: { tab_id: "{sometab}", workspace_id: null, root: … } # replace that tab
+- layout.apply: { tab_id: null, workspace_id: "{ws}", root: … } # new tab in that workspace
+- layout.export: { pane_id: null } # the invoking tab's layout
+```
+
+Omitting both is not a way out: `layout.export: {}` gets both filled in and fails.
+
 `in:`, `cwd:`, `env:`, `ratio:`, `prompt:`, `shell:` are **not** allowed on a primitive
 step; put the equivalent in the params.
 

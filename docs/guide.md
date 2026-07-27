@@ -55,7 +55,7 @@ The web workbench never runs workflows — running needs real herdr panes. It sh
 Exactly one per step. Steps run top to bottom.
 
 - `run:` — command. Shape decides shell involvement: scalar/block go through `shell:` (default `sh`, no placeholders); argv list is shell-free and accepts `{name}` per argument.
-- `agent:` — configured agent in a pane. Waits by default; `wait: false` detaches.
+- `agent:` — configured agent in a pane. Waits by default; `wait: false` detaches; `close: true` reaps the pane when the wait ends.
 - `use:` — include another workflow; pass params with `with:`.
 - `pane.split:` / `worktree.create:` / … — any allowed herdr method, spelled as herdr spells it.
 
@@ -70,7 +70,7 @@ agents:
   claude: [claude, "{prompt}"]
 ```
 
-The one literal `{prompt}` element is where the step's `prompt:` text lands. `agent: claude` then opens that command in a pane and waits for it to finish; `out:` captures its final message.
+The one literal `{prompt}` element is where the step's `prompt:` text lands. `agent: claude` then opens that command in a pane and waits for it to finish. With `out:`, the runner appends an instruction to write the final response to a temporary file; missing or empty output fails the step.
 
 ## Placeholders
 
@@ -111,6 +111,13 @@ steps:
     prompt: "Review:\n{diff}"
 ```
 
+`when:` also compares strings — `{name} == "v"` / `!= "v"`. With the `{platform}` builtin (`macos` / `linux` / `windows`) that forks steps per OS:
+
+```yaml
+- run: [make, setup]
+  when: '{platform} != "windows"'
+```
+
 ## Composition
 
 ```yaml
@@ -126,6 +133,25 @@ steps:
   - use: gate
     with: { suite: all }
   - run: git push
+```
+
+## Background runs
+
+`wait: false` on a local `run:` step is fire-and-forget: the child inherits your invoking environment (`{agent}`, `{source_tab}`, `{session_file}` still resolve inside it) and the step returns immediately. The supported pattern is an entry workflow whose last step spawns a `_`-prefixed workflow — hidden from the picker, meant to be spawned:
+
+```yaml
+# ship.yaml — last step
+- run: [hwf, run, _ship-bg, --input, "branch={branch}"]
+  wait: false
+
+# _ship-bg.yaml
+inputs:
+  branch: text
+steps:
+  - agent: claude
+    focus: false   # don't steal focus
+    close: true    # close the pane when done
+    prompt: "Deploy {branch}. Report tersely."
 ```
 
 ## Web workbench

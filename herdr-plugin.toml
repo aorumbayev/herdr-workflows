@@ -3,14 +3,14 @@ name = "herdr-workflows"
 version = "0.1.0"
 min_herdr_version = "0.7.5"
 description = "Linear YAML workflow runner for herdr panes"
-platforms = ["linux", "macos"]
+platforms = ["linux", "macos", "windows"]
 
 [[build]]
 command = ["bun", "install", "--frozen-lockfile"]
 
 [[build]]
 command = ["bun", "build", "--compile", "--outfile=bin/herdr-workflows", "src/cli.ts"]
-platforms = ["linux", "macos"]
+platforms = ["linux", "macos", "windows"]
 
 [[build]]
 command = ["node", "scripts/install-cli.mjs"]

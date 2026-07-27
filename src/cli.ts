@@ -132,7 +132,7 @@ async function cmdRun(args: string[]): Promise<void> {
   const { flags, positional, multi } = parseArgs(args);
   const name = positional[0];
   if (!name) die("usage: hwf|herdr-workflows run <name> [--prompt …] [--input name=value …]");
-  const repoRoot = await resolveRepoRoot();
+  const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || resolveRepoRoot();
   const { agents, sessions } = await loadConfig(repoRoot);
   const ctx = readInvocationContext();
   ctx.cwd = repoRoot;
@@ -169,7 +169,7 @@ async function cmdWeb(args: string[]): Promise<void> {
   const port = flags.port !== undefined ? Number(flags.port) : undefined;
   if (port !== undefined && (!Number.isInteger(port) || port < 1 || port > 65535))
     die(`--port expects an integer between 1 and 65535, got '${flags.port}'`);
-  const repoRoot = await resolveRepoRoot();
+  const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot());
   const { url } = await startWebServer({ repoRoot, port });
   process.stdout.write(`herdr-workflows web · ${url}\n`);
   if (!bools.has("no-open")) openBrowser(url);
@@ -197,25 +197,17 @@ function preferOnDiskOpentuiLib(): void {
   }
 }
 
-async function runPickerPopup(
-  runPickerSession: (opts: {
-    entries: Awaited<ReturnType<typeof listWorkflows>>;
-    repoRoot: string;
-    agents: Awaited<ReturnType<typeof loadConfig>>["agents"];
-    sessions: Awaited<ReturnType<typeof loadConfig>>["sessions"];
-    ctx: ReturnType<typeof readInvocationContext>;
-  }) => Promise<number>,
-): Promise<void> {
+async function runPickerPopup(picker: typeof import("./tui/picker")): Promise<void> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) die("picker requires a tty");
 
   const ctx = readInvocationContext();
-  const root = process.env.HERDR_WORKFLOWS_REPO_ROOT ?? (await resolveRepoRoot(ctx.cwd));
+  const root = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot(ctx.cwd));
   const { agents, sessions } = await loadConfig(root);
   const entries = await listWorkflows(root, Object.keys(agents));
-  if (entries.length === 0) die("no workflows found");
+  if (!picker.hasVisibleEntries(entries)) die("no workflows found");
 
   ctx.cwd = root;
-  const code = await runPickerSession({
+  const code = await picker.runPickerSession({
     entries,
     repoRoot: root,
     agents,
@@ -235,8 +227,7 @@ async function main(): Promise<void> {
   if (command === "picker") {
     await ensureHerdrProtocol();
     preferOnDiskOpentuiLib();
-    const { runPickerSession } = await import("./tui/picker");
-    return runPickerPopup(runPickerSession);
+    return runPickerPopup(await import("./tui/picker"));
   }
   if (command === "run") return cmdRun(rest);
   if (command === "init") return cmdInit(rest);

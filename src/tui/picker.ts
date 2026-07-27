@@ -35,11 +35,19 @@ export function truncate(text: string, max: number): string {
 
 type PickerRowValue = { entry: WorkflowListEntry };
 
+// `_`-prefixed workflows are background halves — runnable via `hwf run`, hidden from the picker.
+const isPickerVisible = (e: WorkflowListEntry): boolean => !e.name.startsWith("_");
+
+export function hasVisibleEntries(entries: WorkflowListEntry[]): boolean {
+  return entries.some(isPickerVisible);
+}
+
 export function filterWorkflowEntries(
   entries: WorkflowListEntry[],
   filter: string,
 ): { valid: WorkflowListEntry[]; invalid: WorkflowListEntry[] } {
-  const matched = filter ? entries.filter((e) => e.name.includes(filter)) : entries;
+  const visible = entries.filter(isPickerVisible);
+  const matched = filter ? visible.filter((e) => e.name.includes(filter)) : visible;
   return {
     valid: matched.filter((e) => !e.error),
     invalid: matched.filter((e) => e.error),

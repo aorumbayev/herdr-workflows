@@ -56,6 +56,7 @@ export async function includeStep(c: {
     source_tab: c.values.source_tab ?? "",
     agent: c.values.agent ?? "",
     error: c.values.error ?? "",
+    platform: c.values.platform ?? "",
   };
   for (const [k, v] of Object.entries(action.defaults)) {
     childValues[k] = substitute(v, c.values);

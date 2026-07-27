@@ -38,6 +38,7 @@ export const BUILTIN_NAMES = [
   "item",
   "index",
   "attempt",
+  "platform",
 ] as const;
 
 /** Flat namespace: builtins + inputs + out/as bindings. */
@@ -61,6 +62,7 @@ export type WaitSpec = { kind: "block" } | { kind: "detach" } | { kind: "regex";
 
 export type Guard =
   | { kind: "nonempty"; name: string; negate: boolean }
+  | { kind: "eq"; name: string; value: string; negate: boolean }
   | { kind: "argv"; argv: string[] }
   | { kind: "shell"; command: string };
 
@@ -81,7 +83,7 @@ export type OutSpec =
   | { kind: "map"; fields: Record<string, string> };
 
 export type RunPayload =
-  | { form: "scalar" | "block"; command: string; shell: ShellName }
+  | { form: "scalar" | "block"; command: string; shell?: ShellName }
   | { form: "argv"; argv: string[] };
 
 export type FlatStep = {
@@ -94,6 +96,7 @@ export type FlatStep = {
         cwd?: string;
         env?: Record<string, string>;
         ratio?: number;
+        focus?: boolean;
       }
     | {
         kind: "agent";
@@ -103,6 +106,8 @@ export type FlatStep = {
         cwd?: string;
         env?: Record<string, string>;
         ratio?: number;
+        focus?: boolean;
+        close?: boolean;
       }
     | {
         kind: "primitive";

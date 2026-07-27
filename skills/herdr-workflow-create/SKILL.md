@@ -157,7 +157,8 @@ Add the editor schema line at the top only if the user wants IDE completion:
 
 ## Rules that break workflows
 
-These are the load failures that actually happen. Each is a hard error, not a warning.
+These are the failures that actually happen. Each is a hard error, not a warning; every one
+but the last is caught at load.
 
 1. **No placeholders in scalar/block `run:`.** `run: git checkout {branch}` fails. Use argv
    form `run: [git, checkout, "{branch}"]`, or read `$HWF_branch` in the command text.
@@ -181,12 +182,19 @@ These are the load failures that actually happen. Each is a hard error, not a wa
 9. **`{session}` / `{session_file}`** require launching from an agent pane, and are
    rejected in scalar/block `run:` under rule 1. `{agent}` (the invoking agent) must exist
    in `agents:`.
+10. **`layout.apply`, `layout.export`, and `layout.set_split_ratio` need an id pinned to
+    `null`** — they each accept two of `pane_id`/`tab_id`/`workspace_id` and reject the pair,
+    but omitted ids get auto-filled from the invoking context, so they fail at run time no
+    matter how few you set. Write `layout.apply: { tab_id: null, workspace_id: "{ws}", … }`.
+    This one loads clean and only breaks on a live run — see
+    [reference/herdr-api.md](reference/herdr-api.md).
 
-Out of scope by design: parallel steps, Windows, nested loops beyond one level, any
-external engine (no Dagu/Taskfile). `for:` caps at 100 items. Needs herdr ≥ 0.7.5.
+Out of scope by design: parallel steps, nested loops beyond one level, any
+external engine (no Dagu/Taskfile). Windows is in scope — fork steps with
+`when: '{platform} == "windows"'`. `for:` caps at 100 items. Needs herdr ≥ 0.7.5.
 
 ## Keywords
 
-herdr workflow, herdr-workflows, hwf, .hwf/workflows, workflow yaml, hwf run,
-prefix+k picker, herdr plugin api, pane.split, worktree.create, agent handoff, workflow
-load error
+herdr workflow, herdr-workflows, hwf, .hwf/workflows, workflow yaml, hwf run, hwf web,
+live canvas, workbench, prefix+k picker, herdr plugin api, pane.split, worktree.create,
+agent handoff, workflow load error

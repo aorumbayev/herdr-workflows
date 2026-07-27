@@ -8,6 +8,7 @@ import {
   flatNeedsPrompt,
   flatNeedsSession,
   isBuiltin,
+  parseGuard,
   parseRaw,
   rawToFlat,
   stepOutNames,
@@ -521,6 +522,11 @@ async function flattenUseStep(opts: {
   if (typeof step.use !== "string" || !step.use) {
     bail(file, stepIndex, "use", "use: requires a workflow name");
   }
+  for (const key of ["wait", "out", "timeout", "for", "as", "retry", "on_error"] as const) {
+    if (step[key] !== undefined) {
+      bail(file, stepIndex, key, `${key}: is not supported on use: steps`);
+    }
+  }
   const withMap = parseWithMap(file, stepIndex, step, localBound);
   const { defaults, target, targetParsed } = await resolveIncludeTarget({
     file,
@@ -562,7 +568,7 @@ async function flattenUseStep(opts: {
       steps: childSteps,
       exportedOuts,
     },
-    when: undefined,
+    when: step.when !== undefined ? parseGuard(file, stepIndex, "when", step.when) : undefined,
     wait: { kind: "block" },
     allowFail: step.allow_fail === true ? true : undefined,
   };

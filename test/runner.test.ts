@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HerdrError } from "../src/herdr";
 import { runLogPath, type RunLogEntry } from "../src/runlog";
+import { platformName } from "../src/config";
 import { runWorkflow, resolveInputValues, type RunnerDeps } from "../src/run/runner";
 import { runShellStep } from "../src/run/steps/shell";
 
@@ -71,6 +72,7 @@ function mockDeps(overrides: Partial<RunnerDeps> = {}): {
     agentLabel: async () => "claude",
     waitOutput: async () => undefined,
     paneRead: async () => "",
+    paneClose: async () => undefined,
     reportToken: async () => undefined,
     sessionText: async () => "",
     tabClose: async () => undefined,
@@ -158,6 +160,80 @@ steps:
     });
     expect(result.ok).toBe(true);
     expect(outcomes.some((o) => o.includes("skip"))).toBe(true);
+  });
+
+  test("{platform} builtin substitutes in argv and HWF_platform env", async () => {
+    const here = platformName();
+    const root = await repoWith({
+      m: `steps:
+  - run: [printf, "%s", "{platform}"]
+    out: plat
+  - run: [sh, -c, 'test "{plat}" = "$HWF_platform"']
+  - run: [sh, -c, 'test "$HWF_platform" = "${here}"']
+`,
+    });
+    const { deps } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  test("when: == skips the other OS and runs this one", async () => {
+    const here = platformName();
+    const other = here === "windows" ? "macos" : "windows";
+    const root = await repoWith({
+      m: `steps:
+  - run: "exit 1"
+    when: '{platform} == "${other}"'
+  - run: "printf ran"
+    when: '{platform} == "${here}"'
+  - run: "printf ran-too"
+    when: '{platform} != "${other}"'
+  - run: "exit 1"
+    when: '{platform} != "${here}"'
+`,
+    });
+    const { deps } = mockDeps();
+    const outcomes: string[] = [];
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      deps,
+      onProgress: (i, _n, _label, outcome) => {
+        if (outcome) outcomes.push(`${i}:${outcome}`);
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(outcomes).toEqual(["1:skip", "2:ok", "3:ok", "4:skip"]);
+  });
+
+  test("when: == compares an out: binding", async () => {
+    const root = await repoWith({
+      m: `steps:
+  - run: [printf, "%s", "main"]
+    out: branch
+  - run: "exit 1"
+    when: '{branch} == "trunk"'
+  - run: "printf ok"
+    when: '{branch} == "main"'
+`,
+    });
+    const { deps } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    expect(result.ok).toBe(true);
   });
 
   test("skipped step does not trigger on_error", async () => {
@@ -298,6 +374,25 @@ steps:
     });
     expect(result.ok).toBe(false);
     expect(notes.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("a failing on_error keeps the original error", async () => {
+    const root = await repoWith({
+      recover: `steps:\n  - run: "exit 3"\n`,
+      m: `steps:\n  - run: "exit 1"\non_error: recover\n`,
+    });
+    const { deps } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    expect(result.ok).toBe(false);
+    expect(result).toMatchObject({
+      error: expect.stringContaining("on_error also failed"),
+    });
   });
 
   test("allow_fail does not trigger on_error", async () => {
@@ -449,6 +544,77 @@ steps:
     });
     expect(result.ok).toBe(true);
     expect(n).toBeGreaterThanOrEqual(2);
+  });
+
+  test("agent out binds exact file content and removes the temporary file", async () => {
+    const root = await repoWith({
+      m: `steps:
+  - agent: claude
+    prompt: make a handoff
+    out: brief
+  - run: [printf, "%s", "{brief}"]
+`,
+    });
+    const expected = "Continue the work.\n\n## Next steps\n1. Run tests\n\n";
+    let outputPath = "";
+    let captured = "";
+    const { deps } = mockDeps({
+      layoutApply: async (params) => {
+        const prompt = (params.root as { command: string[] }).command[1]!;
+        const match = /exact absolute path, overwriting it:\n([^\n]+)\n/.exec(prompt);
+        outputPath = match?.[1] ?? "";
+        await writeFile(outputPath, expected);
+        return { tabId: "t1", paneId: "p1", workspaceId: "w1" };
+      },
+      agentStatus: async () => "done",
+      paneRead: async () => {
+        throw new Error("agent out must not read terminal content");
+      },
+      runArgv: async (argv) => {
+        captured = argv[2] ?? "";
+        return { ok: true, stdout: captured, stderr: "" };
+      },
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: { claude: ["claude", "{prompt}"] },
+      ctx: { selection: "", cwd: root, workspaceId: "w1" },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    expect(captured).toBe(expected);
+    expect(outputPath).not.toBe("");
+    expect(await Bun.file(outputPath).exists()).toBe(false);
+  });
+
+  test("agent out fails when the agent writes an empty file", async () => {
+    const root = await repoWith({
+      m: `steps:
+  - agent: claude
+    prompt: make a handoff
+    out: brief
+`,
+    });
+    const { deps, notes } = mockDeps({
+      layoutApply: async (params) => {
+        const prompt = (params.root as { command: string[] }).command[1]!;
+        const match = /exact absolute path, overwriting it:\n([^\n]+)\n/.exec(prompt);
+        await writeFile(match?.[1] ?? "", "");
+        return { tabId: "t1", paneId: "p1", workspaceId: "w1" };
+      },
+      agentStatus: async () => "done",
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: { claude: ["claude", "{prompt}"] },
+      ctx: { selection: "", cwd: root, workspaceId: "w1" },
+      deps,
+    });
+    expect(result.ok).toBe(false);
+    expect(result).toMatchObject({ error: "step 1: agent did not write output 'brief'" });
+    expect(notes[0]).toContain("agent did not write output 'brief'");
   });
 
   test("session substitutes into prompt", async () => {
@@ -607,5 +773,465 @@ steps:
     });
     expect(result.ok).toBe(false);
     expect(notes[0]).toContain("match timeout");
+  });
+
+  test("use: when skips the child and binds exported outs empty", async () => {
+    const root = await repoWith({
+      part: `steps:\n  - run: "exit 1"\n    out: report\n`,
+      ship: `steps:\n  - run: "true"\n    out: diff\n  - use: part\n    when: "{diff}"\n  - run: [printf, "%s", "{report}"]\n`,
+    });
+    let captured = "";
+    const { deps } = mockDeps({
+      runArgv: async (argv) => {
+        captured = argv[2] ?? "";
+        return { ok: true, stdout: "", stderr: "" };
+      },
+    });
+    const outcomes: string[] = [];
+    const result = await runWorkflow({
+      name: "ship",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      deps,
+      onProgress: (_i, _n, _label, outcome) => outcomes.push(outcome ?? "ok"),
+    });
+    expect(result.ok).toBe(true);
+    expect(outcomes).toContain("skip");
+    expect(captured).toBe("");
+  });
+
+  test("{platform} reaches use: children", async () => {
+    const here = platformName();
+    const other = here === "windows" ? "macos" : "windows";
+    const root = await repoWith({
+      part: `steps:\n  - run: "exit 1"\n    when: '{platform} == "${other}"'\n  - run: [printf, "%s", "{platform}"]\n    out: plat\n`,
+      ship: `steps:\n  - use: part\n  - run: [sh, -c, 'test "{plat}" = "${here}"']\n`,
+    });
+    const { deps } = mockDeps();
+    const result = await runWorkflow({
+      name: "ship",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  test("session substitutes but is not exported as HWF_session", async () => {
+    const root = await repoWith({
+      m: `steps:\n  - run: [printf, "%s", "{session}"]\n`,
+    });
+    let argvSeen: string[] = [];
+    let envSeen: NodeJS.ProcessEnv = {};
+    const { deps } = mockDeps({
+      sessionText: async () => "transcript",
+      runArgv: async (argv, opts) => {
+        argvSeen = argv;
+        envSeen = opts?.env ?? {};
+        return { ok: true, stdout: "", stderr: "" };
+      },
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root, paneId: "p1" },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    expect(argvSeen[2]).toBe("transcript");
+    expect(envSeen.HWF_session).toBeUndefined();
+    expect(envSeen.HWF_session_file).toContain("hwf-session-");
+  });
+
+  test("oversized binding fails with a named env error instead of E2BIG", async () => {
+    const root = await repoWith({
+      m: `inputs:\n  big: text\nsteps:\n  - run: 'printf %s "$HWF_big"'\n`,
+    });
+    const { deps } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      inputs: { big: "x".repeat(30 * 1024) },
+      deps,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain("HWF_big");
+    expect(result.error).toContain("environment block too large for spawn");
+  });
+
+  test("env-cap failure short-circuits on_error and reports the original step", async () => {
+    const root = await repoWith({
+      recover: `steps:\n  - run: "printf recovered"\n`,
+      m: `inputs:\n  big: text\non_error: recover\nsteps:\n  - run: 'printf %s "$HWF_big$HWF_big"'\n    out: huge\n  - run: "true"\n`,
+    });
+    const { deps, notes } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      inputs: { big: "x".repeat(20 * 1024) },
+      deps,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain("step 2");
+    expect(result.error).toContain("environment block too large for spawn");
+    expect(notes).toHaveLength(1);
+    expect((await readRunLog()).some((e) => e.workflow === "recover")).toBe(false);
+  });
+
+  test("false eq guard skips a step even with an oversized binding", async () => {
+    const root = await repoWith({
+      m: `inputs:\n  big: text\nsteps:\n  - run: 'printf %s "$HWF_big$HWF_big"'\n    out: huge\n  - run: "exit 1"\n    when: '{huge} == "never"'\n`,
+    });
+    const { deps } = mockDeps();
+    const outcomes: string[] = [];
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      inputs: { big: "x".repeat(20 * 1024) },
+      deps,
+      onProgress: (i, _n, _label, outcome) => {
+        if (outcome) outcomes.push(`${i}:${outcome}`);
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(outcomes).toEqual(["1:ok", "2:skip"]);
+  });
+
+  test("session file persists after the run for background handoff", async () => {
+    const root = await repoWith({
+      m: `steps:\n  - run: [printf, "%s", "{session_file}"]\n`,
+    });
+    let path = "";
+    const { deps } = mockDeps({
+      sessionText: async () => "transcript-body",
+      runArgv: async (argv) => {
+        path = argv[2] ?? "";
+        return { ok: true, stdout: "", stderr: "" };
+      },
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root, paneId: "p1" },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    expect(path).toContain("hwf-session-");
+    expect(await Bun.file(path).text()).toBe("transcript-body");
+    await rm(path, { force: true });
+  });
+
+  test("notification.show fails the step when herdr reports shown:false", async () => {
+    const root = await repoWith({
+      m: `steps:\n  - notification.show: { title: hi }\n`,
+    });
+    const { deps } = mockDeps({
+      herdrCall: async () => ({ shown: false, reason: "disabled" }),
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    expect(result.ok).toBe(false);
+    expect(result).toMatchObject({ error: "step 1: notification not shown: disabled" });
+  });
+
+  test("notification.show retries while herdr reports busy", async () => {
+    const root = await repoWith({
+      m: `steps:\n  - notification.show: { title: hi }\n`,
+    });
+    let calls = 0;
+    const { deps } = mockDeps({
+      sleep: async () => undefined,
+      herdrCall: async () => {
+        calls++;
+        return calls < 3 ? { shown: false, reason: "busy" } : { shown: true };
+      },
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    expect(calls).toBe(3);
+  });
+
+  test("notification.show passes when herdr reports shown:true", async () => {
+    const root = await repoWith({
+      m: `steps:\n  - notification.show: { title: hi }\n`,
+    });
+    const { deps } = mockDeps({
+      herdrCall: async () => ({ shown: true }),
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  test("layout.apply with tab_id skips the workspace_id autofill", async () => {
+    const root = await repoWith({
+      pinned: `steps:\n  - layout.apply: { tab_id: t9, root: { type: pane } }\n`,
+      unpinned: `steps:\n  - layout.apply: { root: { type: pane } }\n`,
+    });
+    const { deps, calls } = mockDeps();
+    for (const name of ["pinned", "unpinned"]) {
+      const result = await runWorkflow({
+        name,
+        repoRoot: root,
+        agents: {},
+        ctx: { selection: "", cwd: root, workspaceId: "w1" },
+        deps,
+      });
+      expect(result.ok).toBe(true);
+    }
+    expect(calls[0]!.params.tab_id).toBe("t9");
+    expect("workspace_id" in calls[0]!.params).toBe(false);
+    expect(calls[1]!.params.workspace_id).toBe("w1");
+  });
+
+  test("layout.apply with empty tab_id still autofills workspace_id", async () => {
+    const root = await repoWith({
+      m: `steps:\n  - layout.apply: { tab_id: "", root: { type: pane } }\n`,
+    });
+    const { deps, calls } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root, workspaceId: "w1" },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    expect(calls[0]!.params.tab_id).toBe("");
+    expect(calls[0]!.params.workspace_id).toBe("w1");
+  });
+
+  test("detached in: here run returns immediately and the child keeps running", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "herdr-workflows-detach-"));
+    dirs.push(dir);
+    const marker = join(dir, "marker");
+    const root = await repoWith({
+      m: `steps:\n  - run: [sh, -c, "sleep 1 && touch ${marker}"]\n    wait: false\n`,
+    });
+    const { deps } = mockDeps();
+    const start = Date.now();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    expect(Date.now() - start).toBeLessThan(900);
+    expect(await Bun.file(marker).exists()).toBe(false);
+    await Bun.sleep(1600);
+    expect(await Bun.file(marker).exists()).toBe(true);
+  });
+
+  test("detached scalar run does not arm the timeout killer", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "herdr-workflows-detach-to-"));
+    dirs.push(dir);
+    const marker = join(dir, "marker");
+    const root = await repoWith({
+      m: `steps:\n  - run: sleep 2 && touch ${marker}\n    wait: false\n    timeout: 1\n`,
+    });
+    const { deps } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: {},
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    await Bun.sleep(2600);
+    expect(await Bun.file(marker).exists()).toBe(true);
+  });
+
+  test("detached child inherits the parent environment", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "herdr-workflows-detach-env-"));
+    dirs.push(dir);
+    const marker = join(dir, "env");
+    process.env.HWF_DETACH_TEST = "inherited";
+    try {
+      const root = await repoWith({
+        m: `steps:\n  - run: [sh, -c, "printf %s \\"$HWF_DETACH_TEST\\" > ${marker}"]\n    wait: false\n`,
+      });
+      const { deps } = mockDeps();
+      const result = await runWorkflow({
+        name: "m",
+        repoRoot: root,
+        agents: {},
+        ctx: { selection: "", cwd: root },
+        deps,
+      });
+      expect(result.ok).toBe(true);
+      for (let i = 0; i < 50 && !(await Bun.file(marker).exists()); i++) await Bun.sleep(50);
+      expect(await Bun.file(marker).text()).toBe("inherited");
+    } finally {
+      delete process.env.HWF_DETACH_TEST;
+    }
+  });
+
+  test("focus: false reaches layout.apply; default stays true", async () => {
+    const root = await repoWith({
+      bg: `steps:\n  - run: sleep 5\n    in: tab\n    focus: false\n    wait: false\n`,
+      fg: `steps:\n  - run: sleep 5\n    in: tab\n    wait: false\n`,
+    });
+    const { deps, layouts } = mockDeps();
+    for (const name of ["bg", "fg"]) {
+      const result = await runWorkflow({
+        name,
+        repoRoot: root,
+        agents: {},
+        ctx: { selection: "", cwd: root, workspaceId: "w1" },
+        deps,
+      });
+      expect(result.ok).toBe(true);
+    }
+    expect((layouts[0] as { focus: boolean }).focus).toBe(false);
+    expect((layouts[1] as { focus: boolean }).focus).toBe(true);
+  });
+
+  test("agent close: true reaps pane and tab after out is captured", async () => {
+    const root = await repoWith({
+      m: `steps:
+  - agent: claude
+    prompt: make a handoff
+    out: brief
+    close: true
+  - run: [printf, "%s", "{brief}"]
+`,
+    });
+    const closed: { panes: string[]; tabs: string[] } = { panes: [], tabs: [] };
+    let captured = "";
+    const { deps } = mockDeps({
+      layoutApply: async (params) => {
+        const prompt = (params.root as { command: string[] }).command[1]!;
+        const match = /exact absolute path, overwriting it:\n([^\n]+)\n/.exec(prompt);
+        await writeFile(match?.[1] ?? "", "the brief");
+        return { tabId: "t7", paneId: "p7", workspaceId: "w1" };
+      },
+      agentStatus: async () => "done",
+      paneClose: async (paneId) => {
+        closed.panes.push(paneId);
+      },
+      tabClose: async (tabId) => {
+        closed.tabs.push(tabId);
+      },
+      runArgv: async (argv) => {
+        captured = argv[2] ?? "";
+        return { ok: true, stdout: "", stderr: "" };
+      },
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: { claude: ["claude", "{prompt}"] },
+      ctx: { selection: "", cwd: root, workspaceId: "w1" },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    expect(captured).toBe("the brief");
+    expect(closed).toEqual({ panes: ["p7"], tabs: ["t7"] });
+  });
+
+  test("agent close: true on a split closes only the pane", async () => {
+    const root = await repoWith({
+      m: `steps:\n  - agent: claude\n    prompt: hi\n    in: right\n    close: true\n`,
+    });
+    const closed: { panes: string[]; tabs: string[] } = { panes: [], tabs: [] };
+    const { deps } = mockDeps({
+      agentStatus: async () => "done",
+      paneClose: async (paneId) => {
+        closed.panes.push(paneId);
+      },
+      tabClose: async (tabId) => {
+        closed.tabs.push(tabId);
+      },
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: { claude: ["claude", "{prompt}"] },
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "t0", paneId: "p0" },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    expect(closed).toEqual({ panes: ["p1"], tabs: [] });
+  });
+
+  test("agent close: true also closes on step failure", async () => {
+    const root = await repoWith({
+      m: `steps:\n  - agent: claude\n    prompt: hi\n    out: brief\n    close: true\n`,
+    });
+    const closed: string[] = [];
+    const { deps } = mockDeps({
+      layoutApply: async (params) => {
+        const prompt = (params.root as { command: string[] }).command[1]!;
+        const match = /exact absolute path, overwriting it:\n([^\n]+)\n/.exec(prompt);
+        await writeFile(match?.[1] ?? "", "");
+        return { tabId: "t7", paneId: "p7", workspaceId: "w1" };
+      },
+      agentStatus: async () => "done",
+      paneClose: async (paneId) => {
+        closed.push(paneId);
+      },
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: { claude: ["claude", "{prompt}"] },
+      ctx: { selection: "", cwd: root, workspaceId: "w1" },
+      deps,
+    });
+    expect(result.ok).toBe(false);
+    expect(closed).toEqual(["p7"]);
+  });
+
+  test("agent without close: leaves the pane alone", async () => {
+    const root = await repoWith({
+      m: `steps:\n  - agent: claude\n    prompt: hi\n`,
+    });
+    const closed: string[] = [];
+    const { deps } = mockDeps({
+      agentStatus: async () => "done",
+      paneClose: async (paneId) => {
+        closed.push(paneId);
+      },
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      agents: { claude: ["claude", "{prompt}"] },
+      ctx: { selection: "", cwd: root, workspaceId: "w1" },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    expect(closed).toEqual([]);
   });
 });

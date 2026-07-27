@@ -72,6 +72,14 @@ steps:
 
       ---
       {session}
+  - name: confirm
+    run:
+      - sh
+      - -c
+      - 'printf %s "$HWF_brief"; printf "\\n\\n--- Enter = hand to %s, Ctrl-C = abort: " "$HWF_target"; read _; echo HANDOFF_OK; sleep 15'
+    in: tab
+    wait: /HANDOFF_OK/
+    timeout: 1800
   - agent: "{target}"
     prompt: |
       Focus: {focus}

@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fillAgentArgv } from "../../config";
 import {
   HerdrError,
@@ -12,6 +15,9 @@ import { substituteEnv } from "./shell";
 
 const AGENT_WAIT_POLL_MS = 2000;
 const AGENT_WAIT_IDLE_GRACE_MS = 30_000;
+const AGENT_OUTPUT_INSTRUCTION = `Write your final response, and nothing else, to this exact absolute path, overwriting it:
+{path}
+Do not print the response in the terminal.`;
 
 type WaitAgentDoneOpts = {
   agentStatus: (paneId: string) => Promise<string>;
@@ -93,6 +99,8 @@ type AgentStepCtx = {
       agentStatus: (paneId: string) => Promise<string>;
       waitOutput: (paneId: string, pattern: string, timeoutMs: number) => Promise<unknown>;
       paneRead: (paneId: string, opts: { source: string; lines: number }) => Promise<string>;
+      paneClose: (paneId: string) => Promise<unknown>;
+      tabClose: (tabId: string) => Promise<unknown>;
       notificationShow: (title: string, body?: string) => Promise<unknown>;
       sleep?: (ms: number) => Promise<void>;
       now?: () => number;
@@ -115,48 +123,75 @@ export async function agentStep(
   if (!template) {
     return { ok: false, error: `unknown agent '${name}'` };
   }
-  const prompt = step.action.prompt !== undefined ? substitute(step.action.prompt, c.values) : "";
+  let prompt = step.action.prompt !== undefined ? substitute(step.action.prompt, c.values) : "";
+  const outputDir =
+    step.out?.kind === "text" ? await mkdtemp(join(tmpdir(), "hwf-agent-")) : undefined;
+  const outputPath = outputDir ? join(outputDir, "output.txt") : undefined;
+  if (outputPath) {
+    prompt = `${prompt}\n\n${AGENT_OUTPUT_INSTRUCTION.replace("{path}", outputPath)}`;
+  }
   const cwd =
     step.action.cwd !== undefined ? substitute(step.action.cwd, c.values) : c.opts.ctx.cwd;
   const stepEnv = substituteEnv(step.action.env, c.values);
   const target = step.action.in === "here" ? "tab" : step.action.in;
-  const spawned = await placeCommand(
-    c.opts,
-    target,
-    fillAgentArgv(template, prompt),
-    name,
-    cwd,
-    stepEnv,
-    step.action.ratio,
-  );
+  try {
+    const spawned = await placeCommand(
+      c.opts,
+      target,
+      fillAgentArgv(template, prompt),
+      name,
+      cwd,
+      stepEnv,
+      step.action.ratio,
+      step.action.focus,
+    );
 
-  if (step.wait.kind === "detach") return { ok: true };
+    if (step.wait.kind === "detach") return { ok: true };
 
-  const timeoutMs = step.timeoutMs ?? 1_800_000;
-  if (step.wait.kind === "regex") {
-    await c.opts.deps.waitOutput(spawned.paneId, step.wait.pattern, timeoutMs);
-  } else {
-    await waitAgentDone(spawned.paneId, timeoutMs, {
-      agentStatus: c.opts.deps.agentStatus,
-      sleep: c.opts.deps.sleep ?? ((ms) => Bun.sleep(ms)),
-      now: c.opts.deps.now,
-      pollMs: c.opts.deps.agentWaitPollMs,
-      idleGraceMs: c.opts.deps.agentWaitIdleGraceMs,
-      onBlocked: async () => {
-        await c.opts.deps.notificationShow(
-          `herdr-workflows: ${c.opts.name} waiting`,
-          `agent blocked on step ${c.index} — needs your input`,
-        );
-      },
-    });
+    try {
+      const timeoutMs = step.timeoutMs ?? 1_800_000;
+      if (step.wait.kind === "regex") {
+        await c.opts.deps.waitOutput(spawned.paneId, step.wait.pattern, timeoutMs);
+      } else {
+        await waitAgentDone(spawned.paneId, timeoutMs, {
+          agentStatus: c.opts.deps.agentStatus,
+          sleep: c.opts.deps.sleep ?? ((ms) => Bun.sleep(ms)),
+          now: c.opts.deps.now,
+          pollMs: c.opts.deps.agentWaitPollMs,
+          idleGraceMs: c.opts.deps.agentWaitIdleGraceMs,
+          onBlocked: async () => {
+            await c.opts.deps.notificationShow(
+              `herdr-workflows: ${c.opts.name} waiting`,
+              `agent blocked on step ${c.index} — needs your input`,
+            );
+          },
+        });
+      }
+      if (outputPath && step.out?.kind === "text") {
+        const text = await readFile(outputPath, "utf8").catch(() => "");
+        if (text.length === 0) {
+          return {
+            ok: false,
+            error: `agent did not write output '${step.out.name}'`,
+          };
+        }
+        return { ok: true, bindings: { [step.out.name]: text } };
+      }
+      await c.opts.deps.paneRead(spawned.paneId, {
+        source: PANE_READ_SOURCE,
+        lines: PANE_READ_LINES,
+      });
+      return { ok: true };
+    } finally {
+      // close: reaps the spent pane on success and failure alike — out:/error are already captured.
+      if (step.action.close) {
+        await c.opts.deps.paneClose(spawned.paneId).catch(() => undefined);
+        if (target === "tab") await c.opts.deps.tabClose(spawned.tabId).catch(() => undefined);
+      }
+    }
+  } finally {
+    if (outputDir) {
+      await rm(outputDir, { recursive: true, force: true }).catch(() => undefined);
+    }
   }
-  const text = (
-    await c.opts.deps.paneRead(spawned.paneId, {
-      source: PANE_READ_SOURCE,
-      lines: PANE_READ_LINES,
-    })
-  ).trim();
-  const bindings: Record<string, string> = {};
-  if (step.out?.kind === "text") bindings[step.out.name] = text;
-  return { ok: true, bindings };
 }

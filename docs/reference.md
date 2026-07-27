@@ -21,6 +21,8 @@ Localhost-only HTTP UI over the same core the CLI uses — browse repo + global 
 
 List: `type filter · ↑↓ move · enter run · esc cancel`. Choice input: `type filter · ↑↓ move · enter select · esc back`. Text input / prompt: `enter submit · esc back`.
 
+`_`-prefixed workflows are hidden from the picker — they're background halves meant to be spawned, not run by hand. `hwf run _name` runs them fine.
+
 Declared `inputs:` ask one screen each (declaration order), then the prompt line only if the workflow uses `{prompt}`.
 
 ## Files
@@ -69,7 +71,7 @@ inputs:
 
 Names: `[a-z][a-z0-9_]{0,31}`. Reference as `{name}` (one flat namespace). Unused declared inputs are load errors. Default outside options is a load error. Only the entry workflow prompts; `use:` targets get values via `with:`.
 
-Scalar/block `run:` steps receive every bound name as `HWF_<name>` env (inputs and `out:` names). Prefer argv-form `run:` when values must be arguments.
+Scalar/block `run:` steps receive bound names as `HWF_<name>` env (inputs and `out:` names) — except `{session}`, which holds a whole transcript and never enters the env; use `{session_file}` for shell access. The exported block is capped well under the ~32 KB platform ceiling; exceeding it fails the step with a named error instead of raw `E2BIG`. Prefer argv-form `run:` when values must be arguments.
 
 ## Action keys
 
@@ -84,28 +86,32 @@ Exactly one per step:
 
 ### `run:` forms
 
-| Form   | Example                            | Shell?                       | Placeholders |
-| ------ | ---------------------------------- | ---------------------------- | ------------ |
-| scalar | `run: git diff HEAD`               | yes (`shell:`, default `sh`) | **rejected** |
-| argv   | `run: [git, checkout, "{branch}"]` | no                           | allowed      |
-| block  | `run: \|\n  set -eu\n  bun test`   | yes                          | **rejected** |
+| Form   | Example                            | Shell?         | Placeholders |
+| ------ | ---------------------------------- | -------------- | ------------ |
+| scalar | `run: git diff HEAD`               | yes (`shell:`) | **rejected** |
+| argv   | `run: [git, checkout, "{branch}"]` | no             | allowed      |
+| block  | `run: \|\n  set -eu\n  bun test`   | yes            | **rejected** |
 
-`shell:` selects `sh` / `bash` / `zsh` / `pwsh` / `powershell` / `cmd`. Illegal on argv form and on non-`run:` steps.
+`shell:` selects `sh` / `bash` / `zsh` / `pwsh` / `powershell` / `cmd`; unset, it defaults to `sh` on POSIX and `cmd` on Windows. Illegal on argv form and on non-`run:` steps. Scalar form is shell-specific — `cmd` reads `%HWF_x%`, POSIX shells read `$HWF_x`; argv-form `run:` is the portable form.
 
 ### Placement (`in:`)
 
-On `run:` / `agent:`: `here` \| `tab` \| `right` \| `down`. Defaults: `here` for `run:`, `tab` for `agent:`. `ratio:` only with `right`/`down`. `cwd:` / `env:` allowed on both.
+On `run:` / `agent:`: `here` \| `tab` \| `right` \| `down`. Defaults: `here` for `run:`, `tab` for `agent:`. `ratio:` only with `right`/`down`. `cwd:` / `env:` allowed on both. Placed steps take focus by default; `focus: false` opens the tab/split without stealing focus.
 
 ### Wait
 
-Blocking is the default for `agent:` and for local `run:` (`in: here`) — the step ends when the process does. A **placed** `run:` (`in: tab` / `right` / `down`) hands the command to a herdr pane and returns as soon as that pane exists; herdr owns its lifetime. Gate on its progress with `wait: /regex/` (pane output). `wait: false` detaches. `timeout:` bounds the wait.
+Blocking is the default for `agent:` and for local `run:` (`in: here`) — the step ends when the process does. A **placed** `run:` (`in: tab` / `right` / `down`) hands the command to a herdr pane and returns as soon as that pane exists; herdr owns its lifetime. Gate on its progress with `wait: /regex/` (pane output). `wait: false` detaches: a placed step leaves the pane running, and an `in: here` step spawns the child fire-and-forget — ignored stdio, the parent's full environment, no timeout — and returns immediately. `timeout:` bounds the wait (never a detached step).
+
+`close: true` on an `agent:` step closes its pane (and its tab, when the step created it) once the wait ends — after `out:` is captured, on success and failure alike; close failures are ignored (the pane is already gone). `close:` with `wait: false` is a load error.
 
 ### Outputs (`out:`)
 
-- Identifier: text result (`run` here → stdout; `agent` → final message) → `{name}`
+- Identifier: text result (`run` here → stdout; `agent` → final response written to a runner-managed file) → `{name}`
 - Map: `out: { p: pane.pane_id }` for structured primitive results (dot-paths checked against herdr result union at load; exact at run)
 
 Detached steps cannot bind `out:`. Placed `run:` steps take the map form; their result exposes `pane_id`, `workspace_id`, and `layout.tab_id` (bare `tab_id` is not a union path).
+
+An agent with identifier `out:` receives an appended instruction to write its final response to an absolute temporary path. The step fails if the agent does not create non-empty output. Terminal screen content is never used for the binding.
 
 Loops bind `{item}` and `{index}`; `as:` renames the item inside that step, and both spellings resolve.
 
@@ -113,7 +119,7 @@ Loops bind `{item}` and `{index}`; `as:` renames the item inside that step, and 
 
 | Key            | Role                                                                                                            |
 | -------------- | --------------------------------------------------------------------------------------------------------------- |
-| `when:`        | skip when false — `{name}` / `!{name}`, argv list, or shell string                                              |
+| `when:`        | skip when false — `{name}` / `!{name}`, `{name} == "v"` / `!= "v"`, argv list, or shell string                  |
 | `for:` / `as:` | sequential loop (literal list, `sh …`, or `{name}`); cap 100; no nesting                                        |
 | `retry:`       | int or `{times, delay, until, reset}` (`reset` is a shell command string); pane-creating steps require `reset:` |
 | `allow_fail:`  | record failure, continue; never triggers `on_error:`                                                            |
@@ -124,7 +130,7 @@ Skip is a third outcome (not success, not failure). Skipped `out:` names bind em
 
 ### Primitives
 
-Dotted herdr methods (`pane.split:`, `worktree.create:`, `notification.show:`, …). Params validated from vendored `schemas/herdr-api.schema.json` (`bun run schema:herdr`). Caller context autofills omitted `pane_id` / `tab_id` / `workspace_id`.
+Dotted herdr methods (`pane.split:`, `worktree.create:`, `notification.show:`, …). Params validated from vendored `schemas/herdr-api.schema.json` (`bun run schema:herdr`). Caller context autofills omitted `pane_id` / `tab_id` / `workspace_id` — except `workspace_id` on `layout.apply` when `tab_id` is set (herdr rejects both). `notification.show` fails the step when herdr reports `shown: false` (reason included); `busy` is retried 3× at 2s first, since another toast holding the screen clears on its own.
 
 **Denied** (load error with reason): `server.*`, `plugin.*`, `events.subscribe`, `session.snapshot`, `popup.close`, `pane.graphics.*`, `pane.report_agent`, `pane.report_agent_session`, `pane.clear_agent_authority`, `pane.release_agent`.
 
@@ -140,19 +146,54 @@ steps:
     with: { suite: all }
 ```
 
-Repo shadows global. Cycles and unknown targets are load errors. Included workflows see only `with:` values + builtins; their `out:` names are visible downstream.
+Repo shadows global. Cycles and unknown targets are load errors. Included workflows see only `with:` values + builtins; their `out:` names are visible downstream. A `use:` step accepts `name:`, `with:`, `when:`, and `allow_fail:` — `wait:` / `out:` / `timeout:` / `for:` / `as:` / `retry:` / `on_error:` on `use:` are load errors. A skipped `use:` binds its exported `out:` names empty, same as any skipped step.
 
 ## Namespace
 
-Builtins: `{pane}` `{selection}` `{prompt}` `{session}` `{session_file}` `{source_tab}` `{agent}` `{error}` `{item}` `{index}` `{attempt}`.
+Builtins: `{pane}` `{selection}` `{prompt}` `{session}` `{session_file}` `{source_tab}` `{agent}` `{error}` `{item}` `{index}` `{attempt}` `{platform}`.
+
+`{platform}` is `macos` / `linux` / `windows`. Fork steps per OS with `when:` comparisons:
+
+```yaml
+steps:
+  - run: [make, setup]
+    when: '{platform} != "windows"'
+  - run: [python, scripts/setup.py]
+    when: '{platform} == "windows"'
+```
 
 `{session}` / `{session_file}` legal in `prompt:`, argv, and primitive params — rejected in scalar/block `run:` under the general placeholder rule.
 
 Non-identifier braces (`{"json": true}`) pass through. Unknown `{word}` is a load error. To reuse a step's result, bind `out:` and reference it as `{name}`.
 
+## Background runs
+
+Fire-and-forget: an entry workflow whose last step re-invokes `hwf` detached.
+
+```yaml
+# ship.yaml
+inputs:
+  branch: text = main
+steps:
+  - run: bun test
+  - run: [hwf, run, _ship-bg, --input, "branch={branch}"]
+    wait: false
+
+# _ship-bg.yaml
+inputs:
+  branch: text
+steps:
+  - agent: claude
+    focus: false
+    close: true
+    prompt: "Deploy {branch}. Report tersely."
+```
+
+The detached `hwf run` child inherits the invoking environment, so `{agent}`, `{source_tab}`, and `{session_file}` resolve inside the background run. `_`-prefixed workflows are hidden from the picker. `focus: false` keeps background panes from stealing focus; `close: true` reaps the agent pane when it finishes.
+
 ## Semantics
 
 - Linear foreground steps. First hard failure → optional `on_error` once. Preflight failures skip `on_error`.
 - Skip / success / failure are distinct in progress and the run log.
-- herdr ≥ 0.7.5, POSIX. Parallelism and Windows are out of scope.
+- herdr ≥ 0.7.5; macOS, Linux, Windows (fork steps per OS with `when:` + `{platform}`). Parallelism is out of scope.
 - Schema regen: `bun run schema` (workflow JSON Schema) and `bun run schema:herdr` (method validators) — release-time; plugin build does not call `herdr api schema`.

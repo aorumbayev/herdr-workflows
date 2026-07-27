@@ -6,8 +6,13 @@ const SHELL_TIMEOUT_MS = 300_000;
 
 export type ShellName = "sh" | "bash" | "zsh" | "pwsh" | "powershell" | "cmd";
 
+/** Platform default for scalar/block run: — cmd on Windows, sh elsewhere. */
+export function defaultShell(platform: string = process.platform): ShellName {
+  return platform === "win32" ? "cmd" : "sh";
+}
+
 /** Single choke point for running a command string through an interpreter. */
-export function shellArgv(command: string, shell: ShellName = "sh"): string[] {
+export function shellArgv(command: string, shell: ShellName = defaultShell()): string[] {
   switch (shell) {
     case "sh":
       return ["sh", "-c", command];
@@ -21,6 +26,33 @@ export function shellArgv(command: string, shell: ShellName = "sh"): string[] {
       return ["powershell", "-NoProfile", "-Command", command];
     case "cmd":
       return ["cmd", "/c", command];
+  }
+}
+
+/**
+ * Timeout kill. POSIX: kill the detached process group. Windows has no process groups
+ * (negative pid) — kill the child; cmd /c orphans grandchildren, accepted for a timeout path.
+ */
+export function killSpawn(
+  proc: { pid: number; kill: () => void },
+  platform: string = process.platform,
+): void {
+  if (platform === "win32") {
+    try {
+      proc.kill();
+    } catch {
+      /* already dead */
+    }
+    return;
+  }
+  try {
+    process.kill(-proc.pid, "SIGKILL");
+  } catch {
+    try {
+      proc.kill();
+    } catch {
+      /* already dead */
+    }
   }
 }
 
@@ -47,6 +79,7 @@ export async function spawnCapture(
     stderr: "pipe",
     env: opts.env,
     detached: true,
+    windowsHide: true,
   });
   if (opts.stdin !== undefined) proc.stdin.write(opts.stdin);
   proc.stdin.end();
@@ -54,15 +87,7 @@ export async function spawnCapture(
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
-    try {
-      process.kill(-proc.pid, "SIGKILL");
-    } catch {
-      try {
-        proc.kill();
-      } catch {
-        /* already dead */
-      }
-    }
+    killSpawn(proc);
   }, timeoutMs);
 
   const [stdout, stderr, exitCode] = await Promise.all([
@@ -72,6 +97,20 @@ export async function spawnCapture(
   ]);
   clearTimeout(timer);
   return { timedOut, exitCode: exitCode ?? 1, stdout, stderr, timeoutMs };
+}
+
+/** Fire-and-forget spawn: ignored stdio (nothing drains pipes after return), no timeout, unref'd. */
+function spawnDetach(argv: string[], opts: { cwd: string; env?: NodeJS.ProcessEnv }): void {
+  const proc = Bun.spawn(argv, {
+    cwd: opts.cwd,
+    stdin: "ignore",
+    stdout: "ignore",
+    stderr: "ignore",
+    env: opts.env,
+    detached: true,
+    windowsHide: true,
+  });
+  proc.unref();
 }
 
 function captureResult(r: {
@@ -103,7 +142,7 @@ export async function runShellStep(
   },
 ): Promise<{ ok: boolean; stdout: string; stderr: string }> {
   return captureResult(
-    await spawnCapture(shellArgv(command, opts.shell ?? "sh"), {
+    await spawnCapture(shellArgv(command, opts.shell), {
       cwd: opts.cwd,
       stdin: opts.stdin,
       env: opts.env,
@@ -187,6 +226,14 @@ export async function shellStep(
 
   if (step.action.in === "here") {
     const payload = step.action.payload;
+    if (step.wait.kind === "detach") {
+      const argv =
+        payload.form === "argv"
+          ? payload.argv.map((el) => substitute(el, c.values))
+          : shellArgv(payload.command, payload.shell);
+      spawnDetach(argv, { cwd, env: mergedEnv });
+      return { ok: true };
+    }
     const result =
       payload.form === "argv"
         ? await c.opts.deps.runArgv(
@@ -224,6 +271,7 @@ export async function shellStep(
     cwd,
     stepEnv,
     step.action.ratio,
+    step.action.focus,
   );
 
   if (step.wait.kind === "detach") return { ok: true };

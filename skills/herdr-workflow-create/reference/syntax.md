@@ -62,14 +62,15 @@ Exactly one per step. Adding a second is a load error.
 
 ### `run:`
 
-| Form   | Example                            | Shell                        | `{placeholders}` |
-| ------ | ---------------------------------- | ---------------------------- | ---------------- |
-| scalar | `run: git diff HEAD`               | yes (`shell:`, default `sh`) | **rejected**     |
-| argv   | `run: [git, checkout, "{branch}"]` | no                           | allowed          |
-| block  | `run: \|` + indented lines         | yes                          | **rejected**     |
+| Form   | Example                            | Shell          | `{placeholders}` |
+| ------ | ---------------------------------- | -------------- | ---------------- |
+| scalar | `run: git diff HEAD`               | yes (`shell:`) | **rejected**     |
+| argv   | `run: [git, checkout, "{branch}"]` | no             | allowed          |
+| block  | `run: \|` + indented lines         | yes            | **rejected**     |
 
-`shell:` selects `sh` `bash` `zsh` `pwsh` `powershell` `cmd`; illegal on argv form and on
-any non-`run:` step.
+`shell:` selects `sh` `bash` `zsh` `pwsh` `powershell` `cmd`; unset it defaults to `sh` on
+POSIX, `cmd` on Windows. Illegal on argv form and on any non-`run:` step. Scalar form is
+shell-specific (`%HWF_x%` under cmd, `$HWF_x` under POSIX) — argv form is the portable one.
 
 Scalar/block commands receive every bound name as an env var: `HWF_<name>` for inputs,
 `out:` bindings, and builtins. That is the escape hatch for values in shell text:
@@ -167,14 +168,14 @@ on. To sequence on it, use `wait: /regex/`; to say so explicitly, use `wait: fal
 
 ## Guards, loops, retry, failure
 
-| Key           | Value                                                                 |
-| ------------- | --------------------------------------------------------------------- |
-| `when:`       | `"{name}"` / `"!{name}"` (non-empty test), argv list, or shell string |
-| `for:` `as:`  | literal list, `sh <cmd>`, or `"{name}"` (split on newlines); cap 100  |
-| `retry:`      | integer, or `{ times, delay, until, reset }`                          |
-| `allow_fail:` | `true` — record the failure and continue                              |
-| `on_error:`   | workflow name or inline step list, one shot                           |
-| `name:`       | label shown in progress output and the run log                        |
+| Key           | Value                                                                              |
+| ------------- | ---------------------------------------------------------------------------------- |
+| `when:`       | `"{name}"` / `"!{name}"`, `'{name} == "v"'` / `!= "v"`, argv list, or shell string |
+| `for:` `as:`  | literal list, `sh <cmd>`, or `"{name}"` (split on newlines); cap 100               |
+| `retry:`      | integer, or `{ times, delay, until, reset }`                                       |
+| `allow_fail:` | `true` — record the failure and continue                                           |
+| `on_error:`   | workflow name or inline step list, one shot                                        |
+| `name:`       | label shown in progress output and the run log                                     |
 
 - A shell `when:` passes on exit 0. Skip is a distinct outcome from success and failure.
 - Loops bind `{item}` and `{index}`; `as: path` adds `{path}` as an alias for `{item}`. All
@@ -208,6 +209,7 @@ error; non-identifier braces such as `{"json": true}` pass through untouched.
 | `{error}`          | failure message inside `on_error:`                  |
 | `{item}` `{index}` | current loop item / 0-based position (needs `for:`) |
 | `{attempt}`        | 1-based attempt number (needs `retry:`)             |
+| `{platform}`       | `macos` / `linux` / `windows`                       |
 
 Legal in `prompt:`, argv elements, `cwd:`, `env:` values, `with:` values, and primitive
 params. Rejected in scalar/block `run:` text.

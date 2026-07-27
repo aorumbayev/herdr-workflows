@@ -39,7 +39,7 @@ describe("workflow grammar", () => {
     expect(m.steps).toHaveLength(1);
     expect(m.steps[0]!.action).toMatchObject({
       kind: "run",
-      payload: { form: "scalar", command: "bun test", shell: "sh" },
+      payload: { form: "scalar", command: "bun test" },
       in: "here",
     });
   });
@@ -132,6 +132,43 @@ describe("workflow grammar", () => {
       bad: `steps:\n  - run: lazygit\n    in: tab\n    wait: false\n    out: { tab: tab_id }\n`,
     });
     await expect(loadWorkflow("bad", root)).rejects.toThrow(/detached/);
+  });
+
+  test("detached in: here step with out rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - run: echo hi\n    wait: false\n    out: x\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/detached/);
+  });
+
+  test("focus on in: here run rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - run: echo hi\n    focus: false\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/focus: requires a placed step/);
+  });
+
+  test("focus accepted on placed run and agent", async () => {
+    const root = await repoWithWorkflows({
+      ok: `steps:\n  - run: sleep 5\n    in: tab\n    focus: false\n    wait: false\n  - agent: claude\n    prompt: hi\n    focus: false\n`,
+    });
+    const m = await loadWorkflow("ok", root, ["claude"]);
+    expect(m.steps[0]!.action).toMatchObject({ kind: "run", focus: false });
+    expect(m.steps[1]!.action).toMatchObject({ kind: "agent", focus: false });
+  });
+
+  test("close on non-agent rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - run: echo hi\n    close: true\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/close: is only allowed on agent:/);
+  });
+
+  test("close with wait: false rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - agent: claude\n    prompt: hi\n    wait: false\n    close: true\n`,
+    });
+    await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(/detached/);
   });
 
   test("two outputs coexist", async () => {
@@ -424,6 +461,91 @@ describe("composition", () => {
       ok: `inputs:\n  foo: text\nsteps:\n  - run: 'printf %s "$HWF_foo"'\n`,
     });
     await expect(loadWorkflow("ok", root)).resolves.toBeTruthy();
+  });
+
+  test("use: step modifiers rejected at load", async () => {
+    for (const modifier of [
+      "wait: false",
+      "out: report",
+      "timeout: 5",
+      "for: [a]",
+      "as: p",
+      "retry: 3",
+      "on_error: gate",
+    ]) {
+      const root = await repoWithWorkflows({
+        gate: `steps:\n  - run: "true"\n`,
+        bad: `steps:\n  - use: gate\n    ${modifier}\n`,
+      });
+      await expect(loadWorkflow("bad", root)).rejects.toThrow(/not supported on use: steps/);
+    }
+  });
+
+  test("use: when parsed onto the include step", async () => {
+    const root = await repoWithWorkflows({
+      gate: `steps:\n  - run: "true"\n`,
+      ship: `steps:\n  - run: "true"\n    out: diff\n  - use: gate\n    when: "{diff}"\n`,
+    });
+    const m = await loadWorkflow("ship", root);
+    expect(m.steps[1]!.when).toEqual({ kind: "nonempty", name: "diff", negate: false });
+  });
+
+  test("use: when placeholder validated", async () => {
+    const root = await repoWithWorkflows({
+      gate: `steps:\n  - run: "true"\n`,
+      bad: `steps:\n  - use: gate\n    when: "{nope}"\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/unknown name '\{nope\}'/);
+  });
+
+  test("when: == comparison parses with either quote style", async () => {
+    const root = await repoWithWorkflows({
+      ok: `steps:\n  - run: "true"\n    when: '{platform} == "macos"'\n  - run: "true"\n    when: "{platform} != 'windows'"\n`,
+    });
+    const m = await loadWorkflow("ok", root);
+    expect(m.steps[0]!.when).toEqual({
+      kind: "eq",
+      name: "platform",
+      value: "macos",
+      negate: false,
+    });
+    expect(m.steps[1]!.when).toEqual({
+      kind: "eq",
+      name: "platform",
+      value: "windows",
+      negate: true,
+    });
+  });
+
+  test("when: == counts as an input reference", async () => {
+    const root = await repoWithWorkflows({
+      ok: `inputs:\n  branch: text\nsteps:\n  - run: "true"\n    when: '{branch} == "main"'\n`,
+    });
+    await expect(loadWorkflow("ok", root)).resolves.toBeTruthy();
+  });
+
+  test("when: == with unknown name rejected", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - run: "true"\n    when: '{nope} == "x"'\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/unknown name '\{nope\}'/);
+  });
+
+  test("when: == with unquoted value rejected with quote advice", async () => {
+    const root = await repoWithWorkflows({
+      bad: `steps:\n  - run: "true"\n    when: '{platform} == macos'\n`,
+    });
+    await expect(loadWorkflow("bad", root)).rejects.toThrow(/quote the comparison value/);
+  });
+
+  test("shell: omitted leaves payload shell unset for the run-time platform default", async () => {
+    const root = await repoWithWorkflows({ ok: `steps: bun test\n` });
+    const m = await loadWorkflow("ok", root);
+    const action = m.steps[0]!.action;
+    if (action.kind !== "run" || action.payload.form === "argv") {
+      throw new Error("expected scalar run payload");
+    }
+    expect(action.payload.shell).toBeUndefined();
   });
 });
 

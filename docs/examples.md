@@ -111,6 +111,14 @@ steps:
       Output ONLY the handoff prompt.
       ---
       {session}
+  - name: confirm
+    run:
+      - sh
+      - -c
+      - 'printf %s "$HWF_brief"; printf "\n\n--- Enter = hand to %s, Ctrl-C = abort: " "$HWF_target"; read _; echo HANDOFF_OK; sleep 15'
+    in: tab
+    wait: /HANDOFF_OK/
+    timeout: 1800
   - agent: "{target}"
     prompt: |
       Focus: {focus}
@@ -161,4 +169,28 @@ steps:
     in: right
     ratio: 0.4
     prompt: "Review the diff in the pane on the left."
+```
+
+## Fire-and-forget background run
+
+Entry workflow tests, then spawns a hidden `_`-prefixed workflow and exits. The detached child
+inherits the invoking context, so `{source_tab}` resolves inside the background run:
+
+```yaml
+# ship.yaml
+inputs:
+  branch: text = main
+steps:
+  - run: bun test
+  - run: [hwf, run, _ship-bg, --input, "branch={branch}"]
+    wait: false
+
+# _ship-bg.yaml — hidden from the picker
+inputs:
+  branch: text
+steps:
+  - agent: claude
+    focus: false
+    close: true
+    prompt: "Deploy {branch}. When done, summarise in the tab {source_tab} came from."
 ```

@@ -137,6 +137,8 @@ const MODIFIER_KEYS = [
   "allow_fail",
   "on_error",
   "prompt",
+  "focus",
+  "close",
 ] as const;
 
 type RefineCtx = z.core.$RefinementCtx<Record<string, unknown>>;
@@ -245,6 +247,31 @@ function refineActionModifiers(
       });
     }
   }
+  if (step.focus !== undefined) {
+    if (action !== "run" && action !== "agent") {
+      ctx.addIssue({
+        code: "custom",
+        message: "focus: is only allowed on run: and agent:",
+        path: ["focus"],
+      });
+    } else {
+      const place = step.in ?? (action === "agent" ? "tab" : "here");
+      if (place === "here") {
+        ctx.addIssue({
+          code: "custom",
+          message: "focus: requires a placed step (in: tab, right, or down)",
+          path: ["focus"],
+        });
+      }
+    }
+  }
+  if (step.close !== undefined && action !== "agent") {
+    ctx.addIssue({
+      code: "custom",
+      message: "close: is only allowed on agent:",
+      path: ["close"],
+    });
+  }
   if (typeof step.in === "string" && !(PLACEMENTS as readonly string[]).includes(step.in)) {
     ctx.addIssue({
       code: "custom",
@@ -275,6 +302,13 @@ function refineWaitOut(step: Record<string, unknown>, action: string, ctx: Refin
       code: "custom",
       message: "a detached step produces nothing to capture — remove out: or wait:",
       path: ["out"],
+    });
+  }
+  if (step.wait === false && step.close === true) {
+    ctx.addIssue({
+      code: "custom",
+      message: "a detached step cannot be closed after the wait — remove close: or wait:",
+      path: ["close"],
     });
   }
 }
@@ -395,6 +429,8 @@ const PLACEHOLDER_SHELL =
   'placeholders are not allowed in shell command text — use argv form (run: [cmd, "{name}"]) or HWF_<name> env vars';
 
 const NONEMPTY_GUARD_RE = /^(!?)\{([a-z][a-z0-9_]{0,31})\}$/;
+const EQ_GUARD_RE = /^\{([a-z][a-z0-9_]{0,31})\}\s*(==|!=)\s*(?:"([^"]*)"|'([^']*)')$/;
+const EQ_GUARD_UNQUOTED_RE = /^\{[a-z][a-z0-9_]{0,31}\}\s*(?:==|!=)/;
 const FOR_BINDING_RE = /^\{([a-z][a-z0-9_]{0,31})\}$/;
 const FOR_SH_RE = /^sh\s+(.+)$/s;
 
@@ -409,7 +445,7 @@ function rejectShellPlaceholders(
   }
 }
 
-function parseGuard(file: string, stepIndex: number, key: string, value: unknown): Guard {
+export function parseGuard(file: string, stepIndex: number, key: string, value: unknown): Guard {
   if (Array.isArray(value)) {
     if (!value.every((v) => typeof v === "string")) {
       bail(file, stepIndex, key, "argv guard elements must be strings");
@@ -421,6 +457,13 @@ function parseGuard(file: string, stepIndex: number, key: string, value: unknown
   }
   const m = NONEMPTY_GUARD_RE.exec(value);
   if (m) return { kind: "nonempty", name: m[2]!, negate: m[1] === "!" };
+  const eq = EQ_GUARD_RE.exec(value);
+  if (eq) {
+    return { kind: "eq", name: eq[1]!, value: eq[3] ?? eq[4] ?? "", negate: eq[2] === "!=" };
+  }
+  if (EQ_GUARD_UNQUOTED_RE.test(value)) {
+    bail(file, stepIndex, key, `quote the comparison value: when: '{name} == "value"'`);
+  }
   rejectShellPlaceholders(file, stepIndex, key, value);
   return { kind: "shell", command: value };
 }
@@ -523,8 +566,8 @@ function parseOut(file: string, stepIndex: number, value: unknown): OutSpec {
 
 function parseRunPayload(file: string, stepIndex: number, step: RawStep): RunPayload {
   const value = step.run;
-  const shell = (typeof step.shell === "string" ? step.shell : "sh") as ShellName;
-  if (!(SHELLS as readonly string[]).includes(shell)) {
+  const shell = typeof step.shell === "string" ? step.shell : undefined;
+  if (shell !== undefined && !(SHELLS as readonly string[]).includes(shell)) {
     bail(file, stepIndex, "shell", `shell: must be one of ${SHELLS.join(", ")}`);
   }
   if (Array.isArray(value)) {
@@ -537,7 +580,8 @@ function parseRunPayload(file: string, stepIndex: number, step: RawStep): RunPay
     bail(file, stepIndex, "run", "run: must be a string or argv list");
   }
   rejectShellPlaceholders(file, stepIndex, "run", value);
-  return { form: value.includes("\n") ? "block" : "scalar", command: value, shell };
+  const form = value.includes("\n") ? ("block" as const) : ("scalar" as const);
+  return shell ? { form, command: value, shell: shell as ShellName } : { form, command: value };
 }
 
 export function stepReferencedNames(step: FlatStep): string[] {
@@ -561,9 +605,11 @@ export function stepReferencedNames(step: FlatStep): string[] {
     for (const v of Object.values(a.with)) addText(v);
   }
   if (step.when?.kind === "nonempty") names.push(step.when.name);
+  if (step.when?.kind === "eq") names.push(step.when.name);
   if (step.when?.kind === "argv") for (const el of step.when.argv) addText(el);
   if (step.for?.kind === "binding") names.push(step.for.name);
   if (step.retry?.until?.kind === "nonempty") names.push(step.retry.until.name);
+  if (step.retry?.until?.kind === "eq") names.push(step.retry.until.name);
   if (step.retry?.until?.kind === "argv") for (const el of step.retry.until.argv) addText(el);
   return names;
 }
@@ -655,6 +701,7 @@ function flatRun(file: string, stepIndex: number, step: RawStep, out: OutSpec | 
     cwd: typeof step.cwd === "string" ? step.cwd : undefined,
     env: envMap(step),
     ratio: typeof step.ratio === "number" ? step.ratio : undefined,
+    focus: step.focus === false ? false : undefined,
   };
 }
 
@@ -673,6 +720,8 @@ function flatAgent(file: string, stepIndex: number, step: RawStep, out: OutSpec 
     cwd: typeof step.cwd === "string" ? step.cwd : undefined,
     env: envMap(step),
     ratio: typeof step.ratio === "number" ? step.ratio : undefined,
+    focus: step.focus === false ? false : undefined,
+    close: step.close === true ? true : undefined,
   };
 }
 

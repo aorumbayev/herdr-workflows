@@ -167,6 +167,10 @@ export async function tabClose(tabId: string): Promise<void> {
   await herdrCall("tab.close", { tab_id: tabId });
 }
 
+export async function paneClose(paneId: string): Promise<void> {
+  await herdrCall("pane.close", { pane_id: paneId });
+}
+
 export type LayoutApplyResult = { tabId: string; paneId: string; workspaceId: string };
 
 type LayoutPaneNode = {
@@ -406,6 +410,7 @@ export async function placeCommand(
   cwd: string,
   env: Record<string, string> | undefined,
   ratio: number | undefined,
+  focus?: boolean,
 ): Promise<{ tabId: string; paneId: string; workspaceId: string }> {
   if (place === "tab") {
     return opts.deps.layoutApply({
@@ -418,7 +423,7 @@ export async function placeCommand(
         command: argv,
         env: env ?? {},
       },
-      focus: true,
+      focus: focus ?? true,
     });
   }
   if (place === "right" || place === "down") {
@@ -440,7 +445,7 @@ export async function placeCommand(
           env: env ?? {},
         },
       },
-      focus: true,
+      focus: focus ?? true,
     });
   }
   throw new HerdrError("placement_failed", "in: here does not place a pane");

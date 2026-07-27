@@ -99,6 +99,14 @@ export function fillAgentArgv(template: string[], prompt: string): string[] {
   return template.map((part) => (part === "{prompt}" ? prompt : part));
 }
 
+/** herdr-style platform name for the {platform} builtin. */
+export function platformName(platform: string = process.platform): string {
+  if (platform === "darwin") return "macos";
+  if (platform === "linux") return "linux";
+  if (platform === "win32") return "windows";
+  return platform;
+}
+
 /** Walk up from cwd looking for `.git` or `.hwf`. */
 export function resolveRepoRoot(start = process.cwd()): string {
   let dir = start;
@@ -183,6 +191,7 @@ export async function buildPlaceholders(opts: {
     session_file: opts.sessionFile ?? "",
     source_tab: opts.ctx.tabId ?? "",
     agent: opts.agent ?? "",
+    platform: platformName(),
   };
   for (const [name, value] of Object.entries(opts.inputs ?? {})) {
     values[name] = value;

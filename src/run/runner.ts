@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -9,6 +8,7 @@ import {
   herdrCall,
   layoutApply,
   notificationShow,
+  paneClose,
   paneRead,
   reportToken,
   tabClose,
@@ -46,6 +46,7 @@ export type RunnerDeps = {
   agentLabel: typeof agentLabel;
   waitOutput: typeof waitOutput;
   paneRead: typeof paneRead;
+  paneClose: typeof paneClose;
   reportToken: typeof reportToken;
   sessionText: typeof sessionText;
   tabClose: typeof tabClose;
@@ -77,6 +78,8 @@ type StepResult =
       error: string;
       failures?: string[];
       /** true when a non-allow_fail step aborted */ aborted?: boolean;
+      /** true when the failure was the HWF_ env size cap */
+      envOverflow?: boolean;
     };
 
 type StepContext = {
@@ -111,6 +114,7 @@ function defaultDeps(): RunnerDeps {
     agentLabel,
     waitOutput,
     paneRead,
+    paneClose,
     reportToken,
     sessionText,
     tabClose,
@@ -223,6 +227,10 @@ async function evalGuard(
     const nonempty = v.length > 0;
     return guard.negate ? !nonempty : nonempty;
   }
+  if (guard.kind === "eq") {
+    const equal = (values[guard.name] ?? "") === guard.value;
+    return guard.negate ? !equal : equal;
+  }
   if (guard.kind === "argv") {
     const argv = guard.argv.map((el) => substitute(el, values));
     const result = await opts.deps.runArgv(argv, { cwd: opts.ctx.cwd, env });
@@ -263,6 +271,9 @@ async function resolveForItems(
 }
 
 function bindSkippedOuts(step: FlatStep, values: PlaceholderValues): void {
+  if (step.action.kind === "include") {
+    for (const name of step.action.exportedOuts) values[name] = "";
+  }
   if (!step.out) return;
   if (step.out.kind === "text") {
     values[step.out.name] = "";
@@ -283,10 +294,30 @@ function stepLabel(step: FlatStep): string {
   return `use: ${a.workflow}`;
 }
 
+class EnvSizeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "EnvSizeError";
+  }
+}
+
+// Headroom under the ~32 KB Windows env-block ceiling, the tightest spawn limit anywhere.
+const HWF_ENV_CAP_BYTES = 24 * 1024;
+
 function namespaceEnv(values: PlaceholderValues): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
+  let total = 0;
   for (const [name, value] of Object.entries(values)) {
-    if (value !== undefined) env[`HWF_${name}`] = value;
+    // session holds a whole transcript — too big for env; {session_file} is the shell path.
+    if (name === "session" || value === undefined) continue;
+    const bytes = Buffer.byteLength(`HWF_${name}`) + Buffer.byteLength(value);
+    total += bytes;
+    if (total > HWF_ENV_CAP_BYTES) {
+      throw new EnvSizeError(
+        `HWF_${name} is ${Math.ceil(Buffer.byteLength(value) / 1024)} KB, environment block too large for spawn`,
+      );
+    }
+    env[`HWF_${name}`] = value;
   }
   return env;
 }
@@ -297,6 +328,7 @@ type StepExec = {
   skipped?: boolean;
   failed?: FailedStep;
   failures?: string[];
+  envOverflow?: boolean;
 };
 
 async function logStep(
@@ -401,10 +433,36 @@ async function runOneStep(
   total: number,
 ): Promise<StepExec> {
   const label = stepLabel(step);
+  try {
+    return await execOneStep(step, opts, values, n, total, label);
+  } catch (error) {
+    if (!(error instanceof EnvSizeError)) throw error;
+    const message = await fail(opts.deps, opts.name, n, error.message);
+    opts.onProgress?.(n, total, label, "fail");
+    await logStep(opts, n, total, label, message);
+    return { failed: { ok: false, error: message }, envOverflow: true };
+  }
+}
+
+async function execOneStep(
+  step: FlatStep,
+  opts: StepRunOptions,
+  values: PlaceholderValues,
+  n: number,
+  total: number,
+  label: string,
+): Promise<StepExec> {
   // Rebuilt per step (and per item) so `out:` bindings from earlier steps reach HWF_<name>.
-  let env = namespaceEnv(values);
+  // nonempty/eq guards need no env — skip before the env build can throw the size cap.
+  let env: NodeJS.ProcessEnv | undefined;
   if (step.when) {
-    const pass = await evalGuard(step.when, values, opts, env);
+    const needsEnv = step.when.kind === "shell" || step.when.kind === "argv";
+    const pass = await evalGuard(
+      step.when,
+      values,
+      opts,
+      needsEnv ? (env ??= namespaceEnv(values)) : {},
+    );
     if (!pass) {
       bindSkippedOuts(step, values);
       opts.onProgress?.(n, total, label, "skip");
@@ -412,6 +470,7 @@ async function runOneStep(
       return { skipped: true };
     }
   }
+  env ??= namespaceEnv(values);
 
   const items = await resolveForItems(step, values, opts, env);
   if (!items.ok) {
@@ -493,7 +552,11 @@ async function runSteps(
           values,
         );
         if (!recovery.ok) {
-          return { ok: false, error: recovery.error, aborted: true };
+          return {
+            ok: false,
+            error: `${exec.failed.error} (on_error also failed: ${recovery.error})`,
+            aborted: true,
+          };
         }
         // Step recovery already ran — do not chain workflow on_error.
         return {
@@ -507,6 +570,7 @@ async function runSteps(
         error: exec.failed.error,
         aborted: true,
         failures: tolerated.length ? tolerated : undefined,
+        ...(exec.envOverflow ? { envOverflow: true } : {}),
       };
     }
   }
@@ -603,14 +667,21 @@ export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
 
     const primary = await runSteps(workflow.steps, stepOpts, base);
     let result = primary;
-    if (!primary.ok && primary.aborted && workflow.recovery) {
+    // envOverflow recovery is meaningless: the oversized binding sits in base, so every
+    // recovery step would re-throw the same cap error and mis-attribute it to recovery step 1.
+    if (!primary.ok && primary.aborted && !primary.envOverflow && workflow.recovery) {
       const recoveryValues = { ...base, error: primary.error };
       const recovery = await runSteps(
         workflow.recovery.steps,
         { ...stepOpts, name: workflow.recovery.name },
         recoveryValues,
       );
-      result = recovery.ok ? { ok: false, error: primary.error } : recovery;
+      result = {
+        ok: false,
+        error: recovery.ok
+          ? primary.error
+          : `${primary.error} (on_error also failed: ${recovery.error})`,
+      };
     }
 
     await appendRunLog({
@@ -622,7 +693,6 @@ export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
     });
     return result;
   } finally {
-    if (sessionFile) await rm(sessionFile, { force: true }).catch(() => undefined);
     if (opts.ctx.paneId) {
       void deps.reportToken(opts.ctx.paneId, null).catch(() => undefined);
     }

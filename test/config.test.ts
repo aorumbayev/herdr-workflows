@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fillAgentArgv, loadConfig } from "../src/config";
+import { fillAgentArgv, loadConfig, platformName } from "../src/config";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -71,5 +71,15 @@ describe("agents config", () => {
       "claude",
       "line1\nline2",
     ]);
+  });
+});
+
+describe("platformName", () => {
+  test("maps process.platform to herdr platform names", () => {
+    expect(platformName("darwin")).toBe("macos");
+    expect(platformName("linux")).toBe("linux");
+    expect(platformName("win32")).toBe("windows");
+    expect(platformName("freebsd")).toBe("freebsd");
+    expect(platformName()).toBe(platformName(process.platform));
   });
 });
