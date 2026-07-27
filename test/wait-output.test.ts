@@ -28,14 +28,15 @@ async function withFakeHerdr(exitCode: number, run: () => Promise<void>): Promis
 }
 
 describe("waitOutput", () => {
-  test("calls `pane wait-output` with pattern as --regex value and ms timeout", async () => {
+  // herdr rejects `--regex <pattern> <pane_id>` with `unknown option: <pattern>`.
+  test("calls `pane wait-output` with the pane id first and ms timeout", async () => {
     const args = await withFakeHerdr(0, () => waitOutput("w-pane-1", "DONE.*", 60_000));
     expect(args).toEqual([
       "pane",
       "wait-output",
+      "w-pane-1",
       "--regex",
       "DONE.*",
-      "w-pane-1",
       "--timeout",
       "60000",
     ]);
