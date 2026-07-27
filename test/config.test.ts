@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  buildTemplateNamespace,
   loadConfig,
   parseConfigText,
   platformName,
@@ -66,7 +67,19 @@ describe("profiles config", () => {
     );
     await writeFile(join(root, ".hwf", "config.local.yaml"), `default_profile: missing\n`);
     await expect(loadConfig(root)).rejects.toThrow(
-      /default_profile 'missing' is not a merged profile/,
+      new RegExp(
+        `${join(root, ".hwf", "config.local.yaml").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*default_profile 'missing' is not a merged profile`,
+      ),
+    );
+  });
+
+  test("unresolvable default_profile blames the declaring local layer", async () => {
+    const { root } = await fixture();
+    await writeFile(join(root, ".hwf", "config.yaml"), `profiles:\n  claude:\n    kind: claude\n`);
+    const local = join(root, ".hwf", "config.local.yaml");
+    await writeFile(local, `default_profile: nowhere\n`);
+    await expect(loadConfig(root)).rejects.toThrow(
+      new RegExp(`${local.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}, default_profile:`),
     );
   });
 
@@ -132,6 +145,15 @@ describe("profiles config", () => {
       ]),
     ).toBe(true);
     expect(() => parseConfigText("bad.yaml", "agents: {}")).toThrow(/Unrecognized key: "agents"/);
+  });
+
+  test("buildTemplateNamespace accepts optional agent", () => {
+    const ns = buildTemplateNamespace({
+      ctx: { selection: "", cwd: "/repo" },
+      agent: "claude",
+    });
+    expect(ns.context.agent).toBe("claude");
+    expect(buildTemplateNamespace({ ctx: { selection: "", cwd: "/repo" } }).context.agent).toBe("");
   });
 });
 
@@ -245,6 +267,21 @@ describe("inputs and profile choices", () => {
     const wf = await parseWorkflowText(
       "e",
       `version: v1alpha1\ninputs:\n  name: text\nsteps:\n  - run: 'echo "$HWF_name"'\n`,
+    );
+    expect(wf.inputs).toHaveLength(1);
+  });
+
+  test("HWF_ env exact match still required", async () => {
+    await expect(
+      parseWorkflowText(
+        "prefix",
+        `version: v1alpha1\ninputs:\n  foo: text\nsteps:\n  - run: 'echo "$HWF_foobar"'\n`,
+      ),
+    ).rejects.toThrow(/unused input/);
+
+    const wf = await parseWorkflowText(
+      "exact",
+      `version: v1alpha1\ninputs:\n  foo: text\nsteps:\n  - run: 'echo "$HWF_foo"'\n`,
     );
     expect(wf.inputs).toHaveLength(1);
   });

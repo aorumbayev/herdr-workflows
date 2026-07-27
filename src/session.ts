@@ -90,18 +90,12 @@ async function runTranscriptCommand(
   invocationCwd: string,
 ): Promise<string> {
   const cwd = info.cwd || invocationCwd;
-  let result: Awaited<ReturnType<typeof spawnCapture>>;
-  try {
-    result = await spawnCapture(argv, {
-      cwd,
-      env: transcriptEnv(paneId, info, invocationCwd),
-      timeoutMs: TRANSCRIPT_TIMEOUT_MS,
-      maxStdoutBytes: { source: "transcript" },
-    });
-  } catch (error) {
-    if (error instanceof CaptureLimitError) throw error;
-    throw error;
-  }
+  const result = await spawnCapture(argv, {
+    cwd,
+    env: transcriptEnv(paneId, info, invocationCwd),
+    timeoutMs: TRANSCRIPT_TIMEOUT_MS,
+    maxCaptureBytes: { source: "transcript" },
+  });
 
   if (result.timedOut) {
     throw new HerdrError(

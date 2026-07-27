@@ -73,7 +73,16 @@ async function collectWorkflowEntries(repoRoot: string): Promise<WorkflowListEnt
 }
 
 function shellUsesInput(command: string, name: string): boolean {
-  return command.includes(`HWF_${name}`);
+  const prefix = `HWF_${name}`;
+  let from = 0;
+  while (from <= command.length) {
+    const i = command.indexOf(prefix, from);
+    if (i === -1) break;
+    const after = command[i + prefix.length];
+    if (after === undefined || !/[A-Za-z0-9_]/.test(after)) return true;
+    from = i + prefix.length;
+  }
+  return false;
 }
 
 function inputIsUsed(
@@ -125,7 +134,7 @@ export async function resolveDynamicChoices(
       cwd: repoRoot,
       env,
       timeoutMs: DYNAMIC_CHOICE_TIMEOUT_MS,
-      maxStdoutBytes: { source: `inputs.${name} dynamic choice` },
+      maxCaptureBytes: { source: `inputs.${name} dynamic choice` },
     });
   } catch (error) {
     if (error instanceof CaptureLimitError) {
@@ -311,47 +320,19 @@ const EMPTY_CONFIG: WorkflowsConfig = { profiles: {}, transcripts: {} };
 export async function parseWorkflowText(
   name: string,
   yaml: string,
-  config: WorkflowsConfig | Iterable<string> = EMPTY_CONFIG,
+  config: WorkflowsConfig = EMPTY_CONFIG,
   repoRoot: string = process.cwd(),
   file = `${name}.yaml`,
   resolveDynamic = true,
 ): Promise<LoadedWorkflow> {
-  const cfg = iterableToConfig(config);
   const workflow = loadFromRaw(name, file, "repo", parseRaw(file, yaml));
-  return finalizeWorkflow(workflow, cfg, repoRoot, resolveDynamic);
-}
-
-function isWorkflowsConfig(value: unknown): value is WorkflowsConfig {
-  return !!value && typeof value === "object" && !Array.isArray(value) && "profiles" in value;
-}
-
-function iterableToConfig(config: WorkflowsConfig | Iterable<string>): WorkflowsConfig {
-  if (isWorkflowsConfig(config)) {
-    return {
-      profiles: config.profiles,
-      ...(config.default_profile !== undefined ? { default_profile: config.default_profile } : {}),
-      transcripts: config.transcripts ?? {},
-    };
-  }
-  const profiles: WorkflowsConfig["profiles"] = {};
-  for (const name of config) {
-    profiles[name] = { kind: name };
-  }
-  return { profiles, transcripts: {} };
-}
-
-async function resolveConfig(
-  repoRoot: string,
-  config?: WorkflowsConfig | Iterable<string>,
-): Promise<WorkflowsConfig> {
-  if (config === undefined) return loadConfig(repoRoot);
-  return iterableToConfig(config);
+  return finalizeWorkflow(workflow, config, repoRoot, resolveDynamic);
 }
 
 export async function loadWorkflow(
   name: string,
   repoRoot: string,
-  config?: WorkflowsConfig | Iterable<string>,
+  config?: WorkflowsConfig,
 ): Promise<LoadedWorkflow> {
   const resolved = await resolveWorkflowFile(name, repoRoot);
   if (!resolved) throw new WorkflowLoadError(`workflow '${name}' not found`);
@@ -361,13 +342,13 @@ export async function loadWorkflow(
 export async function loadWorkflowEntry(
   entry: WorkflowListEntry,
   repoRoot: string,
-  config?: WorkflowsConfig | Iterable<string>,
+  config?: WorkflowsConfig,
   resolveDynamic = true,
 ): Promise<LoadedWorkflow> {
   if (!(await Bun.file(entry.file).exists())) {
     bail(entry.file, undefined, undefined, "file not found");
   }
-  const cfg = await resolveConfig(repoRoot, config);
+  const cfg = config ?? (await loadConfig(repoRoot));
   const raw = parseRaw(entry.file, await Bun.file(entry.file).text());
   const workflow = loadFromRaw(entry.name, entry.file, entry.source, raw);
   return finalizeWorkflow(workflow, cfg, repoRoot, resolveDynamic);
@@ -375,9 +356,9 @@ export async function loadWorkflowEntry(
 
 export async function listWorkflows(
   repoRoot: string,
-  config?: WorkflowsConfig | Iterable<string>,
+  config?: WorkflowsConfig,
 ): Promise<WorkflowListEntry[]> {
-  const cfg = await resolveConfig(repoRoot, config);
+  const cfg = config ?? (await loadConfig(repoRoot));
   const entries = await collectWorkflowEntries(repoRoot);
   for (const entry of entries) {
     try {

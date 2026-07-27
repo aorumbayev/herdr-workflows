@@ -4,28 +4,34 @@ import { substituteText } from "../../workflow/parse";
 
 const SHELL_TIMEOUT_MS = 300_000;
 
-async function readStreamCapped(
+type CaptureBudget = {
+  source: string;
+  limit: number;
+  total: number;
+  onOverflow: () => void;
+};
+
+async function readStreamAgainstBudget(
   stream: ReadableStream<Uint8Array> | null,
-  opts?: { source: string; maxBytes: number; onOverflow: () => void },
+  budget?: CaptureBudget,
 ): Promise<string> {
   if (!stream) return "";
-  if (!opts) return new Response(stream).text();
+  if (!budget) return new Response(stream).text();
   const reader = stream.getReader();
   const chunks: Uint8Array[] = [];
-  let total = 0;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
     if (!value?.byteLength) continue;
-    total += value.byteLength;
-    if (total > opts.maxBytes) {
-      opts.onOverflow();
+    budget.total += value.byteLength;
+    if (budget.total > budget.limit) {
+      budget.onOverflow();
       try {
         await reader.cancel();
       } catch {
         /* already closed */
       }
-      throw new CaptureLimitError(opts.source, total, opts.maxBytes);
+      throw new CaptureLimitError(budget.source, budget.total, budget.limit);
     }
     chunks.push(value);
   }
@@ -85,7 +91,7 @@ export async function spawnCapture(
     stdin?: string;
     env?: NodeJS.ProcessEnv;
     timeoutMs?: number;
-    maxStdoutBytes?: { source: string; limit?: number };
+    maxCaptureBytes?: { source: string; limit?: number };
   },
 ): Promise<{
   timedOut: boolean;
@@ -113,18 +119,19 @@ export async function spawnCapture(
     killSpawn(proc);
   }, timeoutMs);
 
-  const stdoutOpts = opts.maxStdoutBytes
+  const budget = opts.maxCaptureBytes
     ? {
-        source: opts.maxStdoutBytes.source,
-        maxBytes: opts.maxStdoutBytes.limit ?? CAPTURE_BYTE_LIMIT,
+        source: opts.maxCaptureBytes.source,
+        limit: opts.maxCaptureBytes.limit ?? CAPTURE_BYTE_LIMIT,
+        total: 0,
         onOverflow: () => killSpawn(proc),
       }
     : undefined;
 
   try {
     const [stdout, stderr, exitCode] = await Promise.all([
-      readStreamCapped(proc.stdout, stdoutOpts),
-      new Response(proc.stderr).text(),
+      readStreamAgainstBudget(proc.stdout, budget),
+      readStreamAgainstBudget(proc.stderr, budget),
       proc.exited,
     ]);
     clearTimeout(timer);

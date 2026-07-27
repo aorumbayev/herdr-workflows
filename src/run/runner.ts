@@ -265,7 +265,7 @@ export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
       return await failPrecondition(error instanceof Error ? error.message : String(error));
     }
 
-    const values = await buildTemplateNamespace({
+    const values = buildTemplateNamespace({
       ctx: opts.ctx,
       inputs: inputs.values,
     });

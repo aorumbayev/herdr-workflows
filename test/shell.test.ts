@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { defaultShell, killSpawn, shellArgv } from "../src/run/steps/shell";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { CAPTURE_BYTE_LIMIT } from "../src/limits";
+import { defaultShell, killSpawn, shellArgv, spawnCapture } from "../src/run/steps/shell";
+
+const dirs: string[] = [];
+afterEach(async () => {
+  await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
+});
 
 describe("defaultShell", () => {
   test("sh on POSIX, cmd on win32", () => {
@@ -64,5 +73,18 @@ describe("killSpawn", () => {
     killSpawn({ pid: 4242, kill: () => (childKilled = true) }, "win32");
     expect(calls).toEqual([]);
     expect(childKilled).toBe(true);
+  });
+});
+
+describe("spawnCapture caps", () => {
+  test("stderr flood fails against the shared capture budget", async () => {
+    const root = await mkdtemp(join(tmpdir(), "herdr-workflows-stderr-cap-"));
+    dirs.push(root);
+    await expect(
+      spawnCapture(["bun", "-e", `process.stderr.write(Buffer.alloc(${CAPTURE_BYTE_LIMIT + 1}))`], {
+        cwd: root,
+        maxCaptureBytes: { source: "command" },
+      }),
+    ).rejects.toThrow(new RegExp(`command exceeded ${CAPTURE_BYTE_LIMIT} byte limit`));
   });
 });

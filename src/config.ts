@@ -165,16 +165,29 @@ export async function loadConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<WorkflowsConfig> {
   const merged = emptyConfig();
-  const globalCfg = await loadFile(await globalConfigPath(env));
-  const repoCfg = await loadFile(repoConfigPath(repoRoot));
-  const localCfg = await loadFile(repoLocalConfigPath(repoRoot));
-  if (globalCfg) mergeLayer(merged, globalCfg);
-  if (repoCfg) mergeLayer(merged, repoCfg);
-  if (localCfg) mergeLayer(merged, localCfg);
+  const globalPath = await globalConfigPath(env);
+  const repoPath = repoConfigPath(repoRoot);
+  const localPath = repoLocalConfigPath(repoRoot);
+  const globalCfg = await loadFile(globalPath);
+  const repoCfg = await loadFile(repoPath);
+  const localCfg = await loadFile(localPath);
+  let defaultProfileFile: string | undefined;
+  if (globalCfg) {
+    mergeLayer(merged, globalCfg);
+    if (globalCfg.default_profile !== undefined) defaultProfileFile = globalPath;
+  }
+  if (repoCfg) {
+    mergeLayer(merged, repoCfg);
+    if (repoCfg.default_profile !== undefined) defaultProfileFile = repoPath;
+  }
+  if (localCfg) {
+    mergeLayer(merged, localCfg);
+    if (localCfg.default_profile !== undefined) defaultProfileFile = localPath;
+  }
   if (merged.default_profile !== undefined && !(merged.default_profile in merged.profiles)) {
     throw new ConfigLoadError(
       positioned(
-        repoConfigPath(repoRoot),
+        defaultProfileFile ?? repoPath,
         "default_profile",
         `default_profile '${merged.default_profile}' is not a merged profile`,
       ),
@@ -265,13 +278,14 @@ function platformValue(): PlatformName {
   return "linux";
 }
 
-export async function buildTemplateNamespace(opts: {
+export function buildTemplateNamespace(opts: {
   ctx: InvocationContext;
   inputs?: Record<string, string>;
   steps?: Record<string, unknown>;
+  agent?: string;
   transcript?: string;
   transcriptFile?: string;
-}): Promise<TemplateNamespace> {
+}): TemplateNamespace {
   return {
     inputs: { ...opts.inputs },
     steps: { ...opts.steps },
@@ -280,7 +294,7 @@ export async function buildTemplateNamespace(opts: {
       tab: opts.ctx.tabId ?? "",
       pane: opts.ctx.paneId ?? "",
       worktree: opts.ctx.worktreePath ?? "",
-      agent: "",
+      agent: opts.agent ?? "",
       selection: sanitizeDisplay(opts.ctx.selection),
       platform: platformValue(),
       ...(opts.transcript !== undefined ? { transcript: opts.transcript } : {}),
