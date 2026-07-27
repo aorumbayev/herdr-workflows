@@ -22,10 +22,12 @@ import {
   type WorkflowListEntry,
   type WorkflowStep,
 } from "./types";
+import { assertChildInputContract, assertWorkflowReferences, workflowChildNames } from "./validate";
 
 const DYNAMIC_CHOICE_TIMEOUT_MS = 10_000;
 const DYNAMIC_CHOICE_MAX = 1_000;
 const STDERR_TAIL = 500;
+const EMPTY_CONFIG: WorkflowsConfig = { profiles: {}, transcripts: {} };
 
 function globalDir(): string {
   return join(process.env.HOME ?? homedir(), ".hwf", "workflows");
@@ -298,24 +300,98 @@ function loadFromRaw(
   };
 }
 
+type LoadScope = {
+  repoRoot: string;
+  config: WorkflowsConfig;
+  resolveDynamic: boolean;
+  stack: string[];
+  cache: Map<string, LoadedWorkflow>;
+};
+
+async function loadChild(name: string, scope: LoadScope): Promise<LoadedWorkflow> {
+  if (scope.stack.includes(name)) {
+    throw new WorkflowLoadError(`workflow cycle: ${[...scope.stack, name].join(" → ")}`);
+  }
+  const cached = scope.cache.get(name);
+  if (cached) return cached;
+  const resolved = await resolveWorkflowFile(name, scope.repoRoot);
+  if (!resolved) {
+    throw new WorkflowLoadError(
+      `workflow '${name}' not found (via ${scope.stack.join(" → ") || "entry"})`,
+    );
+  }
+  const raw = parseRaw(resolved.file, await Bun.file(resolved.file).text());
+  const workflow = loadFromRaw(name, resolved.file, resolved.source, raw);
+  const loaded = await finalizeWorkflow(workflow, {
+    ...scope,
+    stack: [...scope.stack, name],
+    resolveDynamic: false,
+  });
+  scope.cache.set(name, loaded);
+  return loaded;
+}
+
 async function finalizeWorkflow(
   workflow: LoadedWorkflow,
-  config: WorkflowsConfig,
-  repoRoot: string,
-  resolveDynamic: boolean,
+  scope: LoadScope,
 ): Promise<LoadedWorkflow> {
   assertInputsUsed(workflow.file, workflow);
   const inputs = await finalizeInputs(
     workflow.file,
     workflow.inputs,
-    config,
-    repoRoot,
-    resolveDynamic,
+    scope.config,
+    scope.repoRoot,
+    scope.resolveDynamic,
   );
-  return { ...workflow, inputs };
-}
+  const withInputs = { ...workflow, inputs };
 
-const EMPTY_CONFIG: WorkflowsConfig = { profiles: {}, transcripts: {} };
+  const childReturnsById = new Map<string, ReturnsSpec | undefined>();
+  const children = new Map<string, LoadedWorkflow>();
+  for (const childName of workflowChildNames(withInputs)) {
+    if (!children.has(childName)) {
+      children.set(childName, await loadChild(childName, scope));
+    }
+  }
+  for (let i = 0; i < withInputs.steps.length; i++) {
+    const step = withInputs.steps[i]!;
+    if (step.action.kind !== "workflow" || !step.id) continue;
+    const child = children.get(step.action.name)!;
+    childReturnsById.set(step.id, child.returns);
+  }
+
+  const producers = assertWorkflowReferences(withInputs.file, withInputs, childReturnsById);
+  const parentInputNames = new Set(withInputs.inputs.map((input) => input.name));
+  const profiles = new Set(profileNames(scope.config));
+
+  for (let i = 0; i < withInputs.steps.length; i++) {
+    const step = withInputs.steps[i]!;
+    if (step.action.kind !== "workflow") continue;
+    const child = children.get(step.action.name)!;
+    assertChildInputContract(
+      withInputs.file,
+      i + 1,
+      step.action.inputs,
+      child,
+      producers,
+      parentInputNames,
+      profiles,
+    );
+  }
+  if (withInputs.onFailure?.kind === "workflow") {
+    const child = children.get(withInputs.onFailure.name)!;
+    assertChildInputContract(
+      withInputs.file,
+      undefined,
+      withInputs.onFailure.inputs,
+      child,
+      producers,
+      parentInputNames,
+      profiles,
+    );
+  }
+
+  return withInputs;
+}
 
 export async function parseWorkflowText(
   name: string,
@@ -326,7 +402,13 @@ export async function parseWorkflowText(
   resolveDynamic = true,
 ): Promise<LoadedWorkflow> {
   const workflow = loadFromRaw(name, file, "repo", parseRaw(file, yaml));
-  return finalizeWorkflow(workflow, config, repoRoot, resolveDynamic);
+  return finalizeWorkflow(workflow, {
+    repoRoot,
+    config,
+    resolveDynamic,
+    stack: [name],
+    cache: new Map(),
+  });
 }
 
 export async function loadWorkflow(
@@ -351,7 +433,13 @@ export async function loadWorkflowEntry(
   const cfg = config ?? (await loadConfig(repoRoot));
   const raw = parseRaw(entry.file, await Bun.file(entry.file).text());
   const workflow = loadFromRaw(entry.name, entry.file, entry.source, raw);
-  return finalizeWorkflow(workflow, cfg, repoRoot, resolveDynamic);
+  return finalizeWorkflow(workflow, {
+    repoRoot,
+    config: cfg,
+    resolveDynamic,
+    stack: [entry.name],
+    cache: new Map(),
+  });
 }
 
 export async function listWorkflows(

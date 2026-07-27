@@ -782,10 +782,16 @@ function parseRunPayload(file: string, stepIndex: number, step: RawStep): RunPay
 function parseReturns(file: string, value: string | Record<string, string>): ReturnsSpec {
   if (typeof value === "string") {
     assertValidTemplates(file, undefined, "returns", value);
+    if (!isWholeValueTemplate(value)) {
+      bail(file, undefined, "returns", "returns: must be a whole-value template");
+    }
     return { kind: "template", template: value };
   }
   for (const [name, template] of Object.entries(value)) {
     assertValidTemplates(file, undefined, `returns.${name}`, template);
+    if (!isWholeValueTemplate(template)) {
+      bail(file, undefined, `returns.${name}`, "returns: must be a whole-value template");
+    }
   }
   return { kind: "map", fields: value };
 }
@@ -968,7 +974,7 @@ function collectTemplatesFromValue(value: unknown, out: TemplatePath[]): void {
   }
 }
 
-function stepTemplates(step: WorkflowStep): TemplatePath[] {
+export function stepTemplates(step: WorkflowStep): TemplatePath[] {
   const out: TemplatePath[] = [];
   if (step.when?.kind === "truthy") {
     const p = parseTemplatePath(step.when.path);

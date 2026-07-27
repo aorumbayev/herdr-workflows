@@ -19,7 +19,7 @@ function scopeDir(scope: ImportScope, repoRoot: string, home: string): string {
 }
 
 /**
- * Schema-only check. Deliberately not the full load path: that resolves `use:` includes and
+ * Schema-only check. Deliberately not the full load path: that resolves child workflows and
  * runs `options:` shell commands, which would execute the payload before the user consents.
  */
 export function checkBundle(payload: string): WorkflowBundle {

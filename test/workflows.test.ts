@@ -1,4 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { WorkflowsConfig } from "../src/config";
+import { loadWorkflow, parseWorkflowText } from "../src/workflow/load";
 import {
   isWholeValueTemplate,
   parseDurationMs,
@@ -11,6 +16,27 @@ import {
   textTemplates,
 } from "../src/workflow/parse";
 import type { TemplateNamespace } from "../src/workflow/types";
+
+const dirs: string[] = [];
+afterEach(async () => {
+  await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
+});
+
+const emptyConfig: WorkflowsConfig = { profiles: {}, transcripts: {} };
+
+async function repoWith(
+  files: Record<string, string>,
+  config: WorkflowsConfig = emptyConfig,
+): Promise<{ root: string; config: WorkflowsConfig }> {
+  const root = await mkdtemp(join(tmpdir(), "herdr-workflows-loader-"));
+  dirs.push(root);
+  const dir = join(root, ".hwf", "workflows");
+  await mkdir(dir, { recursive: true });
+  await Promise.all(
+    Object.entries(files).map(([name, body]) => writeFile(join(dir, `${name}.yaml`), body)),
+  );
+  return { root, config };
+}
 
 const emptyNs: TemplateNamespace = {
   inputs: {},
@@ -478,5 +504,187 @@ describe("typed templates", () => {
       { root: "inputs", segments: ["a"] },
       { root: "steps", segments: ["b", "c"] },
     ]);
+  });
+});
+
+describe("loader references and composition", () => {
+  test("duplicate and forward step ids", async () => {
+    await expect(
+      parseWorkflowText(
+        "dup",
+        `version: v1alpha1\nsteps:\n  - id: a\n    run: "true"\n  - id: a\n    run: "true"\n`,
+      ),
+    ).rejects.toThrow(/duplicate step id 'a'/);
+
+    await expect(
+      parseWorkflowText(
+        "fwd",
+        `version: v1alpha1\nsteps:\n  - run: [echo, "{{steps.later.stdout}}"]\n  - id: later\n    run: [echo, hi]\n`,
+      ),
+    ).rejects.toThrow(/forward reference to step 'later'/);
+  });
+
+  test("background when and tolerated non-command results rejected", async () => {
+    await expect(
+      parseWorkflowText(
+        "bg",
+        `version: v1alpha1\nsteps:\n  - id: launch\n    run: sleep 1\n    background: true\n    pane: { open: tab }\n  - run: [echo, "{{steps.launch.pane_id}}"]\n`,
+      ),
+    ).rejects.toThrow(/background steps produce no result/);
+
+    await expect(
+      parseWorkflowText(
+        "skip",
+        `version: v1alpha1\nsteps:\n  - id: maybe\n    run: [echo, hi]\n    when: "{{inputs.flag}}"\n  - run: [echo, "{{steps.maybe.stdout}}"]\n`,
+      ),
+    ).rejects.toThrow(/unknown input 'flag'|may be skipped by when/);
+
+    await expect(
+      parseWorkflowText(
+        "skip2",
+        `version: v1alpha1\ninputs:\n  flag: text\nsteps:\n  - id: maybe\n    run: [echo, hi]\n    when: "{{inputs.flag}}"\n  - run: [echo, "{{steps.maybe.stdout}}"]\n`,
+      ),
+    ).rejects.toThrow(/may be skipped by when/);
+
+    await expect(
+      parseWorkflowText(
+        "tol-agent",
+        `version: v1alpha1\nsteps:\n  - id: ask\n    agent: hi\n    continue_on_error: true\n  - run: [echo, "{{steps.ask.response}}"]\n`,
+      ),
+    ).rejects.toThrow(/continue_on_error step may fail without a natural result/);
+
+    const ok = await parseWorkflowText(
+      "tol-cmd",
+      `version: v1alpha1\nsteps:\n  - id: probe\n    run: [sh, -c, "exit 1"]\n    continue_on_error: true\n  - run: [echo, "{{steps.probe.exit_code}}"]\n`,
+    );
+    expect(ok.steps).toHaveLength(2);
+  });
+
+  test("managed agent and herdr result fields", async () => {
+    const agent = await parseWorkflowText(
+      "agent",
+      `version: v1alpha1\nsteps:\n  - id: review\n    agent: look\n  - run: [echo, "{{steps.review.response}}", "{{steps.review.pane_id}}"]\n`,
+    );
+    expect(agent.steps).toHaveLength(2);
+
+    await expect(
+      parseWorkflowText(
+        "bad-agent",
+        `version: v1alpha1\nsteps:\n  - id: review\n    agent: look\n  - run: [echo, "{{steps.review.stdout}}"]\n`,
+      ),
+    ).rejects.toThrow(/unknown managed agent result field/);
+
+    const herdr = await parseWorkflowText(
+      "herdr",
+      `version: v1alpha1\nsteps:\n  - id: tree\n    herdr: worktree.create\n  - run: [echo, "{{steps.tree.worktree.path}}"]\n`,
+    );
+    expect(herdr.steps).toHaveLength(2);
+
+    await expect(
+      parseWorkflowText(
+        "bad-herdr",
+        `version: v1alpha1\nsteps:\n  - id: tree\n    herdr: worktree.create\n  - run: [echo, "{{steps.tree.not_a_field}}"]\n`,
+      ),
+    ).rejects.toThrow(/unknown herdr result field/);
+  });
+
+  test("child returns isolation cycles and required inputs", async () => {
+    const { root, config } = await repoWith({
+      inspect: `version: v1alpha1
+inputs:
+  base: text
+returns:
+  findings: "{{steps.review}}"
+steps:
+  - id: review
+    agent: "review {{inputs.base}}"
+`,
+      parent: `version: v1alpha1
+inputs:
+  base: text
+steps:
+  - id: inspection
+    workflow: inspect
+    inputs:
+      base: "{{inputs.base}}"
+  - run: [echo, "{{steps.inspection.findings.response}}"]
+`,
+      leak: `version: v1alpha1
+steps:
+  - run: [echo, "{{steps.diff.stdout}}"]
+`,
+      bare: `version: v1alpha1
+steps:
+  - run: "true"
+`,
+      uses_bare: `version: v1alpha1
+steps:
+  - id: child
+    workflow: bare
+  - run: [echo, "{{steps.child}}"]
+`,
+      a: `version: v1alpha1
+steps:
+  - workflow: b
+`,
+      b: `version: v1alpha1
+steps:
+  - workflow: a
+`,
+      needs: `version: v1alpha1
+inputs:
+  suite: text
+steps:
+  - run: [echo, "{{inputs.suite}}"]
+`,
+      missing: `version: v1alpha1
+steps:
+  - workflow: needs
+`,
+      typed: `version: v1alpha1
+inputs:
+  n: text
+steps:
+  - run: [echo, "{{inputs.n}}"]
+`,
+      bad_type: `version: v1alpha1
+steps:
+  - id: probe
+    run: [echo, hi]
+  - workflow: typed
+    inputs:
+      n: "{{steps.probe}}"
+`,
+    });
+
+    const parent = await loadWorkflow("parent", root, config);
+    expect(parent.steps[0]?.action).toMatchObject({ kind: "workflow", name: "inspect" });
+
+    await expect(loadWorkflow("leak", root, config)).rejects.toThrow(/unknown step id 'diff'/);
+    await expect(loadWorkflow("uses_bare", root, config)).rejects.toThrow(
+      /child workflow declares no returns/,
+    );
+    await expect(loadWorkflow("a", root, config)).rejects.toThrow(/workflow cycle: a → b → a/);
+    await expect(loadWorkflow("missing", root, config)).rejects.toThrow(
+      /missing required child input 'suite'/,
+    );
+    await expect(loadWorkflow("bad_type", root, config)).rejects.toThrow(
+      /must resolve to text \(source type object\)/,
+    );
+  });
+
+  test("returns reject transcript and require whole-value templates", async () => {
+    await expect(
+      parseWorkflowText(
+        "ret",
+        `version: v1alpha1\nreturns: "{{context.transcript}}"\nsteps:\n  - run: "true"\n`,
+      ),
+    ).rejects.toThrow(/cannot reference context\.transcript/);
+
+    expect(() =>
+      parse(
+        `version: v1alpha1\nreturns: "x {{steps.a.stdout}}"\nsteps:\n  - id: a\n    run: "true"\n`,
+      ),
+    ).toThrow(/must be a whole-value template/);
   });
 });
