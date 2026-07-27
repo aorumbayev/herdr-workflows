@@ -814,7 +814,7 @@
     <script>
       const TOKEN = "__HWF_TOKEN__";
       const $ = (id) => document.getElementById(id);
-      let state = { entries: [], agents: [], repoRoot: "" };
+      let state = { entries: [], profiles: [], repoRoot: "" };
       let tab = "workflows";
       let current = null; // {name, scope}
       let openSeq = 0; // last-click-wins token for openWorkflow
@@ -877,7 +877,7 @@
       async function loadState() {
         const { status, data } = await api("/api/state");
         if (status !== 200 || data.error) {
-          state = { entries: [], agents: [], repoRoot: "" };
+          state = { entries: [], profiles: [], repoRoot: "" };
           const pane = $("pane");
           pane.innerHTML = "";
           const p = document.createElement("p");
@@ -886,7 +886,7 @@
           pane.appendChild(p);
           return;
         }
-        state = Object.assign({ entries: [], agents: [], repoRoot: "" }, data);
+        state = Object.assign({ entries: [], profiles: [], repoRoot: "" }, data);
         $("repo").innerHTML = "repo <b>" + esc(state.repoRoot) + "</b>";
         render();
       }
@@ -1076,7 +1076,7 @@
           ].concat(tail);
         if (verb === "agent")
           return [
-            { k: "agent", l: "agent", t: "select", opts: [""].concat(state.agents) },
+            { k: "agent", l: "agent", t: "select", opts: [""].concat(state.profiles) },
             { k: "prompt", l: "prompt", t: "area" },
           ].concat(tail);
         if (verb === "use")
@@ -2009,7 +2009,10 @@
           if (line.includes("#")) return null;
           const named = /^\s*(?:-\s+)?(agent|use)\s*:\s*(\S*)$/.exec(line);
           if (named) {
-            const pool = named[1] === "agent" ? state.agents : state.entries.map((e) => e.name);
+            const pool =
+              named[1] === "agent" || named[1] === "using"
+                ? state.profiles
+                : state.entries.map((e) => e.name);
             return { start: p - named[2].length, prefix: named[2], pool, suffix: "" };
           }
           const key = /^(\s*)(-\s+)?([a-z][a-z0-9_.]*)?$/.exec(line);

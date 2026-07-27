@@ -34,8 +34,7 @@ function pickerState(): PickerState {
     running: false,
     progressLines: [],
     repoRoot: "/repo",
-    agents: {},
-    sessions: {},
+    config: { profiles: {}, transcripts: {} },
     ctx: { selection: "", cwd: "/repo" },
     loadWorkflow: async () => {
       throw new Error("reload failed");
@@ -65,7 +64,7 @@ steps:
 `,
     });
 
-    const entries = await listWorkflows(root);
+    const entries = await listWorkflows(root, { profiles: {}, transcripts: {} });
     expect(entries.find((e) => e.name === "dynamic")?.dynamicOptions).toBe(true);
   });
 
@@ -79,6 +78,7 @@ steps:
     const workflow = await loadWorkflowEntry(
       { name: "entry", source: "global", file: globalFile },
       root,
+      { profiles: {}, transcripts: {} },
     );
     expect(workflow.file).toBe(globalFile);
     expect(workflow.repoOwned).toBe(false);

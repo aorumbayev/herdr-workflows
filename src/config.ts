@@ -1,16 +1,24 @@
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { sanitizeDisplay } from "./herdr";
 import type { PlatformName, TemplateNamespace } from "./workflow/types";
 
-export type AgentsConfig = Record<string, string[]>;
-export type SessionsConfig = Record<string, string[]>;
+export const PROFILE_NAME_RE = /^[a-z][a-z0-9_-]{0,31}$/;
+
+export type AgentProfile = {
+  kind: string;
+  args?: string[];
+};
+
+export type TranscriptExtractor = {
+  command: string[];
+};
 
 export type WorkflowsConfig = {
-  agents: AgentsConfig;
-  sessions: SessionsConfig;
+  profiles: Record<string, AgentProfile>;
+  default_profile?: string;
+  transcripts: Record<string, TranscriptExtractor>;
 };
 
 class ConfigLoadError extends Error {
@@ -20,35 +28,51 @@ class ConfigLoadError extends Error {
   }
 }
 
+const profileSchema = z
+  .object({
+    kind: z.string().min(1),
+    args: z.array(z.string().min(1)).min(1).optional(),
+  })
+  .strict();
+
+const transcriptSchema = z
+  .object({
+    command: z.array(z.string().min(1)).min(1),
+  })
+  .strict();
+
 const configSchema = z
   .object({
-    agents: z.record(z.string(), z.array(z.string()).min(1)),
-    sessions: z.record(z.string(), z.array(z.string()).min(1)).optional(),
+    profiles: z
+      .record(
+        z.string().regex(PROFILE_NAME_RE, "profile name must match [a-z][a-z0-9_-]{0,31}"),
+        profileSchema,
+      )
+      .optional(),
+    default_profile: z
+      .string()
+      .regex(PROFILE_NAME_RE, "default_profile must match [a-z][a-z0-9_-]{0,31}")
+      .optional(),
+    transcripts: z.record(z.string().min(1), transcriptSchema).optional(),
   })
-  .strict()
-  .superRefine((cfg, ctx) => {
-    for (const [name, argv] of Object.entries(cfg.agents)) {
-      const slots = argv.filter((a) => a === "{prompt}");
-      if (slots.length !== 1) {
-        ctx.addIssue({
-          code: "custom",
-          message: `agent '${name}' must contain exactly one "{prompt}" argv element`,
-          path: ["agents", name],
-        });
-      }
-    }
-  });
+  .strict();
 
 function positioned(file: string, key: string | undefined, message: string): string {
   return key ? `${file}, ${key}: ${message}` : `${file}: ${message}`;
 }
 
 function formatIssue(file: string, issue: z.core.$ZodIssue): string {
-  const path = issue.path;
-  let key: string | undefined;
-  if (path.length > 0) key = path.map(String).join(".");
-  else if (issue.code === "unrecognized_keys") key = (issue as { keys: string[] }).keys.join(", ");
-  return positioned(file, key, issue.message);
+  const unknownKeys =
+    issue.code === "unrecognized_keys" ? (issue as { keys: string[] }).keys : undefined;
+  const key = issue.path.length > 0 ? issue.path.map(String).join(".") : unknownKeys?.join(", ");
+  const message = unknownKeys
+    ? unknownKeys.map((k) => `Unrecognized key: "${k}"`).join("; ")
+    : issue.message;
+  return positioned(file, key ?? unknownKeys?.[0], message);
+}
+
+function emptyConfig(): WorkflowsConfig {
+  return { profiles: {}, transcripts: {} };
 }
 
 /** Validate a config YAML buffer through the same schema `loadConfig` uses. */
@@ -61,13 +85,17 @@ export function parseConfigText(file: string, text: string): WorkflowsConfig {
       positioned(file, undefined, error instanceof Error ? error.message : String(error)),
     );
   }
+  if (data === null || data === undefined) return emptyConfig();
   const result = configSchema.safeParse(data);
   if (!result.success) {
     throw new ConfigLoadError(result.error.issues.map((i) => formatIssue(file, i)).join("; "));
   }
   return {
-    agents: result.data.agents,
-    sessions: result.data.sessions ?? {},
+    profiles: result.data.profiles ?? {},
+    ...(result.data.default_profile !== undefined
+      ? { default_profile: result.data.default_profile }
+      : {}),
+    transcripts: result.data.transcripts ?? {},
   };
 }
 
@@ -77,29 +105,93 @@ async function loadFile(file: string): Promise<WorkflowsConfig | undefined> {
   return parseConfigText(file, await f.text());
 }
 
-export function globalConfigPath(): string {
-  return join(process.env.HOME ?? homedir(), ".hwf", "config.yaml");
+const PLUGIN_ID = "herdr-workflows";
+
+/** Resolve the Herdr-owned plugin config directory (never ~/.hwf). */
+export async function resolvePluginConfigDir(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string> {
+  const injected = env.HERDR_PLUGIN_CONFIG_DIR?.trim();
+  if (injected) return injected;
+  const bin = env.HERDR_BIN_PATH?.trim() || "herdr";
+  const proc = Bun.spawn([bin, "plugin", "config-dir", PLUGIN_ID], {
+    stdout: "pipe",
+    stderr: "pipe",
+    env,
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  const dir = stdout.trim();
+  if (exitCode !== 0 || !dir) {
+    throw new ConfigLoadError(
+      `failed to discover plugin config directory via '${bin} plugin config-dir ${PLUGIN_ID}': ${
+        stderr.trim() || `exit ${exitCode}`
+      }`,
+    );
+  }
+  return dir;
+}
+
+export async function globalConfigPath(env: NodeJS.ProcessEnv = process.env): Promise<string> {
+  return join(await resolvePluginConfigDir(env), "config.yaml");
 }
 
 export function repoConfigPath(repoRoot: string): string {
   return join(repoRoot, ".hwf", "config.yaml");
 }
 
-/** Merge global then repo; repo wins per name for agents and sessions independently. */
-export async function loadConfig(repoRoot: string): Promise<WorkflowsConfig> {
-  const globalCfg = (await loadFile(globalConfigPath())) ?? { agents: {}, sessions: {} };
-  const repoCfg = (await loadFile(repoConfigPath(repoRoot))) ?? { agents: {}, sessions: {} };
-  return {
-    agents: { ...globalCfg.agents, ...repoCfg.agents },
-    sessions: { ...globalCfg.sessions, ...repoCfg.sessions },
-  };
+export function repoLocalConfigPath(repoRoot: string): string {
+  return join(repoRoot, ".hwf", "config.local.yaml");
 }
 
-export function fillAgentArgv(template: string[], prompt: string): string[] {
-  return template.map((part) => (part === "{prompt}" ? prompt : part));
+function mergeLayer(into: WorkflowsConfig, layer: WorkflowsConfig): void {
+  for (const [name, profile] of Object.entries(layer.profiles)) {
+    into.profiles[name] = profile;
+  }
+  for (const [kind, extractor] of Object.entries(layer.transcripts)) {
+    into.transcripts[kind] = extractor;
+  }
+  if (layer.default_profile !== undefined) {
+    into.default_profile = layer.default_profile;
+  }
 }
 
-/** herdr-style platform name for the {platform} builtin. */
+/** Merge global → committed repo → local; higher precedence replaces whole entries by name. */
+export async function loadConfig(
+  repoRoot: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<WorkflowsConfig> {
+  const merged = emptyConfig();
+  const globalCfg = await loadFile(await globalConfigPath(env));
+  const repoCfg = await loadFile(repoConfigPath(repoRoot));
+  const localCfg = await loadFile(repoLocalConfigPath(repoRoot));
+  if (globalCfg) mergeLayer(merged, globalCfg);
+  if (repoCfg) mergeLayer(merged, repoCfg);
+  if (localCfg) mergeLayer(merged, localCfg);
+  if (merged.default_profile !== undefined && !(merged.default_profile in merged.profiles)) {
+    throw new ConfigLoadError(
+      positioned(
+        repoConfigPath(repoRoot),
+        "default_profile",
+        `default_profile '${merged.default_profile}' is not a merged profile`,
+      ),
+    );
+  }
+  return merged;
+}
+
+export function profileNames(config: WorkflowsConfig): string[] {
+  return Object.keys(config.profiles).sort();
+}
+
+export function resolveProfile(config: WorkflowsConfig, name: string): AgentProfile | undefined {
+  return config.profiles[name];
+}
+
+/** herdr-style platform name for context.platform. */
 export function platformName(platform: string = process.platform): string {
   if (platform === "darwin") return "macos";
   if (platform === "linux") return "linux";

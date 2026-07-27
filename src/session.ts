@@ -1,8 +1,11 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { SessionsConfig } from "./config";
+import type { TranscriptExtractor } from "./config";
 import { agentSessionInfo, HerdrError, type AgentSessionInfo } from "./herdr";
+import { assertUnderCaptureCap, CaptureLimitError } from "./limits";
 import { spawnCapture } from "./run/steps/shell";
+
+const TRANSCRIPT_TIMEOUT_MS = 30_000;
 
 export function slug(cwd: string): string {
   return cwd.replace(/[^a-zA-Z0-9]/g, "-");
@@ -48,70 +51,115 @@ export async function readClaudeTranscript(
   const path = join(base, slug(cwd), `${sessionId}.jsonl`);
   const file = Bun.file(path);
   if (!(await file.exists())) {
-    throw new HerdrError("session_file_missing", `session file not found: ${path}`);
+    throw new HerdrError("transcript_file_missing", `transcript file not found: ${path}`);
   }
   try {
-    return extractSessionTranscript(await file.text());
+    const text = extractSessionTranscript(await file.text());
+    assertUnderCaptureCap("transcript", text);
+    return text;
   } catch (error) {
-    if (error instanceof HerdrError) throw error;
+    if (error instanceof HerdrError || error instanceof CaptureLimitError) throw error;
     throw new HerdrError(
-      "session_file_unreadable",
-      `session file unreadable: ${path}${error instanceof Error ? ` (${error.message})` : ""}`,
+      "transcript_file_unreadable",
+      `transcript file unreadable: ${path}${error instanceof Error ? ` (${error.message})` : ""}`,
     );
   }
 }
 
-async function runSessionCommand(argv: string[], info: AgentSessionInfo): Promise<string> {
-  const { timedOut, exitCode, stdout, stderr, timeoutMs } = await spawnCapture(argv, {
-    cwd: info.cwd,
-    env: {
-      ...process.env,
-      HERDR_WORKFLOWS_SESSION_ID: info.sessionId,
-      HERDR_WORKFLOWS_SESSION_CWD: info.cwd,
-      HERDR_WORKFLOWS_SESSION_AGENT: info.agent,
-    },
-  });
-
-  if (timedOut) {
-    throw new HerdrError(
-      "session_command_failed",
-      `session command for '${info.agent}' failed: timed out after ${timeoutMs / 1000}s`,
-    );
-  }
-  if (exitCode !== 0) {
-    const tail = stderr.trim().slice(-500) || `exit ${exitCode}`;
-    throw new HerdrError(
-      "session_command_failed",
-      `session command for '${info.agent}' failed: ${tail}`,
-    );
-  }
-  const text = stdout.trim();
-  if (!text) {
-    throw new HerdrError(
-      "session_command_empty",
-      `session command for '${info.agent}' printed nothing`,
-    );
-  }
-  return stdout;
-}
-
-export async function sessionText(
+function transcriptEnv(
   paneId: string,
-  sessions: SessionsConfig = {},
+  info: AgentSessionInfo,
+  invocationCwd: string,
+): NodeJS.ProcessEnv {
+  const cwd = info.cwd || invocationCwd;
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    HWF_TRANSCRIPT_PANE_ID: paneId,
+    HWF_TRANSCRIPT_AGENT_KIND: info.agent,
+    HWF_TRANSCRIPT_CWD: cwd,
+  };
+  if (info.sessionKind) env.HWF_TRANSCRIPT_SESSION_KIND = info.sessionKind;
+  if (info.sessionId) env.HWF_TRANSCRIPT_SESSION_VALUE = info.sessionId;
+  return env;
+}
+
+async function runTranscriptCommand(
+  argv: string[],
+  paneId: string,
+  info: AgentSessionInfo,
+  invocationCwd: string,
+): Promise<string> {
+  const cwd = info.cwd || invocationCwd;
+  let result: Awaited<ReturnType<typeof spawnCapture>>;
+  try {
+    result = await spawnCapture(argv, {
+      cwd,
+      env: transcriptEnv(paneId, info, invocationCwd),
+      timeoutMs: TRANSCRIPT_TIMEOUT_MS,
+      maxStdoutBytes: { source: "transcript" },
+    });
+  } catch (error) {
+    if (error instanceof CaptureLimitError) throw error;
+    throw error;
+  }
+
+  if (result.timedOut) {
+    throw new HerdrError(
+      "transcript_command_failed",
+      `transcript command for '${info.agent}' failed: timed out after ${result.timeoutMs / 1000}s`,
+    );
+  }
+  if (result.exitCode !== 0) {
+    const tail = result.stderr.trim().slice(-500) || `exit ${result.exitCode}`;
+    throw new HerdrError(
+      "transcript_command_failed",
+      `transcript command for '${info.agent}' failed: ${tail}`,
+    );
+  }
+  if (!result.stdout.trim()) {
+    throw new HerdrError(
+      "transcript_command_empty",
+      `transcript command for '${info.agent}' printed nothing`,
+    );
+  }
+  assertUnderCaptureCap("transcript", result.stdout);
+  return result.stdout;
+}
+
+export function hasTranscriptSupport(
+  agentKind: string,
+  transcripts: Record<string, TranscriptExtractor>,
+): boolean {
+  return agentKind in transcripts || agentKind === "claude";
+}
+
+export async function transcriptText(
+  paneId: string,
+  transcripts: Record<string, TranscriptExtractor> = {},
   opts: {
+    invocationCwd: string;
     projectsBase?: string;
     getInfo?: (paneId: string) => Promise<AgentSessionInfo>;
-  } = {},
+  },
 ): Promise<string> {
   const getInfo = opts.getInfo ?? agentSessionInfo;
   const info = await getInfo(paneId);
-  const argv = sessions[info.agent];
-  if (argv) return runSessionCommand(argv, info);
-  if (info.agent === "claude") {
-    return readClaudeTranscript(info.cwd, info.sessionId, opts.projectsBase);
+  const extractor = transcripts[info.agent];
+  if (extractor) {
+    return runTranscriptCommand(extractor.command, paneId, info, opts.invocationCwd);
   }
-  throw new HerdrError(
-    "session_unsupported_agent",
-    `no sessions entry for '${info.agent}' — add one to .hwf/config.yaml (built-in support: claude)`,
-  );
+  if (!hasTranscriptSupport(info.agent, transcripts)) {
+    throw new HerdrError(
+      "transcript_unsupported_kind",
+      `no transcript extractor for '${info.agent}' and no built-in support for that kind`,
+    );
+  }
+  const cwd = info.cwd || opts.invocationCwd;
+  if (!info.sessionId) {
+    throw new HerdrError(
+      "transcript_unsupported_kind",
+      `no transcript extractor for '${info.agent}' and built-in support requires a native session value`,
+    );
+  }
+  return readClaudeTranscript(cwd, info.sessionId, opts.projectsBase);
 }

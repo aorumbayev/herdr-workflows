@@ -113,7 +113,18 @@ const dynamicChoiceSchema = z
   .object({
     run: z.array(z.string().min(1)).min(1),
   })
-  .strict();
+  .strict()
+  .superRefine((dc, ctx) => {
+    for (let i = 0; i < dc.run.length; i++) {
+      if (dc.run[i]!.includes("{{")) {
+        ctx.addIssue({
+          code: "custom",
+          message: "dynamic choice argv rejects templates",
+          path: ["run", i],
+        });
+      }
+    }
+  });
 
 const rawInputMapSchema = z
   .object({
@@ -988,17 +999,28 @@ function stepTemplates(step: WorkflowStep): TemplatePath[] {
   return out;
 }
 
-export function workflowNeedsTranscript(steps: WorkflowStep[], returns?: ReturnsSpec): boolean {
+const SENSITIVE_CONTEXT_KEYS = new Set(["transcript", "transcript_file"]);
+
+function isSensitiveContextPath(path: TemplatePath): boolean {
+  return path.root === "context" && SENSITIVE_CONTEXT_KEYS.has(path.segments[0] ?? "");
+}
+
+export function workflowTemplateRefs(
+  steps: WorkflowStep[],
+  returns?: ReturnsSpec,
+  onFailure?: RecoveryAction,
+): TemplatePath[] {
   const refs = steps.flatMap(stepTemplates);
   if (returns?.kind === "template") refs.push(...textTemplates(returns.template));
   if (returns?.kind === "map") {
     for (const t of Object.values(returns.fields)) refs.push(...textTemplates(t));
   }
-  return refs.some(
-    (p) =>
-      p.root === "context" &&
-      (p.segments[0] === "transcript" || p.segments[0] === "transcript_file"),
-  );
+  if (onFailure) refs.push(...stepTemplates({ action: onFailure }));
+  return refs;
+}
+
+export function workflowNeedsTranscript(steps: WorkflowStep[], returns?: ReturnsSpec): boolean {
+  return workflowTemplateRefs(steps, returns).some(isSensitiveContextPath);
 }
 
 export function workflowNeedsInvokingAgent(steps: WorkflowStep[]): boolean {

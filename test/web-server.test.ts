@@ -13,10 +13,15 @@ afterEach(async () => {
 
 async function repo(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "herdr-workflows-web-"));
-  dirs.push(root);
+  const plugin = await mkdtemp(join(tmpdir(), "herdr-workflows-plugin-"));
+  dirs.push(root, plugin);
+  process.env.HERDR_PLUGIN_CONFIG_DIR = plugin;
   const dir = join(root, ".hwf", "workflows");
   await mkdir(dir, { recursive: true });
-  await writeFile(join(root, ".hwf", "config.yaml"), "agents:\n  claude: [claude, '{prompt}']\n");
+  await writeFile(
+    join(root, ".hwf", "config.yaml"),
+    "profiles:\n  claude:\n    kind: claude\ndefault_profile: claude\n",
+  );
   return root;
 }
 
@@ -49,8 +54,8 @@ describe("web server security", () => {
     const { base, token } = await serve(root);
     const res = await fetch(`${base}/api/state`, { headers: { "x-hwf-token": token } });
     expect(res.status).toBe(200);
-    const data = (await res.json()) as { agents: string[] };
-    expect(data.agents).toContain("claude");
+    const data = (await res.json()) as { profiles: string[] };
+    expect(data.profiles).toContain("claude");
   });
 
   test("workflow GET rejects path-traversal names", async () => {

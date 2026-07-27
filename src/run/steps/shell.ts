@@ -1,7 +1,36 @@
+import { CaptureLimitError, CAPTURE_BYTE_LIMIT } from "../../limits";
 import type { ShellName, TemplateNamespace, WorkflowStep } from "../../workflow/types";
 import { substituteText } from "../../workflow/parse";
 
 const SHELL_TIMEOUT_MS = 300_000;
+
+async function readStreamCapped(
+  stream: ReadableStream<Uint8Array> | null,
+  opts?: { source: string; maxBytes: number; onOverflow: () => void },
+): Promise<string> {
+  if (!stream) return "";
+  if (!opts) return new Response(stream).text();
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value?.byteLength) continue;
+    total += value.byteLength;
+    if (total > opts.maxBytes) {
+      opts.onOverflow();
+      try {
+        await reader.cancel();
+      } catch {
+        /* already closed */
+      }
+      throw new CaptureLimitError(opts.source, total, opts.maxBytes);
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
 
 export type { ShellName };
 
@@ -56,6 +85,7 @@ export async function spawnCapture(
     stdin?: string;
     env?: NodeJS.ProcessEnv;
     timeoutMs?: number;
+    maxStdoutBytes?: { source: string; limit?: number };
   },
 ): Promise<{
   timedOut: boolean;
@@ -83,13 +113,27 @@ export async function spawnCapture(
     killSpawn(proc);
   }, timeoutMs);
 
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  clearTimeout(timer);
-  return { timedOut, exitCode: exitCode ?? 1, stdout, stderr, timeoutMs };
+  const stdoutOpts = opts.maxStdoutBytes
+    ? {
+        source: opts.maxStdoutBytes.source,
+        maxBytes: opts.maxStdoutBytes.limit ?? CAPTURE_BYTE_LIMIT,
+        onOverflow: () => killSpawn(proc),
+      }
+    : undefined;
+
+  try {
+    const [stdout, stderr, exitCode] = await Promise.all([
+      readStreamCapped(proc.stdout, stdoutOpts),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+    clearTimeout(timer);
+    return { timedOut, exitCode: exitCode ?? 1, stdout, stderr, timeoutMs };
+  } catch (error) {
+    clearTimeout(timer);
+    killSpawn(proc);
+    throw error;
+  }
 }
 
 function captureResult(r: {

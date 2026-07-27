@@ -3,70 +3,101 @@ import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../src/config";
-import { detectAgents, formatAgentsYaml, runInit } from "../src/init";
+import { detectProfiles, formatProfilesYaml, runInit } from "../src/init";
 
 const dirs: string[] = [];
+const prevPluginDir = process.env.HERDR_PLUGIN_CONFIG_DIR;
+
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
+  if (prevPluginDir === undefined) delete process.env.HERDR_PLUGIN_CONFIG_DIR;
+  else process.env.HERDR_PLUGIN_CONFIG_DIR = prevPluginDir;
 });
 
+async function withPluginEnv(): Promise<{ root: string; plugin: string }> {
+  const root = await mkdtemp(join(tmpdir(), "herdr-workflows-init-"));
+  const plugin = await mkdtemp(join(tmpdir(), "herdr-workflows-plugin-"));
+  dirs.push(root, plugin);
+  process.env.HERDR_PLUGIN_CONFIG_DIR = plugin;
+  return { root, plugin };
+}
+
 describe("herdr-workflows init", () => {
-  test("fresh init writes agents config", async () => {
-    const root = await mkdtemp(join(tmpdir(), "herdr-workflows-init-"));
-    const home = await mkdtemp(join(tmpdir(), "herdr-workflows-home-"));
-    dirs.push(root, home);
-    const detected = await detectAgents();
-    const result = await runInit(root, { home });
+  test("fresh init writes profiles config and gitignores local", async () => {
+    const { root } = await withPluginEnv();
+    const detected = await detectProfiles();
+    const result = await runInit(root);
     expect(result.kind).toBe("wrote");
     if (result.kind === "exists") throw new Error("unreachable");
     const text = await readFile(result.path, "utf8");
-    expect(text).toContain("agents:");
+    expect(text).toContain("profiles:");
+    expect(text).not.toContain("agents:");
+    expect(text).not.toContain("{prompt}");
+    const ignore = await readFile(join(root, ".hwf", ".gitignore"), "utf8");
+    expect(ignore).toContain("config.local.yaml");
     const cfg = await loadConfig(root);
     for (const name of Object.keys(detected)) {
-      expect(cfg.agents[name]).toEqual(detected[name]);
+      expect(cfg.profiles[name]).toEqual({ kind: name });
+    }
+    if (Object.keys(detected).length > 0) {
+      expect(cfg.default_profile).toBe(Object.keys(detected).sort()[0]);
     }
   });
 
   test("existing config preserved without confirmation", async () => {
-    const root = await mkdtemp(join(tmpdir(), "herdr-workflows-init-"));
-    dirs.push(root);
+    const { root } = await withPluginEnv();
     await mkdir(join(root, ".hwf"), { recursive: true });
     const path = join(root, ".hwf", "config.yaml");
-    await writeFile(path, `agents:\n  claude: ["claude", "{prompt}"]\n`);
+    await writeFile(path, `profiles:\n  claude:\n    kind: claude\n`);
     const result = await runInit(root);
     expect(result.kind).toBe("exists");
     expect(await readFile(path, "utf8")).toContain("claude");
   });
 
-  test("formatAgentsYaml emits prompt slots", () => {
-    expect(formatAgentsYaml({ claude: ["claude", "{prompt}"] })).toContain('"{prompt}"');
+  test("formatProfilesYaml emits kind objects", () => {
+    expect(
+      formatProfilesYaml({
+        profiles: { claude: { kind: "claude" } },
+        default_profile: "claude",
+      }),
+    ).toContain('kind: "claude"');
   });
 
-  test("force init preserves sessions in config", async () => {
-    const root = await mkdtemp(join(tmpdir(), "herdr-workflows-init-"));
-    const home = await mkdtemp(join(tmpdir(), "herdr-workflows-home-"));
-    dirs.push(root, home);
+  test("force init preserves transcripts in config", async () => {
+    const { root } = await withPluginEnv();
     await mkdir(join(root, ".hwf"), { recursive: true });
     const path = join(root, ".hwf", "config.yaml");
     await writeFile(
       path,
-      `agents:\n  claude: ["claude", "{prompt}"]\nsessions:\n  claude: ["claude", "-p", "--output-format", "json", "-"]\n`,
+      `profiles:\n  claude:\n    kind: claude\ntranscripts:\n  claude:\n    command: ["claude", "-p"]\n`,
     );
-    const result = await runInit(root, { force: true, home });
+    const result = await runInit(root, { force: true });
     expect(result.kind).toBe("overwritten");
     const text = await readFile(path, "utf8");
-    expect(text).toContain("sessions:");
+    expect(text).toContain("transcripts:");
     expect(text).toContain("claude:");
     const cfg = await loadConfig(root);
-    expect(cfg.sessions.claude).toEqual(["claude", "-p", "--output-format", "json", "-"]);
+    expect(cfg.transcripts.claude?.command).toEqual(["claude", "-p"]);
   });
 
   test("init seeds no workflows — examples are imported instead", async () => {
-    const root = await mkdtemp(join(tmpdir(), "herdr-workflows-init-"));
-    const home = await mkdtemp(join(tmpdir(), "herdr-workflows-home-"));
-    dirs.push(root, home);
-    await runInit(root, { home });
+    const { root } = await withPluginEnv();
+    await runInit(root);
     expect(await readdir(join(root, ".hwf", "workflows"))).toEqual([]);
-    expect(await readdir(join(home, ".hwf", "workflows"))).toEqual([]);
+  });
+
+  test("init does not write ~/.hwf/config.yaml", async () => {
+    const { root } = await withPluginEnv();
+    const home = await mkdtemp(join(tmpdir(), "herdr-workflows-home-"));
+    dirs.push(home);
+    const prevHome = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      await runInit(root);
+      expect(await Bun.file(join(home, ".hwf", "config.yaml")).exists()).toBe(false);
+    } finally {
+      if (prevHome === undefined) delete process.env.HOME;
+      else process.env.HOME = prevHome;
+    }
   });
 });

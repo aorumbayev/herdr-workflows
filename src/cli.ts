@@ -78,9 +78,11 @@ async function cmdInit(args: string[]): Promise<void> {
     },
   });
   if (result.kind === "exists") die(`${result.path} already exists (pass --force to overwrite)`);
-  const agents = result.agents.length ? ` (${result.agents.join(", ")})` : " (no agents on PATH)";
+  const profiles = result.profiles.length
+    ? ` (${result.profiles.join(", ")})`
+    : " (no agent kinds on PATH)";
   process.stdout.write(
-    `wrote ${result.path}${agents}\n` +
+    `wrote ${result.path}${profiles}\n` +
       `no workflows yet — pick ready-made ones at ${EXAMPLES_URL}\n` +
       `each card copies an \`hwf workflow import\` command you can paste here\n`,
   );
@@ -165,15 +167,14 @@ async function cmdRun(args: string[]): Promise<void> {
   const name = positional[0];
   if (!name) die("usage: hwf|herdr-workflows run <name> [--prompt …] [--input name=value …]");
   const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || resolveRepoRoot();
-  const { agents, sessions } = await loadConfig(repoRoot);
+  const config = await loadConfig(repoRoot);
   const ctx = readInvocationContext();
   ctx.cwd = repoRoot;
   try {
     const result = await runWorkflow({
       name,
       repoRoot,
-      agents,
-      sessions,
+      config,
       ctx,
       prompt: flags.prompt,
       inputs: parseInputFlags(multi.input ?? []),
@@ -234,16 +235,15 @@ async function runPickerPopup(picker: typeof import("./tui/picker")): Promise<vo
 
   const ctx = readInvocationContext();
   const root = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot(ctx.cwd));
-  const { agents, sessions } = await loadConfig(root);
-  const entries = await listWorkflows(root, Object.keys(agents));
+  const config = await loadConfig(root);
+  const entries = await listWorkflows(root, config);
   if (!picker.hasVisibleEntries(entries)) die("no workflows found");
 
   ctx.cwd = root;
   const code = await picker.runPickerSession({
     entries,
     repoRoot: root,
-    agents,
-    sessions,
+    config,
     ctx,
   });
   process.exit(code);

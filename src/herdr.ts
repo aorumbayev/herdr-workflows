@@ -276,7 +276,7 @@ type AgentGetJson = {
     agent?: {
       agent?: unknown;
       agent_status?: unknown;
-      agent_session?: { value?: unknown };
+      agent_session?: { value?: unknown; kind?: unknown };
       cwd?: unknown;
     };
   };
@@ -305,7 +305,12 @@ export async function agentStatus(paneId: string): Promise<string> {
   return status;
 }
 
-export type AgentSessionInfo = { agent: string; sessionId: string; cwd: string };
+export type AgentSessionInfo = {
+  agent: string;
+  sessionId: string;
+  sessionKind?: string;
+  cwd: string;
+};
 
 export async function agentLabel(paneId: string): Promise<string> {
   const info = await agentGet(paneId);
@@ -318,12 +323,19 @@ export async function agentLabel(paneId: string): Promise<string> {
 export async function agentSessionInfo(paneId: string): Promise<AgentSessionInfo> {
   const info = await agentGet(paneId);
   const agent = info?.agent;
-  const sessionId = info?.agent_session?.value;
-  const cwd = info?.cwd;
-  if (typeof agent !== "string" || typeof sessionId !== "string" || typeof cwd !== "string") {
+  if (typeof agent !== "string" || !agent) {
     throw new HerdrError("no_agent_session", "no agent session detected in this pane");
   }
-  return { agent, sessionId, cwd };
+  const session = info?.agent_session;
+  const sessionId = typeof session?.value === "string" ? session.value : "";
+  const sessionKind = typeof session?.kind === "string" ? session.kind : undefined;
+  const cwd = typeof info?.cwd === "string" ? info.cwd : "";
+  return {
+    agent,
+    sessionId,
+    ...(sessionKind !== undefined ? { sessionKind } : {}),
+    cwd,
+  };
 }
 
 export async function waitOutput(paneId: string, match: string, timeoutMs: number): Promise<void> {

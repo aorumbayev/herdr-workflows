@@ -28,8 +28,8 @@ function scopeOf(v: unknown): Scope | undefined {
   return v === "repo" || v === "global" ? v : undefined;
 }
 
-async function agentsOf(repoRoot: string): Promise<string[]> {
-  return Object.keys((await loadConfig(repoRoot)).agents);
+async function configOf(repoRoot: string) {
+  return loadConfig(repoRoot);
 }
 
 function scalar(v: string): string {
@@ -192,8 +192,9 @@ function hostAllowed(value: string | null, port: number): boolean {
 }
 
 async function getState(repoRoot: string): Promise<Response> {
-  const agents = await agentsOf(repoRoot);
-  const entries = await listWorkflows(repoRoot, agents);
+  const config = await configOf(repoRoot);
+  const profiles = Object.keys(config.profiles).sort();
+  const entries = await listWorkflows(repoRoot, config);
   const mapped = await Promise.all(
     entries.map(async (e) => ({
       name: e.name,
@@ -204,7 +205,7 @@ async function getState(repoRoot: string): Promise<Response> {
       inGlobal: await Bun.file(workflowPath("global", repoRoot, e.name)).exists(),
     })),
   );
-  return json({ repoRoot: shortPath(repoRoot), agents, entries: mapped });
+  return json({ repoRoot: shortPath(repoRoot), profiles, entries: mapped });
 }
 
 function handleParse(body: Record<string, unknown>): Response {
@@ -250,8 +251,13 @@ function handleFormat(body: Record<string, unknown>): Response {
 async function handleValidate(repoRoot: string, body: Record<string, unknown>): Promise<Response> {
   const name = String(body.name ?? "buffer");
   try {
-    const agents = await agentsOf(repoRoot);
-    await parseWorkflowText(name, String(body.text ?? ""), agents, repoRoot, `${name}.yaml`);
+    await parseWorkflowText(
+      name,
+      String(body.text ?? ""),
+      await configOf(repoRoot),
+      repoRoot,
+      `${name}.yaml`,
+    );
     return json({ ok: true });
   } catch (error) {
     return json({ ok: false, error: errText(error) }, 400);
@@ -279,7 +285,7 @@ async function writeWorkflow(
 ): Promise<Response> {
   if (!WORKFLOW_NAME_RE.test(name)) return json({ ok: false, error: "invalid workflow name" }, 400);
   try {
-    await parseWorkflowText(name, text, await agentsOf(repoRoot), repoRoot, `${name}.yaml`);
+    await parseWorkflowText(name, text, await configOf(repoRoot), repoRoot, `${name}.yaml`);
   } catch (error) {
     return json({ ok: false, error: errText(error) }, 400);
   }
@@ -306,7 +312,7 @@ async function handleWorkflow(
     let error: string | undefined;
     if (text) {
       try {
-        await parseWorkflowText(name, text, await agentsOf(repoRoot), repoRoot, `${name}.yaml`);
+        await parseWorkflowText(name, text, await configOf(repoRoot), repoRoot, `${name}.yaml`);
       } catch (e) {
         valid = false;
         error = errText(e);
@@ -355,7 +361,7 @@ async function handleConfig(
 ): Promise<Response> {
   const scope = scopeOf(req.method === "GET" ? url.searchParams.get("scope") : body.scope);
   if (!scope) return json({ ok: false, error: "scope required" }, 400);
-  const file = scope === "repo" ? repoConfigPath(repoRoot) : globalConfigPath();
+  const file = scope === "repo" ? repoConfigPath(repoRoot) : await globalConfigPath();
   if (req.method === "GET") {
     const text = await Bun.file(file)
       .text()

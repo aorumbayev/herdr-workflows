@@ -15,7 +15,7 @@ import {
   type KeyEvent,
   type SelectOption,
 } from "@opentui/core";
-import type { AgentsConfig, InvocationContext, SessionsConfig } from "../config";
+import type { InvocationContext, WorkflowsConfig } from "../config";
 import { sanitizeDisplay } from "../herdr";
 import { runWorkflow } from "../run/runner";
 import { loadWorkflowEntry } from "../workflow/load";
@@ -101,13 +101,12 @@ export type PickerState = {
   running: boolean;
   progressLines: string[];
   repoRoot: string;
-  agents: AgentsConfig;
-  sessions: SessionsConfig;
+  config: WorkflowsConfig;
   ctx: InvocationContext;
   loadWorkflow: (
     entry: WorkflowListEntry,
     repoRoot: string,
-    agents: Iterable<string>,
+    config: WorkflowsConfig,
   ) => Promise<LoadedWorkflow>;
   workflow?: LoadedWorkflow;
   renderer: CliRenderer;
@@ -374,8 +373,7 @@ async function prepareWorkflow(
   setRunMode(state, entry);
   try {
     const workflow =
-      state.workflow ??
-      (await state.loadWorkflow(entry, state.repoRoot, Object.keys(state.agents)));
+      state.workflow ?? (await state.loadWorkflow(entry, state.repoRoot, state.config));
     entry.needsTranscript = workflow.needsTranscript;
     entry.inputs = workflow.inputs;
     entry.repoOwned = workflow.repoOwned;
@@ -413,13 +411,11 @@ export async function startRun(
   setRunMode(state, entry);
   try {
     const workflow =
-      state.workflow ??
-      (await state.loadWorkflow(entry, state.repoRoot, Object.keys(state.agents)));
+      state.workflow ?? (await state.loadWorkflow(entry, state.repoRoot, state.config));
     const result = await runWorkflow({
       name: entry.name,
       repoRoot: state.repoRoot,
-      agents: state.agents,
-      sessions: state.sessions,
+      config: state.config,
       ctx: state.ctx,
       prompt: sanitizeDisplay(prompt),
       inputs,
@@ -461,8 +457,7 @@ function mountPickerUi(
   | "running"
   | "progressLines"
   | "repoRoot"
-  | "agents"
-  | "sessions"
+  | "config"
   | "ctx"
   | "workflow"
   | "loadWorkflow"
@@ -542,8 +537,7 @@ function bindPickerEvents(state: PickerState): void {
 export type PickerSessionOpts = {
   entries: WorkflowListEntry[];
   repoRoot: string;
-  agents: AgentsConfig;
-  sessions: SessionsConfig;
+  config: WorkflowsConfig;
   ctx: InvocationContext;
 };
 
@@ -568,8 +562,7 @@ export async function runPickerSession(opts: PickerSessionOpts): Promise<number>
     running: false,
     progressLines: [],
     repoRoot: opts.repoRoot,
-    agents: opts.agents,
-    sessions: opts.sessions,
+    config: opts.config,
     ctx: opts.ctx,
     loadWorkflow: loadWorkflowEntry,
     ...ui,

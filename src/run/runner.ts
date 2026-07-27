@@ -12,14 +12,10 @@ import {
   tabClose,
   waitOutput,
 } from "../herdr";
-import {
-  buildTemplateNamespace,
-  type AgentsConfig,
-  type InvocationContext,
-  type SessionsConfig,
-} from "../config";
+import { buildTemplateNamespace, type InvocationContext, type WorkflowsConfig } from "../config";
+import { assertUnderHwfEnvCap } from "../limits";
 import { appendRunLog } from "../runlog";
-import { sessionText } from "../session";
+import { transcriptText } from "../session";
 import type { InputSpec, LoadedWorkflow, TemplateNamespace, WorkflowStep } from "../workflow/types";
 import { loadWorkflow } from "../workflow/load";
 import { agentStep } from "./steps/agent";
@@ -40,7 +36,7 @@ type RunnerDeps = {
   paneRead: typeof paneRead;
   paneClose: typeof paneClose;
   reportToken: typeof reportToken;
-  sessionText: typeof sessionText;
+  transcriptText: typeof transcriptText;
   tabClose: typeof tabClose;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
@@ -60,7 +56,7 @@ type StepResult =
 
 type StepRunOptions = {
   name: string;
-  agents: AgentsConfig;
+  config: WorkflowsConfig;
   ctx: InvocationContext;
   deps: RunnerDeps;
   runId: string;
@@ -113,7 +109,7 @@ function defaultDeps(): RunnerDeps {
     paneRead,
     paneClose,
     reportToken,
-    sessionText,
+    transcriptText,
     tabClose,
   };
 }
@@ -213,8 +209,7 @@ bindIncludeRunSteps(runSteps);
 export type RunOptions = {
   name: string;
   repoRoot: string;
-  agents: AgentsConfig;
-  sessions?: SessionsConfig;
+  config: WorkflowsConfig;
   ctx: InvocationContext;
   prompt?: string;
   inputs?: Record<string, string>;
@@ -234,11 +229,10 @@ export type RunResult = StepResult;
 export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
   const deps = { ...defaultDeps(), ...opts.deps };
   const runId = randomUUID().slice(0, 8);
-  const workflow =
-    opts.workflow ?? (await loadWorkflow(opts.name, opts.repoRoot, Object.keys(opts.agents)));
+  const workflow = opts.workflow ?? (await loadWorkflow(opts.name, opts.repoRoot, opts.config));
   const stepOpts = {
     name: workflow.name,
-    agents: opts.agents,
+    config: opts.config,
     ctx: opts.ctx,
     deps,
     runId,
@@ -261,6 +255,15 @@ export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
   try {
     const inputs = resolveInputValues(workflow.inputs, opts.inputs);
     if (!inputs.ok) return await failPrecondition(inputs.error);
+
+    const hwfBlock = Object.entries(inputs.values)
+      .map(([name, value]) => `HWF_${name}=${value}`)
+      .join("\n");
+    try {
+      assertUnderHwfEnvCap("HWF environment", hwfBlock);
+    } catch (error) {
+      return await failPrecondition(error instanceof Error ? error.message : String(error));
+    }
 
     const values = await buildTemplateNamespace({
       ctx: opts.ctx,
