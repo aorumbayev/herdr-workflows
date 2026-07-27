@@ -12,6 +12,9 @@ export type RunLogEntry = {
   label?: string;
   ok: boolean;
   skipped?: boolean;
+  launched?: boolean;
+  blocked?: boolean;
+  interrupted?: boolean;
   error?: string;
 };
 
@@ -19,7 +22,7 @@ const RUN_LOG_MAX_BYTES = 512_000;
 const RUN_LOG_KEEP_LINES = 2_000;
 const RUN_LOG_READ_TAIL_BYTES = 128_000;
 
-function runLogPath(): string {
+export function runLogPath(): string {
   return join(pluginStateDir(), "runs.jsonl");
 }
 

@@ -18,13 +18,21 @@ import {
 import { assertUnderHwfEnvCap } from "../limits";
 import { appendRunLog } from "../runlog";
 import { transcriptText } from "../session";
-import { workflowTemplateRefs } from "../workflow/parse";
-import type { InputSpec, LoadedWorkflow, TemplateNamespace, WorkflowStep } from "../workflow/types";
+import { renderScalar, substituteValue, workflowTemplateRefs } from "../workflow/parse";
+import type {
+  InputSpec,
+  LoadedWorkflow,
+  RecoveryAction,
+  TemplateNamespace,
+  WhenSpec,
+  WorkflowStep,
+} from "../workflow/types";
 import { loadWorkflow } from "../workflow/load";
 import {
   errorText,
   type RunnerDeps,
   type StepCtx,
+  type StepFailure,
   type StepOutcome,
   type StepRunOpts,
   type StepsResult,
@@ -120,53 +128,237 @@ function bindResult(step: WorkflowStep, values: TemplateNamespace, outcome: Step
   values.steps[step.id] = outcome.result;
 }
 
+function isTruthyScalar(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0 && Number.isFinite(value);
+  if (typeof value === "string") return value !== "";
+  return true;
+}
+
+function evaluateWhen(when: WhenSpec, values: TemplateNamespace): boolean {
+  const resolved = substituteValue(`{{${when.path}}}`, values);
+  if (when.kind === "truthy") return isTruthyScalar(resolved);
+  const left = renderScalar(resolved);
+  return when.negate ? left !== when.value : left === when.value;
+}
+
+function retryOf(step: WorkflowStep): { attempts: number; delayMs?: number } | undefined {
+  const action = step.action;
+  if (action.kind === "run" || action.kind === "herdr") return action.retry;
+  return undefined;
+}
+
+function failureOf(
+  opts: StepRunOpts,
+  step: WorkflowStep,
+  stepIndex: number,
+  outcome: Extract<StepOutcome, { ok: false }>,
+): StepFailure {
+  if (outcome.failure) return outcome.failure;
+  return {
+    message: outcome.error,
+    workflow: opts.name,
+    action: step.action.kind,
+    step_number: stepIndex,
+    workflow_path: [...opts.workflowPath],
+    ...(step.id ? { step_id: step.id } : {}),
+    details: {
+      ...outcome.details,
+      ...(step.action.kind === "herdr" ? { method: step.action.method } : {}),
+      ...(step.action.kind === "workflow" ? { workflow: step.action.name } : {}),
+    },
+  };
+}
+
+async function executeOnce(
+  step: WorkflowStep,
+  stepIndex: number,
+  values: TemplateNamespace,
+  opts: StepRunOpts,
+): Promise<StepOutcome> {
+  return RUNNERS[step.action.kind]({ step, stepIndex, values, opts });
+}
+
+async function executeWithRetry(
+  step: WorkflowStep,
+  stepIndex: number,
+  values: TemplateNamespace,
+  opts: StepRunOpts,
+): Promise<StepOutcome> {
+  const retry = retryOf(step);
+  const attempts = retry?.attempts ?? 1;
+  let last: StepOutcome | undefined;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    last = await executeOnce(step, stepIndex, values, opts);
+    if (last.ok || last.coordinationLost) return last;
+    if (attempt < attempts && retry?.delayMs) await opts.deps.sleep(retry.delayMs);
+    if (attempt < attempts) continue;
+  }
+  return last ?? { ok: false, error: "internal: retry produced no outcome" };
+}
+
+async function logStep(
+  opts: StepRunOpts,
+  stepIndex: number,
+  total: number,
+  label: string,
+  entry: {
+    ok: boolean;
+    error?: string;
+    skipped?: boolean;
+    launched?: boolean;
+    blocked?: boolean;
+    interrupted?: boolean;
+  },
+): Promise<void> {
+  await appendRunLog({
+    ts: new Date().toISOString(),
+    run: opts.runId,
+    workflow: opts.name,
+    step: stepIndex,
+    total,
+    label,
+    ...entry,
+  });
+}
+
+async function hardStepFailure(
+  opts: StepRunOpts,
+  step: WorkflowStep,
+  stepIndex: number,
+  total: number,
+  label: string,
+  outcome: Extract<StepOutcome, { ok: false }>,
+  tolerated: string[],
+  interrupted: boolean,
+): Promise<StepsResult> {
+  const error = await fail(opts.deps, opts.name, stepIndex, outcome.error);
+  await logStep(opts, stepIndex, total, label, {
+    ok: false,
+    error,
+    ...(interrupted ? { interrupted: true } : {}),
+  });
+  return {
+    ok: false,
+    error,
+    aborted: true,
+    ...(interrupted ? { coordinationLost: true } : {}),
+    failure: failureOf(opts, step, stepIndex, outcome),
+    ...(tolerated.length > 0 ? { failures: tolerated } : {}),
+  };
+}
+
 async function runSteps(
   steps: WorkflowStep[],
   opts: StepRunOpts,
   values: TemplateNamespace,
 ): Promise<StepsResult> {
   const total = steps.length;
+  const tolerated: string[] = [];
   let n = 0;
   for (const step of steps) {
     n++;
     const label = stepLabel(step);
+    if (step.when && !evaluateWhen(step.when, values)) {
+      opts.onProgress?.(n, total, label, "skip");
+      await logStep(opts, n, total, label, { ok: true, skipped: true });
+      continue;
+    }
     opts.onProgress?.(n, total, label);
-    const outcome = await RUNNERS[step.action.kind]({ step, stepIndex: n, values, opts });
+    const outcome = await executeWithRetry(step, n, values, opts);
     if (!outcome.ok) {
-      const error = await fail(opts.deps, opts.name, n, outcome.error);
+      if (outcome.coordinationLost) {
+        return hardStepFailure(opts, step, n, total, label, outcome, tolerated, true);
+      }
+      if (step.continueOnError) {
+        tolerated.push(outcome.error);
+        opts.onProgress?.(n, total, label, "fail");
+        await logStep(opts, n, total, label, { ok: false, error: outcome.error });
+        continue;
+      }
+      return hardStepFailure(opts, step, n, total, label, outcome, tolerated, false);
+    }
+    bindResult(step, values, outcome);
+    const progress =
+      outcome.skipped === true ? "skip" : outcome.launched === true ? "launch" : "ok";
+    opts.onProgress?.(n, total, label, progress);
+    await logStep(opts, n, total, label, {
+      ok: true,
+      ...(outcome.skipped === true ? { skipped: true } : {}),
+      ...(outcome.launched === true ? { launched: true } : {}),
+      ...(outcome.blocked === true ? { blocked: true } : {}),
+    });
+  }
+  if (tolerated.length) return { ok: false, error: tolerated.join("; "), failures: tolerated };
+  return { ok: true };
+}
+
+bindIncludeRunSteps(runSteps);
+
+async function runRecovery(
+  action: RecoveryAction,
+  opts: StepRunOpts,
+  values: TemplateNamespace,
+  failure: StepFailure,
+): Promise<StepOutcome> {
+  const recoveryValues: TemplateNamespace = {
+    inputs: values.inputs,
+    steps: values.steps,
+    context: { ...values.context, error: failure },
+  };
+  return executeOnce({ action }, 0, recoveryValues, {
+    ...opts,
+    isEntry: false,
+    workflowPath: [...opts.workflowPath, `${opts.name}:on_failure`],
+  });
+}
+
+async function finalizeEntryRun(
+  primary: StepsResult,
+  workflow: LoadedWorkflow,
+  opts: StepRunOpts,
+  values: TemplateNamespace,
+  runId: string,
+): Promise<StepsResult> {
+  if (
+    !primary.ok &&
+    primary.aborted === true &&
+    primary.coordinationLost !== true &&
+    workflow.onFailure &&
+    primary.failure
+  ) {
+    const recovery = await runRecovery(workflow.onFailure, opts, values, primary.failure);
+    if (!recovery.ok) {
+      const error = `${primary.error}; on_failure failed: ${recovery.error}`;
       await appendRunLog({
         ts: new Date().toISOString(),
-        run: opts.runId,
-        workflow: opts.name,
-        step: n,
-        total,
-        label,
+        run: runId,
+        workflow: workflow.name,
         ok: false,
         error,
+        ...(recovery.coordinationLost === true ? { interrupted: true } : {}),
       });
       return {
         ok: false,
         error,
         aborted: true,
-        ...(outcome.coordinationLost ? { coordinationLost: true } : {}),
+        failure: primary.failure,
+        ...(primary.failures !== undefined ? { failures: primary.failures } : {}),
+        ...(recovery.coordinationLost === true ? { coordinationLost: true } : {}),
       };
     }
-    bindResult(step, values, outcome);
-    await appendRunLog({
-      ts: new Date().toISOString(),
-      run: opts.runId,
-      workflow: opts.name,
-      step: n,
-      total,
-      label,
-      ok: true,
-      ...(outcome.skipped ? { skipped: true } : {}),
-    });
   }
-  return { ok: true };
+  await appendRunLog({
+    ts: new Date().toISOString(),
+    run: runId,
+    workflow: workflow.name,
+    ok: primary.ok,
+    ...(!primary.ok ? { error: primary.error } : {}),
+    ...(!primary.ok && primary.coordinationLost === true ? { interrupted: true } : {}),
+  });
+  return primary;
 }
-
-bindIncludeRunSteps(runSteps);
 
 const IDENTITY_KEYS = ["workspace", "tab", "pane", "worktree"] as const;
 const TRANSCRIPT_KEYS = ["transcript", "transcript_file"];
@@ -323,14 +515,7 @@ export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
     transcriptFile = context.transcriptFile;
 
     const primary = await runSteps(workflow.steps, stepOpts, context.values);
-    await appendRunLog({
-      ts: new Date().toISOString(),
-      run: runId,
-      workflow: workflow.name,
-      ok: primary.ok,
-      ...(primary.ok ? {} : { error: primary.error }),
-    });
-    return primary;
+    return finalizeEntryRun(primary, workflow, stepOpts, context.values, runId);
   } finally {
     if (transcriptFile) await rm(transcriptFile, { force: true }).catch(() => undefined);
     if (opts.ctx.paneId) {

@@ -9,9 +9,25 @@ import { HerdrError } from "../herdr";
 import { assertUnderCaptureCap } from "../limits";
 import type { TemplateNamespace, WorkflowStep } from "../workflow/types";
 
+export type StepFailure = {
+  message: string;
+  workflow: string;
+  action: "agent" | "run" | "herdr" | "workflow";
+  step_number: number;
+  workflow_path: string[];
+  step_id?: string;
+  details: Record<string, unknown>;
+};
+
 export type StepOutcome =
-  | { ok: true; result?: unknown; skipped?: boolean; launched?: boolean }
-  | { ok: false; error: string; details?: Record<string, unknown>; coordinationLost?: boolean };
+  | { ok: true; result?: unknown; skipped?: boolean; launched?: boolean; blocked?: boolean }
+  | {
+      ok: false;
+      error: string;
+      details?: Record<string, unknown>;
+      coordinationLost?: boolean;
+      failure?: StepFailure;
+    };
 
 export type RunnerDeps = {
   herdrCall: (method: string, params?: Record<string, unknown>) => Promise<Record<string, unknown>>;
@@ -59,6 +75,7 @@ export type StepsResult =
       failures?: string[];
       aborted?: boolean;
       coordinationLost?: boolean;
+      failure?: StepFailure;
     };
 
 export type RunSteps = (

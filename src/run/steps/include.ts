@@ -118,6 +118,7 @@ async function runChild(
       ok: false,
       error: result.error,
       details: { workflow: child.name },
+      ...(result.failure ? { failure: result.failure } : {}),
       ...(result.coordinationLost ? { coordinationLost: true } : {}),
     };
   }
