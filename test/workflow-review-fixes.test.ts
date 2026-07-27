@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { listWorkflows, loadWorkflowEntry } from "../src/workflow/load";
 import type { PickerState } from "../src/tui/picker";
 import { acceptWorkflow, startRun } from "../src/tui/picker";
+import type { LoadedWorkflow } from "../src/workflow/types";
 
 const dirs: string[] = [];
 
@@ -93,22 +94,34 @@ steps:
     expect(String(state.footer.content)).toBe("enter/esc close");
   });
 
-  test("global entries with repo-owned composition require confirmation", () => {
+  test("picker loads selected workflows without a second confirmation gate", async () => {
     const state = pickerState();
     let loads = 0;
-    state.loadWorkflow = async () => {
+    state.loadWorkflow = async (entry) => {
       loads += 1;
-      throw new Error("must not load before confirmation");
+      const workflow: LoadedWorkflow = {
+        name: entry.name,
+        file: entry.file,
+        version: "v1alpha1",
+        hidden: false,
+        steps: [{ action: { kind: "run", payload: { form: "argv", argv: ["true"] } } }],
+        inputs: [],
+        repoOwned: entry.source === "repo",
+        needsTranscript: false,
+        needsInvokingAgent: false,
+      };
+      return workflow;
     };
 
     acceptWorkflow(state, {
       name: "global-entry",
       source: "global",
       file: "/global/entry.yaml",
-      repoOwned: true,
+      repoOwned: false,
     });
 
-    expect(state.mode).toBe("confirm");
-    expect(loads).toBe(0);
+    await Bun.sleep(0);
+    expect(loads).toBe(1);
+    expect(state.mode).not.toBe("list");
   });
 });

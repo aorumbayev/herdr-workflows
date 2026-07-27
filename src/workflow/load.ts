@@ -22,6 +22,7 @@ import {
   type WorkflowListEntry,
   type WorkflowStep,
 } from "./types";
+import { analyzeWorkflowSensitivity } from "./trust";
 import { assertChildInputContract, assertWorkflowReferences, workflowChildNames } from "./validate";
 
 const DYNAMIC_CHOICE_TIMEOUT_MS = 10_000;
@@ -457,10 +458,19 @@ export async function listWorkflows(
     try {
       const workflow = await loadWorkflowEntry(entry, repoRoot, cfg, false);
       entry.hidden = workflow.hidden;
+      entry.title = workflow.title;
+      entry.description = workflow.description;
       entry.needsTranscript = workflow.needsTranscript;
       entry.inputs = workflow.inputs;
       entry.repoOwned = workflow.repoOwned;
       entry.dynamicOptions = workflow.inputs.some((input) => input.dynamicOptions !== undefined);
+      const flags = analyzeWorkflowSensitivity(
+        workflow.steps,
+        workflow.returns,
+        workflow.onFailure,
+      );
+      entry.hasCommands = flags.hasCommands;
+      entry.sensitiveMethods = flags.sensitiveMethods;
     } catch (error) {
       entry.error = error instanceof Error ? error.message : String(error);
     }

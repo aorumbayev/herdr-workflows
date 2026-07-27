@@ -11,9 +11,10 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
 
+const exactBody = "version: v1alpha1\nsteps:\n  - run: bun test\n";
 const bundle = {
   v: 1 as const,
-  files: [{ name: "demo", body: "version: v1alpha1\nsteps:\n  - run: bun test\n" }],
+  files: [{ name: "demo", body: exactBody }],
 };
 
 async function scratch(): Promise<{ root: string; home: string }> {
@@ -45,14 +46,63 @@ describe("workflow bundle payloads", () => {
     );
   });
 
-  test("checkBundle rejects a payload whose YAML is not a workflow", () => {
+  test("checkBundle rejects non-v1alpha1 YAML with the ordinary load error", () => {
     expect(() =>
       checkBundle(encodeBundle({ v: 1, files: [{ name: "bad", body: "nope: 1\n" }] })),
-    ).toThrow(/version is required|steps is required/);
+    ).toThrow(/version is required|steps is required|unsupported workflow format/);
+    expect(() =>
+      checkBundle(
+        encodeBundle({
+          v: 1,
+          files: [{ name: "legacy", body: "version: experimental\nsteps:\n  - run: x\n" }],
+        }),
+      ),
+    ).toThrow(/unsupported workflow format/);
+    expect(() =>
+      checkBundle(
+        encodeBundle({
+          v: 1,
+          files: [
+            {
+              name: "legacy-keys",
+              body: "version: v1alpha1\nsteps:\n  - run: x\n    out: y\n",
+            },
+          ],
+        }),
+      ),
+    ).toThrow(/Unrecognized key|out/);
+  });
+
+  test("preview shows full YAML and flags transcript and commands", () => {
+    const withTranscript = {
+      v: 1 as const,
+      files: [
+        {
+          name: "review",
+          body: `version: v1alpha1
+title: Review
+description: Uses transcript
+steps:
+  - agent: "see {{context.transcript}}"
+    using: claude
+  - herdr: pane.close
+    params: { pane_id: "{{context.pane}}" }
+`,
+        },
+      ],
+    };
+    const preview = previewText(withTranscript);
+    expect(preview).toContain("--- review.yaml (Review) ---");
+    expect(preview).toContain("⚠ sensitive:");
+    expect(preview).toContain("transcript");
+    expect(preview).toContain("herdr:pane.close");
+    expect(preview).toContain("see {{context.transcript}}");
+    expect(preview).toContain(withTranscript.files[0]!.body);
   });
 
   test("preview names every file it would write", () => {
-    expect(previewText(bundle)).toContain("--- demo.yaml ---");
+    expect(previewText(bundle)).toContain("--- demo.yaml");
+    expect(previewText(bundle)).toContain("commands");
   });
 });
 
@@ -81,6 +131,18 @@ describe("hwf workflow import", () => {
         },
       ]);
     }
+  });
+
+  test("written YAML is preserved exactly with no reformatting", async () => {
+    const { root, home } = await scratch();
+    const odd = "version: v1alpha1\nsteps:\n- run:  [echo,  hi]\n";
+    const outcome = await runImport(encodeBundle({ v: 1, files: [{ name: "odd", body: odd }] }), {
+      repoRoot: root,
+      home,
+      scope: "repo",
+    });
+    if ("aborted" in outcome) throw new Error("unreachable");
+    expect(await readFile(outcome.results[0]!.path, "utf8")).toBe(odd);
   });
 
   test("an existing file is kept unless force", async () => {
@@ -118,11 +180,5 @@ describe("hwf workflow import", () => {
     expect(parseImportScope("R")).toBe("repo");
     expect(parseImportScope("global")).toBe("global");
     expect(parseImportScope("nope")).toBeUndefined();
-  });
-});
-
-describe("examples gallery", () => {
-  test("section 6 rewrites examples to v1alpha1", () => {
-    // Prior gallery coverage depended on the removed experimental grammar.
   });
 });

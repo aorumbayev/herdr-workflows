@@ -19,6 +19,7 @@ import type { InvocationContext, WorkflowsConfig } from "../config";
 import { sanitizeDisplay } from "../herdr";
 import { runWorkflow } from "../run/runner";
 import { loadWorkflowEntry } from "../workflow/load";
+import { sensitivityLabels, workflowDisplayTitle } from "../workflow/trust";
 import type { InputSpec, LoadedWorkflow, WorkflowListEntry } from "../workflow/types";
 import { resolveHostTheme, type HostTheme } from "./theme";
 
@@ -54,14 +55,23 @@ export function filterWorkflowEntries(
   };
 }
 
+export function entrySensitivity(entry: WorkflowListEntry): string[] {
+  return sensitivityLabels({
+    hasCommands: entry.hasCommands === true,
+    hasTranscript: entry.needsTranscript === true,
+    sensitiveMethods: entry.sensitiveMethods ?? [],
+  });
+}
+
 export function buildPickerOptions(valid: WorkflowListEntry[]): SelectOption[] {
   return valid.map((entry) => {
-    const parts = [entry.name, entry.source];
+    const title = workflowDisplayTitle(entry.name, entry.title);
+    const parts = [title, entry.source === "repo" ? "repo" : "global"];
     if (entry.inputs?.length) parts.push("inputs");
-    if (entry.needsTranscript) parts.push("transcript");
+    parts.push(...entrySensitivity(entry));
     return {
       name: parts.join(" · "),
-      description: "",
+      description: entry.description?.trim() || entry.name,
       value: { entry } satisfies PickerRowValue,
     };
   });
@@ -90,7 +100,7 @@ export function filterChoiceOptions(options: string[], filter: string): string[]
 }
 
 export type PickerState = {
-  mode: "list" | "input" | "prompt" | "run" | "confirm";
+  mode: "list" | "input" | "prompt" | "run";
   entries: WorkflowListEntry[];
   pending?: WorkflowListEntry;
   inputQueue: InputSpec[];
@@ -202,21 +212,20 @@ function setListMode(state: PickerState): void {
   state.filter.focus();
 }
 
-function setConfirmMode(state: PickerState, entry: WorkflowListEntry): void {
-  state.mode = "confirm";
-  state.pending = entry;
-  hideBrowserChrome(state);
-  showStatus(state, `${entry.name} · workflow may run shell commands`);
-  state.footer.content = "enter run · esc cancel";
+function inputStatusLine(entry: WorkflowListEntry, spec: InputSpec): string {
+  const title = workflowDisplayTitle(entry.name, entry.title);
+  const kind = spec.type === "profile" ? "profile" : spec.type === "choice" ? "choice" : "text";
+  const desc = spec.description?.trim() ? ` — ${spec.description.trim()}` : "";
+  return `${title} · ${entry.source} · ${spec.name} (${kind})${desc}`;
 }
 
 function setInputMode(state: PickerState, entry: WorkflowListEntry, spec: InputSpec): void {
   state.mode = "input";
   state.pending = entry;
   state.invalid.visible = false;
-  showStatus(state, `${entry.name} · ${spec.name}`);
-  if (spec.options) {
-    state.choiceOptions = spec.options;
+  showStatus(state, inputStatusLine(entry, spec));
+  if (spec.type === "choice" || spec.type === "profile") {
+    state.choiceOptions = spec.options ?? [];
     showBrowserChrome(state);
     applyChoiceFilter(state);
     const preselect = spec.default
@@ -268,17 +277,9 @@ function navigateSelectList(state: PickerState, key: KeyEvent): boolean {
 }
 
 function handleInputKey(state: PickerState, key: KeyEvent): void {
-  if (!state.inputQueue[state.inputIndex]?.options) return;
+  const spec = state.inputQueue[state.inputIndex];
+  if (!spec || (spec.type !== "choice" && spec.type !== "profile")) return;
   navigateSelectList(state, key);
-}
-
-function handleConfirmKey(state: PickerState, key: KeyEvent): void {
-  if (key.name === "return" || key.name === "linefeed") {
-    key.preventDefault();
-    const entry = state.pending;
-    if (!entry) return;
-    void prepareWorkflow(state, entry);
-  }
 }
 
 function handleRunKey(state: PickerState, key: KeyEvent): void {
@@ -297,7 +298,6 @@ function handlePickerKey(state: PickerState, key: KeyEvent): void {
     else setListMode(state);
     return;
   }
-  if (state.mode === "confirm") return handleConfirmKey(state, key);
   if (state.mode === "input") return handleInputKey(state, key);
   if (state.mode === "prompt") return;
   navigateSelectList(state, key);
@@ -357,37 +357,37 @@ function submitInputText(state: PickerState, value: string): void {
 
 export function acceptWorkflow(state: PickerState, entry: WorkflowListEntry): void {
   state.pending = entry;
-  if ((entry.repoOwned ?? entry.source === "repo") || entry.dynamicOptions) {
-    setConfirmMode(state, entry);
-    return;
-  }
-  void prepareWorkflow(state, entry, false);
+  void prepareWorkflow(state, entry);
 }
 
-async function prepareWorkflow(
-  state: PickerState,
-  entry: WorkflowListEntry,
-  confirmed = true,
-): Promise<void> {
-  // Lock input while dynamic choices resolve so one confirmation starts one command.
+async function prepareWorkflow(state: PickerState, entry: WorkflowListEntry): Promise<void> {
   setRunMode(state, entry);
   try {
     const workflow =
       state.workflow ?? (await state.loadWorkflow(entry, state.repoRoot, state.config));
     entry.needsTranscript = workflow.needsTranscript;
+    entry.title = workflow.title;
+    entry.description = workflow.description;
     entry.inputs = workflow.inputs;
     entry.repoOwned = workflow.repoOwned;
+    const flags = sensitivityLabels({
+      hasCommands: workflow.steps.some((s) => s.action.kind === "run"),
+      hasTranscript: workflow.needsTranscript,
+      sensitiveMethods: entry.sensitiveMethods ?? [],
+    });
+    entry.hasCommands = flags.includes("commands");
     state.pending = entry;
     state.workflow = workflow;
-    if (workflow.repoOwned && !confirmed) {
-      state.running = false;
-      setConfirmMode(state, entry);
-      return;
-    }
     state.inputQueue = entry.inputs ?? [];
     state.inputIndex = 0;
     state.inputValues = {};
     state.running = false;
+    if (flags.length > 0) {
+      showStatus(
+        state,
+        `${workflowDisplayTitle(entry.name, entry.title)} · ${entry.source} · ${flags.join(" · ")}`,
+      );
+    }
     advanceInput(state, entry);
   } catch (error) {
     showFailure(state, entry, error);
@@ -478,7 +478,7 @@ function mountPickerUi(
         id: "list",
         flexGrow: 1,
         options: [],
-        showDescription: false,
+        showDescription: true,
         showScrollIndicator: true,
         wrapSelection: true,
         itemSpacing: 0,

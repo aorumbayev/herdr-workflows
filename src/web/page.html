@@ -234,6 +234,34 @@
         font-size: 11px;
         color: var(--muted);
       }
+      .flags {
+        font-size: 11px;
+        color: var(--n-use);
+        margin: 0.35rem 0 0.6rem;
+      }
+      .flags.warn {
+        padding: 0.4rem 0.55rem;
+        border: 1px solid color-mix(in srgb, var(--n-use) 40%, var(--line));
+        border-radius: var(--radius);
+        background: color-mix(in srgb, var(--n-use) 12%, transparent);
+      }
+      .row-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 0.1rem;
+        min-width: 0;
+      }
+      .row-meta .sub {
+        font-size: 11px;
+        color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      aside .row.on .row-meta .sub {
+        color: var(--fill-ink);
+        opacity: 0.85;
+      }
 
       section {
         display: flex;
@@ -916,13 +944,21 @@
           row.type = "button";
           row.className =
             "row" + (!e.valid ? " bad" : "") + (current && current.name === e.name ? " on" : "");
+          const meta = document.createElement("div");
+          meta.className = "row-meta";
           const name = document.createElement("span");
-          name.textContent = e.name;
+          name.textContent = e.title || e.name;
+          const sub = document.createElement("span");
+          sub.className = "sub";
+          const bits = [e.provenance || e.source];
+          if (e.flags && e.flags.length) bits.push(e.flags.join(" · "));
+          sub.textContent = bits.join(" · ");
+          meta.append(name, sub);
           const badge = document.createElement("span");
           badge.className = "badge";
           badge.textContent =
-            e.inRepo && e.inGlobal ? "local + global" : e.source === "repo" ? "local" : "global";
-          row.append(name, badge);
+            e.inRepo && e.inGlobal ? "repo + global" : e.source === "repo" ? "repo" : "global";
+          row.append(meta, badge);
           row.onclick = () => {
             if (confirmLeave()) openWorkflow(e.name, e.source);
           };
@@ -965,7 +1001,7 @@
           pane.appendChild(p);
           return;
         }
-        renderEditor(name, scope, r.data.text || "", r.data.error || "");
+        renderEditor(name, scope, r.data.text || "", r.data.error || "", r.data.flags || []);
       }
 
       function newWorkflow() {
@@ -973,68 +1009,95 @@
         openSeq += 1; // cancel any in-flight openWorkflow
         current = { name: "", scope: "repo" };
         renderWorkflows();
-        renderEditor("", "repo", "steps:\n  - run: echo hello\n", "");
+        renderEditor("", "repo", "version: v1alpha1\nsteps:\n  - run: [echo, hello]\n", "", []);
       }
 
       // Readable step blocks appended at the end of the step list (the right slot for a linear runner).
       const SKELETONS = {
-        run: "  - run: ",
-        agent: "  - agent: \n    prompt: |-\n      ",
-        use: "  - use: ",
-        primitive: "  - pane.split: { direction: right }\n",
+        run: "  - run: [echo, hello]\n",
+        agent:
+          "  - agent: |\n      review this\n    using: claude\n    pane:\n      open: beside\n",
+        herdr: "  - herdr: notification.show\n    params: { title: done }\n",
+        workflow: "  - workflow: child\n",
       };
 
-      const VERBS = ["run", "agent", "use", "primitive"];
+      const VERBS = ["run", "agent", "herdr", "workflow"];
 
       // Mirrors the Zod schema in src/workflow/parse.ts.
-      const TOP_KEYS = ["desc", "hidden", "inputs", "on_error", "steps"];
+      const TOP_KEYS = [
+        "version",
+        "title",
+        "description",
+        "hidden",
+        "inputs",
+        "returns",
+        "on_failure",
+        "steps",
+      ];
       const STEP_KEYS = [
         "agent",
-        "allow_fail",
-        "as",
+        "run",
+        "herdr",
+        "workflow",
+        "id",
+        "using",
+        "target",
+        "shell",
+        "params",
+        "inputs",
         "cwd",
         "env",
-        "for",
-        "in",
-        "name",
-        "on_error",
-        "out",
-        "prompt",
-        "ratio",
-        "retry",
-        "run",
-        "shell",
+        "pane",
+        "background",
+        "ready_when",
         "timeout",
-        "use",
-        "wait",
+        "retry",
         "when",
-        "with",
+        "continue_on_error",
+      ];
+      const CONTEXT_HINTS = [
+        "context.workspace",
+        "context.tab",
+        "context.pane",
+        "context.worktree",
+        "context.agent",
+        "context.selection",
+        "context.platform",
+        "context.transcript",
+        "context.transcript_file",
+        "steps.<id>.response",
+        "steps.<id>.agent",
+        "steps.<id>.pane_id",
+        "steps.<id>.stdout",
+        "steps.<id>.stderr",
+        "steps.<id>.exit_code",
+        "steps.<id>.failed",
       ];
 
       const NODE_TYPES = {
         run: {
-          title: "Execute Command",
+          title: "Command",
           icon: ">_",
           tint: "var(--n-run)",
-          desc: "Run a shell command in a herdr pane",
+          desc: "Local argv or shell command with natural result",
         },
         agent: {
-          title: "Agent",
+          title: "Managed agent",
           icon: "✦",
           tint: "var(--n-agent)",
-          desc: "Send a prompt to a configured agent",
+          desc: "Native Herdr agent via profile or existing target",
         },
-        use: {
-          title: "Sub-workflow",
-          icon: "⊞",
-          tint: "var(--n-use)",
-          desc: "Run another workflow inline",
-        },
-        primitive: {
-          title: "herdr Primitive",
+        herdr: {
+          title: "Herdr",
           icon: "⌗",
           tint: "var(--n-prim)",
-          desc: "Call a dotted herdr method",
+          desc: "Explicit herdr: method with params",
+        },
+        workflow: {
+          title: "Child workflow",
+          icon: "⊞",
+          tint: "var(--n-use)",
+          desc: "Invoke another workflow with isolated inputs",
         },
       };
 
@@ -1046,54 +1109,79 @@
       function verbOf(step) {
         if (step.run !== undefined) return "run";
         if (step.agent !== undefined) return "agent";
-        if (step.use !== undefined) return "use";
-        const method = Object.keys(step).find((k) => k.includes("."));
-        if (method) return "primitive";
+        if (step.herdr !== undefined) return "herdr";
+        if (step.workflow !== undefined) return "workflow";
         return "run";
       }
 
-      function primitiveMethod(step) {
-        return Object.keys(step).find((k) => k.includes(".")) || "pane.split";
+      function paneFields() {
+        return [
+          { k: "pane.open", l: "pane open", t: "select", opts: ["", "tab", "beside", "below"] },
+          { k: "pane.target", l: "pane target (split anchor)" },
+          { k: "pane.workspace", l: "pane workspace (tab)" },
+          { k: "pane.size", l: "pane size %" },
+          { k: "pane.focus", l: "focus new pane", t: "check" },
+          {
+            k: "pane.close",
+            l: "close pane",
+            t: "select",
+            opts: ["", "success", "always"],
+          },
+        ];
       }
 
       function fieldsFor(verb) {
-        const paneOpts = ["", "here", "tab", "right", "down"];
-        const tail = [
-          { k: "in", l: "pane", t: "select", opts: paneOpts },
-          { k: "out", l: "capture output as" },
-          { k: "timeout", l: "timeout seconds" },
-          { k: "wait", l: "detach (wait: false)", t: "check" },
+        const common = [
+          { k: "when", l: "when" },
+          { k: "continue_on_error", l: "continue on error", t: "check" },
+          { k: "timeout", l: "timeout (e.g. 30s)" },
+          { k: "retry", l: "retry — JSON {attempts, delay?}", t: "area" },
         ];
         if (verb === "run")
           return [
-            { k: "run", l: "command", t: "area" },
-            {
-              k: "argv",
-              l: "argv list — JSON array form, required for {placeholders}",
-              t: "check",
-            },
-            { k: "shell", l: "shell" },
-          ].concat(tail);
+            { k: "run", l: "command (string) or argv JSON array", t: "area" },
+            { k: "argv", l: "treat run as argv JSON array", t: "check" },
+            { k: "shell", l: "shell (string form only)" },
+            { k: "cwd", l: "cwd" },
+            { k: "env", l: "env — JSON object", t: "area" },
+            { k: "background", l: "background", t: "check" },
+            { k: "ready_when", l: "ready_when regex" },
+          ]
+            .concat(paneFields())
+            .concat(common);
         if (verb === "agent")
           return [
-            { k: "agent", l: "agent", t: "select", opts: [""].concat(state.profiles) },
-            { k: "prompt", l: "prompt", t: "area" },
-          ].concat(tail);
-        if (verb === "use")
+            { k: "agent", l: "prompt", t: "area" },
+            {
+              k: "mode",
+              l: "mode",
+              t: "select",
+              opts: ["using", "target"],
+            },
+            { k: "using", l: "using profile", t: "select", opts: [""].concat(state.profiles) },
+            { k: "target", l: "target agent/pane" },
+            { k: "cwd", l: "cwd (new-agent only)" },
+            { k: "env", l: "env — JSON object", t: "area" },
+            { k: "background", l: "background", t: "check" },
+          ]
+            .concat(paneFields())
+            .concat(common);
+        if (verb === "workflow")
           return [
             {
-              k: "use",
+              k: "workflow",
               l: "workflow",
               t: "select",
               opts: [""].concat(state.entries.map((e) => e.name)),
             },
-            { k: "with", l: "with — JSON object", t: "area" },
+            { k: "inputs", l: "inputs — JSON object", t: "area" },
+            { k: "when", l: "when" },
+            { k: "continue_on_error", l: "continue on error", t: "check" },
           ];
         return [
-          { k: "method", l: "method (e.g. pane.split)" },
-          { k: "params", l: "params — JSON object, blank for none", t: "area" },
-          { k: "out", l: "out map — JSON object", t: "area" },
-        ];
+          { k: "herdr", l: "method (e.g. notification.show)" },
+          { k: "params", l: "params — JSON object", t: "area" },
+        ].concat(common);
       }
 
       function jsonOf(v) {
@@ -1101,54 +1189,93 @@
       }
 
       function formFrom(verb, step) {
-        const f = { name: typeof step.name === "string" ? step.name : "" };
-        if (verb === "primitive") {
-          const method = primitiveMethod(step);
-          f.method = method;
-          f.params = step[method] == null ? "" : jsonOf(step[method]);
-          f.out = jsonOf(step.out);
-          return f;
-        }
-        if (verb === "use") {
-          f.use = step.use || "";
-          f.with = jsonOf(step.with);
-          return f;
-        }
+        const f = { id: typeof step.id === "string" ? step.id : "" };
+        const pane = step.pane && typeof step.pane === "object" ? step.pane : {};
+        f["pane.open"] = pane.open || "";
+        f["pane.target"] = pane.target || "";
+        f["pane.workspace"] = pane.workspace || "";
+        f["pane.size"] = pane.size != null ? String(pane.size) : "";
+        f["pane.focus"] = pane.focus === true;
+        f["pane.close"] = pane.close || "";
+        f.when = typeof step.when === "string" ? step.when : step.when ? jsonOf(step.when) : "";
+        f.continue_on_error = step.continue_on_error === true;
+        f.timeout = step.timeout ? String(step.timeout) : "";
+        f.retry = jsonOf(step.retry);
+        f.cwd = step.cwd || "";
+        f.env = jsonOf(step.env);
+        f.background = step.background === true;
+        f.ready_when = step.ready_when || "";
         if (verb === "run") {
           f.argv = Array.isArray(step.run);
           f.run = f.argv ? JSON.stringify(step.run) : typeof step.run === "string" ? step.run : "";
           f.shell = step.shell || "";
+        } else if (verb === "agent") {
+          f.agent = typeof step.agent === "string" ? step.agent : "";
+          f.mode = step.target ? "target" : "using";
+          f.using = step.using || "";
+          f.target = step.target || "";
+        } else if (verb === "workflow") {
+          f.workflow = step.workflow || "";
+          f.inputs = jsonOf(step.inputs);
         } else {
-          f.agent = step.agent || "";
-          f.prompt = step.prompt || "";
+          f.herdr = step.herdr || "";
+          f.params = jsonOf(step.params);
         }
-        f.in = step.in || "";
-        f.out = typeof step.out === "string" ? step.out : "";
-        f.timeout = step.timeout ? String(step.timeout) : "";
-        f.wait = step.wait === false;
         return f;
       }
 
-      // Step keys the form has no widget for (when/for/retry/env/…): carried through untouched.
+      // Step keys the form has no widget for: carried through untouched.
       function extraOf(verb, step) {
-        const used = new Set(["name"]);
-        if (verb === "primitive") {
-          used.add(primitiveMethod(step));
-          used.add("out");
-        } else if (verb === "use") {
-          used.add("use");
-          used.add("with");
+        const used = new Set([
+          "id",
+          "when",
+          "continue_on_error",
+          "timeout",
+          "retry",
+          "cwd",
+          "env",
+          "pane",
+          "background",
+          "ready_when",
+        ]);
+        if (verb === "run") {
+          used.add("run");
+          used.add("shell");
+        } else if (verb === "agent") {
+          used.add("agent");
+          used.add("using");
+          used.add("target");
+        } else if (verb === "workflow") {
+          used.add("workflow");
+          used.add("inputs");
         } else {
-          used.add(verb);
-          used.add("in");
-          used.add("timeout");
-          used.add(verb === "run" ? "shell" : "prompt");
-          if (typeof step.out === "string") used.add("out");
-          if (step.wait === false) used.add("wait");
+          used.add("herdr");
+          used.add("params");
         }
         const extra = {};
         for (const k of Object.keys(step)) if (!used.has(k)) extra[k] = step[k];
         return extra;
+      }
+
+      function readPane(form) {
+        const open = String(form["pane.open"] || "").trim();
+        if (!open) return null;
+        const pane = { open };
+        const target = String(form["pane.target"] || "").trim();
+        const workspace = String(form["pane.workspace"] || "").trim();
+        const size = String(form["pane.size"] || "").trim();
+        const close = String(form["pane.close"] || "").trim();
+        if (target) pane.target = target;
+        if (workspace) pane.workspace = workspace;
+        if (size) {
+          const n = Number(size);
+          if (!Number.isInteger(n) || n <= 0 || n >= 100)
+            return { error: "pane.size must be 1–99" };
+          pane.size = n;
+        }
+        if (form["pane.focus"]) pane.focus = true;
+        if (close) pane.close = close;
+        return { pane };
       }
 
       // Live form values → a raw step the /api/format endpoint accepts, or an error to show.
@@ -1169,60 +1296,76 @@
             if (err) return { error: err };
             if (!Array.isArray(out.run)) return { error: "run argv must be a JSON array" };
           } else {
-            out.run = String(form.run ?? ""); // leading/trailing whitespace can be meaningful
+            out.run = String(form.run ?? "");
           }
           if (s("shell")) out.shell = s("shell");
         } else if (verb === "agent") {
-          out.agent = s("agent");
-          if (form.prompt) out.prompt = form.prompt;
-        } else if (verb === "use") {
-          out.use = s("use");
-          if (s("with")) {
-            const err = jsonInto("with", s("with"), "with");
+          out.agent = String(form.agent ?? "");
+          if (form.mode === "target") {
+            if (s("target")) out.target = s("target");
+          } else if (s("using")) out.using = s("using");
+        } else if (verb === "workflow") {
+          out.workflow = s("workflow");
+          if (s("inputs")) {
+            const err = jsonInto("inputs", s("inputs"), "inputs");
             if (err) return { error: err };
           }
         } else {
-          const method = s("method");
-          if (!method.includes(".")) return { error: "method must be a dotted herdr name" };
-          if (!s("params")) out[method] = null;
-          else {
-            const err = jsonInto(method, s("params"), "params");
+          out.herdr = s("herdr");
+          if (s("params")) {
+            const err = jsonInto("params", s("params"), "params");
             if (err) return { error: err };
           }
-          if (s("out")) {
-            const e2 = jsonInto("out", s("out"), "out map");
-            if (e2) return { error: e2 };
-          }
         }
-        if (verb === "run" || verb === "agent") {
-          if (s("in")) out.in = s("in");
-          if (s("out")) out.out = s("out");
-          if (s("timeout")) {
-            const n = Number(s("timeout"));
-            if (!Number.isInteger(n) || n <= 0)
-              return { error: "timeout must be a positive integer" };
-            out.timeout = n;
+        if (verb === "run" || (verb === "agent" && form.mode !== "target")) {
+          if (s("cwd")) out.cwd = s("cwd");
+          if (s("env")) {
+            const err = jsonInto("env", s("env"), "env");
+            if (err) return { error: err };
           }
-          if (form.wait) out.wait = false;
+          if (form.background) out.background = true;
+          if (verb === "run" && s("ready_when")) out.ready_when = s("ready_when");
+          const placed = readPane(form);
+          if (placed && placed.error) return { error: placed.error };
+          if (placed && placed.pane) out.pane = placed.pane;
+        } else if (verb === "agent" && form.background) {
+          out.background = true;
         }
-        if (s("name")) out.name = s("name");
+        if (s("timeout")) out.timeout = s("timeout");
+        if (s("retry")) {
+          const err = jsonInto("retry", s("retry"), "retry");
+          if (err) return { error: err };
+        }
+        if (s("when")) out.when = s("when");
+        if (form.continue_on_error) out.continue_on_error = true;
+        if (s("id")) out.id = s("id");
         return { step: out };
       }
 
       function seedStep(verb) {
-        if (verb === "primitive") return { "pane.split": { direction: "right" } };
-        return { [verb]: "" };
+        if (verb === "herdr") return { herdr: "notification.show", params: { title: "done" } };
+        if (verb === "agent")
+          return {
+            agent: "review this",
+            using: state.profiles[0] || "claude",
+            pane: { open: "beside" },
+          };
+        if (verb === "workflow") return { workflow: "" };
+        return { run: ["echo", "hello"] };
       }
 
       function nodeSummary(verb, form) {
         if (verb === "run") return form.run || "no command";
-        if (verb === "agent") return form.agent || "no agent";
-        if (verb === "use") return form.use || "no workflow";
-        return form.method || "pane.split";
+        if (verb === "agent")
+          return form.mode === "target"
+            ? form.target || "no target"
+            : form.using || form.agent || "no profile";
+        if (verb === "workflow") return form.workflow || "no workflow";
+        return form.herdr || "herdr";
       }
 
       function nodeTitle(verb, form) {
-        return form.name || NODE_TYPES[verb].title;
+        return form.id || NODE_TYPES[verb].title;
       }
 
       function clamp(v, lo, hi) {
@@ -1778,10 +1921,10 @@
           icon.className = "icon";
           icon.textContent = t.icon;
           const nameIn = document.createElement("input");
-          nameIn.placeholder = t.title;
-          nameIn.value = n.form.name || "";
+          nameIn.placeholder = "step id (optional)";
+          nameIn.value = n.form.id || "";
           nameIn.oninput = () => {
-            n.form.name = nameIn.value;
+            n.form.id = nameIn.value;
             relabel(n);
           };
           head.append(icon, nameIn);
@@ -1901,8 +2044,8 @@
 
       /* ---------- YAML syntax highlighting ---------- */
 
-      const VERB_RE = /^(?:run|agent|use|[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+)$/;
-      const PH_RE = /\{[a-z][a-z0-9_]*\}/g;
+      const VERB_RE = /^(?:run|agent|herdr|workflow|[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+)$/;
+      const PH_RE = /\{\{[^}]+\}\}|context\.transcript(?:_file)?/g;
       const KV_RE = /^("[^"]*"|'[^']*'|[A-Za-z_][\w.-]*):(\s|$)/;
 
       function span(cls, text) {
@@ -2007,13 +2150,19 @@
           const ls = v.lastIndexOf("\n", p - 1) + 1;
           const line = v.slice(ls, p);
           if (line.includes("#")) return null;
-          const named = /^\s*(?:-\s+)?(agent|use)\s*:\s*(\S*)$/.exec(line);
+          const named = /^\s*(?:-\s+)?(using|workflow)\s*:\s*(\S*)$/.exec(line);
           if (named) {
-            const pool =
-              named[1] === "agent" || named[1] === "using"
-                ? state.profiles
-                : state.entries.map((e) => e.name);
+            const pool = named[1] === "using" ? state.profiles : state.entries.map((e) => e.name);
             return { start: p - named[2].length, prefix: named[2], pool, suffix: "" };
+          }
+          const tmpl = /\{\{([a-zA-Z0-9_.]*)$/.exec(line);
+          if (tmpl) {
+            return {
+              start: p - tmpl[1].length,
+              prefix: tmpl[1],
+              pool: CONTEXT_HINTS.map((h) => h.replace(/^\{\{|\}\}$/g, "")),
+              suffix: "}}",
+            };
           }
           const key = /^(\s*)(-\s+)?([a-z][a-z0-9_.]*)?$/.exec(line);
           if (!key) return null;
@@ -2216,13 +2365,13 @@
         return at;
       }
 
-      function renderEditor(name, scope, text, loadError) {
+      function renderEditor(name, scope, text, loadError, flags) {
         const pane = $("pane");
         pane.innerHTML = "";
         editorDirty = false;
         editorFileText = text;
         let mode = "text";
-        let extras = {}; // inputs / on_error carried through canvas mode untouched
+        let extras = { version: "v1alpha1" }; // metadata carried through canvas mode untouched
         let validateTimer = null;
         let syncTimer = null;
         let syncSeq = 0;
@@ -2251,6 +2400,22 @@
         bar1.className = "bar";
         bar1.append(nameIn, scopeSel, modeSeg, addbar);
 
+        const flagBox = document.createElement("div");
+        flagBox.className = "flags";
+        function paintFlags(list) {
+          const items = list || [];
+          if (!items.length) {
+            flagBox.classList.remove("warn");
+            flagBox.textContent = "";
+            flagBox.classList.add("hide");
+            return;
+          }
+          flagBox.classList.remove("hide");
+          flagBox.classList.add("warn");
+          flagBox.textContent = "sensitive: " + items.join(" · ");
+        }
+        paintFlags(flags);
+
         const ed = mkCodeEditor(text, () => {
           editorDirty = true;
           runValidate();
@@ -2277,6 +2442,20 @@
             });
             if (!ta.isConnected) return; // editor was replaced while the request was in flight
             showProblem(r.data.ok, r.data.ok ? "valid" : r.data.error);
+            const t = ta.value;
+            const next = [];
+            if (/^\s*-\s*run\s*:/m.test(t) || /\n\s*-\s*run\s*:/.test(t)) next.push("commands");
+            if (/context\.transcript(?:_file)?/.test(t)) next.push("transcript");
+            for (const m of t.matchAll(/^\s*herdr:\s*(\S+)/gm)) {
+              const method = m[1];
+              if (
+                /^(pane\.close|tab\.close|workspace\.close|agent\.send_keys|pane\.send_keys|pane\.send_text|pane\.send_input|worktree\.create|layout\.apply)$/.test(
+                  method,
+                )
+              )
+                next.push("herdr:" + method);
+            }
+            paintFlags([...new Set(next)]);
           }, 350);
         }
 
@@ -2309,11 +2488,14 @@
               );
               return;
             }
-            extras = {};
-            if (r.data.doc.desc) extras.desc = r.data.doc.desc;
+            extras = { version: "v1alpha1" };
+            if (r.data.doc.version) extras.version = r.data.doc.version;
+            if (r.data.doc.title) extras.title = r.data.doc.title;
+            if (r.data.doc.description) extras.description = r.data.doc.description;
             if (r.data.doc.hidden) extras.hidden = r.data.doc.hidden;
             if (r.data.doc.inputs) extras.inputs = r.data.doc.inputs;
-            if (r.data.doc.on_error) extras.on_error = r.data.doc.on_error;
+            if (r.data.doc.returns) extras.returns = r.data.doc.returns;
+            if (r.data.doc.on_failure) extras.on_failure = r.data.doc.on_failure;
             canvasHost.classList.remove("hide");
             canvas.load(r.data.doc.steps);
           } else if (!(await syncFromCanvas())) {
@@ -2348,7 +2530,9 @@
           const seq = ++syncSeq;
           const r = await api("/api/format", {
             method: "POST",
-            body: JSON.stringify({ doc: Object.assign({}, extras, { steps: built.steps }) }),
+            body: JSON.stringify({
+              doc: Object.assign({ version: "v1alpha1" }, extras, { steps: built.steps }),
+            }),
           });
           if (seq !== syncSeq || !ta.isConnected) return false; // a newer sync already won
           if (!r.data.ok) {
@@ -2495,7 +2679,7 @@
           setFoot();
         };
 
-        pane.append(bar1, ed.wrap, canvasHost, status, bar2, foot);
+        pane.append(bar1, flagBox, ed.wrap, canvasHost, status, bar2, foot);
         if (loadError) showProblem(false, loadError);
         runValidate();
         if (editorMode === "visual") setMode("visual");

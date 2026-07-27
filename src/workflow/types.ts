@@ -227,7 +227,11 @@ export type WorkflowListEntry = {
   file: string;
   error?: string;
   hidden?: boolean;
+  title?: string;
+  description?: string;
   needsTranscript?: boolean;
+  hasCommands?: boolean;
+  sensitiveMethods?: string[];
   inputs?: InputSpec[];
   repoOwned?: boolean;
   dynamicOptions?: boolean;

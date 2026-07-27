@@ -5,6 +5,7 @@ import { globalConfigPath, loadConfig, parseConfigText, repoConfigPath } from ".
 import { readRunLog, recentRuns } from "../runlog";
 import { listWorkflows, parseWorkflowText, workflowPath } from "../workflow/load";
 import { parseRaw, rawWorkflowSchema, type RawStep, type RawWorkflowDoc } from "../workflow/parse";
+import { analyzeYamlBody, sensitivityLabels, workflowDisplayTitle } from "../workflow/trust";
 import pageHtml from "./page.html" with { type: "text" };
 
 const PAGE = pageHtml as unknown as string;
@@ -196,14 +197,25 @@ async function getState(repoRoot: string): Promise<Response> {
   const profiles = Object.keys(config.profiles).sort();
   const entries = await listWorkflows(repoRoot, config);
   const mapped = await Promise.all(
-    entries.map(async (e) => ({
-      name: e.name,
-      source: e.source,
-      valid: !e.error,
-      hidden: e.hidden === true,
-      inRepo: await Bun.file(workflowPath("repo", repoRoot, e.name)).exists(),
-      inGlobal: await Bun.file(workflowPath("global", repoRoot, e.name)).exists(),
-    })),
+    entries.map(async (e) => {
+      const flags = sensitivityLabels({
+        hasCommands: e.hasCommands === true,
+        hasTranscript: e.needsTranscript === true,
+        sensitiveMethods: e.sensitiveMethods ?? [],
+      });
+      return {
+        name: e.name,
+        title: workflowDisplayTitle(e.name, e.title),
+        description: e.description ?? "",
+        source: e.source,
+        provenance: e.source === "repo" ? "repo" : "global",
+        valid: !e.error,
+        hidden: e.hidden === true,
+        flags,
+        inRepo: await Bun.file(workflowPath("repo", repoRoot, e.name)).exists(),
+        inGlobal: await Bun.file(workflowPath("global", repoRoot, e.name)).exists(),
+      };
+    }),
   );
   return json({ repoRoot: shortPath(repoRoot), profiles, entries: mapped });
 }
@@ -318,7 +330,15 @@ async function handleWorkflow(
         error = errText(e);
       }
     }
-    return json({ text, valid, error });
+    let flags: string[] = [];
+    if (text) {
+      try {
+        flags = sensitivityLabels(analyzeYamlBody(`${name}.yaml`, text));
+      } catch {
+        flags = [];
+      }
+    }
+    return json({ text, valid, error, flags });
   }
   if (req.method === "PUT") {
     const scope = scopeOf(body.scope);

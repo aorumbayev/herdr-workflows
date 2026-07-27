@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseRaw } from "./parse";
 import { decodeBundle, type WorkflowBundle } from "./bundle";
+import { analyzeRawWorkflow, formatSensitivityBanner, workflowDisplayTitle } from "./trust";
 import { WorkflowLoadError } from "./types";
 
 export type ImportScope = "repo" | "global";
@@ -34,7 +35,13 @@ export function checkBundle(payload: string): WorkflowBundle {
 }
 
 export function previewText(bundle: WorkflowBundle): string {
-  const parts = bundle.files.map((f) => `--- ${f.name}.yaml ---\n${f.body.trimEnd()}`);
+  const parts = bundle.files.map((f) => {
+    const raw = parseRaw(`${f.name}.yaml`, f.body);
+    const banner = formatSensitivityBanner(analyzeRawWorkflow(raw));
+    const title = workflowDisplayTitle(f.name, raw.title);
+    const desc = raw.description?.trim() ? `${raw.description.trim()}\n` : "";
+    return `--- ${f.name}.yaml (${title}) ---\n${banner}${desc}${f.body}`;
+  });
   return `${parts.join("\n\n")}\n`;
 }
 
@@ -53,15 +60,15 @@ async function writeBundle(
       results.push({ name: file.name, path, status: "exists" });
       continue;
     }
-    await Bun.write(path, file.body.endsWith("\n") ? file.body : `${file.body}\n`);
+    await Bun.write(path, file.body);
     results.push({ name: file.name, path, status: "written" });
   }
   return results;
 }
 
-export const IMPORT_DISCLAIMER = `This payload came from outside your machine. Imported workflows run shell
-commands and agent prompts with your permissions, on your repositories.
-Read every line below before you accept it.`;
+export const IMPORT_DISCLAIMER = `This payload came from outside your machine. Imported workflows are
+reviewed executable code: they run shell commands and agent prompts with your
+permissions. Read every line below before you accept it. There is no sandbox.`;
 
 export type ImportPrompts = {
   /** Asks the reader to confirm they reviewed the preview. */

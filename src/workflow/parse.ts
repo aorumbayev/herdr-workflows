@@ -1010,7 +1010,7 @@ function stepTemplates(step: WorkflowStep): TemplatePath[] {
 
 const SENSITIVE_CONTEXT_KEYS = new Set(["transcript", "transcript_file"]);
 
-function isSensitiveContextPath(path: TemplatePath): boolean {
+export function isSensitiveContextPath(path: TemplatePath): boolean {
   return path.root === "context" && SENSITIVE_CONTEXT_KEYS.has(path.segments[0] ?? "");
 }
 
