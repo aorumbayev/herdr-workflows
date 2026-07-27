@@ -6,26 +6,46 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { layoutApply, paneRead, tabClose } from "../src/herdr";
-import { herdrCall, herdrRequest } from "../src/herdr";
+import { herdrCall, herdrRequest, tabClose } from "../src/herdr";
 
 const socket = process.env.HERDR_SOCKET_PATH ?? "";
 const live = Boolean(socket);
+
+type AppliedLayout = { tabId: string; paneId: string };
+
+async function applyCommandTab(
+  label: string,
+  cwd: string,
+  command: string[],
+): Promise<AppliedLayout> {
+  const result = await herdrCall("layout.apply", {
+    workspace_id: null,
+    tab_label: label,
+    tab_id: null,
+    focus: false,
+    root: { type: "pane", label, cwd, command, env: {} },
+  });
+  const layout = result.layout as {
+    tab_id?: string;
+    focused_pane_id?: string;
+    root?: { pane_id?: string };
+  };
+  expect(typeof layout.tab_id).toBe("string");
+  return {
+    tabId: layout.tab_id ?? "",
+    paneId: layout.root?.pane_id ?? layout.focused_pane_id ?? "",
+  };
+}
 
 describe.skipIf(!live)("herdr 0.7.5 empirical", () => {
   test("layout.apply returns tab+pane ids and pane appears in agent.list", async () => {
     process.env.HERDR_SOCKET_PATH = socket;
     const cwd = await mkdtemp(join(tmpdir(), "herdr-workflows-emp-"));
-    const applied = await layoutApply({
-      tabLabel: `herdr-workflows-emp-${Date.now().toString(36)}`,
-      root: {
-        type: "pane",
-        label: "emp",
-        cwd,
-        command: ["sh", "-c", "echo emp; sleep 3"],
-      },
-      focus: false,
-    });
+    const applied = await applyCommandTab(`herdr-workflows-emp-${Date.now().toString(36)}`, cwd, [
+      "sh",
+      "-c",
+      "echo emp; sleep 3",
+    ]);
     expect(applied.tabId).toMatch(/^w/);
     expect(applied.paneId).toMatch(/^w/);
     const listed = await herdrCall("agent.list", {});
@@ -34,22 +54,23 @@ describe.skipIf(!live)("herdr 0.7.5 empirical", () => {
     await tabClose(applied.tabId).catch(() => undefined);
   });
 
-  test("pane read --format text has no ESC bytes", async () => {
+  test("pane.read text format has no ESC bytes", async () => {
     process.env.HERDR_SOCKET_PATH = socket;
     const cwd = await mkdtemp(join(tmpdir(), "herdr-workflows-emp-read-"));
-    const applied = await layoutApply({
-      tabLabel: `herdr-workflows-read-${Date.now().toString(36)}`,
-      root: {
-        type: "pane",
-        label: "read",
-        cwd,
-        command: ["sh", "-c", "printf 'hello\\n'; sleep 2"],
-      },
-      focus: false,
-    });
+    const applied = await applyCommandTab(`herdr-workflows-read-${Date.now().toString(36)}`, cwd, [
+      "sh",
+      "-c",
+      "printf 'hello\\n'; sleep 2",
+    ]);
     await Bun.sleep(200);
-    const text = await paneRead(applied.paneId, { source: "recent-unwrapped", lines: 50 });
-    expect(text.includes("\u001b")).toBe(false);
+    const result = await herdrCall("pane.read", {
+      pane_id: applied.paneId,
+      source: "recent_unwrapped",
+      format: "text",
+      lines: 50,
+    });
+    const read = result.read as { text?: string };
+    expect((read.text ?? "").includes("\u001b")).toBe(false);
     await tabClose(applied.tabId).catch(() => undefined);
   });
 

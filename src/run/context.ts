@@ -1,0 +1,156 @@
+import { join } from "node:path";
+import {
+  pluginStateDir,
+  type InvocationContext,
+  type TranscriptExtractor,
+  type WorkflowsConfig,
+} from "../config";
+import { HerdrError } from "../herdr";
+import { assertUnderCaptureCap } from "../limits";
+import type { TemplateNamespace, WorkflowStep } from "../workflow/types";
+
+export type StepOutcome =
+  | { ok: true; result?: unknown; skipped?: boolean; launched?: boolean }
+  | { ok: false; error: string; details?: Record<string, unknown>; coordinationLost?: boolean };
+
+export type RunnerDeps = {
+  herdrCall: (method: string, params?: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  notificationShow: (title: string, body?: string) => Promise<void>;
+  agentStatus: (target: string) => Promise<string>;
+  agentInfo: (target: string) => Promise<Record<string, unknown>>;
+  paneClose: (paneId: string) => Promise<void>;
+  tabClose: (tabId: string) => Promise<void>;
+  reportToken: (paneId: string, value: string | null) => Promise<void>;
+  transcriptText: (
+    paneId: string,
+    transcripts: Record<string, TranscriptExtractor>,
+    opts: { invocationCwd: string; projectsBase?: string },
+  ) => Promise<string>;
+  sleep: (ms: number) => Promise<void>;
+  now: () => number;
+  responseDir?: string;
+};
+
+export type StepRunOpts = {
+  name: string;
+  repoRoot: string;
+  config: WorkflowsConfig;
+  ctx: InvocationContext;
+  deps: RunnerDeps;
+  runId: string;
+  workflowPath: string[];
+  isEntry: boolean;
+  onProgress?: (step: number, total: number, label: string, outcome?: string) => void;
+  onStderr?: (text: string) => void;
+};
+
+export type StepCtx = {
+  step: WorkflowStep;
+  stepIndex: number;
+  values: TemplateNamespace;
+  opts: StepRunOpts;
+};
+
+export type StepsResult =
+  | { ok: true; failures?: string[] }
+  | {
+      ok: false;
+      error: string;
+      failures?: string[];
+      aborted?: boolean;
+      coordinationLost?: boolean;
+    };
+
+export type RunSteps = (
+  steps: WorkflowStep[],
+  opts: StepRunOpts,
+  values: TemplateNamespace,
+) => Promise<StepsResult>;
+
+const COORDINATION_CODES = new Set(["closed", "no_socket"]);
+const COORDINATION_PATTERNS = [/socket closed/i, /ECONNRESET/, /EPIPE/];
+
+export class CoordinationError extends Error {
+  constructor(action: string, detail: string) {
+    super(
+      `${action}: herdr coordination was lost (${detail}) — the action may still be active; panes were preserved and on_failure was skipped`,
+    );
+    this.name = "CoordinationError";
+  }
+}
+
+export function isCoordinationError(err: unknown): boolean {
+  if (err instanceof HerdrError && COORDINATION_CODES.has(err.code)) return true;
+  if (!(err instanceof Error)) return false;
+  return COORDINATION_PATTERNS.some((pattern) => pattern.test(err.message));
+}
+
+export function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** Wrap a dispatched herdr operation so transport loss becomes an uncertain-coordination outcome. */
+export function dispatchFailure(action: string, err: unknown): StepOutcome {
+  if (isCoordinationError(err)) {
+    return {
+      ok: false,
+      error: new CoordinationError(action, errorText(err)).message,
+      coordinationLost: true,
+    };
+  }
+  return { ok: false, error: `${action}: ${errorText(err)}` };
+}
+
+/** Herdr split ratio is the first child's share and the created pane is the second child. */
+export function sizeToFirstRatio(sizePercent: number): number {
+  return (100 - sizePercent) / 100;
+}
+
+const AGENT_NAME_MAX = 32;
+
+function normalizedPrefix(raw: string): string {
+  const lowered = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^[^a-z]+/, "");
+  return lowered || "agent";
+}
+
+export function generateAgentName(
+  stepId: string | undefined,
+  ordinal: number,
+  suffix: string,
+): string {
+  const tail = suffix.toLowerCase().replace(/[^a-z0-9]+/g, "") || "0";
+  const prefix = normalizedPrefix(stepId ?? `step-${ordinal}`);
+  const room = Math.max(1, AGENT_NAME_MAX - tail.length - 1);
+  return `${prefix.slice(0, room)}-${tail}`.slice(0, AGENT_NAME_MAX);
+}
+
+export function managedResponsePath(
+  runId: string,
+  stepIndex: number,
+  responseDir?: string,
+): string {
+  return join(responseDir ?? join(pluginStateDir(), "responses"), `${runId}-step-${stepIndex}.txt`);
+}
+
+export function appendResponseInstruction(prompt: string, path: string): string {
+  return `${prompt}\n\nWhen this task is complete, write your full answer as plain UTF-8 text to the absolute path ${path}, overwriting whatever is there. Write nothing else to that path and do not create other files for it.`;
+}
+
+export async function readManagedResponse(path: string): Promise<string> {
+  const file = Bun.file(path);
+  if (!(await file.exists())) {
+    throw new HerdrError(
+      "managed_response_missing",
+      `managed response file was not written: ${path}`,
+    );
+  }
+  const text = await file.text();
+  assertUnderCaptureCap("managed response", text);
+  if (!text.trim()) {
+    throw new HerdrError("managed_response_empty", `managed response file is empty: ${path}`);
+  }
+  return text;
+}

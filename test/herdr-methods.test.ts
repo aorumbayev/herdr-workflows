@@ -34,6 +34,7 @@ describe("herdr method validators", () => {
     expect(validateMethodParams("plugin.disable", { plugin_id: "herdr-workflows" })).toMatch(
       /plugin lifecycle methods/,
     );
+    expect(validateMethodParams("agent.view.set", { source: "x" })).toMatch(/agent view filters/);
   });
 
   test("allowed method with valid params passes", () => {

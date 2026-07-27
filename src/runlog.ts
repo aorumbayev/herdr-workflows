@@ -1,7 +1,7 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { closeSync, fstatSync, openSync, readSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { pluginStateDir } from "./config";
 
 export type RunLogEntry = {
   ts: string;
@@ -19,12 +19,8 @@ const RUN_LOG_MAX_BYTES = 512_000;
 const RUN_LOG_KEEP_LINES = 2_000;
 const RUN_LOG_READ_TAIL_BYTES = 128_000;
 
-function stateDir(): string {
-  return process.env.HERDR_PLUGIN_STATE_DIR ?? join(homedir(), ".hwf", "state");
-}
-
 function runLogPath(): string {
-  return join(stateDir(), "runs.jsonl");
+  return join(pluginStateDir(), "runs.jsonl");
 }
 
 function parseLines(text: string): RunLogEntry[] {
@@ -51,7 +47,7 @@ async function trimRunLogIfNeeded(): Promise<void> {
 
 export async function appendRunLog(entry: RunLogEntry): Promise<void> {
   try {
-    await mkdir(stateDir(), { recursive: true });
+    await mkdir(pluginStateDir(), { recursive: true });
     await appendFile(runLogPath(), `${JSON.stringify(entry)}\n`);
     await trimRunLogIfNeeded();
   } catch {

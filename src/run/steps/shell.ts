@@ -1,8 +1,10 @@
 import { CaptureLimitError, CAPTURE_BYTE_LIMIT } from "../../limits";
-import type { ShellName, TemplateNamespace, WorkflowStep } from "../../workflow/types";
-import { substituteText } from "../../workflow/parse";
+import { renderScalar, substituteText } from "../../workflow/parse";
+import type { ShellName, StepAction, TemplateNamespace } from "../../workflow/types";
+import { dispatchFailure, errorText, type StepCtx, type StepOutcome } from "../context";
+import { placeCommandPane } from "./pane";
 
-const SHELL_TIMEOUT_MS = 300_000;
+type RunAction = Extract<StepAction, { kind: "run" }>;
 
 type CaptureBudget = {
   source: string;
@@ -84,6 +86,15 @@ export function killSpawn(
   }
 }
 
+export type CaptureResult = {
+  timedOut: boolean;
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  timeoutMs: number;
+};
+
+/** `timeoutMs` omitted means no workflow timeout; process completion still blocks. */
 export async function spawnCapture(
   argv: string[],
   opts: {
@@ -93,14 +104,8 @@ export async function spawnCapture(
     timeoutMs?: number;
     maxCaptureBytes?: { source: string; limit?: number };
   },
-): Promise<{
-  timedOut: boolean;
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-  timeoutMs: number;
-}> {
-  const timeoutMs = opts.timeoutMs ?? SHELL_TIMEOUT_MS;
+): Promise<CaptureResult> {
+  const timeoutMs = opts.timeoutMs ?? 0;
   const proc = Bun.spawn(argv, {
     cwd: opts.cwd,
     stdin: "pipe",
@@ -114,10 +119,13 @@ export async function spawnCapture(
   proc.stdin.end();
 
   let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    killSpawn(proc);
-  }, timeoutMs);
+  const timer =
+    timeoutMs > 0
+      ? setTimeout(() => {
+          timedOut = true;
+          killSpawn(proc);
+        }, timeoutMs)
+      : undefined;
 
   const budget = opts.maxCaptureBytes
     ? {
@@ -143,23 +151,29 @@ export async function spawnCapture(
   }
 }
 
-function captureResult(r: {
-  timedOut: boolean;
-  exitCode: number;
+type CommandOutcome = {
+  ok: boolean;
   stdout: string;
   stderr: string;
-  timeoutMs: number;
-}): { ok: boolean; stdout: string; stderr: string } {
-  if (r.timedOut) {
-    return {
-      ok: false,
-      stdout: r.stdout,
-      stderr: r.stderr || `timed out after ${r.timeoutMs / 1000}s`,
-    };
-  }
-  if (r.exitCode !== 0) return { ok: false, stdout: r.stdout, stderr: r.stderr };
-  return { ok: true, stdout: r.stdout, stderr: r.stderr };
+  exitCode: number;
+  timedOut: boolean;
+  failed: boolean;
+};
+
+function captureResult(r: CaptureResult): CommandOutcome {
+  const failed = r.timedOut || r.exitCode !== 0;
+  const stderr = r.timedOut && !r.stderr ? `timed out after ${r.timeoutMs / 1000}s` : r.stderr;
+  return {
+    ok: !failed,
+    stdout: r.stdout,
+    stderr,
+    exitCode: r.exitCode,
+    timedOut: r.timedOut,
+    failed,
+  };
 }
+
+const COMMAND_CAPTURE_SOURCE = "command output";
 
 export async function runShellStep(
   command: string,
@@ -170,13 +184,14 @@ export async function runShellStep(
     timeoutMs?: number;
     shell?: ShellName;
   },
-): Promise<{ ok: boolean; stdout: string; stderr: string }> {
+): Promise<CommandOutcome> {
   return captureResult(
     await spawnCapture(shellArgv(command, opts.shell), {
       cwd: opts.cwd,
       stdin: opts.stdin,
       env: opts.env,
       timeoutMs: opts.timeoutMs,
+      maxCaptureBytes: { source: COMMAND_CAPTURE_SOURCE },
     }),
   );
 }
@@ -188,60 +203,159 @@ export async function runArgvStep(
     env?: NodeJS.ProcessEnv;
     timeoutMs?: number;
   },
-): Promise<{ ok: boolean; stdout: string; stderr: string }> {
+): Promise<CommandOutcome> {
   return captureResult(
     await spawnCapture(argv, {
       cwd: opts.cwd,
       env: opts.env,
       timeoutMs: opts.timeoutMs,
+      maxCaptureBytes: { source: COMMAND_CAPTURE_SOURCE },
     }),
   );
 }
 
-function substituteEnv(
-  env: Record<string, string> | undefined,
-  ns: TemplateNamespace,
-): Record<string, string> | undefined {
-  if (!env) return undefined;
-  return Object.fromEntries(Object.entries(env).map(([k, v]) => [k, substituteText(v, ns)]));
+export function buildHwfEnv(inputs: Record<string, unknown>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(inputs).map(([name, value]) => [`HWF_${name}`, renderScalar(value)]),
+  );
 }
 
-export async function shellStep(c: {
-  step: WorkflowStep;
-  values: TemplateNamespace;
-  env?: NodeJS.ProcessEnv;
-  opts?: {
-    ctx: { cwd: string };
-    deps: {
-      runArgv: typeof runArgvStep;
-      runShell: typeof runShellStep;
-    };
-    onStderr?: (text: string) => void;
+const RESERVED_ENV_RE = /^hwf_/i;
+
+type StepEnv = { ok: true; env: Record<string, string> } | { ok: false; error: string };
+
+function stepEnvValues(env: Record<string, string> | undefined, ns: TemplateNamespace): StepEnv {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env ?? {})) {
+    if (RESERVED_ENV_RE.test(key)) {
+      return { ok: false, error: `env key '${key}' uses the reserved HWF_ prefix` };
+    }
+    out[key] = substituteText(value, ns);
+  }
+  return { ok: true, env: out };
+}
+
+/** Runner-generated HWF values replace inherited collisions; explicit `env:` wins over both. */
+export function mergeStepEnv(
+  inherited: NodeJS.ProcessEnv,
+  hwf: Record<string, string>,
+  stepEnv: Record<string, string>,
+): NodeJS.ProcessEnv {
+  return { ...inherited, ...hwf, ...stepEnv };
+}
+
+function commandArgv(action: RunAction, ns: TemplateNamespace): string[] {
+  const payload = action.payload;
+  if (payload.form === "argv") return payload.argv.map((el) => substituteText(el, ns));
+  return shellArgv(payload.command, payload.shell);
+}
+
+function bindCommandResult(c: StepCtx, outcome: CommandOutcome): void {
+  if (!c.step.id) return;
+  c.values.steps[c.step.id] = {
+    stdout: outcome.stdout,
+    stderr: outcome.stderr,
+    exit_code: outcome.exitCode,
+    failed: outcome.failed,
   };
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+}
+
+function commandFailure(outcome: CommandOutcome): StepOutcome {
+  const detail = outcome.stderr.trim() || outcome.stdout.trim().slice(-500);
+  return {
+    ok: false,
+    error: detail || `exit ${outcome.exitCode}`,
+    details: {
+      stdout: outcome.stdout,
+      stderr: outcome.stderr,
+      exit_code: outcome.exitCode,
+    },
+  };
+}
+
+async function localRun(
+  c: StepCtx,
+  action: RunAction,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): Promise<StepOutcome> {
+  const payload = action.payload;
+  let outcome: CommandOutcome;
+  try {
+    outcome =
+      payload.form === "argv"
+        ? await runArgvStep(commandArgv(action, c.values), {
+            cwd,
+            env,
+            timeoutMs: action.timeoutMs,
+          })
+        : await runShellStep(payload.command, {
+            cwd,
+            env,
+            timeoutMs: action.timeoutMs,
+            shell: payload.shell,
+          });
+  } catch (error) {
+    if (error instanceof CaptureLimitError) return { ok: false, error: error.message };
+    return { ok: false, error: `run: ${errorText(error)}` };
+  }
+  if (outcome.stderr) c.opts.onStderr?.(outcome.stderr);
+  bindCommandResult(c, outcome);
+  return outcome.failed ? commandFailure(outcome) : { ok: true };
+}
+
+const READY_LINES = 80;
+
+async function placedRun(
+  c: StepCtx,
+  action: RunAction,
+  cwd: string,
+  paneEnv: Record<string, string>,
+): Promise<StepOutcome> {
+  const pane = action.pane;
+  if (!pane) return { ok: false, error: "run: background and ready_when require pane:" };
+  const sub = (text?: string) => (text === undefined ? undefined : substituteText(text, c.values));
+  const placed = await placeCommandPane({
+    open: pane.open,
+    target: sub(pane.target),
+    workspace: sub(pane.workspace),
+    size: pane.size,
+    focus: pane.focus ?? action.background !== true,
+    cwd,
+    env: paneEnv,
+    label: c.step.id ?? "hwf-run",
+    argv: commandArgv(action, c.values),
+    deps: c.opts.deps,
+    invocation: c.opts.ctx,
+  });
+  if (action.background === true) return { ok: true, launched: true };
+  if (action.readyWhen === undefined || action.timeoutMs === undefined) {
+    return { ok: false, error: "run: placed foreground run requires ready_when and timeout" };
+  }
+  const waited = await c.opts.deps.herdrCall("pane.wait_for_output", {
+    pane_id: placed.pane_id,
+    source: "recent",
+    lines: READY_LINES,
+    strip_ansi: true,
+    match: { type: "regex", value: action.readyWhen },
+    timeout_ms: action.timeoutMs,
+  });
+  return { ok: true, result: { ...waited, ...placed } };
+}
+
+export async function shellStep(c: StepCtx & { env: NodeJS.ProcessEnv }): Promise<StepOutcome> {
   const action = c.step.action;
   if (action.kind !== "run") return { ok: false, error: "internal: not a run step" };
-  if (action.pane || action.background || action.readyWhen) {
-    return { ok: false, error: "v1alpha1 placed run execution is not implemented yet" };
-  }
-  if (!c.opts) return { ok: false, error: "v1alpha1 run execution is not implemented yet" };
+  const stepEnv = stepEnvValues(action.env, c.values);
+  if (!stepEnv.ok) return { ok: false, error: stepEnv.error };
+  const hwf = buildHwfEnv(c.values.inputs);
   const cwd = action.cwd !== undefined ? substituteText(action.cwd, c.values) : c.opts.ctx.cwd;
-  const stepEnv = substituteEnv(action.env, c.values);
-  const mergedEnv = { ...c.env, ...stepEnv };
-  const payload = action.payload;
-  const result =
-    payload.form === "argv"
-      ? await c.opts.deps.runArgv(
-          payload.argv.map((el) => substituteText(el, c.values)),
-          { cwd, env: mergedEnv, timeoutMs: action.timeoutMs },
-        )
-      : await c.opts.deps.runShell(payload.command, {
-          cwd,
-          env: mergedEnv,
-          timeoutMs: action.timeoutMs,
-          shell: payload.shell,
-        });
-  if (result.stderr) c.opts.onStderr?.(result.stderr);
-  if (!result.ok) return { ok: false, error: result.stderr.trim() || "nonzero exit" };
-  return { ok: true };
+  if (action.pane || action.background === true || action.readyWhen !== undefined) {
+    try {
+      return await placedRun(c, action, cwd, { ...hwf, ...stepEnv.env });
+    } catch (error) {
+      return dispatchFailure("run", error);
+    }
+  }
+  return localRun(c, action, cwd, mergeStepEnv(c.env, hwf, stepEnv.env));
 }

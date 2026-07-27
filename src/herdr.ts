@@ -1,9 +1,6 @@
 import { connect } from "node:net";
 import { randomUUID } from "node:crypto";
 import { checkHerdrProtocol } from "./herdr-methods";
-import type { PaneOpen } from "./workflow/types";
-
-type Placement = "here" | PaneOpen | "right" | "down" | "beside" | "below";
 
 export type HerdrResponse = {
   id: string;
@@ -161,63 +158,12 @@ export async function readLine(): Promise<PromptResult> {
   }
 }
 
-/** Request ceiling for pane scrollback. Actual text still capped by herdr retention. */
-const PANE_READ_LINES = 100_000;
-const PANE_READ_SOURCE = "recent-unwrapped" as const;
-
 export async function tabClose(tabId: string): Promise<void> {
   await herdrCall("tab.close", { tab_id: tabId });
 }
 
 export async function paneClose(paneId: string): Promise<void> {
   await herdrCall("pane.close", { pane_id: paneId });
-}
-
-export type LayoutApplyResult = { tabId: string; paneId: string; workspaceId: string };
-
-type LayoutPaneNode = {
-  type: "pane";
-  label?: string;
-  cwd?: string;
-  command?: string[];
-  env?: Record<string, string>;
-  pane_id?: string;
-};
-
-type LayoutSplitNode = {
-  type: "split";
-  direction: "right" | "down";
-  ratio: number;
-  first: LayoutNode;
-  second: LayoutNode;
-};
-
-export type LayoutNode = LayoutPaneNode | LayoutSplitNode;
-
-export async function layoutApply(params: {
-  workspaceId?: string;
-  tabLabel?: string;
-  tabId?: string;
-  root: LayoutNode;
-  focus?: boolean;
-}): Promise<LayoutApplyResult> {
-  // herdr rejects both set ("use either tab_id or workspace_id, not both").
-  const result = await herdrCall("layout.apply", {
-    workspace_id: params.tabId ? null : (params.workspaceId ?? null),
-    tab_label: params.tabLabel ?? null,
-    tab_id: params.tabId ?? null,
-    focus: params.focus ?? true,
-    root: params.root,
-  });
-  const layout = result.layout as
-    | { tab_id?: string; focused_pane_id?: string; workspace_id?: string }
-    | undefined;
-  const tabId = layout?.tab_id;
-  const paneId = layout?.focused_pane_id;
-  const workspaceId = layout?.workspace_id ?? params.workspaceId;
-  if (!tabId || !paneId || !workspaceId)
-    throw new HerdrError("layout_apply_failed", "layout.apply missing tab/pane ids");
-  return { tabId, paneId, workspaceId };
 }
 
 export async function pluginPaneOpen(params: {
@@ -234,29 +180,6 @@ export async function pluginPaneOpen(params: {
     focus: true,
     env: params.env ?? {},
   });
-}
-
-export async function paneRead(
-  paneId: string,
-  opts: {
-    source?: "visible" | "recent" | "recent-unwrapped";
-    lines?: number;
-  } = {},
-): Promise<string> {
-  const args = [
-    "pane",
-    "read",
-    paneId,
-    "--format",
-    "text",
-    "--source",
-    opts.source ?? PANE_READ_SOURCE,
-    "--lines",
-    String(opts.lines ?? PANE_READ_LINES),
-  ];
-  const { stdout, stderr, exitCode } = await herdrCli(args);
-  if (exitCode !== 0) throw new HerdrError("pane_read_failed", stderr.trim() || "pane read failed");
-  return stdout;
 }
 
 export async function notificationShow(title: string, body?: string): Promise<void> {
@@ -282,8 +205,8 @@ type AgentGetJson = {
   };
 };
 
-async function agentGet(paneId: string): Promise<NonNullable<AgentGetJson["result"]>["agent"]> {
-  const { stdout, stderr, exitCode } = await herdrCli(["agent", "get", paneId]);
+async function agentGet(target: string): Promise<NonNullable<AgentGetJson["result"]>["agent"]> {
+  const { stdout, stderr, exitCode } = await herdrCli(["agent", "get", target]);
   if (exitCode !== 0) {
     throw new HerdrError("agent_status_failed", stderr.trim() || "agent get failed");
   }
@@ -296,8 +219,9 @@ async function agentGet(paneId: string): Promise<NonNullable<AgentGetJson["resul
   return (parsed as AgentGetJson)?.result?.agent;
 }
 
-export async function agentStatus(paneId: string): Promise<string> {
-  const agent = await agentGet(paneId);
+/** `target` is an agent name or a pane id — `herdr agent get` accepts either. */
+export async function agentStatus(target: string): Promise<string> {
+  const agent = await agentGet(target);
   const status = agent?.agent_status;
   if (typeof status !== "string") {
     throw new HerdrError("agent_status_failed", "agent get missing agent_status");
@@ -311,14 +235,6 @@ export type AgentSessionInfo = {
   sessionKind?: string;
   cwd: string;
 };
-
-export async function agentLabel(paneId: string): Promise<string> {
-  const info = await agentGet(paneId);
-  if (typeof info?.agent !== "string" || !info.agent) {
-    throw new HerdrError("no_agent", "no agent detected in this pane");
-  }
-  return info.agent;
-}
 
 export async function agentSessionInfo(paneId: string): Promise<AgentSessionInfo> {
   const info = await agentGet(paneId);
@@ -336,26 +252,6 @@ export async function agentSessionInfo(paneId: string): Promise<AgentSessionInfo
     ...(sessionKind !== undefined ? { sessionKind } : {}),
     cwd,
   };
-}
-
-export async function waitOutput(paneId: string, match: string, timeoutMs: number): Promise<void> {
-  // herdr 0.7.5 removed top-level `wait`; `pane wait-output` takes the pane id first and the
-  // pattern as --regex's value — passing --regex before the pane id makes herdr reject it.
-  const { stdout, stderr, exitCode } = await herdrCli([
-    "pane",
-    "wait-output",
-    paneId,
-    "--regex",
-    match,
-    "--timeout",
-    String(timeoutMs),
-  ]);
-  if (exitCode !== 0) {
-    throw new HerdrError(
-      "wait_output_failed",
-      stderr.trim() || stdout.trim() || "wait output failed",
-    );
-  }
 }
 
 export async function reportToken(paneId: string, value: string | null): Promise<void> {
@@ -400,76 +296,4 @@ export async function ensureHerdrProtocol(): Promise<void> {
   const check = checkHerdrProtocol(result.protocol);
   if (!check.ok) throw new HerdrError("protocol_mismatch", check.error);
   checked = true;
-}
-
-type PlaceLayoutApply = (params: {
-  workspaceId?: string;
-  tabId?: string;
-  tabLabel?: string;
-  root: unknown;
-  focus?: boolean;
-}) => Promise<{ tabId: string; paneId: string; workspaceId: string }>;
-
-type PlaceOpts = {
-  deps: { layoutApply: PlaceLayoutApply };
-  ctx: {
-    workspaceId?: string;
-    paneId?: string;
-    tabId?: string;
-  };
-};
-
-export async function placeCommand(
-  opts: PlaceOpts,
-  place: Placement,
-  argv: string[],
-  label: string,
-  cwd: string,
-  env: Record<string, string> | undefined,
-  ratio: number | undefined,
-  focus?: boolean,
-): Promise<{ tabId: string; paneId: string; workspaceId: string }> {
-  if (place === "tab") {
-    return opts.deps.layoutApply({
-      workspaceId: opts.ctx.workspaceId,
-      tabLabel: label,
-      root: {
-        type: "pane",
-        label,
-        cwd,
-        command: argv,
-        env: env ?? {},
-      },
-      focus: focus ?? true,
-    });
-  }
-  if (place === "right" || place === "down" || place === "beside" || place === "below") {
-    if (!opts.ctx.paneId || !opts.ctx.tabId) {
-      throw new HerdrError("placement_failed", `in: ${place} requires an invoking pane`);
-    }
-    const direction =
-      place === "beside" || place === "right"
-        ? "right"
-        : place === "below" || place === "down"
-          ? "down"
-          : place;
-    return opts.deps.layoutApply({
-      tabId: opts.ctx.tabId,
-      root: {
-        type: "split",
-        direction,
-        ratio: ratio ?? 0.5,
-        first: { type: "pane", pane_id: opts.ctx.paneId },
-        second: {
-          type: "pane",
-          label,
-          cwd,
-          command: argv,
-          env: env ?? {},
-        },
-      },
-      focus: focus ?? true,
-    });
-  }
-  throw new HerdrError("placement_failed", "in: here does not place a pane");
 }

@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { sanitizeDisplay } from "./herdr";
@@ -137,6 +138,11 @@ export async function resolvePluginConfigDir(
 
 export async function globalConfigPath(env: NodeJS.ProcessEnv = process.env): Promise<string> {
   return join(await resolvePluginConfigDir(env), "config.yaml");
+}
+
+/** Herdr-owned plugin state directory for run logs, managed responses, and transcripts. */
+export function pluginStateDir(env: NodeJS.ProcessEnv = process.env): string {
+  return env.HERDR_PLUGIN_STATE_DIR ?? join(homedir(), ".hwf", "state");
 }
 
 export function repoConfigPath(repoRoot: string): string {

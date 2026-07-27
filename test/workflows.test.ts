@@ -576,16 +576,23 @@ describe("loader references and composition", () => {
 
     const herdr = await parseWorkflowText(
       "herdr",
-      `version: v1alpha1\nsteps:\n  - id: tree\n    herdr: worktree.create\n  - run: [echo, "{{steps.tree.worktree.path}}"]\n`,
+      `version: v1alpha1\nsteps:\n  - id: tree\n    herdr: worktree.create\n    params: { cwd: /repo }\n  - run: [echo, "{{steps.tree.worktree.path}}"]\n`,
     );
     expect(herdr.steps).toHaveLength(2);
 
     await expect(
       parseWorkflowText(
         "bad-herdr",
-        `version: v1alpha1\nsteps:\n  - id: tree\n    herdr: worktree.create\n  - run: [echo, "{{steps.tree.not_a_field}}"]\n`,
+        `version: v1alpha1\nsteps:\n  - id: tree\n    herdr: worktree.create\n    params: { cwd: /repo }\n  - run: [echo, "{{steps.tree.not_a_field}}"]\n`,
       ),
     ).rejects.toThrow(/unknown herdr result field/);
+
+    await expect(
+      parseWorkflowText(
+        "split-focus",
+        `version: v1alpha1\nsteps:\n  - herdr: pane.split\n    params: { direction: right }\n`,
+      ),
+    ).rejects.toThrow(/target_pane_id is required/);
   });
 
   test("child returns isolation cycles and required inputs", async () => {

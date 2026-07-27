@@ -75,6 +75,10 @@ const DENY_REASONS: { match: (method: string) => boolean; reason: string }[] = [
       m === "pane.release_agent",
     reason: "agent-identity authority methods would corrupt herdr's own detection",
   },
+  {
+    match: (m) => m === "agent.view.set" || m === "agent.view.clear",
+    reason: "agent view filters are client UI state, not workflow automation",
+  },
 ];
 
 function isAllowedArea(method: string): boolean {

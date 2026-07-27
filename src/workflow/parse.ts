@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { assertFocusPolicyAtLoad } from "../herdr-policy";
 import { validateMethodParams } from "../herdr-methods";
 import {
   bail,
@@ -871,6 +872,8 @@ function toAction(
     const params = step.params;
     const err = validateMethodParams(step.herdr, params);
     if (err) bail(file, stepIndex, keyPrefix ? `${keyPrefix}.herdr` : "herdr", err);
+    const policy = assertFocusPolicyAtLoad(step.herdr, params);
+    if (policy) bail(file, stepIndex, keyPrefix ? `${keyPrefix}.herdr` : "herdr", policy);
     return {
       kind: "herdr",
       method: step.herdr,
