@@ -27,6 +27,7 @@ export type StepOutcome =
       details?: Record<string, unknown>;
       coordinationLost?: boolean;
       failure?: StepFailure;
+      blocked?: boolean;
     };
 
 export type RunnerDeps = {
@@ -56,6 +57,7 @@ export type StepRunOpts = {
   runId: string;
   workflowPath: string[];
   isEntry: boolean;
+  managedResponseFiles: string[];
   onProgress?: (step: number, total: number, label: string, outcome?: string) => void;
   onStderr?: (text: string) => void;
 };

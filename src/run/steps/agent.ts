@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { resolveProfile, type AgentProfile } from "../../config";
+import { HerdrError } from "../../herdr";
 import { substituteText } from "../../workflow/parse";
 import type { StepAction } from "../../workflow/types";
 import {
@@ -19,10 +20,15 @@ type AgentAction = Extract<StepAction, { kind: "agent" }>;
 const TURN_TIMEOUT_MS = 1_800_000;
 const POLL_MS = 1_000;
 const SETTLED = new Set(["idle", "done"]);
+/** New-agent only: consecutive settled+empty polls before missing-response failure. */
+const SETTLED_EMPTY_GRACE_POLLS = 2;
 
 type ProfileChoice =
   | { ok: true; name: string; profile: AgentProfile }
   | { ok: false; error: string };
+
+/** Target mode keeps waiting for the exact managed file; new-agent fails after a short settled grace. */
+type ManagedWaitMode = "new-agent" | "target";
 
 function chooseProfile(c: StepCtx, action: AgentAction): ProfileChoice {
   const name =
@@ -40,6 +46,7 @@ function chooseProfile(c: StepCtx, action: AgentAction): ProfileChoice {
 async function preparedResponsePath(c: StepCtx): Promise<string> {
   const path = managedResponsePath(c.opts.runId, c.stepIndex, c.opts.deps.responseDir);
   await mkdir(dirname(path), { recursive: true });
+  c.opts.managedResponseFiles.push(path);
   return path;
 }
 
@@ -48,38 +55,93 @@ async function fileHasText(path: string): Promise<boolean> {
   return (await file.exists()) && file.size > 0;
 }
 
-type TurnWait = { settled: true } | { settled: false; error: string };
+async function missingManagedError(path: string): Promise<string> {
+  const file = Bun.file(path);
+  if (!(await file.exists())) return `managed response file was not written: ${path}`;
+  return `managed response file is empty: ${path}`;
+}
+
+type TurnWait =
+  | { settled: true; blocked: boolean }
+  | { settled: false; error: string; blocked: boolean };
 
 async function awaitManagedTurn(
   c: StepCtx,
   target: string,
   path: string,
   timeoutMs: number,
+  mode: ManagedWaitMode,
 ): Promise<TurnWait> {
   const deps = c.opts.deps;
   const deadline = deps.now() + timeoutMs;
   let notifiedBlocked = false;
+  let sawBlocked = false;
+  let settledEmptyPolls = 0;
   for (;;) {
     const status = await deps.agentStatus(target);
-    if (SETTLED.has(status) && (await fileHasText(path))) return { settled: true };
-    if (status !== "blocked") notifiedBlocked = false;
-    else if (!notifiedBlocked) {
-      notifiedBlocked = true;
-      await deps
-        .notificationShow(
-          `herdr-workflows: ${c.opts.name} agent blocked`,
-          `${target} is waiting for input at step ${c.stepIndex}`,
-        )
-        .catch(() => undefined);
+    const hasText = await fileHasText(path);
+    if (SETTLED.has(status) && hasText) return { settled: true, blocked: sawBlocked };
+
+    if (mode === "new-agent" && SETTLED.has(status) && !hasText) {
+      settledEmptyPolls += 1;
+      if (settledEmptyPolls > SETTLED_EMPTY_GRACE_POLLS) {
+        return {
+          settled: false,
+          error: await missingManagedError(path),
+          blocked: sawBlocked,
+        };
+      }
+    } else {
+      settledEmptyPolls = 0;
     }
+
+    if (status !== "blocked") notifiedBlocked = false;
+    else {
+      sawBlocked = true;
+      if (!notifiedBlocked) {
+        notifiedBlocked = true;
+        await deps
+          .notificationShow(
+            `herdr-workflows: ${c.opts.name} agent blocked`,
+            `${target} is waiting for input at step ${c.stepIndex}`,
+          )
+          .catch(() => undefined);
+      }
+    }
+
     if (deps.now() >= deadline) {
       return {
         settled: false,
         error: `agent turn on '${target}' did not settle with a managed response within ${timeoutMs / 1000}s (last status ${status})`,
+        blocked: sawBlocked,
       };
     }
     await deps.sleep(POLL_MS);
   }
+}
+
+function agentDetails(parts: {
+  profile?: string;
+  kind?: string;
+  target?: string;
+  pane?: PlacedPane;
+  pane_id?: string;
+  status?: string;
+}): Record<string, unknown> {
+  return {
+    ...(parts.profile !== undefined ? { profile: parts.profile } : {}),
+    ...(parts.kind !== undefined ? { kind: parts.kind } : {}),
+    ...(parts.target !== undefined ? { target: parts.target } : {}),
+    ...(parts.pane
+      ? {
+          pane_id: parts.pane.pane_id,
+          tab_id: parts.pane.tab_id,
+          workspace_id: parts.pane.workspace_id,
+        }
+      : {}),
+    ...(parts.pane_id !== undefined && !parts.pane ? { pane_id: parts.pane_id } : {}),
+    ...(parts.status !== undefined ? { status: parts.status } : {}),
+  };
 }
 
 async function managedResult(
@@ -87,20 +149,42 @@ async function managedResult(
   target: string,
   path: string,
   timeoutMs: number,
-  paneId?: string,
+  mode: ManagedWaitMode,
+  details: Record<string, unknown>,
 ): Promise<StepOutcome> {
-  const wait = await awaitManagedTurn(c, target, path, timeoutMs);
+  const wait = await awaitManagedTurn(c, target, path, timeoutMs, mode);
   if (!wait.settled) {
     return {
       ok: false,
       error: wait.error,
-      details: { target, ...(paneId ? { pane_id: paneId } : {}) },
+      details,
+      ...(wait.blocked ? { blocked: true } : {}),
     };
   }
-  const response = await readManagedResponse(path);
-  const agent = await c.opts.deps.agentInfo(target);
-  const pane = paneId ?? (typeof agent.pane_id === "string" ? agent.pane_id : "");
-  return { ok: true, result: { response, agent, pane_id: pane } };
+  try {
+    const response = await readManagedResponse(path);
+    const agent = await c.opts.deps.agentInfo(target);
+    const pane =
+      typeof details.pane_id === "string"
+        ? details.pane_id
+        : typeof agent.pane_id === "string"
+          ? agent.pane_id
+          : "";
+    return {
+      ok: true,
+      result: { response, agent, pane_id: pane },
+      ...(wait.blocked ? { blocked: true } : {}),
+    };
+  } catch (error) {
+    const message =
+      error instanceof HerdrError ? error.message : `managed response: ${String(error)}`;
+    return {
+      ok: false,
+      error: message,
+      details,
+      ...(wait.blocked ? { blocked: true } : {}),
+    };
+  }
 }
 
 async function submitPrompt(c: StepCtx, target: string, text: string): Promise<void> {
@@ -147,6 +231,12 @@ async function newAgentTurn(c: StepCtx, action: AgentAction): Promise<StepOutcom
   if (!chosen.ok) return { ok: false, error: chosen.error };
   let placement: { name: string; placed: PlacedPane } | undefined;
   const close = action.pane?.close;
+  const baseDetails = () =>
+    agentDetails({
+      profile: chosen.name,
+      kind: chosen.profile.kind,
+      ...(placement ? { target: placement.name, pane: placement.placed } : {}),
+    });
   try {
     placement = await startNewAgent(c, action, chosen.profile);
     const prompt = substituteText(action.prompt, c.values);
@@ -161,12 +251,14 @@ async function newAgentTurn(c: StepCtx, action: AgentAction): Promise<StepOutcom
       placement.name,
       path,
       action.timeoutMs ?? TURN_TIMEOUT_MS,
-      placement.placed.pane_id,
+      "new-agent",
+      baseDetails(),
     );
     if (outcome.ok && close === "success") await closePane(c, placement.placed);
     return outcome;
   } catch (error) {
-    return dispatchFailure(`agent (profile ${chosen.name})`, error);
+    const failure = dispatchFailure(`agent (profile ${chosen.name})`, error);
+    return failure.ok ? failure : { ...failure, details: baseDetails() };
   } finally {
     if (close === "always" && placement) await closePane(c, placement.placed);
   }
@@ -179,13 +271,14 @@ async function targetTurn(
 ): Promise<StepOutcome> {
   const target = substituteText(rawTarget, c.values);
   if (!target) return { ok: false, error: "agent: target resolved to an empty value" };
+  const details = agentDetails({ target });
   try {
     const status = await c.opts.deps.agentStatus(target);
     if (!SETTLED.has(status)) {
       return {
         ok: false,
         error: `agent target '${target}' is ${status} — herdr cannot correlate a queued turn; use 'herdr: agent.prompt' to queue work deliberately`,
-        details: { target, status },
+        details: agentDetails({ target, status }),
       };
     }
     const prompt = substituteText(action.prompt, c.values);
@@ -195,9 +288,17 @@ async function targetTurn(
     }
     const path = await preparedResponsePath(c);
     await submitPrompt(c, target, appendResponseInstruction(prompt, path));
-    return await managedResult(c, target, path, action.timeoutMs ?? TURN_TIMEOUT_MS);
+    return await managedResult(
+      c,
+      target,
+      path,
+      action.timeoutMs ?? TURN_TIMEOUT_MS,
+      "target",
+      details,
+    );
   } catch (error) {
-    return dispatchFailure(`agent (target ${target})`, error);
+    const failure = dispatchFailure(`agent (target ${target})`, error);
+    return failure.ok ? failure : { ...failure, details };
   }
 }
 

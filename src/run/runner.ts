@@ -238,6 +238,7 @@ async function hardStepFailure(
     ok: false,
     error,
     ...(interrupted ? { interrupted: true } : {}),
+    ...(outcome.blocked === true ? { blocked: true } : {}),
   });
   return {
     ok: false,
@@ -274,7 +275,11 @@ async function runSteps(
       if (step.continueOnError) {
         tolerated.push(outcome.error);
         opts.onProgress?.(n, total, label, "fail");
-        await logStep(opts, n, total, label, { ok: false, error: outcome.error });
+        await logStep(opts, n, total, label, {
+          ok: false,
+          error: outcome.error,
+          ...(outcome.blocked === true ? { blocked: true } : {}),
+        });
         continue;
       }
       return hardStepFailure(opts, step, n, total, label, outcome, tolerated, false);
@@ -464,6 +469,7 @@ export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
   const deps = { ...defaultDeps(), ...opts.deps };
   const runId = randomUUID().slice(0, 8);
   const workflow = opts.workflow ?? (await loadWorkflow(opts.name, opts.repoRoot, opts.config));
+  const managedResponseFiles: string[] = [];
   const stepOpts: StepRunOpts = {
     name: workflow.name,
     repoRoot: opts.repoRoot,
@@ -473,6 +479,7 @@ export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
     runId,
     workflowPath: [workflow.name],
     isEntry: true,
+    managedResponseFiles,
     ...(opts.onProgress ? { onProgress: opts.onProgress } : {}),
     ...(opts.onStderr ? { onStderr: opts.onStderr } : {}),
   };
@@ -518,6 +525,9 @@ export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
     return finalizeEntryRun(primary, workflow, stepOpts, context.values, runId);
   } finally {
     if (transcriptFile) await rm(transcriptFile, { force: true }).catch(() => undefined);
+    await Promise.all(
+      managedResponseFiles.map((path) => rm(path, { force: true }).catch(() => undefined)),
+    );
     if (opts.ctx.paneId) {
       void deps.reportToken(opts.ctx.paneId, null).catch(() => undefined);
     }

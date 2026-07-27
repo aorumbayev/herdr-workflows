@@ -46,11 +46,13 @@ const baseConfig: WorkflowsConfig = {
   transcripts: {},
 };
 
-function mockDeps(overrides: Partial<RunnerDeps> = {}): {
+function mockDeps(overrides: Partial<RunnerDeps> & { writeManagedResponse?: boolean } = {}): {
   deps: RunnerDeps;
   notes: string[];
   calls: { method: string; params: Record<string, unknown> }[];
+  agents: Map<string, { status: string; pane_id: string; name: string }>;
 } {
+  const { writeManagedResponse = true, ...depOverrides } = overrides;
   const notes: string[] = [];
   const calls: { method: string; params: Record<string, unknown> }[] = [];
   const agents = new Map<string, { status: string; pane_id: string; name: string }>();
@@ -115,7 +117,7 @@ function mockDeps(overrides: Partial<RunnerDeps> = {}): {
         };
         const text = String(params.text ?? "");
         const match = /absolute path ([^\s,]+)/.exec(text);
-        if (match?.[1]) {
+        if (writeManagedResponse && match?.[1]) {
           await mkdir(join(match[1]!, ".."), { recursive: true });
           await writeFile(match[1]!, "managed answer\n");
         }
@@ -182,9 +184,20 @@ function mockDeps(overrides: Partial<RunnerDeps> = {}): {
     transcriptText: async () => "TRANSCRIPT",
     sleep: async () => undefined,
     now: () => Date.now(),
-    ...overrides,
+    ...depOverrides,
   };
-  return { deps, notes, calls };
+  return { deps, notes, calls, agents };
+}
+
+function fastClock(): { sleep: () => Promise<void>; now: () => number } {
+  let t = 0;
+  return {
+    sleep: async () => undefined,
+    now: () => {
+      t += 50;
+      return t;
+    },
+  };
 }
 
 function failed(
@@ -254,14 +267,7 @@ steps:
       repoRoot: root,
       config: baseConfig,
       ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
-      deps: {
-        ...deps,
-        sleep: async () => undefined,
-        now: (() => {
-          let t = 0;
-          return () => (t += 50);
-        })(),
-      },
+      deps: { ...deps, ...fastClock() },
     });
     expect(result.ok).toBe(true);
     const methods = calls.map((c) => c.method);
@@ -272,6 +278,142 @@ steps:
       direction: "right",
       target_pane_id: "w1:p1",
     });
+  });
+
+  test("new-agent fails fast when settled without managed response", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: summarize
+    using: claude
+    pane: { open: beside }
+`,
+    });
+    const { deps, calls } = mockDeps({ writeManagedResponse: false });
+    const clock = fastClock();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: { ...deps, ...clock },
+    });
+    const err = failed(result);
+    expect(err.error).toMatch(/managed response file was not written/);
+    expect(err.error).not.toMatch(/within \d+s/);
+    expect(calls.some((c) => c.method === "agent.prompt")).toBe(true);
+  });
+
+  test("target mode keeps waiting for managed response until timeout", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - agent: continue
+    target: worker
+    timeout: 200ms
+`,
+    });
+    const { deps } = mockDeps({ writeManagedResponse: false });
+    const clock = fastClock();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, paneId: "w1:p1" },
+      deps: {
+        ...deps,
+        ...clock,
+        agentStatus: async () => "idle",
+        agentInfo: async () => ({
+          name: "worker",
+          pane_id: "w1:p9",
+          agent_status: "idle",
+          agent: "claude",
+        }),
+      },
+    });
+    const err = failed(result);
+    expect(err.error).toMatch(/did not settle with a managed response within 0\.2s/);
+    expect(err.error).not.toMatch(/managed response file was not written/);
+  });
+
+  test("managed response file is cleaned up while step result keeps response", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: summarize
+    using: claude
+    pane: { open: beside }
+  - herdr: notification.show
+    params: { title: kept, body: "{{steps.review.response}}" }
+`,
+    });
+    const state = process.env.HERDR_PLUGIN_STATE_DIR!;
+    const { deps, calls } = mockDeps();
+    let responsePath = "";
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: {
+        ...deps,
+        ...fastClock(),
+        herdrCall: async (method, params = {}) => {
+          const out = await deps.herdrCall(method, params);
+          if (method === "agent.prompt") {
+            const match = /absolute path ([^\s,]+)/.exec(String(params.text ?? ""));
+            if (match?.[1]) responsePath = match[1]!;
+            expect(await Bun.file(responsePath).exists()).toBe(true);
+          }
+          return out;
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(responsePath).not.toBe("");
+    expect(await Bun.file(responsePath).exists()).toBe(false);
+    const leftover = await Array.fromAsync(
+      new Bun.Glob("responses/*").scan({ cwd: state, absolute: true }),
+    );
+    expect(leftover).toEqual([]);
+    const notify = calls.find((c) => c.method === "notification.show" && c.params.title === "kept");
+    expect(notify?.params.body).toBe("managed answer\n");
+  });
+
+  test("blocked episode notifies once and is recorded in the run log", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: summarize
+    using: claude
+    pane: { open: beside }
+`,
+    });
+    let polls = 0;
+    const { deps, notes } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: {
+        ...deps,
+        ...fastClock(),
+        agentStatus: async (target) => {
+          polls += 1;
+          if (polls <= 2) return "blocked";
+          return deps.agentStatus(target);
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(notes.filter((n) => n.includes("agent blocked"))).toHaveLength(1);
+    const log = await readRunLog();
+    expect(log.some((e) => e.blocked === true && e.ok === true)).toBe(true);
   });
 
   test("busy target rejected before prompt", async () => {
@@ -393,6 +535,38 @@ steps:
     const notify = calls.filter((c) => c.method === "notification.show");
     expect(notify).toHaveLength(1);
     expect(notify[0]?.params).toMatchObject({ title: "m" });
+  });
+
+  test("agent failure details reach context.error.details in recovery", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+on_failure:
+  herdr: notification.show
+  params:
+    title: "{{context.error.details.profile}}"
+    body: "{{context.error.details.kind}}|{{context.error.details.pane_id}}|{{context.error.details.tab_id}}|{{context.error.details.workspace_id}}"
+steps:
+  - id: review
+    agent: summarize
+    using: claude
+    pane: { open: beside }
+`,
+    });
+    const { deps, calls } = mockDeps({ writeManagedResponse: false });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: { ...deps, ...fastClock() },
+    });
+    expect(result.ok).toBe(false);
+    const notify = calls.filter((c) => c.method === "notification.show");
+    expect(notify).toHaveLength(1);
+    expect(notify[0]?.params).toMatchObject({
+      title: "claude",
+      body: "claude|w1:p3|w1:t1|w1",
+    });
   });
 
   test("child failure bubbles to entry recovery with child attribution", async () => {
@@ -559,14 +733,7 @@ steps:
       repoRoot: root,
       config: baseConfig,
       ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
-      deps: {
-        ...deps,
-        sleep: async () => undefined,
-        now: (() => {
-          let t = 0;
-          return () => (t += 50);
-        })(),
-      },
+      deps: { ...deps, ...fastClock() },
     });
     expect(result.ok).toBe(true);
     const leftover = await Array.fromAsync(
