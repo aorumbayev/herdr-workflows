@@ -55,7 +55,22 @@ Running always happens through the picker or `hwf run` — it needs real herdr p
 
 ## Agent skill
 
-`skills/herdr-workflow-create` is an agent skill that walks you through authoring a workflow and validates the YAML against this plugin's own loader before writing it. Install it into any coding agent:
+`skills/herdr-workflow-create` is an agent skill that walks you through authoring a workflow, keeps the web workbench canvas drawing it as it goes, and validates the YAML against this plugin's own loader before saving. Paste this to your coding agent and it sets itself up:
+
+```
+Install the herdr-workflows toolkit so you can build workflows for me:
+
+1. If `hwf` is not on PATH: herdr plugin install aorumbayev/herdr-workflows
+2. Install the skill for this agent:
+   npx -y skills add aorumbayev/herdr-workflows --skill herdr-workflow-create -y
+3. Read the installed herdr-workflow-create/SKILL.md so you know the authoring workflow.
+4. In this repo: run `hwf init` if .hwf/config.yaml is missing, then start the workbench in
+   the background with `hwf web --no-open` and give me the URL it prints.
+5. Build a small test workflow — one `run: git status --short` step — save it, send me
+   <url>#w=repo:<name>, and confirm the canvas draws it. Then interview me for the real one.
+```
+
+Or install it by hand:
 
 ```bash
 npx skills add aorumbayev/herdr-workflows --skill herdr-workflow-create --global

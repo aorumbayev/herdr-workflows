@@ -820,6 +820,9 @@
       let openSeq = 0; // last-click-wins token for openWorkflow
       let configDirty = false;
       let editorDirty = false;
+      let editorFileText = ""; // open workflow as last read from disk — live reload compares to it
+      let editorMode = "text"; // desired mode, kept across live reloads
+      let wantOpen = null; // {name, scope} from the URL hash; opened as soon as the file exists
 
       function errMsg(e) {
         return (e && e.message) || String(e);
@@ -937,6 +940,8 @@
       async function openWorkflow(name, scope) {
         const seq = ++openSeq;
         current = { name, scope };
+        wantOpen = null;
+        setHash("w=" + scope + ":" + name);
         renderWorkflows();
         const pane = $("pane");
         pane.innerHTML = "<p class=hint>loading…</p>";
@@ -2203,6 +2208,7 @@
         const pane = $("pane");
         pane.innerHTML = "";
         editorDirty = false;
+        editorFileText = text;
         let mode = "text";
         let extras = {}; // inputs / on_error carried through canvas mode untouched
         let validateTimer = null;
@@ -2301,6 +2307,7 @@
             return; // stale YAML would wipe the node edits on the way back in
           }
           mode = next;
+          editorMode = next;
           textBtn.classList.toggle("on", mode === "text");
           visBtn.classList.toggle("on", mode === "visual");
           ed.wrap.classList.toggle("hide", mode !== "text");
@@ -2478,6 +2485,7 @@
         pane.append(bar1, ed.wrap, canvasHost, status, bar2, foot);
         if (loadError) showProblem(false, loadError);
         runValidate();
+        if (editorMode === "visual") setMode("visual");
       }
 
       function mkScopeSelect(scope) {
@@ -2626,7 +2634,67 @@
         e.preventDefault();
         e.returnValue = "";
       });
-      loadState();
+
+      function setHash(h) {
+        if (location.hash !== "#" + h) location.hash = h;
+      }
+
+      // #w=<scope>:<name> — a link straight to one workflow, so an agent can hand over a
+      // single URL and then keep rewriting the file while the page follows along.
+      function applyHash() {
+        const m = /^#w=(repo|global):([a-z0-9][a-z0-9-_]*)$/.exec(location.hash);
+        if (!m) return;
+        const [, scope, name] = m;
+        if (current && current.name === name && current.scope === scope) return;
+        if (!confirmLeave()) return;
+        tab = "workflows";
+        const entry = state.entries.find((e) => e.name === name);
+        if (entry) {
+          const has = scope === "repo" ? entry.inRepo : entry.inGlobal;
+          return openWorkflow(name, has ? scope : entry.source);
+        }
+        wantOpen = { name, scope }; // not written yet — liveTick opens it once it appears
+        current = null;
+        renderWorkflows();
+        $("pane").innerHTML = "<p class=hint>waiting for " + esc(name) + "…</p>";
+      }
+
+      let liveSig = "";
+      let liveBusy = false;
+
+      // Poll disk so a workflow an agent is writing shows up (and redraws) without a reload.
+      // Local edits win: a dirty buffer is never overwritten.
+      async function liveTick() {
+        if (liveBusy || document.hidden || tab !== "workflows" || editorDirty || configDirty)
+          return;
+        liveBusy = true;
+        try {
+          const s = await api("/api/state");
+          if (s.status === 200 && !s.data.error) {
+            const sig = JSON.stringify(s.data.entries || []);
+            if (sig !== liveSig) {
+              liveSig = sig;
+              state = Object.assign(state, s.data);
+              renderWorkflows();
+              if (wantOpen) applyHash();
+            }
+          }
+          if (!current || !current.name || editorDirty) return;
+          const r = await api(
+            "/api/workflow?name=" + encodeURIComponent(current.name) + "&scope=" + current.scope,
+          );
+          if (r.status !== 200 || editorDirty) return;
+          const text = r.data.text || "";
+          if (text === editorFileText) return;
+          renderEditor(current.name, current.scope, text, r.data.error || "");
+        } finally {
+          liveBusy = false;
+        }
+      }
+
+      addEventListener("hashchange", applyHash);
+      setInterval(liveTick, 1500);
+      loadState().then(applyHash);
     </script>
   </body>
 </html>

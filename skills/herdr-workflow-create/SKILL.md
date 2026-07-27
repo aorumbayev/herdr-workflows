@@ -26,9 +26,10 @@ Copy this checklist and tick as you go:
 ```
 - [ ] 1. Interview: goal, inputs, agent vs shell, placement, failure policy
 - [ ] 2. Survey: read config agents + existing workflows
-- [ ] 3. Compose the YAML
-- [ ] 4. Validate through the real loader (MUST be ok:true)
-- [ ] 5. Write the file, print the run command
+- [ ] 3. Open the workbench, hand the user the live canvas link
+- [ ] 4. Compose the YAML
+- [ ] 5. Validate through the real loader (MUST be ok:true)
+- [ ] 6. Save, then keep iterating on the live canvas
 ```
 
 ### 1. Interview
@@ -57,7 +58,23 @@ ls .hwf/workflows ~/.hwf/workflows 2>/dev/null        # reusable targets for use
 workflow). Existing workflow that already does a sub-task → compose with `use:` + `with:`
 instead of duplicating steps.
 
-### 3. Compose
+### 3. Open the live canvas
+
+Start the workbench once per session, in the background:
+
+```bash
+hwf web --no-open        # prints: herdr-workflows web · http://127.0.0.1:7317/?token=…
+```
+
+Send the user that URL with the workflow pinned on the end — `<url>#w=repo:<name>` (or
+`#w=global:<name>`) — and tell them to press **canvas**. The link works before the file
+exists; the page waits for it. From then on every save you make redraws in front of them
+within ~1.5s, and it never clobbers edits they have open unsaved.
+
+Port 7317 is the default and `hwf web` steps to the next free port when it is taken, so
+reuse a URL you already handed over instead of starting a second server.
+
+### 4. Compose
 
 The shape that covers most requests:
 
@@ -100,7 +117,7 @@ Validated copy-paste recipes (review gate, worktree, handoff, fix-until-green, p
 loop, review workspace, notify):
 **[reference/recipes.md](reference/recipes.md)**.
 
-### 4. Validate — mandatory gate
+### 5. Validate — mandatory gate
 
 Never write a workflow you have not validated. The bundled script runs the plugin's own
 loader, so its errors are exactly what `hwf run` would print:
@@ -116,9 +133,17 @@ PATH, `curl`, `python3`; it starts a localhost `hwf web` server and stops it on 
 If `hwf` is not installed, say so and hand-check every rule in
 [reference/syntax.md](reference/syntax.md) instead — do not claim the file is valid.
 
-### 5. Write and report
+### 6. Save and iterate
 
-Write the validated YAML to the chosen scope, then print:
+Write the validated YAML to the chosen scope as soon as it passes — the first step alone is
+worth saving, because that is what puts the workflow on the user's canvas. Then work in short
+rounds: change → validate → save → ask what to fix, so they watch it grow instead of reviewing
+a wall of YAML at the end.
+
+Before editing again, re-read the file: the user may have moved nodes or saved from the
+browser, and their copy wins.
+
+Report the run command once the shape is settled:
 
 ```
 hwf run <name> [--input k=v …] [--prompt "…"]     # or prefix+k → <name>

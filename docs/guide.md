@@ -136,9 +136,26 @@ hwf web   # opens http://127.0.0.1:7317/?token=… — or just run bare `hwf`
 
 Text editor with live validation, or visual mode (drag-reorderable step cards). Bound to `127.0.0.1` with a per-launch token.
 
+`<url>#w=repo:<name>` (or `#w=global:<name>`) opens straight onto one workflow, and waits for it if the file does not exist yet. The open workflow reloads from disk every 1.5s, so a workflow being written by an agent — or by your editor — redraws on the canvas as it changes. Anything you have unsaved is left alone.
+
 ## Let an agent write it
 
-`herdr-workflow-create` is an agent skill that interviews you, then validates the YAML against this plugin's own loader before writing the file:
+`herdr-workflow-create` is an agent skill that interviews you, starts the workbench so you watch the canvas fill in, and validates every YAML against this plugin's own loader before saving. Paste this to your coding agent:
+
+```
+Install the herdr-workflows toolkit so you can build workflows for me:
+
+1. If `hwf` is not on PATH: herdr plugin install aorumbayev/herdr-workflows
+2. Install the skill for this agent:
+   npx -y skills add aorumbayev/herdr-workflows --skill herdr-workflow-create -y
+3. Read the installed herdr-workflow-create/SKILL.md so you know the authoring workflow.
+4. In this repo: run `hwf init` if .hwf/config.yaml is missing, then start the workbench in
+   the background with `hwf web --no-open` and give me the URL it prints.
+5. Build a small test workflow — one `run: git status --short` step — save it, send me
+   <url>#w=repo:<name>, and confirm the canvas draws it. Then interview me for the real one.
+```
+
+Or install it by hand:
 
 ```bash
 npx skills add aorumbayev/herdr-workflows --skill herdr-workflow-create --global
