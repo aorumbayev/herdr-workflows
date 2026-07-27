@@ -345,6 +345,73 @@ steps:
       parse(`version: v1alpha1\nsteps:\n  - pane.split: { direction: right }\n`),
     ).toThrow(/no action key|Unrecognized key/);
   });
+
+  test("unknown template root rejected", () => {
+    expect(() => parse(`version: v1alpha1\nsteps:\n  - agent: "see {{foo.bar}}"\n`)).toThrow(
+      /invalid template '\{\{foo\.bar\}\}'/,
+    );
+  });
+
+  test("near-miss template roots rejected", () => {
+    expect(() =>
+      parse(
+        `version: v1alpha1\ninputs:\n  base: text\nsteps:\n  - run: [echo, "{{input.base}}"]\n`,
+      ),
+    ).toThrow(/invalid template '\{\{input\.base\}\}'/);
+    expect(() => parse(`version: v1alpha1\nsteps:\n  - agent: "{{step.diff}}"\n`)).toThrow(
+      /invalid template '\{\{step\.diff\}\}'/,
+    );
+  });
+
+  test("bare template root without path rejected", () => {
+    expect(() => parse(`version: v1alpha1\nsteps:\n  - agent: "{{steps}}"\n`)).toThrow(
+      /invalid template '\{\{steps\}\}'/,
+    );
+  });
+
+  test("unclosed template rejected", () => {
+    expect(() => parse(`version: v1alpha1\nsteps:\n  - agent: "see {{inputs.base"\n`)).toThrow(
+      /invalid template '\{\{inputs\.base'/,
+    );
+  });
+
+  test("malformed when template names the bad mustache", () => {
+    expect(() =>
+      parse(`version: v1alpha1\nsteps:\n  - run: "true"\n    when: "{{stepz.x}}"\n`),
+    ).toThrow(/invalid template '\{\{stepz\.x\}\}'/);
+  });
+
+  test("valid templates and JSON single braces still parse", () => {
+    const doc = parse(`version: v1alpha1
+inputs:
+  base: text
+steps:
+  - id: probe
+    run: [echo, "{{inputs.base}}", '{"key": "value"}']
+  - agent: "review {{steps.probe.stdout}} with {\\"a\\":1}"
+  - herdr: notification.show
+    params:
+      title: "{{inputs.base}}"
+      body: '{"ok": true}'
+  - workflow: gate
+    inputs:
+      suite: "{{inputs.base}}"
+returns: "{{steps.probe}}"
+`);
+    expect(doc.steps).toHaveLength(4);
+    expect(doc.returns).toEqual({ kind: "template", template: "{{steps.probe}}" });
+  });
+
+  test("on_failure templates are validated", () => {
+    expect(() =>
+      parse(`version: v1alpha1
+on_failure:
+  agent: "failed {{foo.bar}}"
+steps:
+  - run: "true"
+`),
+    ).toThrow(/on_failure\.agent.*invalid template/);
+  });
 });
 
 describe("typed templates", () => {
@@ -354,6 +421,7 @@ describe("typed templates", () => {
       segments: ["assess", "response"],
     });
     expect(parseTemplatePath("prompt")).toBeUndefined();
+    expect(parseTemplatePath("inputs")).toBeUndefined();
     expect(parseTemplatePath("inputs.base")).toEqual({ root: "inputs", segments: ["base"] });
   });
 

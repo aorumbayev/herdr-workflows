@@ -25,11 +25,13 @@ import {
 const SHELLS = ["sh", "bash", "zsh", "pwsh", "powershell", "cmd"] as const;
 const ACTION_KEYS = ["agent", "run", "herdr", "workflow"] as const;
 const PATH_SEGMENT_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
-const TEMPLATE_PATH_RE = /^(inputs|steps|context)(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*$/;
-const TEMPLATE_FIND_RE = /\{\{\s*((?:inputs|steps|context)(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\}\}/g;
-const WHOLE_TEMPLATE_RE = /^\{\{\s*((?:inputs|steps|context)(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\}\}$/;
-const WHEN_EQ_RE =
-  /^\{\{\s*((?:inputs|steps|context)(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\}\}\s*(==|!=)\s*(?:"([^"]*)"|'([^']*)')$/;
+const TEMPLATE_INNER = "(?:inputs|steps|context)(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)+";
+const TEMPLATE_PATH_RE = new RegExp(`^${TEMPLATE_INNER}$`);
+const TEMPLATE_FIND_RE = new RegExp(`\\{\\{\\s*(${TEMPLATE_INNER})\\s*\\}\\}`, "g");
+const WHOLE_TEMPLATE_RE = new RegExp(`^\\{\\{\\s*(${TEMPLATE_INNER})\\s*\\}\\}$`);
+const WHEN_EQ_RE = new RegExp(
+  `^\\{\\{\\s*(${TEMPLATE_INNER})\\s*\\}\\}\\s*(==|!=)\\s*(?:"([^"]*)"|'([^']*)')$`,
+);
 const ANY_MUSTACHE_RE = /\{\{/;
 
 const identSchema = z.string().regex(IDENT_RE, "must match [a-z][a-z0-9_]{0,31}");
@@ -589,7 +591,7 @@ export function parseTemplatePath(path: string): TemplatePath | undefined {
   const parts = trimmed.split(".");
   const root = parts[0] as TemplateRoot;
   const segments = parts.slice(1);
-  if (!segments.every((s) => PATH_SEGMENT_RE.test(s))) return undefined;
+  if (segments.length === 0 || !segments.every((s) => PATH_SEGMENT_RE.test(s))) return undefined;
   return { root, segments };
 }
 
@@ -607,14 +609,50 @@ export function textTemplates(text: string): TemplatePath[] {
   return out;
 }
 
-function templateHasUnsafeMustache(text: string): boolean {
-  TEMPLATE_FIND_RE.lastIndex = 0;
-  let last = 0;
-  for (let m = TEMPLATE_FIND_RE.exec(text); m; m = TEMPLATE_FIND_RE.exec(text)) {
-    if (text.slice(last, m.index).includes("{{")) return true;
-    last = m.index + m[0].length;
+function malformedTemplateSnippet(text: string): string | undefined {
+  let from = 0;
+  while (from < text.length) {
+    const start = text.indexOf("{{", from);
+    if (start === -1) return undefined;
+    const close = text.indexOf("}}", start + 2);
+    if (close === -1) return text.slice(start);
+    const snippet = text.slice(start, close + 2);
+    if (!parseTemplatePath(text.slice(start + 2, close))) return snippet;
+    from = close + 2;
   }
-  return text.slice(last).includes("{{");
+  return undefined;
+}
+
+function assertValidTemplates(
+  file: string,
+  step: number | undefined,
+  key: string,
+  text: string,
+): void {
+  const bad = malformedTemplateSnippet(text);
+  if (bad === undefined) return;
+  bail(file, step, key, `invalid template '${bad}' — expected {{inputs|steps|context.<path>}}`);
+}
+
+function assertTemplatesInValue(
+  file: string,
+  step: number | undefined,
+  key: string,
+  value: unknown,
+): void {
+  if (typeof value === "string") {
+    assertValidTemplates(file, step, key, value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, i) => assertTemplatesInValue(file, step, `${key}[${i}]`, item));
+    return;
+  }
+  if (value && typeof value === "object") {
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      assertTemplatesInValue(file, step, `${key}.${k}`, v);
+    }
+  }
 }
 
 function resolvePath(ns: TemplateNamespace, path: TemplatePath): unknown {
@@ -675,6 +713,9 @@ export function substituteParams(
 }
 
 function parseWhen(file: string, stepIndex: number, value: string): WhenSpec {
+  if (ANY_MUSTACHE_RE.test(value)) {
+    assertValidTemplates(file, stepIndex, "when", value);
+  }
   const eq = WHEN_EQ_RE.exec(value);
   if (eq) {
     return {
@@ -727,8 +768,14 @@ function parseRunPayload(file: string, stepIndex: number, step: RawStep): RunPay
     : { form: "shell", command: value };
 }
 
-function parseReturns(value: string | Record<string, string>): ReturnsSpec {
-  if (typeof value === "string") return { kind: "template", template: value };
+function parseReturns(file: string, value: string | Record<string, string>): ReturnsSpec {
+  if (typeof value === "string") {
+    assertValidTemplates(file, undefined, "returns", value);
+    return { kind: "template", template: value };
+  }
+  for (const [name, template] of Object.entries(value)) {
+    assertValidTemplates(file, undefined, `returns.${name}`, template);
+  }
   return { kind: "map", fields: value };
 }
 
@@ -744,7 +791,43 @@ function optionalCwdEnvPane(step: {
   };
 }
 
-function toAction(file: string, stepIndex: number, step: RawStep): StepAction {
+function assertActionTemplates(
+  file: string,
+  stepIndex: number | undefined,
+  step: RawStep,
+  keyPrefix?: string,
+): void {
+  const key = (name: string) => (keyPrefix ? `${keyPrefix}.${name}` : name);
+  if (step.agent !== undefined) {
+    assertValidTemplates(file, stepIndex, key("agent"), step.agent);
+    if (step.using !== undefined) assertValidTemplates(file, stepIndex, key("using"), step.using);
+    if (step.target !== undefined)
+      assertValidTemplates(file, stepIndex, key("target"), step.target);
+  }
+  if (Array.isArray(step.run)) {
+    step.run.forEach((el, i) => assertValidTemplates(file, stepIndex, key(`run[${i}]`), el));
+  }
+  if (step.cwd !== undefined) assertValidTemplates(file, stepIndex, key("cwd"), step.cwd);
+  if (step.env !== undefined) assertTemplatesInValue(file, stepIndex, key("env"), step.env);
+  if (step.pane?.target !== undefined) {
+    assertValidTemplates(file, stepIndex, key("pane.target"), step.pane.target);
+  }
+  if (step.pane?.workspace !== undefined) {
+    assertValidTemplates(file, stepIndex, key("pane.workspace"), step.pane.workspace);
+  }
+  if (step.params !== undefined)
+    assertTemplatesInValue(file, stepIndex, key("params"), step.params);
+  if (step.inputs !== undefined)
+    assertTemplatesInValue(file, stepIndex, key("inputs"), step.inputs);
+}
+
+function toAction(
+  file: string,
+  stepIndex: number | undefined,
+  step: RawStep,
+  keyPrefix?: string,
+): StepAction {
+  assertActionTemplates(file, stepIndex, step, keyPrefix);
   if (step.agent !== undefined) {
     return {
       kind: "agent",
@@ -759,7 +842,7 @@ function toAction(file: string, stepIndex: number, step: RawStep): StepAction {
   if (step.run !== undefined) {
     return {
       kind: "run",
-      payload: parseRunPayload(file, stepIndex, step),
+      payload: parseRunPayload(file, stepIndex ?? 0, step),
       ...optionalCwdEnvPane(step),
       ...(step.background === true ? { background: true } : {}),
       ...(step.ready_when !== undefined ? { readyWhen: step.ready_when.slice(1, -1) } : {}),
@@ -770,7 +853,7 @@ function toAction(file: string, stepIndex: number, step: RawStep): StepAction {
   if (step.herdr !== undefined) {
     const params = step.params;
     const err = validateMethodParams(step.herdr, params);
-    if (err) bail(file, stepIndex, "herdr", err);
+    if (err) bail(file, stepIndex, keyPrefix ? `${keyPrefix}.herdr` : "herdr", err);
     return {
       kind: "herdr",
       method: step.herdr,
@@ -785,7 +868,7 @@ function toAction(file: string, stepIndex: number, step: RawStep): StepAction {
       ...(step.inputs !== undefined ? { inputs: step.inputs } : {}),
     };
   }
-  bail(file, stepIndex, undefined, "step has no action key");
+  bail(file, stepIndex, keyPrefix, "step has no action key");
 }
 
 function toStep(file: string, stepIndex: number, step: RawStep): WorkflowStep {
@@ -798,7 +881,7 @@ function toStep(file: string, stepIndex: number, step: RawStep): WorkflowStep {
 }
 
 function toRecovery(file: string, step: z.infer<typeof recoveryStepSchema>): RecoveryAction {
-  const asStep = toAction(file, 0, step as RawStep);
+  const asStep = toAction(file, undefined, step as RawStep, "on_failure");
   if (asStep.kind === "agent") {
     const { background: _b, ...rest } = asStep as AgentWithBackground;
     return rest;
@@ -854,7 +937,7 @@ export function parseRaw(file: string, text: string): RawWorkflow {
     ...(raw.description !== undefined ? { description: raw.description } : {}),
     ...(raw.hidden !== undefined ? { hidden: raw.hidden } : {}),
     ...(raw.inputs !== undefined ? { inputs: raw.inputs as Record<string, RawInputValue> } : {}),
-    ...(raw.returns !== undefined ? { returns: parseReturns(raw.returns) } : {}),
+    ...(raw.returns !== undefined ? { returns: parseReturns(file, raw.returns) } : {}),
     ...(raw.on_failure !== undefined ? { onFailure: toRecovery(file, raw.on_failure) } : {}),
     steps: raw.steps.map((step, i) => toStep(file, i + 1, step)),
   };
