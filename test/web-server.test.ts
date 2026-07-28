@@ -441,6 +441,9 @@ describe("web page share and import routes", () => {
     expect(html).toContain("replace existing workflows");
     expect(html).toContain("no run");
     expect(html).toContain("confirmLeave()");
+    expect(html).toContain('aria-label", "import command"');
+    expect(html).toContain("cmd.tabIndex = 0");
+    expect(html).toContain("aria-readonly");
     expect(html).not.toMatch(/run imported|import and run|run this bundle/i);
   });
 
@@ -451,8 +454,36 @@ describe("web page share and import routes", () => {
     expect(html).toContain("function syncWorkflowLayout()");
     expect(html).toMatch(/if \(!hash\) \{[\s\S]*?routeView = null/);
     expect(html).toMatch(/if \(!hash\) \{[\s\S]*?confirmLeave\(\)/);
-    expect(html).toMatch(/if \(routeView\) \{[\s\S]*?syncWorkflowLayout\(\)/);
     expect(html).toContain("syncWorkflowLayout()");
     expect(html).toMatch(/openWorkflow[\s\S]*?syncWorkflowLayout\(\)/);
+  });
+
+  test("served page restores prior hash when dirty confirm cancels route changes", async () => {
+    const root = await repo();
+    const { base, token } = await serve(root);
+    const html = await (await fetch(`${base}/?token=${encodeURIComponent(token)}`)).text();
+    expect(html).toContain("function currentRouteHash()");
+    expect(html).toContain("function restoreRouteHash()");
+    expect(html).toMatch(
+      /function currentRouteHash\(\) \{\s*if \(tab !== "workflows"\) return "";/,
+    );
+    expect(html).toMatch(
+      /history\.replaceState\(null, "", location\.pathname \+ location\.search \+ want\)/,
+    );
+    expect(html).toMatch(/if \(!confirmLeave\(\)\) \{\s*restoreRouteHash\(\);\s*return;\s*\}/);
+    const cancelRestores = html.match(
+      /if \(!confirmLeave\(\)\) \{\s*restoreRouteHash\(\);\s*return;\s*\}/g,
+    );
+    expect(cancelRestores?.length).toBeGreaterThanOrEqual(4);
+    expect(html).toMatch(
+      /if \(\s*!routeView &&\s*current &&\s*current\.name === name &&\s*current\.scope === scope\s*\)\s*return;/,
+    );
+    expect(html).toMatch(
+      /if \(!confirmLeave\(\)\) \{\s*restoreRouteHash\(\);\s*return;\s*\}\s*routeView = null;/,
+    );
+    expect(html).toContain("configDirty");
+    expect(html).toContain("editorDirty");
+    expect(html).toContain("discard unsaved config changes?");
+    expect(html).toContain("discard unsaved workflow changes?");
   });
 });

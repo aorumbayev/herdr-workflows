@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { gzipSync } from "node:zlib";
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../src/limits";
@@ -313,6 +313,97 @@ describe("hwf workflow import", () => {
     expect(outcome.result.status).toBe("conflicts");
     expect(await readFile(join(dir, "keep.yaml"), "utf8")).toBe(successor);
     expect(await Bun.file(join(dir, "blocked.yaml")).exists()).toBe(true);
+  });
+
+  test("replace-all mid-failure restores an overwritten destination", async () => {
+    const { root, home } = await scratch();
+    const dir = join(root, ".hwf", "workflows");
+    await mkdir(dir, { recursive: true });
+    const oldA = "version: v1alpha1\nsteps:\n  - run: old-a\n";
+    await writeFile(join(dir, "a.yaml"), oldA);
+    const bundle = [
+      { name: "a", yaml: exactBody },
+      { name: "b", yaml: exactBody },
+    ];
+    await expect(
+      runImport(encodePayload(bundle), {
+        repoRoot: root,
+        home,
+        scope: "repo",
+        force: true,
+        afterPublish: async ({ name }) => {
+          if (name === "a") throw new Error("injected replace failure");
+        },
+      }),
+    ).rejects.toThrow(/injected replace failure/);
+    expect(await readFile(join(dir, "a.yaml"), "utf8")).toBe(oldA);
+    expect(await Bun.file(join(dir, "b.yaml")).exists()).toBe(false);
+    expect((await readdir(dir)).filter((n) => n.startsWith("."))).toEqual([]);
+  });
+
+  test("replace-all mid-failure removes a newly created destination", async () => {
+    const { root, home } = await scratch();
+    const dir = join(root, ".hwf", "workflows");
+    await mkdir(dir, { recursive: true });
+    const oldB = "version: v1alpha1\nsteps:\n  - run: old-b\n";
+    await writeFile(join(dir, "b.yaml"), oldB);
+    const bundle = [
+      { name: "a", yaml: exactBody },
+      { name: "b", yaml: exactBody },
+    ];
+    await expect(
+      runImport(encodePayload(bundle), {
+        repoRoot: root,
+        home,
+        scope: "repo",
+        force: true,
+        afterPublish: async ({ name }) => {
+          if (name === "a") throw new Error("injected new-dest failure");
+        },
+      }),
+    ).rejects.toThrow(/injected new-dest failure/);
+    expect(await Bun.file(join(dir, "a.yaml")).exists()).toBe(false);
+    expect(await readFile(join(dir, "b.yaml"), "utf8")).toBe(oldB);
+    expect((await readdir(dir)).filter((n) => n.startsWith("."))).toEqual([]);
+  });
+
+  test("replace-all preserves backup when rollback restore rename fails", async () => {
+    const { root, home } = await scratch();
+    const dir = join(root, ".hwf", "workflows");
+    await mkdir(dir, { recursive: true });
+    const oldA = "version: v1alpha1\nsteps:\n  - run: old-a\n";
+    await writeFile(join(dir, "a.yaml"), oldA);
+    const bundle = [
+      { name: "a", yaml: exactBody },
+      { name: "b", yaml: exactBody },
+    ];
+    let err: unknown;
+    try {
+      await runImport(encodePayload(bundle), {
+        repoRoot: root,
+        home,
+        scope: "repo",
+        force: true,
+        afterPublish: async ({ name, path }) => {
+          if (name !== "a") return;
+          await unlink(path);
+          await mkdir(path);
+          await writeFile(join(path, "blocker"), "x");
+          throw new Error("injected restore-block failure");
+        },
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toMatch(/injected restore-block failure/);
+    expect((err as Error).message).toMatch(/original backup preserved at /);
+    const backupPath = /original backup preserved at (.+)$/.exec((err as Error).message)?.[1];
+    expect(backupPath).toBeTruthy();
+    expect(await readFile(backupPath!, "utf8")).toBe(oldA);
+    expect(await Bun.file(join(dir, "b.yaml")).exists()).toBe(false);
+    const dots = (await readdir(dir)).filter((n) => n.startsWith("."));
+    expect(dots).toEqual([backupPath!.slice(dir.length + 1)]);
   });
 
   test("no scope and no prompt is an error, not a silent default", async () => {

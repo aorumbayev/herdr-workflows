@@ -863,6 +863,12 @@
         white-space: pre-wrap;
         font-size: 0.85rem;
         line-height: 1.55;
+        user-select: text;
+        cursor: text;
+      }
+      .cmd-box:focus {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
       }
       .bundle {
         display: flex;
@@ -1013,6 +1019,22 @@
       function clearRouteHash() {
         if (!/^#(share=|import)/.test(location.hash)) return;
         history.replaceState(null, "", location.pathname + location.search);
+      }
+
+      function currentRouteHash() {
+        if (tab !== "workflows") return "";
+        if (routeView) {
+          if (routeView.kind === "import") return "#import";
+          if (routeView.kind === "share") return "#share=" + routeView.scope + ":" + routeView.name;
+        }
+        if (current && current.name) return "#w=" + current.scope + ":" + current.name;
+        return "";
+      }
+
+      function restoreRouteHash() {
+        const want = currentRouteHash();
+        if (location.hash === want) return;
+        history.replaceState(null, "", location.pathname + location.search + want);
       }
 
       function syncWorkflowLayout() {
@@ -2982,6 +3004,8 @@
         cmd.className = "cmd-box";
         cmd.setAttribute("role", "textbox");
         cmd.setAttribute("aria-readonly", "true");
+        cmd.setAttribute("aria-label", "import command");
+        cmd.tabIndex = 0;
         cmd.textContent = r.data.command || "";
         pane.appendChild(cmd);
         const bar = document.createElement("div");
@@ -3277,7 +3301,10 @@
         const hash = location.hash.slice(1);
         if (!hash) {
           if (!routeView && !current) return;
-          if (!confirmLeave()) return;
+          if (!confirmLeave()) {
+            restoreRouteHash();
+            return;
+          }
           openSeq += 1;
           routeView = null;
           current = null;
@@ -3289,7 +3316,10 @@
         }
         if (hash === "import") {
           if (routeView && routeView.kind === "import") return;
-          if (!confirmLeave()) return;
+          if (!confirmLeave()) {
+            restoreRouteHash();
+            return;
+          }
           openImport();
           return;
         }
@@ -3304,19 +3334,22 @@
             routeView.name === name
           )
             return;
-          if (!confirmLeave()) return;
+          if (!confirmLeave()) {
+            restoreRouteHash();
+            return;
+          }
           openShare(scope, name);
           return;
         }
         const m = /^w=(repo|global):([a-z0-9][a-z0-9-_]*)$/.exec(hash);
         if (!m) return;
         const [, scope, name] = m;
-        if (routeView) {
-          routeView = null;
-          syncWorkflowLayout();
+        if (!routeView && current && current.name === name && current.scope === scope) return;
+        if (!confirmLeave()) {
+          restoreRouteHash();
+          return;
         }
-        if (current && current.name === name && current.scope === scope) return;
-        if (!confirmLeave()) return;
+        routeView = null;
         tab = "workflows";
         const entry = state.entries.find((e) => e.name === name);
         if (entry) {

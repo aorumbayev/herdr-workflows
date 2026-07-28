@@ -139,6 +139,31 @@ async function rollbackPublished(published: PublishedLink[]): Promise<void> {
   }
 }
 
+type ReplaceSlot = {
+  dest: string;
+  backup: string | null;
+  published: boolean;
+};
+
+/** Returns backup paths kept because restore rename failed. */
+async function rollbackReplaceAll(slots: ReplaceSlot[]): Promise<string[]> {
+  const preserved: string[] = [];
+  for (const row of slots) {
+    if (!row.published) continue;
+    try {
+      if (row.backup) {
+        await rename(row.backup, row.dest);
+        row.backup = null;
+      } else {
+        await unlink(row.dest);
+      }
+    } catch {
+      if (row.backup) preserved.push(row.backup);
+    }
+  }
+  return preserved;
+}
+
 async function writeBundleStaged(
   bundle: WorkflowBundle,
   dir: string,
@@ -153,6 +178,7 @@ async function writeBundleStaged(
 
   const staged: { tmp: string; dest: string; name: string }[] = [];
   const published: PublishedLink[] = [];
+  const replaceSlots: ReplaceSlot[] = [];
   try {
     for (const entry of bundle) {
       const dest = join(dir, `${entry.name}.yaml`);
@@ -164,9 +190,24 @@ async function writeBundleStaged(
     const results: { name: string; path: string }[] = [];
     if (replaceAll) {
       for (const row of staged) {
-        await rename(row.tmp, row.dest);
-        results.push({ name: row.name, path: row.dest });
+        if (await Bun.file(row.dest).exists()) {
+          const backup = join(dir, `.${row.name}.yaml.${randomUUID()}.bak`);
+          await link(row.dest, backup);
+          replaceSlots.push({ dest: row.dest, backup, published: false });
+        } else {
+          replaceSlots.push({ dest: row.dest, backup: null, published: false });
+        }
       }
+
+      for (let i = 0; i < staged.length; i++) {
+        const row = staged[i]!;
+        const slot = replaceSlots[i]!;
+        await rename(row.tmp, row.dest);
+        slot.published = true;
+        results.push({ name: row.name, path: row.dest });
+        if (afterPublish) await afterPublish({ name: row.name, path: row.dest });
+      }
+      await cleanupTemps(replaceSlots.map((s) => s.backup).filter((b): b is string => !!b));
       return { status: "written", results };
     }
 
@@ -190,8 +231,21 @@ async function writeBundleStaged(
     }
     return { status: "written", results };
   } catch (error) {
+    const preservedBackups = await rollbackReplaceAll(replaceSlots);
     await rollbackPublished(published);
-    await cleanupTemps(staged.map((s) => s.tmp));
+    const preserved = new Set(preservedBackups);
+    await cleanupTemps([
+      ...staged.map((s) => s.tmp),
+      ...replaceSlots.map((s) => s.backup).filter((b): b is string => !!b && !preserved.has(b)),
+    ]);
+    if (preservedBackups.length > 0) {
+      const note = `original backup preserved at ${preservedBackups.join(", ")}`;
+      if (error instanceof Error) {
+        error.message = `${error.message}; ${note}`;
+        throw error;
+      }
+      throw new Error(`${String(error)}; ${note}`);
+    }
     throw error;
   }
 }
