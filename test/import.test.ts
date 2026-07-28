@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { decodePayload, encodePayload } from "../src/workflow/bundle";
+import { decodePayload, encodePayload } from "../src/workflow/payload";
 import { checkPayload, parseImportScope, previewText, runImport } from "../src/workflow/import";
 import { WorkflowLoadError } from "../src/workflow/types";
 

@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { decodePayload, type WorkflowPayload } from "./bundle";
+import { decodePayload, type WorkflowPayload } from "./payload";
 import { parseRaw } from "./parse";
 import {
   analyzeRawWorkflow,
