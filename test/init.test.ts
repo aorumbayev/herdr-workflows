@@ -100,4 +100,29 @@ describe("herdr-workflows init", () => {
       else process.env.HOME = prevHome;
     }
   });
+
+  test("init --global writes plugin config dir, not repo .hwf", async () => {
+    const { root, plugin } = await withPluginEnv();
+    const detected = await detectProfiles();
+    const result = await runInit(root, { global: true });
+    expect(result.kind).toBe("wrote");
+    if (result.kind === "exists") throw new Error("unreachable");
+    expect(result.path).toBe(join(plugin, "config.yaml"));
+    expect(await Bun.file(result.path).exists()).toBe(true);
+    expect(await Bun.file(join(root, ".hwf", "config.yaml")).exists()).toBe(false);
+    const text = await readFile(result.path, "utf8");
+    expect(text).toContain("profiles:");
+    for (const name of Object.keys(detected)) {
+      expect(text).toContain(`${name}:`);
+    }
+  });
+
+  test("init --global preserves existing without confirmation", async () => {
+    const { root, plugin } = await withPluginEnv();
+    const path = join(plugin, "config.yaml");
+    await writeFile(path, `profiles:\n  claude:\n    kind: claude\n`);
+    const result = await runInit(root, { global: true });
+    expect(result.kind).toBe("exists");
+    expect(await readFile(path, "utf8")).toContain("claude");
+  });
 });

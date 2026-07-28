@@ -1,6 +1,12 @@
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { resolveProfile, type AgentProfile } from "../../config";
+import {
+  configPathsHint,
+  globalConfigPath,
+  repoConfigPath,
+  resolveProfile,
+  type AgentProfile,
+} from "../../config";
 import { HerdrError } from "../../herdr";
 import { substituteText } from "../../workflow/parse";
 import type { StepAction } from "../../workflow/types";
@@ -105,13 +111,17 @@ type ProfileChoice =
 /** Target mode keeps waiting for the exact managed file; new-agent fails after a short settled grace. */
 type ManagedWaitMode = "new-agent" | "target";
 
-function chooseProfile(c: StepCtx, action: AgentAction): ProfileChoice {
+async function chooseProfile(c: StepCtx, action: AgentAction): Promise<ProfileChoice> {
   const name =
     action.using !== undefined
       ? substituteText(action.using, c.values)
       : c.opts.config.default_profile;
   if (!name) {
-    return { ok: false, error: "agent: no using: profile and no default_profile is configured" };
+    const hint = configPathsHint(await globalConfigPath(), repoConfigPath(c.opts.repoRoot));
+    return {
+      ok: false,
+      error: `agent: no using: profile and no default_profile is configured (${hint}); run \`hwf init\` or \`hwf init --global\``,
+    };
   }
   const profile = resolveProfile(c.opts.config, name);
   if (!profile) return { ok: false, error: `agent: unknown profile '${name}'` };
@@ -333,7 +343,7 @@ async function bootNewAgent(
 }
 
 async function newAgentTurn(c: StepCtx, action: AgentAction): Promise<StepOutcome> {
-  const chosen = chooseProfile(c, action);
+  const chosen = await chooseProfile(c, action);
   if (!chosen.ok) return { ok: false, error: chosen.error };
   let placement: { name: string; placed: PlacedPane } | undefined;
   const close = action.pane?.close;

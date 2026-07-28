@@ -96,6 +96,15 @@ export function resolveInputValues(
   }
   const values: Record<string, string> = Object.create(null) as Record<string, string>;
   for (const spec of specs) {
+    if (spec.options !== undefined && spec.options.length === 0) {
+      return {
+        ok: false,
+        error:
+          spec.type === "profile"
+            ? `input '${spec.name}': no profiles configured; run \`hwf init\` or \`hwf init --global\``
+            : `input '${spec.name}': choice produced no options`,
+      };
+    }
     const value = Object.hasOwn(provided, spec.name) ? provided[spec.name] : spec.default;
     if (value === undefined) {
       return { ok: false, error: `missing input '${spec.name}' (--input ${spec.name}=…)` };

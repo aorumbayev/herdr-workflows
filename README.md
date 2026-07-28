@@ -44,19 +44,22 @@ herdr plugin install aorumbayev/herdr-workflows
 
 That compiles the plugin, puts `herdr-workflows` / `hwf` on your PATH, and binds `prefix+k` to the workflow picker.
 
-Then, inside any repo:
+Then set up profiles:
 
 ```bash
 cd your-repo
-hwf init            # writes .hwf/config.yaml (native profiles for kinds on PATH)
+hwf init            # team / repo-local: writes .hwf/config.yaml
+hwf init --global   # personal: writes Herdr plugin config dir (for ~/.hwf/workflows)
 ```
 
-`hwf init` probes your PATH for the kinds it knows (`claude`, `codex`, `aider`, `cursor`, `opencode`) and writes
-one profile per kind, with the first as `default_profile`. A profile is what a workflow's `using:` names, so add
-role-oriented ones with startup `args` when a single kind should back several roles:
+Both probe PATH for the kinds they know (`claude`, `codex`, `aider`, `cursor`, `opencode`) and write
+one profile per kind, with the first as `default_profile`. Use repo init for shared team config; use
+`--global` when you run workflows from `~/.hwf/workflows` without a per-repo `.hwf`. A profile is what a
+workflow's `using:` names, so add role-oriented ones with startup `args` when a single kind should back
+several roles:
 
 ```yaml
-# .hwf/config.yaml
+# .hwf/config.yaml  (or the global plugin config.yaml)
 profiles:
   claude:
     kind: claude

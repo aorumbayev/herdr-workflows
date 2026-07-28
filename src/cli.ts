@@ -67,12 +67,15 @@ function parseInputFlags(values: string[]): Record<string, string> {
 
 async function cmdInit(args: string[]): Promise<void> {
   const { bools } = parseArgs(args);
+  const global = bools.has("global");
   const repoRoot = await resolveRepoRoot();
   const result = await runInit(repoRoot, {
     force: bools.has("force") || bools.has("yes"),
+    global,
     confirm: async () => {
       if (!process.stdin.isTTY) return false;
-      process.stdout.write(`.hwf/config.yaml exists — overwrite? [y/N] `);
+      const label = global ? "global plugin config" : ".hwf/config.yaml";
+      process.stdout.write(`${label} exists — overwrite? [y/N] `);
       const line = await readLine();
       return line.kind === "line" && line.text.trim().toLowerCase() === "y";
     },
@@ -83,8 +86,10 @@ async function cmdInit(args: string[]): Promise<void> {
     : " (no agent kinds on PATH)";
   process.stdout.write(
     `wrote ${result.path}${profiles}\n` +
-      `no workflows yet — pick ready-made ones at ${EXAMPLES_URL}\n` +
-      `each card copies an \`hwf workflow import\` command you can paste here\n`,
+      (global
+        ? `profiles apply to every repo; keep personal workflows in ~/.hwf/workflows\n`
+        : `no workflows yet — pick ready-made ones at ${EXAMPLES_URL}\n` +
+          `each card copies an \`hwf workflow import\` command you can paste here\n`),
   );
 }
 

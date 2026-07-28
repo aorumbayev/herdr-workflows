@@ -4,10 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   buildTemplateNamespace,
+  globalConfigPath,
   loadConfig,
   parseConfigText,
   platformName,
   profileNames,
+  repoConfigPath,
   repoLocalConfigPath,
   resolveProfile,
   resolvePluginConfigDir,
@@ -208,6 +210,32 @@ describe("inputs and profile choices", () => {
       cfg,
     );
     expect(wf.inputs[0]?.options).toEqual(["alpha", "zebra"]);
+  });
+
+  test("profile input with zero profiles fails naming config paths", async () => {
+    const root = await mkdtemp(join(tmpdir(), "herdr-workflows-noprof-"));
+    dirs.push(root);
+    const plugin = await mkdtemp(join(tmpdir(), "herdr-workflows-plugin-"));
+    dirs.push(plugin);
+    process.env.HERDR_PLUGIN_CONFIG_DIR = plugin;
+    const globalPath = await globalConfigPath();
+    const repoPath = repoConfigPath(root);
+    let message = "";
+    try {
+      await parseWorkflowText(
+        "handoff",
+        `version: v1alpha1\ninputs:\n  target: profile\nsteps:\n  - agent: hi\n    using: "{{inputs.target}}"\n`,
+        { profiles: {}, transcripts: {} },
+        root,
+      );
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toContain("inputs.target: no profiles configured");
+    expect(message).toContain(globalPath);
+    expect(message).toContain(repoPath);
+    expect(message).toContain("hwf init");
+    expect(message).toContain("hwf init --global");
   });
 
   test("unused inputs fail load", async () => {

@@ -217,14 +217,30 @@ function setListMode(state: PickerState): void {
   state.filter.focus();
 }
 
+export function formatInputPrompt(spec: InputSpec): string {
+  const desc = spec.description?.trim();
+  const label = desc ? `${spec.name} — ${desc}` : spec.name;
+  if (spec.type === "text") return `${label} · type free text`;
+  return `${label} · type to filter, enter to select`;
+}
+
 function inputStatusLine(entry: WorkflowListEntry, spec: InputSpec): string {
   const title = workflowDisplayTitle(entry.name, entry.title);
-  const kind = spec.type === "profile" ? "profile" : spec.type === "choice" ? "choice" : "text";
-  const desc = spec.description?.trim() ? ` — ${spec.description.trim()}` : "";
-  return `${title} · ${entry.source} · ${spec.name} (${kind})${desc}`;
+  return `${title} · ${entry.source}\n${formatInputPrompt(spec)}`;
+}
+
+function emptyInputOptionsError(spec: InputSpec): string {
+  if (spec.type === "profile") {
+    return `input '${spec.name}': no profiles configured; run \`hwf init\` or \`hwf init --global\``;
+  }
+  return `input '${spec.name}': choice produced no options`;
 }
 
 function setInputMode(state: PickerState, entry: WorkflowListEntry, spec: InputSpec): void {
+  if ((spec.type === "choice" || spec.type === "profile") && (spec.options?.length ?? 0) === 0) {
+    showFailure(state, entry, new Error(emptyInputOptionsError(spec)));
+    return;
+  }
   state.mode = "input";
   state.pending = entry;
   state.invalid.visible = false;

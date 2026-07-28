@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import {
+  globalConfigPath,
   parseConfigText,
   PROFILE_NAME_RE,
   repoConfigPath,
@@ -100,9 +101,10 @@ export async function runInit(
   opts: {
     force?: boolean;
     confirm?: () => Promise<boolean>;
+    global?: boolean;
   } = {},
 ): Promise<InitResult> {
-  const path = repoConfigPath(repoRoot);
+  const path = opts.global ? await globalConfigPath() : repoConfigPath(repoRoot);
   const existed = await Bun.file(path).exists();
   if (existed && !opts.force) {
     if (!opts.confirm) return { kind: "exists", path };
@@ -111,12 +113,12 @@ export async function runInit(
 
   const profiles = await detectProfiles();
   const names = Object.keys(profiles).sort();
-  const hwfDir = dirname(path);
-  const workflowsDir = join(repoRoot, ".hwf", "workflows");
 
-  await mkdir(hwfDir, { recursive: true });
-  await mkdir(workflowsDir, { recursive: true });
-  await ensureLocalConfigGitignored(repoRoot);
+  await mkdir(dirname(path), { recursive: true });
+  if (!opts.global) {
+    await mkdir(join(repoRoot, ".hwf", "workflows"), { recursive: true });
+    await ensureLocalConfigGitignored(repoRoot);
+  }
 
   const transcripts = existed ? await readPreservedTranscripts(path) : {};
   await Bun.write(

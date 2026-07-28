@@ -12,21 +12,23 @@ herdr plugin install aorumbayev/herdr-workflows
 
 That compiles the plugin, puts `hwf` (≡ `herdr-workflows`) on your PATH, and binds `prefix+k` to the picker.
 
-## Set up a repo
+## Set up profiles
 
 ```bash
 cd your-repo
-hwf init
+hwf init            # team / repo-local: .hwf/config.yaml
+# or
+hwf init --global   # personal: Herdr plugin config dir (for ~/.hwf/workflows)
 ```
 
-Writes `.hwf/config.yaml`, probing your PATH for the agent kinds it knows (`claude`, `codex`, `aider`, `cursor`, `opencode`) and writing one profile per kind found, with the first as `default_profile`. It also creates `.hwf/workflows/` and gitignores `.hwf/config.local.yaml`.
+Both probe PATH for the agent kinds they know (`claude`, `codex`, `aider`, `cursor`, `opencode`) and write one profile per kind found, with the first as `default_profile`. Repo init also creates `.hwf/workflows/` and gitignores `.hwf/config.local.yaml`. Use repo init when the team shares profiles in git; use `--global` when you keep workflows in `~/.hwf/workflows` and want profiles without touching each checkout.
 
 ### Profiles
 
 A profile is the name a workflow's `using:` refers to — not an agent binary. `kind` is the native Herdr agent kind; live `agent.start` decides whether it is supported. Optional `args` pin startup flags, so one kind can back several roles:
 
 ```yaml
-# .hwf/config.yaml
+# .hwf/config.yaml  (or the global plugin config.yaml)
 profiles:
   claude:
     kind: claude
@@ -38,7 +40,7 @@ default_profile: claude
 
 `hwf init` gets you the plain one-profile-per-kind form; role names and `args` are yours to add. An `agent:` step with no `using:` and no `target:` uses `default_profile`.
 
-Config merges across three layers, each replacing whole entries by name: the global plugin config dir (`hwf` finds it through Herdr), committed `.hwf/config.yaml`, then gitignored `.hwf/config.local.yaml` for per-machine choices — point `deep-review` at a different kind locally without touching what the team shares.
+Config merges across three layers, each replacing whole entries by name: the global plugin config dir (`$HERDR_PLUGIN_CONFIG_DIR/config.yaml`, discovered via `herdr plugin config-dir`), committed `.hwf/config.yaml`, then gitignored `.hwf/config.local.yaml` for per-machine choices — point `deep-review` at a different kind locally without touching what the team shares.
 
 No workflows yet — import ready-made ones from [Examples](/examples). Each card copies `hwf workflow import "<base64>"`; import prints the YAML, flags sensitive bits, asks before writing to this repo's `.hwf/workflows` or global `~/.hwf/workflows`.
 
