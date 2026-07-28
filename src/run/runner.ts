@@ -38,7 +38,7 @@ import {
   type StepsResult,
 } from "./context";
 import { agentStep } from "./steps/agent";
-import { bindIncludeRunSteps, workflowStep } from "./steps/include";
+import { bindIncludeRunSteps, evaluateReturns, workflowStep } from "./steps/include";
 import { herdrStep } from "./steps/primitive";
 import { shellStep } from "./steps/shell";
 
@@ -266,15 +266,14 @@ async function runSteps(
       await logStep(opts, n, total, label, { ok: true, skipped: true });
       continue;
     }
-    opts.onProgress?.(n, total, label);
     const outcome = await executeWithRetry(step, n, values, opts);
     if (!outcome.ok) {
+      opts.onProgress?.(n, total, label, "fail");
       if (outcome.coordinationLost) {
         return hardStepFailure(opts, step, n, total, label, outcome, tolerated, true);
       }
       if (step.continueOnError) {
         tolerated.push(outcome.error);
-        opts.onProgress?.(n, total, label, "fail");
         await logStep(opts, n, total, label, {
           ok: false,
           error: outcome.error,
@@ -354,6 +353,8 @@ async function finalizeEntryRun(
       };
     }
   }
+  const returns =
+    primary.ok && workflow.returns ? evaluateReturns(workflow.returns, values) : undefined;
   await appendRunLog({
     ts: new Date().toISOString(),
     run: runId,
@@ -361,6 +362,7 @@ async function finalizeEntryRun(
     ok: primary.ok,
     ...(!primary.ok ? { error: primary.error } : {}),
     ...(!primary.ok && primary.coordinationLost === true ? { interrupted: true } : {}),
+    ...(returns !== undefined ? { returns } : {}),
   });
   return primary;
 }

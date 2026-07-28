@@ -111,46 +111,55 @@ function layoutPlacement(result: Record<string, unknown>, split: boolean): Place
   return { pane_id: createdPaneId(layout, split), tab_id: tabId, workspace_id: workspaceId };
 }
 
-async function tabOfPane(o: PlaceOpts, paneId: string): Promise<string> {
-  if (paneId === o.invocation.paneId && o.invocation.tabId) return o.invocation.tabId;
-  const result = await o.deps.herdrCall("pane.get", { pane_id: paneId });
-  const pane = (result.pane ?? {}) as PaneInfoish;
-  if (typeof pane.tab_id !== "string") fail(`pane.get did not return a tab for ${paneId}`);
-  return pane.tab_id;
+/** Quote argv for submission into an interactive shell via pane.send_input. */
+export function quoteArgvForShell(argv: string[], platform: string = process.platform): string {
+  if (platform === "win32") {
+    return argv.map(quoteWindowsArg).join(" ");
+  }
+  return argv.map(quotePosixArg).join(" ");
 }
 
-/** Pane running a command: only layout.apply can attach argv to a created pane. */
+function quotePosixArg(value: string): string {
+  if (value.length === 0) return "''";
+  if (/^[A-Za-z0-9_./:=+-]+$/.test(value)) return value;
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function quoteWindowsArg(value: string): string {
+  if (value.length === 0) return '""';
+  if (/^[A-Za-z0-9_./:=+-]+$/.test(value)) return value;
+  return `"${value.replace(/"/g, '\\"')}"`;
+}
+
+/**
+ * Pane running a command.
+ * - `open: tab` uses layout.apply with a command leaf (true argv, no shell).
+ * - `open: beside|below` uses pane.split (preserves the anchor process) then
+ *   pane.send_input with a shell-quoted command line — Herdr has no pane.run
+ *   socket method, and layout.apply replaces the tab without preserving PTYs.
+ */
 export async function placeCommandPane(o: PlaceOpts & { argv: string[] }): Promise<PlacedPane> {
-  const leaf = {
-    type: "pane",
-    label: o.label ?? null,
-    cwd: o.cwd ?? null,
-    command: o.argv,
-    env: o.env ?? {},
-  };
   if (o.open === "tab") {
     const result = await o.deps.herdrCall("layout.apply", {
       workspace_id: requireWorkspace(o),
       tab_label: o.label ?? null,
       tab_id: null,
       focus: o.focus,
-      root: leaf,
+      root: {
+        type: "pane",
+        label: o.label ?? null,
+        cwd: o.cwd ?? null,
+        command: o.argv,
+        env: o.env ?? {},
+      },
     });
     return layoutPlacement(result, false);
   }
-  const target = requireTargetPane(o);
-  const result = await o.deps.herdrCall("layout.apply", {
-    workspace_id: null,
-    tab_id: await tabOfPane(o, target),
-    tab_label: null,
-    focus: o.focus,
-    root: {
-      type: "split",
-      direction: splitDirection(o.open),
-      ratio: o.size !== undefined ? sizeToFirstRatio(o.size) : 0.5,
-      first: { type: "pane", pane_id: target },
-      second: leaf,
-    },
+  const placed = await placeEmptyPane(o);
+  await o.deps.herdrCall("pane.send_input", {
+    pane_id: placed.pane_id,
+    text: quoteArgvForShell(o.argv),
+    keys: ["Enter"],
   });
-  return layoutPlacement(result, true);
+  return placed;
 }

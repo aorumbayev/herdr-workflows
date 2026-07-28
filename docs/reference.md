@@ -30,6 +30,8 @@ Exactly one of `agent`, `run`, `herdr`, `workflow` per step. Optional on every s
 
 Natural result: `{stdout, stderr, exit_code, failed}`. Inputs export as `HWF_<name>`. Explicit `env:` cannot use the reserved `HWF_` prefix. Omit `cwd` → invocation cwd. Omit `timeout` → no workflow timeout.
 
+Placed `run:` (`pane.open: beside|below`) preserves the anchor pane via `pane.split`, then submits the argv as a shell-quoted line through `pane.send_input` (Herdr has no socket `pane.run`, and `layout.apply` replaces the tab without preserving live processes). `pane.open: tab` still launches argv directly through `layout.apply`.
+
 Also: `shell`, `cwd`, `env`, `pane`, `background`, `ready_when`, `timeout`, `retry`.
 
 ### `agent:`

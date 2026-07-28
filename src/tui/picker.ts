@@ -432,8 +432,9 @@ export async function startRun(
       prompt: sanitizeDisplay(prompt),
       inputs,
       workflow,
-      onProgress: (step, total, label) => {
-        state.progressLines.push(`[${step}/${total}] ${truncate(label, 48)}`);
+      onProgress: (step, total, label, outcome = "ok") => {
+        const suffix = outcome === "ok" ? "" : ` ${outcome}`;
+        state.progressLines.push(`[${step}/${total}] ${truncate(label, 40)}${suffix}`);
         state.status.content = formatRunProgress(entry.name, state.progressLines);
       },
     });

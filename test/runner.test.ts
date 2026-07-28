@@ -691,6 +691,89 @@ steps:
     });
   });
 
+  test("beside placed run splits and send_input without layout.apply", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: boot
+    run: [sh, -c, "echo LISTENING"]
+    pane: { open: beside, target: "w1:pM" }
+    ready_when: "/LISTENING/"
+    timeout: 5s
+`,
+    });
+    const { deps, calls } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    expect(calls.some((c) => c.method === "layout.apply")).toBe(false);
+    const split = calls.find((c) => c.method === "pane.split");
+    const send = calls.find((c) => c.method === "pane.send_input");
+    expect(split?.params).toMatchObject({ direction: "right", target_pane_id: "w1:pM" });
+    expect(send?.params).toMatchObject({ pane_id: "w1:p3", keys: ["Enter"] });
+  });
+
+  test("entry returns are recorded on the final run-log entry", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+returns:
+  note: "{{steps.echo.stdout}}"
+  platform: "{{context.platform}}"
+steps:
+  - id: echo
+    run: [printf, hello]
+`,
+    });
+    const { deps } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    const finals = (await readRunLog()).filter((e) => e.workflow === "m" && e.step === undefined);
+    expect(finals[0]?.returns).toMatchObject({ note: "hello" });
+    expect(typeof (finals[0]?.returns as { platform?: string }).platform).toBe("string");
+  });
+
+  test("progress reports one outcome line per step including skip", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+inputs:
+  flag:
+    type: text
+    default: ""
+steps:
+  - id: go
+    run: [printf, ok]
+  - id: skipme
+    run: [printf, no]
+    when: "{{inputs.flag}}"
+`,
+    });
+    const { deps } = mockDeps();
+    const lines: string[] = [];
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      deps,
+      onProgress: (i, n, label, outcome = "ok") => {
+        lines.push(`[${i}/${n}] ${label}${outcome === "ok" ? "" : ` ${outcome}`}`);
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(lines).toEqual(["[1/2] go", "[2/2] skipme skip"]);
+  });
+
   test("background placed run launches without a result", async () => {
     const root = await repoWith({
       m: `version: v1alpha1

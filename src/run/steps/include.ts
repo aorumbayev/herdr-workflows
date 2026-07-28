@@ -58,7 +58,7 @@ async function resolveChildInputs(
   return { ok: true, values };
 }
 
-function evaluateReturns(returns: ReturnsSpec, ns: TemplateNamespace): unknown {
+export function evaluateReturns(returns: ReturnsSpec, ns: TemplateNamespace): unknown {
   if (returns.kind === "template") return substituteValue(returns.template, ns);
   return Object.fromEntries(
     Object.entries(returns.fields).map(([name, template]) => [name, substituteValue(template, ns)]),

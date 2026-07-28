@@ -16,6 +16,7 @@ export type RunLogEntry = {
   blocked?: boolean;
   interrupted?: boolean;
   error?: string;
+  returns?: unknown;
 };
 
 const RUN_LOG_MAX_BYTES = 512_000;

@@ -131,6 +131,8 @@ Anchors are the immutable invocation pane/workspace or explicit `target` / `work
 
 `ready_when: /regex/` on a placed `run:` waits through native `pane.wait_for_output` over the recent 80 rendered rows with ANSI stripped. Already-present snapshot text can match. It does not detect process exit. `timeout` is required with `ready_when`.
 
+`pane.open: beside|below` splits with `pane.split` so the anchor pane and its process stay alive, then runs the step's argv in the new shell via `pane.send_input` (shell-quoted). That is narrower than a true argv spawn for beside/below only; `open: tab` still uses `layout.apply` with a command leaf.
+
 ## Context and transcripts
 
 `context` carries invocation `workspace`, `tab`, `pane`, `worktree`, `agent`, `selection`, `platform`, plus `transcript` / `transcript_file` when the workflow references them. Identity and transcript values that are unavailable fail preflight.
