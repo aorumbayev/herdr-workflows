@@ -11,36 +11,115 @@
       href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap"
     />
     <title>herdr-workflows</title>
+    <script>
+      // Stamps the resolved theme before first paint, so a light-preferring reload never flashes dark.
+      (function () {
+        var t = null;
+        try {
+          t = localStorage.getItem("hwf-theme");
+        } catch (e) {}
+        if (t !== "light" && t !== "dark")
+          t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+        document.documentElement.dataset.theme = t;
+      })();
+    </script>
     <style>
       :root {
+        /* Nord palette. Kept as rgb() literals so verifyx hardcoded-colors still guards the rest of the file. */
+        --nord0: rgb(46 52 64);
+        --nord1: rgb(59 66 82);
+        --nord2: rgb(67 76 94);
+        --nord3: rgb(76 86 106);
+        --nord4: rgb(216 222 233);
+        --nord5: rgb(229 233 240);
+        --nord6: rgb(236 239 244);
+        --nord7: rgb(143 188 187);
+        --nord8: rgb(136 192 208);
+        --nord9: rgb(129 161 193);
+        --nord10: rgb(94 129 172);
+        --nord11: rgb(191 97 106);
+        --nord12: rgb(208 135 112);
+        --nord13: rgb(235 203 139);
+        --nord14: rgb(163 190 140);
+        --nord15: rgb(180 142 173);
         color-scheme: dark;
-        --bg: rgb(46 52 64);
-        --bg-elevated: rgb(52 59 73);
+        --bg: var(--nord0);
+        --bg-elevated: color-mix(in srgb, var(--nord1) 50%, var(--nord0));
         --ink: rgb(255 255 255);
-        --ink-soft: rgb(236 239 244);
-        --muted: rgb(135 146 168);
-        --muted-2: rgb(95 106 128);
-        --line: rgb(67 76 94);
-        --line-strong: rgb(76 86 106);
-        --accent: rgb(136 192 208);
+        --ink-soft: var(--nord6);
+        /* Lighter than the pre-token value: the original rgb(135 146 168) missed AA on --bg. */
+        --muted: color-mix(in srgb, var(--nord4) 52%, var(--nord3));
+        --muted-2: color-mix(in srgb, var(--nord4) 14%, var(--nord3));
+        --line: var(--nord2);
+        --line-strong: var(--nord3);
+        --accent: var(--nord8);
         --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
-        --green: rgb(163 190 140);
-        --yellow: rgb(235 203 139);
-        --red: rgb(191 97 106);
-        --term-bg: rgb(59 66 82);
-        --term-border: rgb(67 76 94);
-        --term-text: rgb(236 239 244);
+        --green: var(--nord14);
+        --yellow: var(--nord13);
+        --red: var(--nord11);
+        --term-bg: var(--nord1);
+        --term-border: var(--nord2);
+        --term-text: var(--nord6);
         --fill: var(--accent);
-        --fill-ink: rgb(46 52 64);
-        --canvas-bg: rgb(46 52 64);
-        --canvas-dot: rgb(76 86 106);
-        --edge: rgb(95 106 128);
-        --scrim: rgb(24 27 33 / 72%);
-        --n-trigger: rgb(180 142 173);
-        --n-run: rgb(163 190 140);
-        --n-agent: rgb(129 161 193);
-        --n-use: rgb(235 203 139);
-        --n-prim: rgb(143 188 187);
+        --fill-ink: var(--nord0);
+        --canvas-bg: var(--nord0);
+        --canvas-dot: var(--nord3);
+        --edge: color-mix(in srgb, var(--nord4) 14%, var(--nord3));
+        --scrim: color-mix(in srgb, color-mix(in srgb, var(--nord0) 52%, black) 72%, transparent);
+        --n-trigger: var(--nord15);
+        --n-run: var(--nord14);
+        --n-agent: var(--nord9);
+        --n-use: var(--nord13);
+        --n-prim: var(--nord7);
+        --tok-key: var(--n-agent);
+        --tok-verb: var(--yellow);
+        --tok-str: var(--green);
+        --tok-num: var(--n-use);
+        --tok-com: var(--muted);
+        --tok-blk: var(--n-prim);
+        /* Lifted off --n-trigger: bare nord15 sits at 4.4:1 on --bg. */
+        --tok-ph: color-mix(in srgb, var(--nord6) 12%, var(--nord15));
+        --tok-pun: var(--muted);
+        --caret: var(--accent);
+        --pop-bg: var(--bg-elevated);
+        --pop-sel: var(--accent-soft);
+        --toast-bg: var(--bg-elevated);
+        --num-bg: var(--line-strong);
+        --radius: 4px;
+        --radius-sm: 2px;
+        --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      /* Nord Light. Frost and Aurora hues are darkened toward nord0 so they hold AA on Snow Storm.
+         The head script always stamps data-theme, so no prefers-color-scheme block is needed here. */
+      :root[data-theme="light"] {
+        color-scheme: light;
+        --bg: var(--nord6);
+        --bg-elevated: var(--nord5);
+        --ink: var(--nord0);
+        --ink-soft: var(--nord1);
+        --muted: var(--nord3);
+        --muted-2: rgb(93 104 121);
+        --line: var(--nord4);
+        --line-strong: rgb(195 203 217);
+        --accent: var(--nord10);
+        --accent-soft: rgb(221 228 237);
+        --green: rgb(93 108 80);
+        --yellow: rgb(117 101 69);
+        --red: rgb(148 83 93);
+        --term-bg: var(--nord5);
+        --term-border: var(--nord4);
+        --term-text: var(--nord0);
+        --fill: var(--accent);
+        --fill-ink: var(--nord6);
+        --canvas-bg: var(--nord6);
+        --canvas-dot: rgb(195 203 217);
+        --edge: rgb(119 131 154);
+        --scrim: rgb(46 52 64 / 60%);
+        --n-trigger: rgb(122 97 118);
+        --n-run: rgb(93 108 80);
+        --n-agent: rgb(85 106 127);
+        --n-use: rgb(117 101 69);
+        --n-prim: rgb(83 109 108);
         --tok-key: var(--n-agent);
         --tok-verb: var(--yellow);
         --tok-str: var(--green);
@@ -54,9 +133,6 @@
         --pop-sel: var(--accent-soft);
         --toast-bg: var(--bg-elevated);
         --num-bg: var(--line-strong);
-        --radius: 4px;
-        --radius-sm: 2px;
-        --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       }
       * {
         box-sizing: border-box;
@@ -122,13 +198,22 @@
         border-left: 1px solid var(--line-strong);
       }
       header .repo {
-        margin-left: auto;
         font-size: 11px;
         color: var(--muted);
       }
       header .repo b {
         color: var(--ink-soft);
         font-weight: 600;
+      }
+      header .theme {
+        margin-left: auto;
+        min-width: 32px;
+        min-height: 32px;
+        padding: 0.35rem 0.65rem;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: lowercase;
       }
 
       button,
@@ -167,7 +252,7 @@
       button.primary:hover:not(:disabled) {
         background: var(--accent);
         border-color: transparent;
-        color: var(--ink);
+        color: var(--fill-ink);
       }
       input {
         min-width: 9rem;
@@ -181,16 +266,32 @@
         cursor: pointer;
         accent-color: var(--accent);
       }
-      input:focus,
-      select:focus,
-      textarea:focus {
+      button:focus-visible,
+      .tab:focus-visible,
+      select:focus-visible,
+      input:focus-visible,
+      textarea:focus-visible,
+      .canvas:focus-visible,
+      .cmd-box:focus-visible,
+      .node:focus-visible,
+      .theme:focus-visible {
         outline: 2px solid var(--accent);
-        outline-offset: 1px;
+        outline-offset: 2px;
+      }
+      input:focus-visible,
+      select:focus-visible,
+      textarea:focus-visible {
         border-color: transparent;
       }
 
       .tab {
         font-weight: 600;
+        min-height: 32px;
+        min-width: 32px;
+      }
+      .tab:hover:not(.on):not(:disabled) {
+        border-color: var(--accent);
+        background: var(--accent-soft);
       }
       .tab.on {
         background: var(--accent);
@@ -199,6 +300,10 @@
       }
       .tab.on:hover {
         background: var(--fill);
+        color: var(--fill-ink);
+      }
+      .bar button {
+        min-height: 32px;
       }
 
       main {
@@ -232,10 +337,12 @@
       }
       aside .row:hover {
         background: var(--accent-soft);
+        border-color: var(--line);
       }
       aside .row.on {
         background: var(--accent);
         color: var(--fill-ink);
+        border-color: var(--accent);
       }
       aside .row.on .badge {
         color: var(--fill-ink);
@@ -497,7 +604,6 @@
         outline: none;
       }
       .canvas:focus-visible {
-        outline: 2px solid var(--accent);
         outline-offset: -2px;
       }
       .canvas.panning {
@@ -559,11 +665,13 @@
       .node:active {
         cursor: grabbing;
       }
-      .node.sel,
+      .node.sel {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px var(--accent-soft);
+      }
       .node:focus-visible {
         border-color: var(--accent);
         box-shadow: 0 0 0 2px var(--accent-soft);
-        outline: none;
       }
       .node.trigger {
         border-radius: 46px 8px 8px 46px;
@@ -866,10 +974,6 @@
         user-select: text;
         cursor: text;
       }
-      .cmd-box:focus {
-        outline: 2px solid var(--accent);
-        outline-offset: 2px;
-      }
       .bundle {
         display: flex;
         flex-direction: column;
@@ -892,7 +996,7 @@
       .bundle .item .top .name {
         font-weight: 600;
       }
-      .bundle .item pre {
+      .yaml {
         margin: 0;
         padding: 0.7rem 0.85rem;
         max-height: min(40vh, 28rem);
@@ -910,13 +1014,20 @@
         width: 100%;
       }
       @media (max-width: 720px) {
-        .bundle .item pre {
+        .yaml {
           max-height: 30vh;
           white-space: pre-wrap;
           word-break: break-word;
         }
         .cmd-box {
           font-size: 0.8rem;
+        }
+        header {
+          flex-wrap: wrap;
+          gap: 0.6rem;
+        }
+        header .theme {
+          margin-left: 0;
         }
       }
     </style>
@@ -929,6 +1040,7 @@
         <button class="tab" data-tab="config">Config</button>
         <button class="tab" data-tab="runs">Runs</button>
       </nav>
+      <button type="button" class="theme" id="theme-btn" aria-label="Theme: system">system</button>
       <span id="repo" class="repo"></span>
     </header>
     <main>
@@ -938,6 +1050,8 @@
     <script>
       const TOKEN = "__HWF_TOKEN__";
       const $ = (id) => document.getElementById(id);
+      const THEME_KEY = "hwf-theme";
+      const THEME_CYCLE = [null, "dark", "light"];
       let state = { entries: [], profiles: [], repoRoot: "" };
       let tab = "workflows";
       let current = null; // {name, scope}
@@ -2226,6 +2340,13 @@
         return text.split("\n").map(hlLine).join("\n") + "\n";
       }
 
+      function yamlBlock(text) {
+        const pre = document.createElement("pre");
+        pre.className = "yaml";
+        pre.innerHTML = highlight(text || "");
+        return pre;
+      }
+
       /* ---------- YAML textarea: highlight + smart indent + autocomplete ---------- */
 
       function mkCodeEditor(initial, onInput) {
@@ -3042,9 +3163,7 @@
                   : "—",
             ) +
             "</span>";
-          const pre = document.createElement("pre");
-          pre.textContent = e.yaml || "";
-          item.append(top, pre);
+          item.append(top, yamlBlock(e.yaml || ""));
           bundle.appendChild(item);
         }
         pane.appendChild(bundle);
@@ -3143,9 +3262,7 @@
               esc(e.name) +
               esc(warnBits) +
               "</span>";
-            const pre = document.createElement("pre");
-            pre.textContent = e.yaml || "";
-            item.append(top, pre);
+            item.append(top, yamlBlock(e.yaml || ""));
             bundle.appendChild(item);
           }
           review.appendChild(bundle);
@@ -3406,6 +3523,49 @@
       addEventListener("hashchange", applyHash);
       setInterval(liveTick, 1500);
       loadState().then(applyHash);
+
+      function themeMode() {
+        try {
+          const t = localStorage.getItem(THEME_KEY);
+          if (t === "light" || t === "dark") return t;
+        } catch (e) {}
+        return null;
+      }
+
+      function themeLabel(mode) {
+        return mode || "system";
+      }
+
+      function syncThemeControl() {
+        const btn = $("theme-btn");
+        if (!btn) return;
+        const mode = themeMode();
+        const label = themeLabel(mode);
+        btn.textContent = label;
+        btn.setAttribute("aria-label", "Theme: " + label);
+        btn.setAttribute("aria-pressed", mode ? "true" : "false");
+        document.documentElement.dataset.theme =
+          mode || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+      }
+
+      function cycleTheme() {
+        const cur = themeMode();
+        const i = THEME_CYCLE.indexOf(cur);
+        const next = THEME_CYCLE[(i + 1) % THEME_CYCLE.length];
+        try {
+          if (next) localStorage.setItem(THEME_KEY, next);
+          else localStorage.removeItem(THEME_KEY);
+        } catch (e) {}
+        syncThemeControl();
+      }
+
+      $("theme-btn").addEventListener("click", cycleTheme);
+      syncThemeControl();
+      try {
+        matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
+          if (themeMode() == null) syncThemeControl();
+        });
+      } catch (e) {}
     </script>
   </body>
 </html>
