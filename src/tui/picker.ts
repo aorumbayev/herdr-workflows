@@ -24,7 +24,14 @@ import {
   workflowDisplayTitle,
 } from "../workflow/trust";
 import type { InputSpec, LoadedWorkflow, WorkflowListEntry } from "../workflow/types";
-import { launchDetachedRun, type DetachedRunHandle, type LaunchRunRequest } from "./run-launch";
+import { parseWebRoute } from "../web/route";
+import {
+  launchDetachedRun,
+  launchDetachedWeb,
+  type DetachedRunHandle,
+  type LaunchRunRequest,
+  type LaunchWebRequest,
+} from "./run-launch";
 import { resolveHostTheme, type HostTheme } from "./theme";
 
 function stripFilePrefix(error: string, file: string): string {
@@ -124,6 +131,7 @@ export type PickerState = {
     config: WorkflowsConfig,
   ) => Promise<LoadedWorkflow>;
   launchRun?: (req: LaunchRunRequest) => DetachedRunHandle;
+  launchWeb?: (req: LaunchWebRequest) => void;
   runHandle?: DetachedRunHandle;
   workflow?: LoadedWorkflow;
   renderer: CliRenderer;
@@ -135,7 +143,7 @@ export type PickerState = {
   footer: TextRenderable;
 };
 
-const LIST_HINT = "type filter · ↑↓ move · enter run · esc cancel";
+export const LIST_HINT = "type filter · ↑↓ · enter run · ^e edit · ^y share · ^o import · esc";
 const PROMPT_HINT = "enter submit · esc back";
 const CHOICE_HINT = "type filter · ↑↓ move · enter select · esc back";
 const RUN_HINT = "esc dismiss · run continues";
@@ -321,6 +329,58 @@ function handleRunKey(state: PickerState, key: KeyEvent): void {
   }
 }
 
+/** Selected valid row in list mode, or undefined when the filtered list is empty. */
+export function selectedListEntry(state: PickerState): WorkflowListEntry | undefined {
+  if (state.list.options.length === 0) return undefined;
+  const option = state.list.options[state.list.getSelectedIndex()];
+  const value = option?.value as PickerRowValue | undefined;
+  return value?.entry;
+}
+
+/**
+ * Resolve a list-mode workbench shortcut.
+ * `undefined` = not a workbench shortcut; `"noop"` = recognized but no launch;
+ * otherwise a validated route hash for `hwf web`.
+ */
+export function resolveListWorkbenchRoute(
+  key: { name: string; ctrl: boolean },
+  selected: WorkflowListEntry | undefined,
+): string | "noop" | undefined {
+  if (!key.ctrl) return undefined;
+  const name = key.name.toLowerCase();
+  if (name === "o") return "import";
+  if (name !== "e" && name !== "y") return undefined;
+  if (!selected) return "noop";
+  const kind = name === "e" ? "w" : "share";
+  const route = `${kind}=${selected.source}:${selected.name}`;
+  return parseWebRoute(route) ? route : "noop";
+}
+
+export function launchWorkbenchRoute(state: PickerState, route: string): void {
+  const parsed = parseWebRoute(route);
+  if (!parsed) return;
+  const launch = state.launchWeb ?? launchDetachedWeb;
+  try {
+    launch({ route: parsed.hash, repoRoot: state.repoRoot });
+  } catch (error) {
+    const detail = truncate(error instanceof Error ? error.message : String(error), 60);
+    showStatus(state, `workbench failed · ${detail}`);
+    state.footer.content = LIST_HINT;
+    return;
+  }
+  finish(state, 0);
+}
+
+export function tryListWorkbenchShortcut(state: PickerState, key: KeyEvent): boolean {
+  if (state.mode !== "list") return false;
+  const resolved = resolveListWorkbenchRoute(key, selectedListEntry(state));
+  if (resolved === undefined) return false;
+  key.preventDefault();
+  if (resolved === "noop") return true;
+  launchWorkbenchRoute(state, resolved);
+  return true;
+}
+
 function handlePickerKey(state: PickerState, key: KeyEvent): void {
   if (state.mode === "run") return handleRunKey(state, key);
   if (key.name === "escape") {
@@ -331,10 +391,30 @@ function handlePickerKey(state: PickerState, key: KeyEvent): void {
   }
   if (state.mode === "input") return handleInputKey(state, key);
   if (state.mode === "prompt") return;
+  if (tryListWorkbenchShortcut(state, key)) return;
   navigateSelectList(state, key);
 }
 
 /** herdr prefix-key C0 bytes sit in the popup PTY; drop buffered + ignore late leaks. */
+const WORKBENCH_SHORTCUT_C0 = new Set([
+  0x05, // Ctrl+E
+  0x0f, // Ctrl+O
+  0x19, // Ctrl+Y
+]);
+
+/**
+ * True when a raw stdin sequence should be dropped as a herdr prefix-key leak.
+ * Keeps tab/newline/CR/escape and Ctrl+E/O/Y so OpenTUI can emit workbench keypresses.
+ */
+export function shouldDropStdinLeakSequence(sequence: string): boolean {
+  if (sequence.length !== 1) return false;
+  const c = sequence.charCodeAt(0);
+  if (c >= 0x20) return false;
+  if (c === 0x09 || c === 0x0a || c === 0x0d || c === 0x1b) return false;
+  if (WORKBENCH_SHORTCUT_C0.has(c)) return false;
+  return true;
+}
+
 function stdinLeakHandlers(): {
   drain: () => void;
   prepend: ((sequence: string) => boolean)[];
@@ -343,13 +423,7 @@ function stdinLeakHandlers(): {
     drain: () => {
       if (process.stdin.readableLength > 0) process.stdin.read(process.stdin.readableLength);
     },
-    prepend: [
-      (sequence) => {
-        if (sequence.length !== 1) return false;
-        const c = sequence.charCodeAt(0);
-        return c < 0x20 && c !== 0x09 && c !== 0x0a && c !== 0x0d && c !== 0x1b;
-      },
-    ],
+    prepend: [shouldDropStdinLeakSequence],
   };
 }
 

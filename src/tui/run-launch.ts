@@ -220,3 +220,39 @@ export function launchDetachedRun(req: LaunchRunRequest): DetachedRunHandle {
 
   return { result, detach };
 }
+
+export type LaunchWebRequest = {
+  route: string;
+  repoRoot: string;
+  env?: NodeJS.ProcessEnv;
+  spawn?: typeof Bun.spawn;
+};
+
+/** Env the detached `hwf web` child needs for the same repo workbench. */
+export function buildWebLaunchEnv(
+  repoRoot: string,
+  base: NodeJS.ProcessEnv = process.env,
+): Record<string, string | undefined> {
+  return {
+    ...base,
+    HERDR_WORKFLOWS_REPO_ROOT: repoRoot,
+  };
+}
+
+/**
+ * Fire-and-forget `hwf web <route>`. No stdout parsing, no retained handle —
+ * the web command owns endpoint reuse and browser open.
+ */
+export function launchDetachedWeb(req: LaunchWebRequest): void {
+  const spawn = req.spawn ?? Bun.spawn.bind(Bun);
+  const argv = selfWebArgv([req.route]);
+  const proc = spawn(argv, {
+    cwd: req.repoRoot,
+    env: buildWebLaunchEnv(req.repoRoot, { ...process.env, ...req.env }),
+    stdin: "ignore",
+    stdout: "ignore",
+    stderr: "ignore",
+    detached: true,
+  });
+  proc.unref();
+}

@@ -9,6 +9,9 @@ import {
   formatInvalidLines,
   formatRunProgress,
   hasVisibleEntries,
+  LIST_HINT,
+  resolveListWorkbenchRoute,
+  shouldDropStdinLeakSequence,
   truncate,
 } from "../src/tui/picker";
 import { humanizeWorkflowName, workflowDisplayTitle } from "../src/workflow/trust";
@@ -198,5 +201,59 @@ describe("truncate", () => {
   test("ellipsis at max", () => {
     expect(truncate("abcdefghij", 5)).toBe("abcd…");
     expect(truncate("abcd", 5)).toBe("abcd");
+  });
+});
+
+describe("list workbench shortcuts", () => {
+  test("footer identifies run edit share import dismiss", () => {
+    expect(LIST_HINT).toContain("enter run");
+    expect(LIST_HINT).toContain("^e edit");
+    expect(LIST_HINT).toContain("^y share");
+    expect(LIST_HINT).toContain("^o import");
+    expect(LIST_HINT).toContain("esc");
+  });
+
+  test("printable e y o are filter letters not workbench actions", () => {
+    const entry: WorkflowListEntry = { name: "deploy", source: "repo", file: "/r/d.yaml" };
+    expect(resolveListWorkbenchRoute({ name: "e", ctrl: false }, entry)).toBeUndefined();
+    expect(resolveListWorkbenchRoute({ name: "y", ctrl: false }, entry)).toBeUndefined();
+    expect(resolveListWorkbenchRoute({ name: "o", ctrl: false }, entry)).toBeUndefined();
+  });
+
+  test("ctrl+e and ctrl+y preserve selected repo/global provenance", () => {
+    expect(
+      resolveListWorkbenchRoute(
+        { name: "e", ctrl: true },
+        { name: "deploy", source: "repo", file: "/r/d.yaml" },
+      ),
+    ).toBe("w=repo:deploy");
+    expect(
+      resolveListWorkbenchRoute(
+        { name: "y", ctrl: true },
+        { name: "deploy", source: "global", file: "/g/d.yaml" },
+      ),
+    ).toBe("share=global:deploy");
+  });
+
+  test("edit/share noop without selection; import works with empty list", () => {
+    expect(resolveListWorkbenchRoute({ name: "e", ctrl: true }, undefined)).toBe("noop");
+    expect(resolveListWorkbenchRoute({ name: "y", ctrl: true }, undefined)).toBe("noop");
+    expect(resolveListWorkbenchRoute({ name: "o", ctrl: true }, undefined)).toBe("import");
+  });
+});
+
+describe("stdin leak prepend boundary", () => {
+  test("preserves Ctrl+E/O/Y C0 bytes while dropping unrelated prefix leaks", () => {
+    expect(shouldDropStdinLeakSequence(String.fromCharCode(0x05))).toBe(false); // Ctrl+E
+    expect(shouldDropStdinLeakSequence(String.fromCharCode(0x0f))).toBe(false); // Ctrl+O
+    expect(shouldDropStdinLeakSequence(String.fromCharCode(0x19))).toBe(false); // Ctrl+Y
+    expect(shouldDropStdinLeakSequence("\t")).toBe(false);
+    expect(shouldDropStdinLeakSequence("\n")).toBe(false);
+    expect(shouldDropStdinLeakSequence("\r")).toBe(false);
+    expect(shouldDropStdinLeakSequence("\x1b")).toBe(false);
+    expect(shouldDropStdinLeakSequence("e")).toBe(false);
+    expect(shouldDropStdinLeakSequence(String.fromCharCode(0x01))).toBe(true); // Ctrl+A
+    expect(shouldDropStdinLeakSequence(String.fromCharCode(0x18))).toBe(true); // Ctrl+X
+    expect(shouldDropStdinLeakSequence("ab")).toBe(false);
   });
 });
