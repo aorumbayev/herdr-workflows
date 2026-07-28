@@ -12,6 +12,9 @@ hero:
     - theme: alt
       text: Examples
       link: /examples
+    - theme: alt
+      text: Reference
+      link: /reference
 ---
 
 ## 60-second quickstart
@@ -34,7 +37,7 @@ steps:
 
 Press `prefix+k`, pick `scratch`, hit enter — a lazygit tab opens.
 
-Ready-made workflows (handoff, prompt-enhance, worktree, review) are on [Examples](/examples).
+Ready-made workflows (**handoff**, **prompt-enhance**) are on [Examples](/examples).
 Each card copies a `hwf workflow import` command that shows the YAML and asks before writing.
 
 Next: [Guide](/guide) · [Examples](/examples) · [Reference](/reference)

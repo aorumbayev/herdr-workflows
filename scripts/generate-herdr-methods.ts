@@ -450,21 +450,37 @@ function emitGenerated(
   return `${lines.join("\n")}\n`;
 }
 
-async function main(): Promise<void> {
-  const rootSchema = (await Bun.file(schemaPath).json()) as RootSchema;
+export async function buildGeneratedSource(schemaFile = schemaPath): Promise<{
+  source: string;
+  protocol: number;
+  methodCount: number;
+  variantCount: number;
+  resultPathCount: number;
+}> {
+  const rootSchema = (await Bun.file(schemaFile).json()) as RootSchema;
   const methods = extractMethods(rootSchema);
   const variantPaths = extractResultVariantPaths(rootSchema);
   const methodVariants = mapMethodResultVariants(methods, variantPaths);
   const resultPaths = [...new Set([...variantPaths.values()].flat())].sort();
-  const source = emitGenerated(rootSchema.protocol, methods, methodVariants, resultPaths);
-  await mkdir(dirname(outPath), { recursive: true });
-  await Bun.write(outPath, source);
-  process.stdout.write(
-    `wrote ${outPath} (protocol ${rootSchema.protocol}, ${methods.length} methods, ${variantPaths.size} result variants, ${resultPaths.length} result paths)\n`,
-  );
+  return {
+    source: emitGenerated(rootSchema.protocol, methods, methodVariants, resultPaths),
+    protocol: rootSchema.protocol,
+    methodCount: methods.length,
+    variantCount: variantPaths.size,
+    resultPathCount: resultPaths.length,
+  };
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
-});
+if (import.meta.main) {
+  try {
+    const built = await buildGeneratedSource();
+    await mkdir(dirname(outPath), { recursive: true });
+    await Bun.write(outPath, built.source);
+    process.stdout.write(
+      `wrote ${outPath} (protocol ${built.protocol}, ${built.methodCount} methods, ${built.variantCount} result variants, ${built.resultPathCount} result paths)\n`,
+    );
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  }
+}

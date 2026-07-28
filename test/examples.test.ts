@@ -2,9 +2,18 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildExamples } from "../scripts/generate-examples";
+import { buildExamples, renderModule } from "../scripts/generate-examples";
 import { loadWorkflow } from "../src/workflow/load";
 import type { WorkflowsConfig } from "../src/config";
+
+const committedGallery = join(
+  import.meta.dir,
+  "..",
+  "docs",
+  ".vitepress",
+  "theme",
+  "examples.generated.ts",
+);
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -65,5 +74,32 @@ describe("shipped examples", () => {
         expect(file.body).not.toMatch(/^\s*use:/m);
       }
     }
+  });
+
+  test("docs/.vitepress/theme/examples.generated.ts matches buildExamples()", async () => {
+    const expected = renderModule(await buildExamples(EXAMPLES_DIR));
+    const file = Bun.file(committedGallery);
+    expect(await file.exists()).toBe(true);
+    if ((await file.text()) !== expected) {
+      throw new Error(
+        "docs/.vitepress/theme/examples.generated.ts is stale — run `bun run examples`",
+      );
+    }
+  });
+
+  test("docs/examples.md mounts ExampleCards and does not embed YAML", async () => {
+    const page = await Bun.file(join(import.meta.dir, "..", "docs", "examples.md")).text();
+    expect(page).toContain("<ExampleCards");
+    expect(page).not.toMatch(/```ya?ml/);
+  });
+
+  test("docs home lists only shipped example names", async () => {
+    const home = await Bun.file(join(import.meta.dir, "..", "docs", "index.md")).text();
+    const cards = await buildExamples(EXAMPLES_DIR);
+    for (const card of cards) {
+      expect(home).toContain(card.name);
+    }
+    expect(home).not.toMatch(/\bworktree\b/);
+    expect(home).not.toMatch(/\breview\b/);
   });
 });
