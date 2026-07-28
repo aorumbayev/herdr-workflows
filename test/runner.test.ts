@@ -1010,6 +1010,61 @@ steps:
     expect(logText).not.toContain("TRANSCRIPT");
   });
 
+  test("templated herdr enum param fails at runtime on a bad resolved value", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+inputs:
+  d: text
+steps:
+  - herdr: pane.split
+    params:
+      direction: "{{inputs.d}}"
+      target_pane_id: w1:p1
+`,
+    });
+    const { deps, calls } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, paneId: "w1:p1" },
+      inputs: { d: "sideways" },
+      deps,
+    });
+    const err = failed(result);
+    expect(err.error).toMatch(/param 'direction' must be one of right, down/);
+    expect(calls.filter((c) => c.method === "pane.split")).toHaveLength(0);
+  });
+
+  test("templated herdr enum param succeeds at runtime on a good resolved value", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+inputs:
+  d: text
+steps:
+  - herdr: pane.split
+    params:
+      direction: "{{inputs.d}}"
+      target_pane_id: w1:p1
+`,
+    });
+    const { deps, calls } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, paneId: "w1:p1" },
+      inputs: { d: "right" },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    expect(calls.filter((c) => c.method === "pane.split")).toHaveLength(1);
+    expect(calls.find((c) => c.method === "pane.split")?.params).toMatchObject({
+      direction: "right",
+      target_pane_id: "w1:p1",
+    });
+  });
+
   test("HWF environment cap fails preflight", async () => {
     const root = await repoWith({
       m: `version: v1alpha1

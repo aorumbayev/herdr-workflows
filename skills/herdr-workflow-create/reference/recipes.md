@@ -26,6 +26,7 @@ inputs:
 steps:
   - herdr: worktree.create
     params:
+      workspace_id: "{{context.workspace}}"
       branch: "{{inputs.branch}}"
       focus: true
 ```

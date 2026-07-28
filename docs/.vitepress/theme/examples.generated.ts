@@ -47,9 +47,9 @@ export default [
     "files": [
       {
         "name": "worktree",
-        "body": "version: v1alpha1\ntitle: Worktree\ndescription: Create a worktree and focus it\ninputs:\n  branch: text\n  base:\n    type: choice\n    options: [main, develop]\n    default: main\nsteps:\n  - herdr: worktree.create\n    params:\n      branch: \"{{inputs.branch}}\"\n      base: \"{{inputs.base}}\"\n      label: \"{{inputs.branch}}\"\n      focus: true\n"
+        "body": "version: v1alpha1\ntitle: Worktree\ndescription: Create a worktree and focus it\ninputs:\n  branch: text\n  base:\n    type: choice\n    options: [main, develop]\n    default: main\nsteps:\n  - herdr: worktree.create\n    params:\n      workspace_id: \"{{context.workspace}}\"\n      branch: \"{{inputs.branch}}\"\n      base: \"{{inputs.base}}\"\n      label: \"{{inputs.branch}}\"\n      focus: true\n"
       }
     ],
-    "payload": "H4sIAAAAAAAAE4WQQW7EIAxFr2J5nY6Urbc9RBfDLBxwFFQCCJxMR1HuXiV0Ru2q7PB/fD+x4YrUdzj6IBXpumHkWZDwnsqnFhHscEjugYSrlOpTJFh7Dnni3kT1GoTg44c10Um1xWc9ufcirAIMzy7g6GBMdqng1UQf86KVTAQYCkc7Eah86XnnKmcAoI8sBHZK3kqbpLO/Elxn9rEDJ6uElG8tdTLyEpTgCE2sKrnteINJiiv00rnYU7A9y1x4buBxnkIGt615Xtpo3w2+oMPyD8JVfgOBBwn/lJz/QaBlERNxv+3fmHSza5MBAAA="
+    "payload": "H4sIAAAAAAAAE4WQMW7DMAxFr0JwTg1k5dpDdIiCgpEYWKhCCRLtNjB898JWEyBTuYn/8fNTC85IxwNeY5KGdFpQ+SZI+J3rl1URPOAlhzsSzlJbzEowHzmVkY9OLVoSgo8/1mmQ5msstnPvVdgEGB5ewBrgmv3UIJrTqGWyRk4BLpXVjwQmP7a/uckuANi9CIEfc/TSO3n3bwSnG0c9QJBZUi7nrga58pSMYBOdNpPSd7zBKDVUesYZ/B6wjxWufOvgVhvTCnv5jIHA4bL4rFu64amsq8MH/si/gf2sobdeoO2oF4Tbi0vii6R/TPbvI7A6iVNcz+svn9IR4sIBAAA="
   }
 ] as const;

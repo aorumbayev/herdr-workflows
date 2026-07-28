@@ -43,6 +43,24 @@ describe("herdr method validators", () => {
     ).toBeUndefined();
   });
 
+  test("whole-value templates skip enum and type checks", () => {
+    expect(
+      validateMethodParams("pane.split", {
+        direction: "{{inputs.d}}",
+        target_pane_id: "w1:p1",
+      }),
+    ).toBeUndefined();
+    expect(
+      validateMethodParams("pane.zoom", { mode: "{{inputs.z}}", pane_id: "w1:p1" }),
+    ).toBeUndefined();
+    expect(
+      validateMethodParams("pane.split", {
+        direction: "sideways",
+        target_pane_id: "w1:p1",
+      }),
+    ).toMatch(/param 'direction' must be one of/);
+  });
+
   test("protocol mismatch names installed/required versions and both protocols", () => {
     const bad = checkHerdrStartup({ protocol: HERDR_PROTOCOL + 1, version: MIN_HERDR_VERSION });
     expect(bad.ok).toBe(false);

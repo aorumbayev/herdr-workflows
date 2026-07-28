@@ -131,6 +131,25 @@ describe("assertFocusPolicy", () => {
   test("unconstrained methods pass", () => {
     expect(assertFocusPolicy("notification.show", { title: "hi" })).toBeUndefined();
   });
+
+  test("templated unrelated params do not waive selector presence", () => {
+    expect(assertFocusPolicy("worktree.create", { branch: "{{inputs.branch}}" })).toContain(
+      "exactly one",
+    );
+    expect(assertFocusPolicy("tab.create", { label: "{{inputs.l}}" })).toContain("workspace_id");
+    expect(
+      assertFocusPolicy("worktree.create", {
+        cwd: "{{inputs.cwd}}",
+        branch: "{{inputs.branch}}",
+      }),
+    ).toBeUndefined();
+    expect(
+      assertFocusPolicy("tab.create", {
+        workspace_id: "{{context.workspace}}",
+        label: "{{inputs.l}}",
+      }),
+    ).toBeUndefined();
+  });
 });
 
 describe("coordination loss", () => {

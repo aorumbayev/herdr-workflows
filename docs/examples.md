@@ -44,6 +44,7 @@ inputs:
 steps:
   - herdr: worktree.create
     params:
+      workspace_id: "{{context.workspace}}"
       branch: "{{inputs.branch}}"
       base: "{{inputs.base}}"
       label: "{{inputs.branch}}"

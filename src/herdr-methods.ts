@@ -47,7 +47,15 @@ function kindsMatch(spec: PropSpec, value: unknown): boolean {
   return false;
 }
 
-/** Load-time check: unknown / denied method, or params that violate the generated schema. */
+/** Must stay aligned with `isWholeValueTemplate` in workflow/parse.ts. */
+const WHOLE_VALUE_TEMPLATE_RE =
+  /^\{\{\s*(?:inputs|steps|context)(?:\.[a-zA-Z_][a-zA-Z0-9_]*)+\s*\}\}$/;
+
+function isWholeValueTemplateParam(value: unknown): boolean {
+  return typeof value === "string" && WHOLE_VALUE_TEMPLATE_RE.test(value);
+}
+
+/** Unknown / denied method, or params that violate the generated schema. */
 export function validateMethodParams(
   method: string,
   params: Record<string, unknown> | undefined,
@@ -72,6 +80,8 @@ export function validateMethodParams(
       continue;
     }
     if (value === undefined) continue;
+    // Whole-value templates keep their type until substitute; check shape at runtime.
+    if (isWholeValueTemplateParam(value)) continue;
     if (prop.enumValues && !prop.enumValues.includes(value) && !(value === null && prop.nullable)) {
       return `${method}: param '${key}' must be one of ${prop.enumValues.map(String).join(", ")}`;
     }

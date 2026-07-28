@@ -7,8 +7,7 @@ version: v1alpha1 # required
 title: optional picker title
 description: optional picker subtitle
 hidden: true # optional; hide from picker
-inputs: {} # optional
-returns: {} # optional; children
+# inputs: / returns: optional (returns map must be non-empty when set)
 on_failure: # optional; entry only
   herdr: notification.show
   params: { title: "{{context.error.message}}" }
@@ -58,9 +57,15 @@ Blocking result: `{response, agent, pane_id}`.
 
 ### `herdr:`
 
+Raw `herdr:` calls never autofill targets from live UI focus. Methods such as
+`tab.create`, `pane.split`, `pane.zoom`, `layout.apply`, `layout.set_split_ratio`, and
+`worktree.*` require their exact selector params (`workspace_id`, `cwd`, `pane_id`,
+`target_pane_id`, …) — a template on an unrelated param does not waive that.
+
 ```yaml
 - herdr: worktree.create
   params:
+    workspace_id: "{{context.workspace}}"
     branch: "{{inputs.branch}}"
     focus: true
 ```

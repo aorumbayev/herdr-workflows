@@ -593,6 +593,29 @@ describe("loader references and composition", () => {
         `version: v1alpha1\nsteps:\n  - herdr: pane.split\n    params: { direction: right }\n`,
       ),
     ).rejects.toThrow(/target_pane_id is required/);
+
+    await expect(
+      parseWorkflowText(
+        "worktree-templated-branch",
+        `version: v1alpha1\nsteps:\n  - herdr: worktree.create\n    params: { branch: "{{inputs.branch}}" }\n`,
+      ),
+    ).rejects.toThrow(/needs exactly one of workspace_id or cwd/);
+
+    await expect(
+      parseWorkflowText(
+        "tab-templated-label",
+        `version: v1alpha1\nsteps:\n  - herdr: tab.create\n    params: { label: "{{inputs.l}}" }\n`,
+      ),
+    ).rejects.toThrow(/params.workspace_id is required/);
+
+    const templatedEnum = await parseWorkflowText(
+      "split-templated-direction",
+      `version: v1alpha1\ninputs:\n  d: text\nsteps:\n  - herdr: pane.split\n    params: { direction: "{{inputs.d}}", target_pane_id: w1:p1 }\n`,
+    );
+    expect(templatedEnum.steps[0]?.action).toMatchObject({
+      kind: "herdr",
+      method: "pane.split",
+    });
   });
 
   test("child returns isolation cycles and required inputs", async () => {

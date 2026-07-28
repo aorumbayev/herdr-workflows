@@ -80,20 +80,10 @@ export function assertFocusPolicy(method: string, params: Params | undefined): s
   return undefined;
 }
 
-function valueHasTemplate(value: unknown): boolean {
-  if (typeof value === "string") return value.includes("{{");
-  if (Array.isArray(value)) return value.some(valueHasTemplate);
-  if (value && typeof value === "object") {
-    return Object.values(value as Params).some(valueHasTemplate);
-  }
-  return false;
-}
-
-/** Load-time check when params have no templates; templated selectors stay for runtime. */
+/** Load-time alias: selector presence is key-based; template values do not waive it. */
 export function assertFocusPolicyAtLoad(
   method: string,
   params: Params | undefined,
 ): string | undefined {
-  if (params && valueHasTemplate(params)) return undefined;
   return assertFocusPolicy(method, params);
 }
