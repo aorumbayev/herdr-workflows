@@ -142,9 +142,11 @@ Layers: global plugin config dir → `.hwf/config.yaml` → `.hwf/config.local.y
 | Dynamic choice timeout                                          | 10s    |
 | Transcript extractor timeout                                    | 30s    |
 
-## Trust and denylist
+## Trust, share, and import
 
-Workflow files are reviewed executable code. Import requires full YAML review and confirmation. Picker and workbench show repo vs global provenance and flag commands, transcript references, and sensitive Herdr methods.
+Workflow files are reviewed executable code. Picker and workbench show repo vs global provenance and flag commands, transcript references, and sensitive Herdr methods.
+
+Sharing uses `hwf workflow import "<bundle>"`: a gzip-compressed, base64-encoded `{name, yaml}[]` array with no version, root, source, or config metadata. Export starts from the exact selected source and walks `workflow:` children with runtime repo-first resolution. Import requires reviewing every YAML body and aggregate warnings, choosing one destination scope for the whole bundle, and confirming. Name conflicts preserve the existing set: workbench asks replace-all interactively; CLI exits with the conflicts and needs `--force` on rerun. The old single-workflow `{v, name, body}` format is rejected. Workbench share/import views never execute workflows.
 
 The method denylist (server/plugin lifecycle, identity authority, experimental graphics, and similar) is an accidental-misuse and runtime-safety rail. It is not a sandbox. Trusted `run:` can invoke the complete Herdr CLI or socket as the current user.
 

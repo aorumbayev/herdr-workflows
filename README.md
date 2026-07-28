@@ -74,18 +74,20 @@ Config merges global (Herdr's plugin config dir) → committed `.hwf/config.yaml
 
 Ready-made workflows live in [`examples/`](examples) and on the
 [Examples page](https://aorumbayev.github.io/herdr-workflows/examples), where each card copies a
-`hwf workflow import "<base64>"` command — it prints the YAML (with sensitive flags), asks for review,
-then asks for this repo's `.hwf/workflows` or your global `~/.hwf/workflows`.
+`hwf workflow import "<bundle>"` command — import reviews every bundled YAML (with sensitive flags),
+asks for one repo or global destination, and confirms before writing. Name conflicts: workbench
+asks replace-all; CLI needs `--force` on rerun. Old single-workflow payloads are unsupported.
 
-Press `prefix+k` to pick and run a workflow, or use the CLI:
+Press `prefix+k` to pick and run a workflow (`Ctrl+E` edit, `Ctrl+Y` share, `Ctrl+O` import open the
+workbench), or use the CLI:
 
 ```bash
 hwf run review      # run the workflow above, live progress in the terminal
-hwf web             # browser workbench: build/edit/validate workflows, browse run log
+hwf web             # browser workbench: build/edit/validate/share/import — never runs
 hwf                 # same as `hwf web`
 ```
 
-Running always happens through the picker or `hwf run` — it needs real herdr panes, so the web workbench builds and shares but never runs.
+Running always happens through the picker or `hwf run` — it needs real herdr panes, so the web workbench builds, shares, and imports but never runs. Picker shortcuts reuse one live workbench per repository when it is still reachable.
 
 ## Agent skill
 

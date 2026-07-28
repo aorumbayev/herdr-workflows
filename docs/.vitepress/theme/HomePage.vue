@@ -87,7 +87,10 @@ steps:
       <div class="surface-grid">
         <article>
           <h3>prefix+k</h3>
-          <p>Picker collects entry inputs, then runs the workflow in real herdr panes.</p>
+          <p>
+            Picker runs workflows; list-mode <code>Ctrl+E</code> / <code>Ctrl+Y</code> /
+            <code>Ctrl+O</code> open edit, share, or import in the workbench.
+          </p>
         </article>
         <article>
           <h3>hwf run</h3>
@@ -95,7 +98,7 @@ steps:
         </article>
         <article>
           <h3>hwf web</h3>
-          <p>Browser workbench to build, validate, and share — never executes.</p>
+          <p>Browser workbench to build, validate, share, and import — never executes.</p>
         </article>
       </div>
     </section>
@@ -105,7 +108,7 @@ steps:
       <h2>Ready-made workflows</h2>
       <p class="section-lede">
         <strong>handoff</strong> and <strong>prompt-enhance</strong> ship in <code>examples/</code>.
-        Each card copies a reviewed <code>hwf workflow import</code> command.
+        Each card copies a reviewed <code>hwf workflow import</code> bundle command.
       </p>
       <div class="actions">
         <a class="btn btn-primary" :href="withBase('/examples')">Browse examples</a>

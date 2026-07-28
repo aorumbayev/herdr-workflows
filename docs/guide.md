@@ -42,7 +42,7 @@ default_profile: claude
 
 Config merges across three layers, each replacing whole entries by name: the global plugin config dir (`$HERDR_PLUGIN_CONFIG_DIR/config.yaml`, discovered via `herdr plugin config-dir`), committed `.hwf/config.yaml`, then gitignored `.hwf/config.local.yaml` for per-machine choices — point `deep-review` at a different kind locally without touching what the team shares.
 
-No workflows yet — import ready-made ones from [Examples](/examples). Each card copies `hwf workflow import "<base64>"`; import prints the YAML, flags sensitive bits, asks before writing to this repo's `.hwf/workflows` or global `~/.hwf/workflows`.
+No workflows yet — import ready-made ones from [Examples](/examples). Each card copies `hwf workflow import "<bundle>"`. Import reviews every bundled YAML, flags sensitive bits, asks for one repo or global destination, and confirms before writing. Name conflicts are handled per surface — see [Share and import](#share-and-import).
 
 Workflow YAML is reviewed executable code. Opening a repository never runs a workflow. There is no sandbox — a trusted `run:` can invoke the whole Herdr CLI or socket as your user.
 
@@ -72,13 +72,35 @@ steps:
 
 ## Pick a surface
 
-| Where                     | Use it for                                        |
-| ------------------------- | ------------------------------------------------- |
-| `prefix+k` (picker)       | running — collects entry inputs, then fires       |
-| `hwf run <name>`          | running from scripts/terminal, with `--input k=v` |
-| `hwf web` (or bare `hwf`) | editing — build, validate, share, browse run log  |
+| Where                     | Use it for                                                    |
+| ------------------------- | ------------------------------------------------------------- |
+| `prefix+k` (picker)       | run; list-mode `Ctrl+E` edit, `Ctrl+Y` share, `Ctrl+O` import |
+| `hwf run <name>`          | run from scripts/terminal, with `--input k=v`                 |
+| `hwf web` (or bare `hwf`) | edit, share, import review, browse run log — never executes   |
 
-Running always goes through the picker or `hwf run`. The workbench builds and shares but never executes.
+Running always goes through the picker or `hwf run`. The workbench builds, shares, and imports but never executes. Picker shortcuts and `hwf web` reuse one live authenticated workbench per repository when the recorded endpoint still answers.
+
+### Picker workbench shortcuts
+
+In list mode (filter focused):
+
+- `Ctrl+E` — open the selected workflow in the editor (`#w=<source>:<name>`)
+- `Ctrl+Y` — share the selected workflow and connected children (`#share=<source>:<name>`)
+- `Ctrl+O` — open import review (`#import`); no selection required
+
+Edit and share keep exact repo/global provenance. With no valid selection they are no-ops. Printable `e` / `y` / `o` still enter the filter. The picker dismisses only after a successful detached handoff.
+
+### Share and import
+
+Share produces the canonical command:
+
+```bash
+hwf workflow import "<bundle>"
+```
+
+The bundle is gzip+base64 of a non-empty `{name, yaml}[]` array: the exact selected source plus every transitively referenced `workflow:` child, resolved repo-first then global (same as runtime). Local provenance is display-only and is not encoded. Cycles or missing children fail export. The removed single-workflow `{v, name, body}` payload is unsupported — re-export.
+
+Import (CLI or workbench `#import`) accepts that command or the raw encoded bundle, never other shell text. It shows every YAML body and aggregate sensitivity warnings, requires one `repo` or `global` destination for the whole set, then confirmation. If any bundled name already exists in that scope, nothing is written: the workbench asks for an explicit replace-all confirmation; the CLI reports the conflicts and requires a rerun with `--force`. Share and import never run workflows.
 
 ## Format
 

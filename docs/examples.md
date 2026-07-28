@@ -1,6 +1,6 @@
 # Examples
 
-Each card copies a `hwf workflow import "<base64>"` command. Import prints the full YAML, marks commands, transcript access, and sensitive Herdr methods, asks for confirmation, then writes into repo or global `.hwf/workflows`.
+Each card copies a `hwf workflow import "<bundle>"` command (gzip+base64 `{name, yaml}[]`). Import reviews every bundled YAML, marks commands, transcript access, and sensitive Herdr methods, asks for confirmation and one repo or global destination, then writes. Name conflicts: workbench replace-all prompt, or CLI `--force` on rerun — see [Guide · Share and import](/guide#share-and-import). Old single-workflow payloads are rejected. Share and import never run workflows.
 
 All shipped examples use `version: v1alpha1`. Source of truth is [`examples/`](https://github.com/aorumbayev/herdr-workflows/tree/main/examples).
 
