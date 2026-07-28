@@ -44,7 +44,7 @@ async function mirrorExamples(): Promise<string> {
 }
 
 describe("shipped examples", () => {
-  test("every example and background workflow loads through the real loader", async () => {
+  test("every example loads through the real loader", async () => {
     const root = await mirrorExamples();
     const names = (await readdir(EXAMPLES_DIR))
       .filter((f) => f.endsWith(".yaml"))
@@ -64,15 +64,13 @@ describe("shipped examples", () => {
     for (const card of cards) {
       expect(card.desc.length).toBeGreaterThan(0);
       expect(card.payload.length).toBeGreaterThan(0);
-      for (const file of card.files) {
-        expect(file.body).toContain("version: v1alpha1");
-        expect(file.body).not.toMatch(/^\s*out:/m);
-        expect(file.body).not.toMatch(/^\s*wait:/m);
-        expect(file.body).not.toMatch(/^\s*allow_fail:/m);
-        expect(file.body).not.toMatch(/^\s*on_error:/m);
-        expect(file.body).not.toContain("{session}");
-        expect(file.body).not.toMatch(/^\s*use:/m);
-      }
+      expect(card.body).toContain("version: v1alpha1");
+      expect(card.body).not.toMatch(/^\s*out:/m);
+      expect(card.body).not.toMatch(/^\s*wait:/m);
+      expect(card.body).not.toMatch(/^\s*allow_fail:/m);
+      expect(card.body).not.toMatch(/^\s*on_error:/m);
+      expect(card.body).not.toContain("{session}");
+      expect(card.body).not.toMatch(/^\s*use:/m);
     }
   });
 

@@ -2,8 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { decodeBundle, encodeBundle } from "../src/workflow/bundle";
-import { checkBundle, parseImportScope, previewText, runImport } from "../src/workflow/import";
+import { decodePayload, encodePayload } from "../src/workflow/bundle";
+import { checkPayload, parseImportScope, previewText, runImport } from "../src/workflow/import";
 import { WorkflowLoadError } from "../src/workflow/types";
 
 const dirs: string[] = [];
@@ -12,9 +12,10 @@ afterEach(async () => {
 });
 
 const exactBody = "version: v1alpha1\nsteps:\n  - run: bun test\n";
-const bundle = {
+const demo = {
   v: 1 as const,
-  files: [{ name: "demo", body: exactBody }],
+  name: "demo",
+  body: exactBody,
 };
 
 async function scratch(): Promise<{ root: string; home: string }> {
@@ -24,58 +25,56 @@ async function scratch(): Promise<{ root: string; home: string }> {
   return { root, home };
 }
 
-describe("workflow bundle payloads", () => {
+describe("shared workflow payloads", () => {
   test("round-trips through base64", () => {
-    expect(decodeBundle(encodeBundle(bundle))).toEqual(bundle);
+    expect(decodePayload(encodePayload(demo))).toEqual(demo);
   });
 
-  test("encodeBundle is platform-stable", () => {
-    const payload = encodeBundle({ v: 1, files: [{ name: "a", body: "x\n" }] });
+  test("encodePayload is platform-stable", () => {
+    const payload = encodePayload({ v: 1, name: "a", body: "x\n" });
     expect(Buffer.from(payload, "base64")[9]).toBe(3);
-    expect(payload).toBe(
-      "H4sIAAAAAAAAA6tWKlOyMtRRSsvMSS1WsoquVspLzE1VslJKVNJRSspPqVSyUqqIyVOqja0FAIxVyMQrAAAA",
-    );
+    expect(payload).toBe("H4sIAAAAAAAAA6tWKlOyMtRRykvMTVWyUkpU0lFKyk+pVLJSqojJU6oFACebt0gfAAAA");
   });
 
   test("survives the line wrapping a copy-paste can add", () => {
-    const payload = encodeBundle(bundle);
+    const payload = encodePayload(demo);
     const wrapped = `${payload.slice(0, 10)}\n ${payload.slice(10)}`;
-    expect(decodeBundle(wrapped)).toEqual(bundle);
+    expect(decodePayload(wrapped)).toEqual(demo);
   });
 
-  test("rejects junk, non-bundle JSON, and bad workflow names", () => {
-    expect(() => decodeBundle("not-base64-at-all")).toThrow(WorkflowLoadError);
-    expect(() => decodeBundle(Buffer.from("plain").toString("base64"))).toThrow(WorkflowLoadError);
+  test("rejects junk, multi-file envelopes, and bad workflow names", () => {
+    expect(() => decodePayload("not-base64-at-all")).toThrow(WorkflowLoadError);
+    expect(() => decodePayload(Buffer.from("plain").toString("base64"))).toThrow(WorkflowLoadError);
     const gz = (o: unknown) =>
       Buffer.from(Bun.gzipSync(new TextEncoder().encode(JSON.stringify(o)))).toString("base64");
-    expect(() => decodeBundle(gz({ hello: true }))).toThrow(/not a workflow bundle/);
-    expect(() => decodeBundle(gz({ v: 1, files: [{ name: "../evil", body: "x" }] }))).toThrow(
+    expect(() => decodePayload(gz({ hello: true }))).toThrow(/not a shared workflow/);
+    expect(() => decodePayload(gz({ v: 1, files: [{ name: "demo", body: exactBody }] }))).toThrow(
+      /not a shared workflow/,
+    );
+    expect(() => decodePayload(gz({ v: 1, name: "../evil", body: "x" }))).toThrow(
       /workflow name must match/,
     );
   });
 
-  test("checkBundle rejects non-v1alpha1 YAML with the ordinary load error", () => {
+  test("checkPayload rejects non-v1alpha1 YAML with the ordinary load error", () => {
+    expect(() => checkPayload(encodePayload({ v: 1, name: "bad", body: "nope: 1\n" }))).toThrow(
+      /version is required|steps is required|unsupported workflow format/,
+    );
     expect(() =>
-      checkBundle(encodeBundle({ v: 1, files: [{ name: "bad", body: "nope: 1\n" }] })),
-    ).toThrow(/version is required|steps is required|unsupported workflow format/);
-    expect(() =>
-      checkBundle(
-        encodeBundle({
+      checkPayload(
+        encodePayload({
           v: 1,
-          files: [{ name: "legacy", body: "version: experimental\nsteps:\n  - run: x\n" }],
+          name: "legacy",
+          body: "version: experimental\nsteps:\n  - run: x\n",
         }),
       ),
     ).toThrow(/unsupported workflow format/);
     expect(() =>
-      checkBundle(
-        encodeBundle({
+      checkPayload(
+        encodePayload({
           v: 1,
-          files: [
-            {
-              name: "legacy-keys",
-              body: "version: v1alpha1\nsteps:\n  - run: x\n    out: y\n",
-            },
-          ],
+          name: "legacy-keys",
+          body: "version: v1alpha1\nsteps:\n  - run: x\n    out: y\n",
         }),
       ),
     ).toThrow(/Unrecognized key|out/);
@@ -84,10 +83,8 @@ describe("workflow bundle payloads", () => {
   test("preview shows full YAML and flags transcript and commands", () => {
     const withTranscript = {
       v: 1 as const,
-      files: [
-        {
-          name: "review",
-          body: `version: v1alpha1
+      name: "review",
+      body: `version: v1alpha1
 title: Review
 description: Uses transcript
 steps:
@@ -96,8 +93,6 @@ steps:
   - herdr: pane.close
     params: { pane_id: "{{context.pane}}" }
 `,
-        },
-      ],
     };
     const preview = previewText(withTranscript);
     expect(preview).toContain("--- review.yaml (Review) ---");
@@ -105,66 +100,34 @@ steps:
     expect(preview).toContain("transcript");
     expect(preview).toContain("herdr:pane.close");
     expect(preview).toContain("see {{context.transcript}}");
-    expect(preview).toContain(withTranscript.files[0]!.body);
+    expect(preview).toContain(withTranscript.body);
   });
 
-  test("preview names every file it would write", () => {
-    expect(previewText(bundle)).toContain("--- demo.yaml");
-    expect(previewText(bundle)).toContain("commands");
+  test("preview names the single workflow it would write", () => {
+    expect(previewText(demo)).toContain("--- demo.yaml");
+    expect(previewText(demo)).toContain("commands");
   });
 
-  test("preview aggregates commands from a bundled child before per-file sections", () => {
-    const multi = {
-      v: 1 as const,
-      files: [
-        {
-          name: "parent",
-          body: `version: v1alpha1
-steps:
-  - workflow: child
-`,
-        },
-        {
-          name: "child",
-          body: `version: v1alpha1
-steps:
-  - run: [echo, hi]
-`,
-        },
-      ],
-    };
-    const preview = previewText(multi);
-    const payloadIdx = preview.indexOf("⚠ payload: commands");
-    const parentIdx = preview.indexOf("--- parent.yaml");
-    const childIdx = preview.indexOf("--- child.yaml");
-    expect(payloadIdx).toBeGreaterThanOrEqual(0);
-    expect(parentIdx).toBeGreaterThan(payloadIdx);
-    expect(childIdx).toBeGreaterThan(parentIdx);
-    expect(preview.slice(parentIdx, childIdx)).not.toContain("commands");
-    expect(preview.slice(childIdx)).toContain("commands");
-  });
-
-  test("preview lists workflow children missing from the bundle", () => {
+  test("preview notes that workflow children are outside the payload", () => {
     const preview = previewText({
       v: 1,
-      files: [
-        {
-          name: "parent",
-          body: `version: v1alpha1
+      name: "parent",
+      body: `version: v1alpha1
 steps:
   - workflow: missing-child
 `,
-        },
-      ],
     });
-    expect(preview).toContain("⚠ payload: unresolved:missing-child");
+    expect(preview).toContain("single workflow");
+    expect(preview).toContain("missing-child");
+    expect(preview).toContain("not included");
+    expect(preview).toContain("importing repo");
   });
 });
 
 describe("hwf workflow import", () => {
   test("declining the review writes nothing", async () => {
     const { root, home } = await scratch();
-    const outcome = await runImport(encodeBundle(bundle), {
+    const outcome = await runImport(encodePayload(demo), {
       repoRoot: root,
       home,
       prompts: { confirm: async () => false, chooseScope: async () => "repo" },
@@ -176,28 +139,26 @@ describe("hwf workflow import", () => {
   test("chosen scope decides the directory", async () => {
     const { root, home } = await scratch();
     for (const scope of ["repo", "global"] as const) {
-      const outcome = await runImport(encodeBundle(bundle), { repoRoot: root, home, scope });
+      const outcome = await runImport(encodePayload(demo), { repoRoot: root, home, scope });
       if ("aborted" in outcome) throw new Error("unreachable");
-      expect(outcome.results).toEqual([
-        {
-          name: "demo",
-          path: join(scope === "repo" ? root : home, ".hwf", "workflows", "demo.yaml"),
-          status: "written",
-        },
-      ]);
+      expect(outcome.result).toEqual({
+        name: "demo",
+        path: join(scope === "repo" ? root : home, ".hwf", "workflows", "demo.yaml"),
+        status: "written",
+      });
     }
   });
 
   test("written YAML is preserved exactly with no reformatting", async () => {
     const { root, home } = await scratch();
     const odd = "version: v1alpha1\nsteps:\n- run:  [echo,  hi]\n";
-    const outcome = await runImport(encodeBundle({ v: 1, files: [{ name: "odd", body: odd }] }), {
+    const outcome = await runImport(encodePayload({ v: 1, name: "odd", body: odd }), {
       repoRoot: root,
       home,
       scope: "repo",
     });
     if ("aborted" in outcome) throw new Error("unreachable");
-    expect(await readFile(outcome.results[0]!.path, "utf8")).toBe(odd);
+    expect(await readFile(outcome.result.path, "utf8")).toBe(odd);
   });
 
   test("an existing file is kept unless force", async () => {
@@ -206,27 +167,27 @@ describe("hwf workflow import", () => {
       join(root, ".hwf", "workflows", "demo.yaml"),
       "version: v1alpha1\nsteps:\n  - run: mine\n",
     );
-    const kept = await runImport(encodeBundle(bundle), { repoRoot: root, home, scope: "repo" });
+    const kept = await runImport(encodePayload(demo), { repoRoot: root, home, scope: "repo" });
     if ("aborted" in kept) throw new Error("unreachable");
-    expect(kept.results[0]!.status).toBe("exists");
-    expect(await readFile(kept.results[0]!.path, "utf8")).toBe(
+    expect(kept.result.status).toBe("exists");
+    expect(await readFile(kept.result.path, "utf8")).toBe(
       "version: v1alpha1\nsteps:\n  - run: mine\n",
     );
 
-    const forced = await runImport(encodeBundle(bundle), {
+    const forced = await runImport(encodePayload(demo), {
       repoRoot: root,
       home,
       scope: "repo",
       force: true,
     });
     if ("aborted" in forced) throw new Error("unreachable");
-    expect(forced.results[0]!.status).toBe("written");
-    expect(await readFile(forced.results[0]!.path, "utf8")).toBe(bundle.files[0]!.body);
+    expect(forced.result.status).toBe("written");
+    expect(await readFile(forced.result.path, "utf8")).toBe(demo.body);
   });
 
   test("no scope and no prompt is an error, not a silent default", async () => {
     const { root, home } = await scratch();
-    await expect(runImport(encodeBundle(bundle), { repoRoot: root, home })).rejects.toThrow(
+    await expect(runImport(encodePayload(demo), { repoRoot: root, home })).rejects.toThrow(
       /no destination chosen/,
     );
   });

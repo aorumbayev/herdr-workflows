@@ -29,8 +29,8 @@ function toggle(name) {
         <h3>{{ card.name }}</h3>
         <p>{{ card.desc }}</p>
       </header>
-      <p class="hwf-files">
-        <code v-for="f in card.files" :key="f.name">{{ f.name }}.yaml</code>
+      <p class="hwf-file">
+        <code>{{ card.name }}.yaml</code>
       </p>
       <div class="hwf-actions">
         <button type="button" class="hwf-copy" @click="copy(card)">
@@ -41,10 +41,8 @@ function toggle(name) {
         </button>
       </div>
       <div v-if="open === card.name" class="hwf-yaml">
-        <div v-for="f in card.files" :key="f.name">
-          <p class="hwf-filename">{{ f.name }}.yaml</p>
-          <pre>{{ f.body.trimEnd() }}</pre>
-        </div>
+        <p class="hwf-filename">{{ card.name }}.yaml</p>
+        <pre>{{ card.body.trimEnd() }}</pre>
       </div>
     </article>
   </div>
@@ -79,13 +77,10 @@ function toggle(name) {
   color: var(--muted, var(--vp-c-text-3));
   line-height: 1.45;
 }
-.hwf-files {
+.hwf-file {
   margin: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
 }
-.hwf-files code {
+.hwf-file code {
   font-size: 0.72rem;
 }
 .hwf-actions {

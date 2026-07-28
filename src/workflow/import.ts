@@ -1,12 +1,12 @@
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { decodePayload, type WorkflowPayload } from "./bundle";
 import { parseRaw } from "./parse";
-import { decodeBundle, type WorkflowBundle } from "./bundle";
 import {
-  analyzeBundleSensitivity,
   analyzeRawWorkflow,
   formatSensitivityBanner,
+  referencedWorkflowChildren,
   workflowDisplayTitle,
 } from "./trust";
 import { WorkflowLoadError } from "./types";
@@ -28,49 +28,39 @@ function scopeDir(scope: ImportScope, repoRoot: string, home: string): string {
  * Schema-only check. Deliberately not the full load path: that resolves child workflows and
  * runs `options:` shell commands, which would execute the payload before the user consents.
  */
-export function checkBundle(payload: string): WorkflowBundle {
-  const bundle = decodeBundle(payload);
-  for (const file of bundle.files) {
-    parseRaw(`${file.name}.yaml`, file.body);
-  }
-  const names = bundle.files.map((f) => f.name);
-  const dupe = names.find((n, i) => names.indexOf(n) !== i);
-  if (dupe) throw new WorkflowLoadError(`payload lists '${dupe}' twice`);
-  return bundle;
+export function checkPayload(payload: string): WorkflowPayload {
+  const workflow = decodePayload(payload);
+  parseRaw(`${workflow.name}.yaml`, workflow.body);
+  return workflow;
 }
 
-export function previewText(bundle: WorkflowBundle): string {
-  const payloadBanner = formatSensitivityBanner(analyzeBundleSensitivity(bundle.files), "payload");
-  const parts = bundle.files.map((f) => {
-    const raw = parseRaw(`${f.name}.yaml`, f.body);
-    const banner = formatSensitivityBanner(analyzeRawWorkflow(raw));
-    const title = workflowDisplayTitle(f.name, raw.title);
-    const desc = raw.description?.trim() ? `${raw.description.trim()}\n` : "";
-    return `--- ${f.name}.yaml (${title}) ---\n${banner}${desc}${f.body}`;
-  });
-  const body = parts.join("\n\n");
-  return payloadBanner ? `${payloadBanner}\n${body}\n` : `${body}\n`;
+export function previewText(workflow: WorkflowPayload): string {
+  const raw = parseRaw(`${workflow.name}.yaml`, workflow.body);
+  const banner = formatSensitivityBanner(analyzeRawWorkflow(raw));
+  const title = workflowDisplayTitle(workflow.name, raw.title);
+  const desc = raw.description?.trim() ? `${raw.description.trim()}\n` : "";
+  const children = referencedWorkflowChildren(raw);
+  const childNote =
+    children.length > 0
+      ? `Note: this payload is a single workflow. Referenced children (${children.join(", ")}) are not included and will resolve from the importing repo (or be missing).\n`
+      : "";
+  return `--- ${workflow.name}.yaml (${title}) ---\n${banner}${childNote}${desc}${workflow.body}\n`;
 }
 
 export type ImportOutcome = { name: string; path: string; status: "written" | "exists" };
 
-async function writeBundle(
-  bundle: WorkflowBundle,
+async function writeWorkflow(
+  workflow: WorkflowPayload,
   dir: string,
   force: boolean,
-): Promise<ImportOutcome[]> {
+): Promise<ImportOutcome> {
   await mkdir(dir, { recursive: true });
-  const results: ImportOutcome[] = [];
-  for (const file of bundle.files) {
-    const path = join(dir, `${file.name}.yaml`);
-    if (!force && (await Bun.file(path).exists())) {
-      results.push({ name: file.name, path, status: "exists" });
-      continue;
-    }
-    await Bun.write(path, file.body);
-    results.push({ name: file.name, path, status: "written" });
+  const path = join(dir, `${workflow.name}.yaml`);
+  if (!force && (await Bun.file(path).exists())) {
+    return { name: workflow.name, path, status: "exists" };
   }
-  return results;
+  await Bun.write(path, workflow.body);
+  return { name: workflow.name, path, status: "written" };
 }
 
 export const IMPORT_DISCLAIMER = `This payload came from outside your machine. Imported workflows are
@@ -78,7 +68,6 @@ reviewed executable code: they run shell commands and agent prompts with your
 permissions. Read every line below before you accept it. There is no sandbox.`;
 
 export type ImportPrompts = {
-  /** Asks the reader to confirm they reviewed the preview. */
   confirm: (preview: string) => Promise<boolean>;
   chooseScope: () => Promise<ImportScope>;
 };
@@ -92,11 +81,17 @@ export async function runImport(
     force?: boolean;
     prompts?: ImportPrompts;
   },
-): Promise<{ bundle: WorkflowBundle; results: ImportOutcome[]; dir: string } | { aborted: true }> {
-  const bundle = checkBundle(payload);
-  if (opts.prompts && !(await opts.prompts.confirm(previewText(bundle)))) return { aborted: true };
+): Promise<{ workflow: WorkflowPayload; result: ImportOutcome; dir: string } | { aborted: true }> {
+  const workflow = checkPayload(payload);
+  if (opts.prompts && !(await opts.prompts.confirm(previewText(workflow)))) {
+    return { aborted: true };
+  }
   const scope = opts.scope ?? (await opts.prompts?.chooseScope());
   if (!scope) throw new WorkflowLoadError("no destination chosen (pass --to=repo|global)");
   const dir = scopeDir(scope, opts.repoRoot, opts.home ?? process.env.HOME ?? homedir());
-  return { bundle, results: await writeBundle(bundle, dir, opts.force === true), dir };
+  return {
+    workflow,
+    result: await writeWorkflow(workflow, dir, opts.force === true),
+    dir,
+  };
 }

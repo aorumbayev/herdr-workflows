@@ -59,7 +59,6 @@ function childWorkflowNames(steps: WorkflowStep[], onFailure?: RecoveryAction): 
   return names;
 }
 
-/** Local sensitivity only — used by import-bundle previews that stay per-file. */
 function analyzeWorkflowSensitivity(
   steps: WorkflowStep[],
   returns?: ReturnsSpec,
@@ -79,31 +78,9 @@ export function analyzeRawWorkflow(raw: RawWorkflow): WorkflowSensitivity {
   return analyzeWorkflowSensitivity(raw.steps, raw.returns, raw.onFailure);
 }
 
-/** Union sensitivity across every file in an import payload; missing `workflow:` children are listed. */
-export function analyzeBundleSensitivity(
-  files: readonly { name: string; body: string }[],
-): WorkflowSensitivity {
-  const rawByName = new Map<string, RawWorkflow>();
-  for (const file of files) {
-    rawByName.set(file.name, parseRaw(`${file.name}.yaml`, file.body));
-  }
-  const aggregated: WorkflowSensitivity = {
-    hasCommands: false,
-    hasTranscript: false,
-    sensitiveMethods: [],
-    unresolvedChildren: [],
-  };
-  for (const raw of rawByName.values()) {
-    mergeSensitivity(aggregated, analyzeRawWorkflow(raw));
-    for (const child of childWorkflowNames(raw.steps, raw.onFailure)) {
-      if (!rawByName.has(child) && !aggregated.unresolvedChildren.includes(child)) {
-        aggregated.unresolvedChildren.push(child);
-      }
-    }
-  }
-  aggregated.sensitiveMethods.sort();
-  aggregated.unresolvedChildren.sort();
-  return aggregated;
+/** `workflow:` names referenced by a single shared payload (never included in the payload itself). */
+export function referencedWorkflowChildren(raw: RawWorkflow): string[] {
+  return [...new Set(childWorkflowNames(raw.steps, raw.onFailure))].sort();
 }
 
 /** Same repo-over-global resolution the loader uses. */

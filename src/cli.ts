@@ -112,7 +112,7 @@ async function cmdWorkflowImport(args: string[]): Promise<void> {
         : {
             confirm: async (preview) => {
               process.stdout.write(`${IMPORT_DISCLAIMER}\n\n${preview}\n`);
-              process.stdout.write("Reviewed the workflows above and want them? [y/N] ");
+              process.stdout.write("Reviewed the workflow above and want it? [y/N] ");
               const line = await readLine();
               return line.kind === "line" && line.text.trim().toLowerCase() === "y";
             },
@@ -128,13 +128,12 @@ async function cmdWorkflowImport(args: string[]): Promise<void> {
       process.stdout.write("aborted — nothing written\n");
       return;
     }
-    for (const r of outcome.results) {
-      process.stdout.write(
-        r.status === "written"
-          ? `wrote ${r.path}\n`
-          : `kept existing ${r.path} (--force to replace)\n`,
-      );
-    }
+    const r = outcome.result;
+    process.stdout.write(
+      r.status === "written"
+        ? `wrote ${r.path}\n`
+        : `kept existing ${r.path} (--force to replace)\n`,
+    );
   } catch (error) {
     if (error instanceof WorkflowLoadError) die(error.message);
     throw error;

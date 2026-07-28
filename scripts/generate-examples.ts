@@ -1,6 +1,6 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { encodeBundle } from "../src/workflow/bundle";
+import { encodePayload } from "../src/workflow/bundle";
 import { parseRaw } from "../src/workflow/parse";
 
 const EXAMPLES_DIR = join(import.meta.dir, "..", "examples");
@@ -9,38 +9,26 @@ const OUT = join(import.meta.dir, "..", "docs", ".vitepress", "theme", "examples
 export type ExampleCard = {
   name: string;
   desc: string;
-  files: { name: string; body: string }[];
+  body: string;
   payload: string;
 };
 
-/** `<entry>-bg.yaml` with `hidden: true` ships with `<entry>` — importing one without the other breaks it. */
 export async function buildExamples(dir = EXAMPLES_DIR): Promise<ExampleCard[]> {
   const names = (await readdir(dir))
     .filter((f) => f.endsWith(".yaml"))
     .map((f) => f.replace(/\.yaml$/, ""))
     .sort();
-  const bodies = new Map<string, string>();
-  const raws = new Map<string, ReturnType<typeof parseRaw>>();
-  for (const name of names) {
-    const body = await readFile(join(dir, `${name}.yaml`), "utf8");
-    bodies.set(name, body);
-    raws.set(name, parseRaw(`${name}.yaml`, body));
-  }
-  const hidden = names.filter((n) => raws.get(n)!.hidden === true);
   const cards: ExampleCard[] = [];
   for (const name of names) {
-    if (hidden.includes(name)) continue;
-    const own = [name, ...hidden.filter((h) => h.startsWith(`${name}-`))];
-    const files = own.map((n) => ({ name: n, body: bodies.get(n)! }));
+    const body = await readFile(join(dir, `${name}.yaml`), "utf8");
+    const raw = parseRaw(`${name}.yaml`, body);
     cards.push({
       name,
-      desc: raws.get(name)!.description ?? "",
-      files,
-      payload: encodeBundle({ v: 1, files }),
+      desc: raw.description ?? "",
+      body,
+      payload: encodePayload({ v: 1, name, body }),
     });
   }
-  const orphan = hidden.find((h) => !cards.some((c) => c.files.some((f) => f.name === h)));
-  if (orphan) throw new Error(`examples/${orphan}.yaml is hidden but no entry workflow claims it`);
   return cards;
 }
 
