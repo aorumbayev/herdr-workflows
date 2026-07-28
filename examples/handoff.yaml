@@ -1,6 +1,6 @@
 version: v1alpha1
 title: Handoff
-description: Distil this session and hand it to another agent
+description: Distil this session and hand it to another agent — launch it from an idle agent pane, it closes that tab
 inputs:
   target: profile
   focus:
