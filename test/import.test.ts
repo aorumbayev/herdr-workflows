@@ -101,6 +101,12 @@ describe("shared workflow payloads", () => {
     expect(() => decodePayload(encoded)).toThrow(/workflow bundle exceeded/);
   });
 
+  test("encodePayload rejects uncompressed bundles over the capture cap", () => {
+    const yaml = "x".repeat(CAPTURE_BYTE_LIMIT);
+    expect(() => encodePayload([{ name: "huge", yaml }])).toThrow(CaptureLimitError);
+    expect(() => encodePayload([{ name: "huge", yaml }])).toThrow(/workflow bundle exceeded/);
+  });
+
   test("checkPayload rejects non-v1alpha1 YAML with the ordinary load error", () => {
     expect(() => checkPayload(encodePayload([{ name: "bad", yaml: "nope: 1\n" }]))).toThrow(
       /version is required|steps is required|unsupported workflow format/,

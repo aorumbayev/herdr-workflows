@@ -838,6 +838,81 @@
         color: var(--red);
         font-size: 0.8rem;
       }
+
+      /* share / import routes */
+      .route-head {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: baseline;
+        justify-content: space-between;
+      }
+      .route-head h2 {
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+      }
+      .cmd-box {
+        width: 100%;
+        padding: 0.7rem 0.85rem;
+        border: 1px solid var(--term-border);
+        border-radius: var(--radius);
+        background: var(--term-bg);
+        color: var(--term-text);
+        word-break: break-all;
+        white-space: pre-wrap;
+        font-size: 0.85rem;
+        line-height: 1.55;
+      }
+      .bundle {
+        display: flex;
+        flex-direction: column;
+        gap: 0.55rem;
+      }
+      .bundle .item {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--bg-elevated);
+        overflow: hidden;
+      }
+      .bundle .item .top {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+        padding: 0.5rem 0.7rem;
+        border-bottom: 1px solid var(--line);
+      }
+      .bundle .item .top .name {
+        font-weight: 600;
+      }
+      .bundle .item pre {
+        margin: 0;
+        padding: 0.7rem 0.85rem;
+        max-height: min(40vh, 28rem);
+        overflow: auto;
+        background: var(--term-bg);
+        color: var(--term-text);
+        font: inherit;
+        font-size: 0.85rem;
+        line-height: 1.55;
+        white-space: pre;
+      }
+      #import-paste {
+        min-height: 8rem;
+        flex: none;
+        width: 100%;
+      }
+      @media (max-width: 720px) {
+        .bundle .item pre {
+          max-height: 30vh;
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+        .cmd-box {
+          font-size: 0.8rem;
+        }
+      }
     </style>
   </head>
   <body>
@@ -866,6 +941,7 @@
       let editorFileText = ""; // open workflow as last read from disk — live reload compares to it
       let editorMode = "text"; // desired mode, kept across live reloads
       let wantOpen = null; // {name, scope} from the URL hash; opened as soon as the file exists
+      let routeView = null; // null | {kind:"share",scope,name} | {kind:"import"}
 
       function errMsg(e) {
         return (e && e.message) || String(e);
@@ -934,19 +1010,32 @@
         render();
       }
 
+      function clearRouteHash() {
+        if (!/^#(share=|import)/.test(location.hash)) return;
+        history.replaceState(null, "", location.pathname + location.search);
+      }
+
+      function syncWorkflowLayout() {
+        const full = tab !== "workflows" || !!routeView;
+        document.querySelector("main").classList.toggle("full", full);
+        if (full) $("list").classList.add("hide");
+        else $("list").classList.remove("hide");
+      }
+
       function render() {
         document
           .querySelectorAll(".tab")
           .forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
-        document.querySelector("main").classList.toggle("full", tab !== "workflows");
+        syncWorkflowLayout();
+        if (routeView) return;
         if (tab === "workflows") return renderWorkflows();
         if (tab === "config") return renderConfig();
         return renderRuns();
       }
 
       function renderWorkflows() {
+        syncWorkflowLayout();
         const list = $("list");
-        list.classList.remove("hide");
         list.innerHTML = "";
         const nu = document.createElement("button");
         nu.textContent = "+ new";
@@ -999,9 +1088,11 @@
 
       async function openWorkflow(name, scope) {
         const seq = ++openSeq;
+        routeView = null;
         current = { name, scope };
         wantOpen = null;
         setHash("w=" + scope + ":" + name);
+        syncWorkflowLayout();
         renderWorkflows();
         const pane = $("pane");
         pane.innerHTML = "<p class=hint>loading…</p>";
@@ -1022,7 +1113,9 @@
       function newWorkflow() {
         if (!confirmLeave()) return;
         openSeq += 1; // cancel any in-flight openWorkflow
+        routeView = null;
         current = { name: "", scope: "repo" };
+        syncWorkflowLayout();
         renderWorkflows();
         renderEditor("", "repo", "version: v1alpha1\nsteps:\n  - run: [echo, hello]\n", "", []);
       }
@@ -2832,10 +2925,335 @@
         pane.appendChild(wrap);
       }
 
+      async function renderShare(scope, name) {
+        syncWorkflowLayout();
+        const pane = $("pane");
+        const seq = ++openSeq;
+        pane.innerHTML = "<p class=hint>loading share…</p>";
+        const r = await api(
+          "/api/share?name=" + encodeURIComponent(name) + "&scope=" + encodeURIComponent(scope),
+        );
+        if (seq !== openSeq) return;
+        if (!routeView || routeView.kind !== "share") return;
+        pane.innerHTML = "";
+        const head = document.createElement("div");
+        head.className = "route-head";
+        head.innerHTML =
+          "<h2>share <code>" +
+          esc(scope) +
+          ":" +
+          esc(name) +
+          "</code></h2><span class=hint>connected workflows · import command</span>";
+        pane.appendChild(head);
+        if (r.status !== 200 || !r.data.ok) {
+          const err = document.createElement("p");
+          err.className = "status bad";
+          err.textContent = r.data.error || "could not build share bundle";
+          pane.appendChild(err);
+          return;
+        }
+        const provenance = {};
+        for (const p of r.data.provenance || []) provenance[p.name] = p.source;
+        const entries = r.data.entries || [];
+        if (!entries.length) {
+          const empty = document.createElement("p");
+          empty.className = "hint";
+          empty.textContent = "bundle is empty";
+          pane.appendChild(empty);
+          return;
+        }
+        const names = document.createElement("div");
+        names.className = "flags";
+        names.textContent =
+          "includes " +
+          entries
+            .map((e) => {
+              const src = provenance[e.name];
+              const label = src === "repo" ? "local" : src === "global" ? "global" : "local";
+              return e.name + " (" + label + ")";
+            })
+            .join(" · ");
+        pane.appendChild(names);
+        const cap = document.createElement("p");
+        cap.className = "bar";
+        cap.innerHTML = "<span class=cap>import command</span>";
+        pane.appendChild(cap);
+        const cmd = document.createElement("div");
+        cmd.className = "cmd-box";
+        cmd.setAttribute("role", "textbox");
+        cmd.setAttribute("aria-readonly", "true");
+        cmd.textContent = r.data.command || "";
+        pane.appendChild(cmd);
+        const bar = document.createElement("div");
+        bar.className = "bar";
+        const copy = mkBtn("copy import command", () => {
+          navigator.clipboard.writeText(r.data.command || "").then(
+            () => toast("import command copied", true),
+            (e) => toast("copy failed — " + errMsg(e), false),
+          );
+        });
+        copy.className = "primary";
+        bar.appendChild(copy);
+        pane.appendChild(bar);
+        const listCap = document.createElement("p");
+        listCap.className = "bar";
+        listCap.innerHTML = "<span class=cap>bundled workflows</span>";
+        pane.appendChild(listCap);
+        const bundle = document.createElement("div");
+        bundle.className = "bundle";
+        for (const e of entries) {
+          const item = document.createElement("div");
+          item.className = "item";
+          const top = document.createElement("div");
+          top.className = "top";
+          top.innerHTML =
+            "<span class=name>" +
+            esc(e.name) +
+            "</span><span class=badge>" +
+            esc(
+              provenance[e.name] === "global"
+                ? "global"
+                : provenance[e.name] === "repo"
+                  ? "local"
+                  : "—",
+            ) +
+            "</span>";
+          const pre = document.createElement("pre");
+          pre.textContent = e.yaml || "";
+          item.append(top, pre);
+          bundle.appendChild(item);
+        }
+        pane.appendChild(bundle);
+      }
+
+      function renderImport() {
+        syncWorkflowLayout();
+        const pane = $("pane");
+        pane.innerHTML = "";
+        const head = document.createElement("div");
+        head.className = "route-head";
+        head.innerHTML =
+          "<h2>import workflows</h2><span class=hint>review every YAML · one destination · no run</span>";
+        pane.appendChild(head);
+        const paste = document.createElement("textarea");
+        paste.id = "import-paste";
+        paste.setAttribute("aria-label", "import command or encoded bundle");
+        paste.placeholder = 'hwf workflow import "…"  — or paste the encoded bundle';
+        pane.appendChild(paste);
+        const bar = document.createElement("div");
+        bar.className = "bar";
+        const previewBtn = mkBtn("preview", () => runImportPreview());
+        previewBtn.className = "primary";
+        bar.appendChild(previewBtn);
+        pane.appendChild(bar);
+        const status = document.createElement("div");
+        status.id = "import-status";
+        status.className = "status";
+        pane.appendChild(status);
+        const review = document.createElement("div");
+        review.id = "import-review";
+        pane.appendChild(review);
+
+        async function runImportPreview() {
+          const text = paste.value.trim();
+          review.innerHTML = "";
+          if (!text) {
+            setStatus(status, false, "paste an import command or encoded bundle");
+            return;
+          }
+          setStatus(status, "info", "loading preview…");
+          const r = await api("/api/import/preview", {
+            method: "POST",
+            body: JSON.stringify({ text }),
+          });
+          if (!r.data.ok) {
+            setStatus(status, false, r.data.error || "preview failed");
+            return;
+          }
+          setStatus(status, true, "preview ready — choose a destination and confirm");
+          const entries = r.data.entries || [];
+          const warnings = r.data.warnings || [];
+          const unresolved = r.data.unresolvedChildren || [];
+          const availability = r.data.availability || {};
+
+          if (r.data.banner) {
+            const banner = document.createElement("div");
+            banner.className = "flags warn";
+            banner.textContent = r.data.banner.trim();
+            review.appendChild(banner);
+          }
+          if (warnings.length) {
+            const wl = document.createElement("div");
+            wl.className = "flags warn";
+            wl.textContent = "warnings · " + warnings.join(" · ");
+            review.appendChild(wl);
+          }
+          if (unresolved.length) {
+            const note = document.createElement("p");
+            note.className = "hint";
+            note.textContent =
+              "referenced but not in bundle: " +
+              unresolved.join(", ") +
+              " — resolve on import host";
+            review.appendChild(note);
+          }
+          if (!entries.length) {
+            const empty = document.createElement("p");
+            empty.className = "hint";
+            empty.textContent = "no workflows in this bundle";
+            review.appendChild(empty);
+            return;
+          }
+          const bundle = document.createElement("div");
+          bundle.className = "bundle";
+          for (const e of entries) {
+            const item = document.createElement("div");
+            item.className = "item";
+            const top = document.createElement("div");
+            top.className = "top";
+            const warnBits = (e.warnings || []).length ? " · " + e.warnings.join(" · ") : "";
+            top.innerHTML =
+              "<span class=name>" +
+              esc(e.title || e.name) +
+              "</span><span class=badge>" +
+              esc(e.name) +
+              esc(warnBits) +
+              "</span>";
+            const pre = document.createElement("pre");
+            pre.textContent = e.yaml || "";
+            item.append(top, pre);
+            bundle.appendChild(item);
+          }
+          review.appendChild(bundle);
+
+          const dest = document.createElement("div");
+          dest.className = "bar";
+          dest.innerHTML = "<span class=cap>destination</span>";
+          const scopeSel = document.createElement("select");
+          scopeSel.setAttribute("aria-label", "import destination scope");
+          for (const s of ["repo", "global"]) {
+            const o = document.createElement("option");
+            o.value = s;
+            o.textContent = s === "repo" ? "local (repo)" : "global";
+            scopeSel.appendChild(o);
+          }
+          dest.appendChild(scopeSel);
+          const conflictHint = document.createElement("span");
+          conflictHint.className = "hint";
+          const syncConflicts = () => {
+            const scope = scopeSel.value;
+            const conflicts = (availability[scope] && availability[scope].conflicts) || [];
+            conflictHint.textContent = conflicts.length
+              ? "conflicts: " + conflicts.map((c) => c.name || c).join(", ")
+              : "no name conflicts in " + (scope === "repo" ? "local" : "global");
+          };
+          scopeSel.onchange = syncConflicts;
+          syncConflicts();
+          dest.appendChild(conflictHint);
+          review.appendChild(dest);
+
+          const actions = document.createElement("div");
+          actions.className = "bar";
+          const confirmBtn = mkBtn("confirm import", async () => {
+            const scope = scopeSel.value;
+            const n = entries.length;
+            if (
+              !confirm(
+                "import " +
+                  n +
+                  " workflow" +
+                  (n === 1 ? "" : "s") +
+                  " into " +
+                  (scope === "repo" ? "local (repo)" : "global") +
+                  "?",
+              )
+            )
+              return;
+            await writeImport(text, scope, false);
+          });
+          confirmBtn.className = "primary";
+          actions.appendChild(confirmBtn);
+          review.appendChild(actions);
+          const resultBox = document.createElement("div");
+          resultBox.id = "import-result";
+          resultBox.className = "status";
+          review.appendChild(resultBox);
+
+          async function writeImport(payload, scope, replaceAll) {
+            const out = $("import-result") || resultBox;
+            setStatus(out, "info", replaceAll ? "replacing…" : "importing…");
+            const wr = await api("/api/import", {
+              method: "POST",
+              body: JSON.stringify({ text: payload, scope, replaceAll }),
+            });
+            if (wr.status === 409) {
+              const conflicts = wr.data.conflicts || [];
+              const names = conflicts.map((c) => c.name || c).join(", ");
+              if (
+                !confirm(
+                  "replace existing workflows (" +
+                    (names || "conflicts") +
+                    ")? this overwrites every conflicting file in the chosen scope.",
+                )
+              ) {
+                setStatus(out, false, "import cancelled — existing files kept");
+                return;
+              }
+              return writeImport(payload, scope, true);
+            }
+            if (!wr.data.ok) {
+              setStatus(out, false, wr.data.error || "import failed");
+              toast("import failed", false);
+              return;
+            }
+            const saved = wr.data.results || [];
+            const msg =
+              "saved " +
+              saved.length +
+              " file" +
+              (saved.length === 1 ? "" : "s") +
+              (saved.length ? ": " + saved.map((s) => s.name).join(", ") : "");
+            setStatus(out, true, msg);
+            toast(msg, true);
+            await loadState();
+          }
+        }
+      }
+
+      function openShare(scope, name) {
+        openSeq += 1;
+        routeView = { kind: "share", scope, name };
+        current = null;
+        wantOpen = null;
+        tab = "workflows";
+        setHash("share=" + scope + ":" + name);
+        document
+          .querySelectorAll(".tab")
+          .forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+        syncWorkflowLayout();
+        void renderShare(scope, name);
+      }
+
+      function openImport() {
+        openSeq += 1;
+        routeView = { kind: "import" };
+        current = null;
+        wantOpen = null;
+        tab = "workflows";
+        setHash("import");
+        document
+          .querySelectorAll(".tab")
+          .forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+        syncWorkflowLayout();
+        renderImport();
+      }
+
       document.querySelectorAll(".tab").forEach(
         (b) =>
           (b.onclick = () => {
             if (!confirmLeave()) return;
+            routeView = null;
+            clearRouteHash();
             tab = b.dataset.tab;
             if (tab === "workflows") current = null;
             render();
@@ -2851,12 +3269,52 @@
         if (location.hash !== "#" + h) location.hash = h;
       }
 
-      // #w=<scope>:<name> — a link straight to one workflow, so an agent can hand over a
-      // single URL and then keep rewriting the file while the page follows along.
+      // #w=<scope>:<name> — editor deep link
+      // #share=<scope>:<name> — share bundle + import command
+      // #import — paste/preview/confirm import (no run)
+      // empty hash — leave share/import (and editor deep-link) for the workflow list
       function applyHash() {
-        const m = /^#w=(repo|global):([a-z0-9][a-z0-9-_]*)$/.exec(location.hash);
+        const hash = location.hash.slice(1);
+        if (!hash) {
+          if (!routeView && !current) return;
+          if (!confirmLeave()) return;
+          openSeq += 1;
+          routeView = null;
+          current = null;
+          wantOpen = null;
+          tab = "workflows";
+          syncWorkflowLayout();
+          renderWorkflows();
+          return;
+        }
+        if (hash === "import") {
+          if (routeView && routeView.kind === "import") return;
+          if (!confirmLeave()) return;
+          openImport();
+          return;
+        }
+        const share = /^share=(repo|global):([a-z0-9][a-z0-9-_]*)$/.exec(hash);
+        if (share) {
+          const scope = share[1];
+          const name = share[2];
+          if (
+            routeView &&
+            routeView.kind === "share" &&
+            routeView.scope === scope &&
+            routeView.name === name
+          )
+            return;
+          if (!confirmLeave()) return;
+          openShare(scope, name);
+          return;
+        }
+        const m = /^w=(repo|global):([a-z0-9][a-z0-9-_]*)$/.exec(hash);
         if (!m) return;
         const [, scope, name] = m;
+        if (routeView) {
+          routeView = null;
+          syncWorkflowLayout();
+        }
         if (current && current.name === name && current.scope === scope) return;
         if (!confirmLeave()) return;
         tab = "workflows";
@@ -2867,6 +3325,7 @@
         }
         wantOpen = { name, scope }; // not written yet — liveTick opens it once it appears
         current = null;
+        syncWorkflowLayout();
         renderWorkflows();
         $("pane").innerHTML = "<p class=hint>waiting for " + esc(name) + "…</p>";
       }
@@ -2877,7 +3336,14 @@
       // Poll disk so a workflow an agent is writing shows up (and redraws) without a reload.
       // Local edits win: a dirty buffer is never overwritten.
       async function liveTick() {
-        if (liveBusy || document.hidden || tab !== "workflows" || editorDirty || configDirty)
+        if (
+          liveBusy ||
+          document.hidden ||
+          tab !== "workflows" ||
+          routeView ||
+          editorDirty ||
+          configDirty
+        )
           return;
         liveBusy = true;
         try {

@@ -1,6 +1,6 @@
 import { gunzipSync } from "node:zlib";
 import { z } from "zod";
-import { CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../limits";
+import { CAPTURE_BYTE_LIMIT, CaptureLimitError, assertUnderCaptureCap } from "../limits";
 import { WorkflowLoadError } from "./types";
 
 /** Same grammar as workbench deep-links / picker sources. */
@@ -46,7 +46,9 @@ export function encodePayload(entries: WorkflowBundle): string {
       `cannot encode bundle: ${parsed.error.issues.map((i) => i.message).join("; ")}`,
     );
   }
-  const gz = new Uint8Array(Bun.gzipSync(new TextEncoder().encode(JSON.stringify(parsed.data))));
+  const json = JSON.stringify(parsed.data);
+  assertUnderCaptureCap("workflow bundle", json);
+  const gz = new Uint8Array(Bun.gzipSync(new TextEncoder().encode(json)));
   gz[9] = GZIP_OS_UNIX;
   return Buffer.from(gz).toString("base64");
 }

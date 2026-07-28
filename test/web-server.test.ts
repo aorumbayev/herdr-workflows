@@ -424,3 +424,35 @@ describe("web share and import APIs", () => {
     expect(await Bun.file(join(root, ".hwf", "workflows", "demo.yaml")).text()).toContain("new");
   });
 });
+
+describe("web page share and import routes", () => {
+  test("served page wires #share and #import views without a run action", async () => {
+    const root = await repo();
+    const { base, token } = await serve(root);
+    const res = await fetch(`${base}/?token=${encodeURIComponent(token)}`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('hash === "import"');
+    expect(html).toContain("^share=(repo|global):");
+    expect(html).toContain("/api/share?");
+    expect(html).toContain("/api/import/preview");
+    expect(html).toContain("copy import command");
+    expect(html).toContain("confirm import");
+    expect(html).toContain("replace existing workflows");
+    expect(html).toContain("no run");
+    expect(html).toContain("confirmLeave()");
+    expect(html).not.toMatch(/run imported|import and run|run this bundle/i);
+  });
+
+  test("served page clears share/import on empty hash and restores list layout", async () => {
+    const root = await repo();
+    const { base, token } = await serve(root);
+    const html = await (await fetch(`${base}/?token=${encodeURIComponent(token)}`)).text();
+    expect(html).toContain("function syncWorkflowLayout()");
+    expect(html).toMatch(/if \(!hash\) \{[\s\S]*?routeView = null/);
+    expect(html).toMatch(/if \(!hash\) \{[\s\S]*?confirmLeave\(\)/);
+    expect(html).toMatch(/if \(routeView\) \{[\s\S]*?syncWorkflowLayout\(\)/);
+    expect(html).toContain("syncWorkflowLayout()");
+    expect(html).toMatch(/openWorkflow[\s\S]*?syncWorkflowLayout\(\)/);
+  });
+});
