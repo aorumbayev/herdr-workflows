@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { constants } from "node:fs";
 import { copyFile, link, mkdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -146,16 +147,10 @@ function linkUnsupported(error: unknown): boolean {
   return LINK_UNSUPPORTED.has((error as NodeJS.ErrnoException).code ?? "");
 }
 
-function conflictError(dest: string): NodeJS.ErrnoException {
-  const error: NodeJS.ErrnoException = new Error(`EEXIST: file already exists, '${dest}'`);
-  error.code = "EEXIST";
-  return error;
-}
-
 /**
  * `link` is the atomic create-if-absent primitive: EEXIST is how publication detects a conflict.
- * ponytail: where links are unsupported, fall back to a checked rename — same outcome with a small
- * TOCTOU window, which beats refusing the import outright.
+ * Where links are unsupported, fall back to `copyFile(..., COPYFILE_EXCL)` then unlink tmp —
+ * same create-if-absent semantics without a TOCTOU overwrite window.
  */
 export async function publishStaged(
   tmp: string,
@@ -169,8 +164,8 @@ export async function publishStaged(
   } catch (error) {
     if (!linkUnsupported(error)) throw error;
   }
-  if (await Bun.file(dest).exists()) throw conflictError(dest);
-  await rename(tmp, dest);
+  await copyFile(tmp, dest, constants.COPYFILE_EXCL);
+  await unlink(tmp);
 }
 
 async function backupExisting(dest: string, backup: string): Promise<void> {

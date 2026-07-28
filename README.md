@@ -44,7 +44,7 @@ You need [herdr](https://herdr.dev) **0.7.5** or newer.
 herdr plugin install aorumbayev/herdr-workflows
 ```
 
-The install compiles the plugin, puts `herdr-workflows` / `hwf` on your PATH, and binds `prefix+k` to the workflow picker.
+The install compiles the plugin, then attempts to link `herdr-workflows` / `hwf` into `~/.local/bin` (or `$XDG_BIN_HOME`) and append a validated `prefix+k` picker binding. Both steps are nonfatal — skips print a note and continue. If needed: `command -v hwf`, `herdr config check`, and add the bin dir to PATH when the install warns it is missing.
 
 Then set up profiles:
 

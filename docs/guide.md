@@ -10,7 +10,7 @@ You need [herdr](https://herdr.dev) 0.7.5 or newer.
 herdr plugin install aorumbayev/herdr-workflows
 ```
 
-The install compiles the plugin, puts `hwf` (same as `herdr-workflows`) on your PATH, and binds `prefix+k` to the picker.
+The install compiles the plugin, then attempts to link `hwf` / `herdr-workflows` into `~/.local/bin` (or `$XDG_BIN_HOME`) and append a validated `prefix+k` picker binding. Both steps are nonfatal — skips print a note and continue. If needed: `command -v hwf`, `herdr config check`, and add the bin dir to PATH when the install warns it is missing.
 
 ## Set up profiles
 
@@ -118,7 +118,7 @@ If any bundled name already exists in that scope, nothing is written. The workbe
 
 Every workflow declares `version: v1alpha1`. The package stays semver `0.x`. A later incompatible alpha increments `v1alphaN`. Workflow YAML never declares a herdr version. The plugin manifest and CLI own that.
 
-Optional `title` and `description` appear in the picker. Title defaults from the humanized filename. The picker shows titles up to about 47 characters and descriptions up to about 116. Longer values are truncated there. `hidden: true` hides a workflow from the picker. `hwf run` still works.
+Optional `title` and `description` appear in the picker. Title defaults from the humanized filename. The picker truncates both to the current row width (title on one line; description wraps to at most two). `hidden: true` hides a workflow from the picker. `hwf run` still works.
 
 ## Four actions
 

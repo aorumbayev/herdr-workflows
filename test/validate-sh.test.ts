@@ -59,7 +59,7 @@ async function runValidate(
   file: string,
   name?: string,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
-  const proc = Bun.spawn(["sh", SCRIPT, file, ...(name ? [name] : [])], {
+  const proc = Bun.spawn(["/bin/sh", SCRIPT, file, ...(name ? [name] : [])], {
     env,
     cwd: env.HERDR_WORKFLOWS_REPO_ROOT,
     stdout: "pipe",
@@ -98,13 +98,14 @@ describe("validate.sh", () => {
   test("exit 2 when hwf is missing", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-validate-miss-"));
     dirs.push(root);
+    const emptyPath = join(root, "empty-path");
+    await mkdir(emptyPath);
     const file = join(root, "x.yaml");
     await writeFile(file, "version: v1alpha1\nsteps:\n  - run: [echo, hi]\n");
-    const sysPath = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"].join(delimiter);
     const result = await runValidate(
       {
         ...process.env,
-        PATH: sysPath,
+        PATH: emptyPath,
       },
       file,
       "x",

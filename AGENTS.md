@@ -4,13 +4,13 @@ herdr ≥ 0.7.5 plugin. Sequences short linear YAML workflows (`agent` / `run` /
 
 Workflow format is `version: v1alpha1`; the package stays semver `0.x`. A later incompatible alpha increments `v1alphaN`. Workflow YAML never declares a herdr version — the plugin manifest and CLI own minimum version and protocol enforcement.
 
-Spec of record: `openspec/changes/redesign-workflow-v1-syntax/` (proposal, design, `specs/*/spec.md`). Product docs in `docs/` describe the current v1alpha1 contract. herdr runtime behavior comes from `references/herdr/docs/versions/0.7.5/`, never from memory.
+Spec of record: `openspec/specs/*/spec.md`. History: archived change `openspec/changes/archive/2026-07-28-redesign-workflow-v1-syntax/`. Product docs in `docs/` describe the current v1alpha1 contract. herdr runtime behavior comes from `references/herdr/docs/versions/0.7.5/`, never from memory.
 
 ## Commands
 
 ```bash
 bun install --frozen-lockfile
-bun test ./test                          # unit suite
+bun test ./test                          # unit suite (preload test/setup.ts quarantines real herdr/hwf)
 bun test ./test/runner.test.ts           # one file
 bun test ./test -t 'pattern'             # name filter
 npm run verify                           # all verify:* in parallel (pre-commit gate)
@@ -24,12 +24,11 @@ bun run install:dev                      # compile + herdr plugin link + keybind
 - Pre-commit (`.githooks/pre-commit`): `CI=1 npm run verify` — check-only, **no tests**.
 - CI (`.github/workflows/verify.yml`): `bun test ./test` then `npm run verify`.
 - Local `npm run verify` auto-fixes lint/format; under `CI=1` it only checks.
-- `test/herdr-empirical.test.ts` runs only when `HERDR_SOCKET_PATH` is set; otherwise skipped.
 - After `install:dev`, live binary is `bin/herdr-workflows`; the manifest invokes it directly.
 
 ## Layout
 
-`.ts` files under `src/` (+ `web/page.html`).
+`.ts` files under `src/` (+ `src/web/page.html`).
 
 | Path                             | Role                                                                                                                   |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -44,8 +43,10 @@ bun run install:dev                      # compile + herdr plugin link + keybind
 | `src/init.ts`                    | init + workflow seeds                                                                                                  |
 | `src/workflow/`                  | types.ts, parse.ts (YAML → WorkflowStep[]), validate.ts (references, child contracts), load.ts (name → LoadedWorkflow) |
 | `src/run/`                       | runner.ts + steps/                                                                                                     |
-| `src/tui/`                       | picker.ts, theme.ts                                                                                                    |
-| `src/web/`                       | server.ts (+ page.html)                                                                                                |
+| `src/tui/`                       | picker.ts, run-launch.ts, theme.ts                                                                                     |
+| `src/web/`                       | server.ts, endpoint.ts, route.ts                                                                                       |
+| `src/web/page.html`              | workbench UI served by the web server                                                                                  |
+| `test/setup.ts`                  | Bun preload quarantine — denies real `herdr`/`hwf`, isolates HOME/config/socket env                                    |
 | `herdr-plugin.toml`              | plugin manifest (build + `prefix+k` → picker)                                                                          |
 | `knip.json`                      | unused-code (package.bin → `src/cli.ts`)                                                                               |
 

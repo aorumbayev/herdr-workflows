@@ -529,7 +529,7 @@ describe("publication without hard-link support", () => {
     throw error;
   };
 
-  test("falls back to a checked rename", async () => {
+  test("falls back to exclusive copy when links are unsupported", async () => {
     const { root } = await scratch();
     const tmp = join(root, "staged.tmp");
     const dest = join(root, "demo.yaml");
@@ -541,7 +541,7 @@ describe("publication without hard-link support", () => {
     expect(await Bun.file(tmp).exists()).toBe(false);
   });
 
-  test("still reports a conflict when the destination exists", async () => {
+  test("exclusive-copy fallback cannot overwrite a destination created before copy", async () => {
     const { root } = await scratch();
     const tmp = join(root, "staged.tmp");
     const dest = join(root, "demo.yaml");
@@ -552,5 +552,6 @@ describe("publication without hard-link support", () => {
       publishStaged(tmp, dest, unsupported as unknown as typeof link),
     ).rejects.toMatchObject({ code: "EEXIST" });
     expect(await readFile(dest, "utf8")).toContain("run: mine");
+    expect(await Bun.file(tmp).exists()).toBe(true);
   });
 });

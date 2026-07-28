@@ -4,16 +4,16 @@ Contract for `version: v1alpha1`. The loader enforces cross-field rules. `docs/w
 
 ## Document
 
-| Key           | Required | Notes                                                                      |
-| ------------- | -------- | -------------------------------------------------------------------------- |
-| `version`     | yes      | Must be `v1alpha1`                                                         |
-| `steps`       | yes      | Non-empty list                                                             |
-| `title`       | no       | Picker label. Defaults from humanized filename. Shown up to ~47 chars.     |
-| `description` | no       | Picker subtitle. Shown up to ~116 chars (2 lines). Longer values truncated |
-| `hidden`      | no       | Hide from picker. `hwf run` still works.                                   |
-| `inputs`      | no       | Entry workflow only prompts                                                |
-| `returns`     | no       | Child export map or template                                               |
-| `on_failure`  | no       | Entry-only recovery action                                                 |
+| Key           | Required | Notes                                                                   |
+| ------------- | -------- | ----------------------------------------------------------------------- |
+| `version`     | yes      | Must be `v1alpha1`                                                      |
+| `steps`       | yes      | Non-empty list                                                          |
+| `title`       | no       | Picker label. Defaults from humanized filename. Truncated to row width. |
+| `description` | no       | Picker subtitle. Wrapped/truncated to row width (at most two lines).    |
+| `hidden`      | no       | Hide from picker. `hwf run` still works.                                |
+| `inputs`      | no       | Entry workflow only prompts                                             |
+| `returns`     | no       | Child export map or template                                            |
+| `on_failure`  | no       | Entry-only recovery action                                              |
 
 Unsupported format versions fail load with rewrite-or-upgrade guidance. The package stays semver `0.x`. A later incompatible alpha uses `v1alphaN`. Workflow YAML never declares a herdr version.
 
