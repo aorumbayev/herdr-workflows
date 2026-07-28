@@ -16,6 +16,7 @@ import { IMPORT_DISCLAIMER, parseImportScope, runImport } from "./workflow/impor
 import { listWorkflows } from "./workflow/load";
 import { WorkflowLoadError } from "./workflow/types";
 import { runWorkflow } from "./run/runner";
+import { parseLaunchPayload } from "./tui/run-launch";
 import { startWebServer } from "./web/server";
 
 export function parseArgs(args: string[]): {
@@ -67,12 +68,15 @@ function parseInputFlags(values: string[]): Record<string, string> {
 
 async function cmdInit(args: string[]): Promise<void> {
   const { bools } = parseArgs(args);
+  const global = bools.has("global");
   const repoRoot = await resolveRepoRoot();
   const result = await runInit(repoRoot, {
     force: bools.has("force") || bools.has("yes"),
+    global,
     confirm: async () => {
       if (!process.stdin.isTTY) return false;
-      process.stdout.write(`.hwf/config.yaml exists — overwrite? [y/N] `);
+      const label = global ? "global plugin config" : ".hwf/config.yaml";
+      process.stdout.write(`${label} exists — overwrite? [y/N] `);
       const line = await readLine();
       return line.kind === "line" && line.text.trim().toLowerCase() === "y";
     },
@@ -83,8 +87,10 @@ async function cmdInit(args: string[]): Promise<void> {
     : " (no agent kinds on PATH)";
   process.stdout.write(
     `wrote ${result.path}${profiles}\n` +
-      `no workflows yet — pick ready-made ones at ${EXAMPLES_URL}\n` +
-      `each card copies an \`hwf workflow import\` command you can paste here\n`,
+      (global
+        ? `profiles apply to every repo; keep personal workflows in ~/.hwf/workflows\n`
+        : `no workflows yet — pick ready-made ones at ${EXAMPLES_URL}\n` +
+          `each card copies an \`hwf workflow import\` command you can paste here\n`),
   );
 }
 
@@ -161,9 +167,29 @@ async function cmdLaunch(): Promise<void> {
 
 async function cmdRun(args: string[]): Promise<void> {
   await ensureHerdrProtocol();
-  const { flags, positional, multi } = parseArgs(args);
+  const { flags, bools, positional, multi } = parseArgs(args);
   const name = positional[0];
-  if (!name) die("usage: hwf|herdr-workflows run <name> [--prompt …] [--input name=value …]");
+  if (!name) {
+    die(
+      "usage: hwf|herdr-workflows run <name> [--prompt …] [--input name=value …] [--launch-payload]",
+    );
+  }
+  let inputs: Record<string, string> = {};
+  let prompt = flags.prompt;
+  if (bools.has("launch-payload")) {
+    let payload;
+    try {
+      payload = parseLaunchPayload(await Bun.stdin.text());
+    } catch (error) {
+      die(error instanceof Error ? error.message : String(error));
+    }
+    if (payload.name !== name) {
+      die(`launch payload name '${payload.name}' does not match run name '${name}'`);
+    }
+    inputs = payload.inputs;
+    if (prompt === undefined) prompt = payload.prompt;
+  }
+  inputs = { ...inputs, ...parseInputFlags(multi.input ?? []) };
   const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || resolveRepoRoot();
   const config = await loadConfig(repoRoot);
   const ctx = readInvocationContext();
@@ -174,9 +200,13 @@ async function cmdRun(args: string[]): Promise<void> {
       repoRoot,
       config,
       ctx,
-      prompt: flags.prompt,
-      inputs: parseInputFlags(multi.input ?? []),
+      prompt,
+      inputs,
       onProgress: (i, n, label, outcome = "ok") => {
+        if (outcome === "start") {
+          process.stdout.write(`[${i}/${n}] ${label}…\n`);
+          return;
+        }
         const suffix = outcome === "ok" ? "" : ` ${outcome}`;
         process.stdout.write(`[${i}/${n}] ${label}${suffix}\n`);
       },

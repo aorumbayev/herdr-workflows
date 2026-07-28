@@ -1,6 +1,6 @@
 /**
  * Empirical checks against a live herdr 0.7.5 server (skipped when no socket).
- * Confirms layout.apply shapes, agent.list visibility, and pane read text has no ESC.
+ * Confirms layout.apply shapes, pane.list visibility, and pane read text has no ESC.
  */
 import { describe, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
@@ -38,7 +38,7 @@ async function applyCommandTab(
 }
 
 describe.skipIf(!live)("herdr 0.7.5 empirical", () => {
-  test("layout.apply returns tab+pane ids and pane appears in agent.list", async () => {
+  test("layout.apply returns tab+pane ids and pane appears in pane.list", async () => {
     process.env.HERDR_SOCKET_PATH = socket;
     const cwd = await mkdtemp(join(tmpdir(), "herdr-workflows-emp-"));
     const applied = await applyCommandTab(`herdr-workflows-emp-${Date.now().toString(36)}`, cwd, [
@@ -48,8 +48,9 @@ describe.skipIf(!live)("herdr 0.7.5 empirical", () => {
     ]);
     expect(applied.tabId).toMatch(/^w/);
     expect(applied.paneId).toMatch(/^w/);
-    const listed = await herdrCall("agent.list", {});
-    const panes = ((listed.agents as { pane_id?: string }[]) ?? []).map((a) => a.pane_id);
+    // A command pane is not an agent: herdr only lists recognized agents in agent.list.
+    const listed = await herdrCall("pane.list", {});
+    const panes = ((listed.panes as { pane_id?: string }[]) ?? []).map((p) => p.pane_id);
     expect(panes).toContain(applied.paneId);
     await tabClose(applied.tabId).catch(() => undefined);
   });

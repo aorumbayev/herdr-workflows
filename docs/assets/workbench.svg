@@ -1,0 +1,554 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" width="1200" height="720"
+     role="img" aria-labelledby="ttl dsc" preserveAspectRatio="xMidYMid meet">
+  <title id="ttl">herdr-workflows in five chapters</title>
+  <desc id="dsc">An animated walkthrough: the commands you retype every time, the YAML that replaces them,
+    picking it with prefix+k, watching it run across herdr panes, and sharing it with the team.</desc>
+
+  <style>
+    :root { --seek: 0s; }
+    svg { --f: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    svg.paused * { animation-play-state: paused; }
+
+    /* every element on the master 50s clock; --d is the negative of its start time */
+    .a { animation: 50s linear infinite both; animation-delay: calc(var(--seek, 0s) + var(--d, 0s)); }
+    .v14 { animation-name: v14 }
+    @keyframes v14 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 2.8% { opacity:1;transform:none } 3.3% { opacity:0 } 100% { opacity:0 } }
+    .v34 { animation-name: v34 }
+    @keyframes v34 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 6.8% { opacity:1;transform:none } 7.3% { opacity:0 } 100% { opacity:0 } }
+    .v52 { animation-name: v52 }
+    @keyframes v52 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 10.4% { opacity:1;transform:none } 10.9% { opacity:0 } 100% { opacity:0 } }
+    .v10 { animation-name: v10 }
+    @keyframes v10 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 2.0% { opacity:1;transform:none } 2.5% { opacity:0 } 100% { opacity:0 } }
+    .v15 { animation-name: v15 }
+    @keyframes v15 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 3.0% { opacity:1;transform:none } 3.5% { opacity:0 } 100% { opacity:0 } }
+    .v20 { animation-name: v20 }
+    @keyframes v20 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 4.0% { opacity:1;transform:none } 4.5% { opacity:0 } 100% { opacity:0 } }
+    .v25 { animation-name: v25 }
+    @keyframes v25 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 5.0% { opacity:1;transform:none } 5.5% { opacity:0 } 100% { opacity:0 } }
+    .v30 { animation-name: v30 }
+    @keyframes v30 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 6.0% { opacity:1;transform:none } 6.5% { opacity:0 } 100% { opacity:0 } }
+    .v35 { animation-name: v35 }
+    @keyframes v35 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 7.0% { opacity:1;transform:none } 7.5% { opacity:0 } 100% { opacity:0 } }
+    .v40 { animation-name: v40 }
+    @keyframes v40 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 8.0% { opacity:1;transform:none } 8.5% { opacity:0 } 100% { opacity:0 } }
+    .v45 { animation-name: v45 }
+    @keyframes v45 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 9.0% { opacity:1;transform:none } 9.5% { opacity:0 } 100% { opacity:0 } }
+    .v50 { animation-name: v50 }
+    @keyframes v50 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 10.0% { opacity:1;transform:none } 10.5% { opacity:0 } 100% { opacity:0 } }
+    .v55 { animation-name: v55 }
+    @keyframes v55 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 11.0% { opacity:1;transform:none } 11.5% { opacity:0 } 100% { opacity:0 } }
+    .v60 { animation-name: v60 }
+    @keyframes v60 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 12.0% { opacity:1;transform:none } 12.5% { opacity:0 } 100% { opacity:0 } }
+    .v65 { animation-name: v65 }
+    @keyframes v65 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 13.0% { opacity:1;transform:none } 13.5% { opacity:0 } 100% { opacity:0 } }
+    .v70 { animation-name: v70 }
+    @keyframes v70 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 14.0% { opacity:1;transform:none } 14.5% { opacity:0 } 100% { opacity:0 } }
+    .v75 { animation-name: v75 }
+    @keyframes v75 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 15.0% { opacity:1;transform:none } 15.5% { opacity:0 } 100% { opacity:0 } }
+    .v80 { animation-name: v80 }
+    @keyframes v80 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 16.0% { opacity:1;transform:none } 16.5% { opacity:0 } 100% { opacity:0 } }
+    .v85 { animation-name: v85 }
+    @keyframes v85 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 17.0% { opacity:1;transform:none } 17.5% { opacity:0 } 100% { opacity:0 } }
+    .v90 { animation-name: v90 }
+    @keyframes v90 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 18.0% { opacity:1;transform:none } 18.5% { opacity:0 } 100% { opacity:0 } }
+    .v95 { animation-name: v95 }
+    @keyframes v95 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 19.0% { opacity:1;transform:none } 19.5% { opacity:0 } 100% { opacity:0 } }
+    .v100 { animation-name: v100 }
+    @keyframes v100 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 20.0% { opacity:1;transform:none } 20.5% { opacity:0 } 100% { opacity:0 } }
+    .v125 { animation-name: v125 }
+    @keyframes v125 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 25.0% { opacity:1;transform:none } 25.5% { opacity:0 } 100% { opacity:0 } }
+    .v130 { animation-name: v130 }
+    @keyframes v130 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 26.0% { opacity:1;transform:none } 26.5% { opacity:0 } 100% { opacity:0 } }
+    .v135 { animation-name: v135 }
+    @keyframes v135 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 27.0% { opacity:1;transform:none } 27.5% { opacity:0 } 100% { opacity:0 } }
+    .p15 { animation-name: p15; transform-box: fill-box; transform-origin: center }
+    @keyframes p15 { 0% { opacity:0;transform:scale(.9) } 1.2% { opacity:1;transform:none } 3.0% { opacity:1;transform:none } 3.5% { opacity:0 } 100% { opacity:0 } }
+    .p20 { animation-name: p20; transform-box: fill-box; transform-origin: center }
+    @keyframes p20 { 0% { opacity:0;transform:scale(.9) } 1.2% { opacity:1;transform:none } 4.0% { opacity:1;transform:none } 4.5% { opacity:0 } 100% { opacity:0 } }
+    .p30 { animation-name: p30; transform-box: fill-box; transform-origin: center }
+    @keyframes p30 { 0% { opacity:0;transform:scale(.9) } 1.2% { opacity:1;transform:none } 6.0% { opacity:1;transform:none } 6.5% { opacity:0 } 100% { opacity:0 } }
+    .p40 { animation-name: p40; transform-box: fill-box; transform-origin: center }
+    @keyframes p40 { 0% { opacity:0;transform:scale(.9) } 1.2% { opacity:1;transform:none } 8.0% { opacity:1;transform:none } 8.5% { opacity:0 } 100% { opacity:0 } }
+    .p50 { animation-name: p50; transform-box: fill-box; transform-origin: center }
+    @keyframes p50 { 0% { opacity:0;transform:scale(.9) } 1.2% { opacity:1;transform:none } 10.0% { opacity:1;transform:none } 10.5% { opacity:0 } 100% { opacity:0 } }
+    .p60 { animation-name: p60; transform-box: fill-box; transform-origin: center }
+    @keyframes p60 { 0% { opacity:0;transform:scale(.9) } 1.2% { opacity:1;transform:none } 12.0% { opacity:1;transform:none } 12.5% { opacity:0 } 100% { opacity:0 } }
+    .p75 { animation-name: p75; transform-box: fill-box; transform-origin: center }
+    @keyframes p75 { 0% { opacity:0;transform:scale(.9) } 1.2% { opacity:1;transform:none } 15.0% { opacity:1;transform:none } 15.5% { opacity:0 } 100% { opacity:0 } }
+    .p110 { animation-name: p110; transform-box: fill-box; transform-origin: center }
+    @keyframes p110 { 0% { opacity:0;transform:scale(.9) } 1.2% { opacity:1;transform:none } 22.0% { opacity:1;transform:none } 22.5% { opacity:0 } 100% { opacity:0 } }
+    .s25 { animation-name: s25 }
+    @keyframes s25 { 0% { opacity:0;transform:translateX(26px) } 1.2% { opacity:1;transform:none } 5.0% { opacity:1;transform:none } 5.5% { opacity:0 } 100% { opacity:0 } }
+    .s35 { animation-name: s35 }
+    @keyframes s35 { 0% { opacity:0;transform:translateX(26px) } 1.2% { opacity:1;transform:none } 7.0% { opacity:1;transform:none } 7.5% { opacity:0 } 100% { opacity:0 } }
+    .s40 { animation-name: s40 }
+    @keyframes s40 { 0% { opacity:0;transform:translateX(26px) } 1.2% { opacity:1;transform:none } 8.0% { opacity:1;transform:none } 8.5% { opacity:0 } 100% { opacity:0 } }
+    .s50 { animation-name: s50 }
+    @keyframes s50 { 0% { opacity:0;transform:translateX(26px) } 1.2% { opacity:1;transform:none } 10.0% { opacity:1;transform:none } 10.5% { opacity:0 } 100% { opacity:0 } }
+    .s60 { animation-name: s60 }
+    @keyframes s60 { 0% { opacity:0;transform:translateX(26px) } 1.2% { opacity:1;transform:none } 12.0% { opacity:1;transform:none } 12.5% { opacity:0 } 100% { opacity:0 } }
+    .s95 { animation-name: s95 }
+    @keyframes s95 { 0% { opacity:0;transform:translateX(26px) } 1.2% { opacity:1;transform:none } 19.0% { opacity:1;transform:none } 19.5% { opacity:0 } 100% { opacity:0 } }
+    .w30 { animation-name: w30; transform-box: fill-box; transform-origin: left center }
+    @keyframes w30 { 0% { transform:scaleX(0) } 1.7% { transform:scaleX(1) } 6.0% { transform:scaleX(1) } 6.5% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
+    .w40 { animation-name: w40; transform-box: fill-box; transform-origin: left center }
+    @keyframes w40 { 0% { transform:scaleX(0) } 1.7% { transform:scaleX(1) } 8.0% { transform:scaleX(1) } 8.5% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
+    .w50 { animation-name: w50; transform-box: fill-box; transform-origin: left center }
+    @keyframes w50 { 0% { transform:scaleX(0) } 1.7% { transform:scaleX(1) } 10.0% { transform:scaleX(1) } 10.5% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
+    .w60 { animation-name: w60; transform-box: fill-box; transform-origin: left center }
+    @keyframes w60 { 0% { transform:scaleX(0) } 1.7% { transform:scaleX(1) } 12.0% { transform:scaleX(1) } 12.5% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
+    .w65 { animation-name: w65; transform-box: fill-box; transform-origin: left center }
+    @keyframes w65 { 0% { transform:scaleX(0) } 1.7% { transform:scaleX(1) } 13.0% { transform:scaleX(1) } 13.5% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
+    .w70 { animation-name: w70; transform-box: fill-box; transform-origin: left center }
+    @keyframes w70 { 0% { transform:scaleX(0) } 1.7% { transform:scaleX(1) } 14.0% { transform:scaleX(1) } 14.5% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
+    .w80 { animation-name: w80; transform-box: fill-box; transform-origin: left center }
+    @keyframes w80 { 0% { transform:scaleX(0) } 1.7% { transform:scaleX(1) } 16.0% { transform:scaleX(1) } 16.5% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
+
+    /* chapters: 1) 0-9s  2) 9-20s  3) 20-29s  4) 29-43s  5) 43-50s */
+    .sc1 { animation-name: sc1 } .sc2 { animation-name: sc2 } .sc3 { animation-name: sc3 }
+    .sc4 { animation-name: sc4 } .sc5 { animation-name: sc5 }
+    @keyframes sc1 { 0% { opacity: 0 } 1% { opacity: 1 } 17.2% { opacity: 1 } 18% { opacity: 0 } 100% { opacity: 0 } }
+    @keyframes sc2 { 0% { opacity: 0 } 17.8% { opacity: 0 } 18.8% { opacity: 1 } 39.2% { opacity: 1 } 40% { opacity: 0 } 100% { opacity: 0 } }
+    @keyframes sc3 { 0% { opacity: 0 } 39.8% { opacity: 0 } 40.8% { opacity: 1 } 57.2% { opacity: 1 } 58% { opacity: 0 } 100% { opacity: 0 } }
+    @keyframes sc4 { 0% { opacity: 0 } 57.8% { opacity: 0 } 58.8% { opacity: 1 } 85.2% { opacity: 1 } 86% { opacity: 0 } 100% { opacity: 0 } }
+    @keyframes sc5 { 0% { opacity: 0 } 85.8% { opacity: 0 } 86.8% { opacity: 1 } 99% { opacity: 1 } 100% { opacity: 0 } }
+
+    .on1 { animation-name: on1 } .on2 { animation-name: on2 } .on3 { animation-name: on3 }
+    .on4 { animation-name: on4 } .on5 { animation-name: on5 }
+    @keyframes on1 { 0% { opacity: 1 } 17.9% { opacity: 1 } 18% { opacity: 0 } 100% { opacity: 0 } }
+    @keyframes on2 { 0% { opacity: 0 } 17.9% { opacity: 0 } 18% { opacity: 1 } 39.9% { opacity: 1 } 40% { opacity: 0 } 100% { opacity: 0 } }
+    @keyframes on3 { 0% { opacity: 0 } 39.9% { opacity: 0 } 40% { opacity: 1 } 57.9% { opacity: 1 } 58% { opacity: 0 } 100% { opacity: 0 } }
+    @keyframes on4 { 0% { opacity: 0 } 57.9% { opacity: 0 } 58% { opacity: 1 } 85.9% { opacity: 1 } 86% { opacity: 0 } 100% { opacity: 0 } }
+    @keyframes on5 { 0% { opacity: 0 } 85.9% { opacity: 0 } 86% { opacity: 1 } 100% { opacity: 1 } }
+
+    .bar { animation-name: bar; transform-box: fill-box; transform-origin: left center }
+    @keyframes bar { 0% { transform: scaleX(0) } 100% { transform: scaleX(1) } }
+
+    .pill { animation-name: pill }
+    @keyframes pill {
+      0%   { opacity: 0; transform: none }
+      1.2% { opacity: 1; transform: none }
+      4.0% { opacity: 1; transform: translate(420px, 140px) }
+      4.8% { opacity: 0; transform: translate(420px, 140px) }
+      100% { opacity: 0; transform: translate(420px, 140px) }
+    }
+
+    /* free-running detail: cursors, spinners, the "step is working" pulse */
+    .blink { animation: blink 1.06s steps(2, jump-none) infinite }
+    @keyframes blink { 0% { opacity: 1 } 50% { opacity: 0 } 100% { opacity: 1 } }
+    .spin { animation: spin 1.1s linear infinite; transform-box: fill-box; transform-origin: center }
+    @keyframes spin { to { transform: rotate(360deg) } }
+    .beat { animation: beat 1.3s ease-in-out infinite; transform-box: fill-box; transform-origin: center }
+    @keyframes beat { 0%,100% { opacity: 1; transform: scale(1) } 50% { opacity: .45; transform: scale(1.5) } }
+
+
+    text { font-family: var(--f); white-space: pre }
+    .h1  { font-size: 30px; font-weight: 600; fill: #ffffff; letter-spacing: -.02em }
+    .h2  { font-size: 21px; font-weight: 500; fill: #ffffff; letter-spacing: -.02em }
+    .p   { font-size: 14.5px; fill: #8792a8 }
+    .k   { font-size: 11.5px; fill: #5f6a80; letter-spacing: .08em }
+    .m   { font-size: 13.5px; fill: #d8dee9 }
+    .mm  { font-size: 13px; fill: #8792a8 }
+    .cy  { fill: #88c0d0 } .gr { fill: #a3be8c } .yl { fill: #ebcb8b } .rd { fill: #bf616a } .pu { fill: #b48ead }
+    .card { fill: #343b49; stroke: #434c5e }
+    .well { fill: #272d38; stroke: #434c5e }
+    .nav  { cursor: pointer }
+    .nav:hover .lbl { fill: #88c0d0 }
+    .nav:focus { outline: none }
+    .nav:focus-visible .ring { opacity: 1 }
+  </style>
+
+  <defs>
+    <clipPath id="t1"><rect class="a w80" style="--d:0.8s"  x="76" y="184" width="600" height="24"/></clipPath>
+    <clipPath id="t2"><rect class="a w65" style="--d:1.9s"  x="76" y="224" width="600" height="24"/></clipPath>
+    <clipPath id="t3"><rect class="a w60" style="--d:2.5s"  x="76" y="264" width="600" height="24"/></clipPath>
+    <clipPath id="t4"><rect class="a w50" style="--d:3.4s"  x="76" y="304" width="600" height="24"/></clipPath>
+    <clipPath id="t5"><rect class="a w40" style="--d:4.6s"  x="76" y="344" width="600" height="24"/></clipPath>
+    <clipPath id="t6"><rect class="a w30" style="--d:5.4s"  x="76" y="384" width="600" height="24"/></clipPath>
+    <clipPath id="t7"><rect class="a w70" style="--d:21.8s" x="324" y="200" width="300" height="24"/></clipPath>
+    <clipPath id="frame"><rect x="0" y="0" width="1200" height="720" rx="10"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#frame)">
+    <rect width="1200" height="720" fill="#2e3440"/>
+
+    <!-- window chrome -->
+    <g>
+      <circle cx="28" cy="24" r="5" fill="#bf616a"/><circle cx="48" cy="24" r="5" fill="#ebcb8b"/><circle cx="68" cy="24" r="5" fill="#a3be8c"/>
+      <text x="96" y="29" class="mm">herdr-workflows</text>
+      <text x="1144" y="29" class="k" text-anchor="end">automate the boring, repetitive stuff</text>
+      <line x1="0" y1="48" x2="1200" y2="48" stroke="#434c5e"/>
+    </g>
+
+    <!-- ── 1 · the ritual ─────────────────────────────────────────────── -->
+    <g class="a sc1">
+      <text x="56" y="96" class="k">CHAPTER ONE — WHAT YOU DO TODAY</text>
+
+      <rect class="well" x="56" y="124" width="648" height="420" rx="6"/>
+      <line x1="56" y1="160" x2="704" y2="160" stroke="#434c5e"/>
+      <text x="76" y="150" class="k">zsh · ~/acme-api</text>
+
+      <g clip-path="url(#t1)"><text x="76" y="199" class="m"><tspan class="cy">$ </tspan>git add -A &amp;&amp; git commit -m "wip"</text></g>
+      <g clip-path="url(#t2)"><text x="76" y="239" class="m"><tspan class="cy">$ </tspan>claude</text></g>
+      <g clip-path="url(#t3)"><text x="76" y="279" class="mm">    paste the diff… "review this, blocking issues only"</text></g>
+      <g clip-path="url(#t4)"><text x="76" y="319" class="mm">    …waiting…</text></g>
+      <g clip-path="url(#t5)"><text x="76" y="359" class="m"><tspan class="cy">$ </tspan>herdr notification.show --title "review done"</text></g>
+      <g clip-path="url(#t6)"><text x="76" y="399" class="m"><tspan class="cy">$ </tspan>lazygit</text></g>
+      <g class="a v50" style="--d:3.4s"><circle class="spin" cx="252" cy="313" r="6" fill="none" stroke="#ebcb8b" stroke-width="2" stroke-dasharray="20 8"/></g>
+      <g class="a v25" style="--d:6.2s"><rect class="blink" x="76" y="424" width="9" height="18" fill="#88c0d0"/></g>
+
+      <text style="--d:1.6s" x="744" y="196" class="a v70 h1">Five commands.</text>
+      <text style="--d:3.4s" x="744" y="238" class="a v50 h1">From memory.</text>
+      <text style="--d:5.6s" x="744" y="280" class="a v30 h1 cy">Every single time.</text>
+      <text style="--d:6.4s" x="744" y="330" class="a v20 p">Same order. Same flags. Same</text>
+      <text style="--d:6.4s" x="744" y="352" class="a v20 p">half-remembered prompt.</text>
+      <g class="a p15" style="--d:7.0s">
+        <rect x="744" y="388" width="176" height="34" rx="4" fill="#bf616a" fill-opacity=".14" stroke="#bf616a" stroke-opacity=".5"/>
+        <text x="762" y="410" class="m rd">14 times this week</text>
+      </g>
+
+      <text style="--d:7.6s" x="56" y="596" class="a v10 p">The work is identical every time — so stop typing it every time.</text>
+    </g>
+
+    <!-- ── 2 · write it once ──────────────────────────────────────────── -->
+    <g class="a sc2">
+      <text x="56" y="96" class="k">CHAPTER TWO — WRITE IT DOWN ONCE</text>
+
+      <rect class="well" x="56" y="124" width="660" height="452" rx="6"/>
+      <line x1="56" y1="164" x2="716" y2="164" stroke="#434c5e"/>
+      <text x="76" y="152" class="k">.hwf/workflows/ship.yaml</text>
+
+      <rect class="a v50" style="--d:14.6s" x="68" y="315" width="636" height="20" fill="#a3be8c" fill-opacity=".10"/>
+      <rect class="a v40" style="--d:15.4s" x="68" y="339" width="636" height="20" fill="#88c0d0" fill-opacity=".10"/>
+      <rect class="a v35" style="--d:16.2s" x="68" y="459" width="636" height="20" fill="#ebcb8b" fill-opacity=".10"/>
+      <rect class="a v25" style="--d:17.0s" x="68" y="531" width="636" height="20" fill="#b48ead" fill-opacity=".10"/>
+
+      <g font-size="13" class="m">
+        <text class="a v100" style="--d:9.8s"  x="76" y="186"><tspan class="cy">version:</tspan> v1alpha1</text>
+        <text class="a v95" style="--d:10.0s" x="76" y="210"><tspan class="cy">title:</tspan> Ship</text>
+        <text class="a v95" style="--d:10.2s" x="76" y="234"><tspan class="cy">inputs:</tspan></text>
+        <text class="a v90" style="--d:10.4s" x="76" y="258">  <tspan class="cy">reviewer:</tspan> profile</text>
+        <text class="a v90" style="--d:10.6s" x="76" y="282"><tspan class="cy">steps:</tspan></text>
+        <text class="a v85" style="--d:10.9s" x="76" y="306">  - <tspan class="cy">id:</tspan> diff</text>
+        <text class="a v85" style="--d:11.2s" x="76" y="330">    <tspan class="gr">run:</tspan> [git, diff, --staged]</text>
+        <text class="a v80" style="--d:11.6s" x="76" y="354">  - <tspan class="cy">agent:</tspan> |</text>
+        <text class="a v75" style="--d:11.9s" x="76" y="378">      Review this diff. Blocking only.</text>
+        <text class="a v75" style="--d:12.2s" x="76" y="402">      <tspan class="yl">{{steps.diff.stdout}}</tspan></text>
+        <text class="a v70" style="--d:12.5s" x="76" y="426">    <tspan class="cy">using:</tspan> "<tspan class="yl">{{inputs.reviewer}}</tspan>"</text>
+        <text class="a v70" style="--d:12.8s" x="76" y="450">    <tspan class="cy">pane:</tspan> { open: beside }</text>
+        <text class="a v65" style="--d:13.1s" x="76" y="474">  - <tspan class="yl">herdr:</tspan> notification.show</text>
+        <text class="a v60" style="--d:13.4s" x="76" y="498">    <tspan class="cy">params:</tspan> { title: review done }</text>
+        <text class="a v60" style="--d:13.7s" x="76" y="522">  - <tspan class="gr">run:</tspan> [lazygit]</text>
+        <text class="a v55" style="--d:14.0s" x="76" y="546">  - <tspan class="pu">workflow:</tspan> deploy</text>
+      </g>
+
+      <text style="--d:9.6s" x="744" y="152" class="a v100 p">Four things a step can do:</text>
+      <g class="a s50" style="--d:14.6s">
+        <rect class="card" x="744" y="176" width="400" height="66" rx="5"/>
+        <rect x="744" y="176" width="3" height="66" fill="#a3be8c"/>
+        <text x="768" y="204" class="m gr">run:</text><text x="768" y="226" class="mm">any command, on your machine</text>
+      </g>
+      <g class="a s40" style="--d:15.4s">
+        <rect class="card" x="744" y="256" width="400" height="66" rx="5"/>
+        <rect x="744" y="256" width="3" height="66" fill="#88c0d0"/>
+        <text x="768" y="284" class="m cy">agent:</text><text x="768" y="306" class="mm">a real agent turn, in a real pane</text>
+      </g>
+      <g class="a s35" style="--d:16.2s">
+        <rect class="card" x="744" y="336" width="400" height="66" rx="5"/>
+        <rect x="744" y="336" width="3" height="66" fill="#ebcb8b"/>
+        <text x="768" y="364" class="m yl">herdr:</text><text x="768" y="386" class="mm">panes, tabs, notifications — from herdr</text>
+      </g>
+      <g class="a s25" style="--d:17.0s">
+        <rect class="card" x="744" y="416" width="400" height="66" rx="5"/>
+        <rect x="744" y="416" width="3" height="66" fill="#b48ead"/>
+        <text x="768" y="444" class="m pu">workflow:</text><text x="768" y="466" class="mm">a child workflow, its own inputs</text>
+      </g>
+      <text style="--d:18.0s" x="744" y="522" class="a v15 p">Templates read earlier steps:</text>
+      <text style="--d:18.0s" x="744" y="546" class="a v15 m yl">{{steps.diff.stdout}}</text>
+
+      <text style="--d:18.4s" x="56" y="608" class="a v10 p">One file. Reviewed like code, committed like code, shared like code.</text>
+    </g>
+
+    <!-- ── 3 · pick it ────────────────────────────────────────────────── -->
+    <g class="a sc3">
+      <text x="56" y="96" class="k">CHAPTER THREE — REACH FOR IT</text>
+      <text style="--d:20.2s" x="56" y="150" class="a v85 h2">Two keys, wherever you are.</text>
+
+      <g class="a v80" style="--d:20.5s">
+        <rect x="56" y="196" width="92" height="40" rx="5" fill="#343b49" stroke="#4c566a"/>
+        <text x="76" y="222" class="m">prefix</text>
+        <rect x="160" y="196" width="46" height="40" rx="5" fill="#343b49" stroke="#4c566a"/>
+        <text x="177" y="222" class="m">k</text>
+      </g>
+      <g class="a p75" style="--d:20.9s">
+        <rect x="160" y="196" width="46" height="40" rx="5" fill="#88c0d0" fill-opacity=".18" stroke="#88c0d0"/>
+        <text x="177" y="222" class="m cy">k</text>
+      </g>
+      <text style="--d:27.0s" x="56" y="308" class="a v15 p">Or from a script,</text>
+      <text style="--d:27.0s" x="56" y="330" class="a v15 p">same runner:</text>
+      <g class="a v10" style="--d:27.4s">
+        <rect class="well" x="56" y="352" width="212" height="70" rx="5"/>
+        <text x="72" y="380" class="m"><tspan class="cy">$ </tspan>hwf run ship</text>
+        <text x="72" y="404" class="mm">  --input reviewer=claude</text>
+      </g>
+
+      <rect class="a p75 card" style="--d:21.2s" x="300" y="176" width="600" height="280" rx="6"/>
+      <g class="a v70" style="--d:21.4s">
+        <line x1="300" y1="240" x2="900" y2="240" stroke="#434c5e"/>
+        <text x="324" y="216" class="mm cy">›</text>
+      </g>
+      <g clip-path="url(#t7)"><text x="344" y="216" class="m">ship</text></g>
+      <g class="a v52" style="--d:22.4s"><rect class="blink" x="404" y="202" width="8" height="18" fill="#88c0d0"/></g>
+
+      <g class="a v14" style="--d:21.4s">
+        <g>
+          <text x="324" y="281" class="m">handoff</text><text x="876" y="281" class="k" text-anchor="end">global</text>
+          <text x="324" y="325" class="m">pr</text><text x="876" y="325" class="k" text-anchor="end">local</text>
+          <text x="324" y="369" class="m">ship</text><text x="876" y="369" class="k" text-anchor="end">local</text>
+          <text x="324" y="413" class="m">worktree</text><text x="876" y="413" class="k" text-anchor="end">global</text>
+        </g>
+      </g>
+      <g class="a v55" style="--d:23.0s">
+        <rect x="316" y="258" width="568" height="34" rx="3" fill="#88c0d0" fill-opacity=".14"/>
+        <text x="324" y="281" class="m cy">ship</text>
+        <text x="876" y="281" class="k cy" text-anchor="end">local</text>
+      </g>
+
+      <g class="a v50" style="--d:23.8s">
+        <rect class="well" x="316" y="308" width="568" height="120" rx="5"/>
+        <text x="336" y="334" class="k">THIS WORKFLOW ASKS FOR</text>
+        <text x="336" y="368" class="mm">reviewer</text><text x="470" y="368" class="m cy">claude</text>
+        <text x="336" y="398" class="mm">focus</text><text x="470" y="398" class="m">auth refactor</text>
+      </g>
+      <g class="a p30" style="--d:25.6s">
+        <rect x="782" y="374" width="84" height="32" rx="4" fill="#a3be8c" fill-opacity=".18" stroke="#a3be8c"/>
+        <text x="798" y="396" class="m gr">⏎ run</text>
+      </g>
+
+      <text style="--d:26.4s" x="56" y="608" class="a v20 p">The picker collects the inputs, then hands off to the runner. Nothing runs from the browser.</text>
+    </g>
+
+    <!-- ── 4 · watch it run ───────────────────────────────────────────── -->
+    <g class="a sc4">
+      <text x="56" y="96" class="k">CHAPTER FOUR — WATCH IT GO</text>
+
+      <g class="m">
+        <g class="a v135" style="--d:29.3s">
+          <rect class="card" x="56" y="140" width="304" height="64" rx="5"/>
+          <text x="80" y="168" class="mm">1 · <tspan class="gr">run</tspan></text><text x="80" y="190" class="m">git diff --staged</text>
+        </g>
+        <g class="a v130" style="--d:29.5s">
+          <rect class="card" x="56" y="216" width="304" height="64" rx="5"/>
+          <text x="80" y="244" class="mm">2 · <tspan class="cy">agent</tspan></text><text x="80" y="266" class="m">review the diff</text>
+        </g>
+        <g class="a v130" style="--d:29.7s">
+          <rect class="card" x="56" y="292" width="304" height="64" rx="5"/>
+          <text x="80" y="320" class="mm">3 · <tspan class="yl">herdr</tspan></text><text x="80" y="342" class="m">notification.show</text>
+        </g>
+        <g class="a v125" style="--d:29.9s">
+          <rect class="card" x="56" y="368" width="304" height="64" rx="5"/>
+          <text x="80" y="396" class="mm">4 · <tspan class="gr">run</tspan></text><text x="80" y="418" class="m">lazygit</text>
+        </g>
+      </g>
+      <!-- running pulse, then a green tick -->
+      <g class="a v14" style="--d:30.2s"><circle class="beat" cx="332" cy="172" r="4" fill="#88c0d0"/></g>
+      <g class="a v34" style="--d:33.0s"><circle class="beat" cx="332" cy="248" r="4" fill="#88c0d0"/></g>
+      <g class="a v10" style="--d:36.6s"><circle class="beat" cx="332" cy="324" r="4" fill="#88c0d0"/></g>
+      <g class="a v10" style="--d:37.8s"><circle class="beat" cx="332" cy="400" r="4" fill="#88c0d0"/></g>
+      <g class="gr" font-size="15">
+        <text class="a p110" style="--d:31.6s" x="324" y="178">✓</text>
+        <text class="a p60" style="--d:36.4s" x="324" y="254">✓</text>
+        <text class="a p50" style="--d:37.6s" x="324" y="330">✓</text>
+        <text class="a p40" style="--d:38.8s" x="324" y="406">✓</text>
+      </g>
+
+      <!-- herdr window -->
+      <g class="a v130" style="--d:29.4s">
+        <rect class="well" x="400" y="140" width="744" height="416" rx="6"/>
+        <line x1="400" y1="176" x2="1144" y2="176" stroke="#434c5e"/>
+        <text x="424" y="164" class="k">editor</text>
+      </g>
+      <g class="a v45" style="--d:38.2s">
+        <rect x="488" y="140" width="98" height="36" fill="#343b49"/>
+        <text x="506" y="164" class="k cy">lazygit</text>
+      </g>
+      <g style="--d:30.2s" class="a v125 mm" font-size="12.5">
+        <text x="424" y="212" class="mm">- const ok = check(u)</text>
+        <text x="424" y="234" class="mm">+ const ok = check(u, ctx)</text>
+        <text x="424" y="256" class="mm">  return ok ? next() : deny()</text>
+      </g>
+      <g class="a s95" style="--d:33.2s">
+        <line x1="772" y1="176" x2="772" y2="556" stroke="#434c5e"/>
+        <rect x="772" y="176" width="372" height="380" fill="#2b313c"/>
+        <text x="796" y="208" class="k cy">claude · pane opened beside</text>
+      </g>
+      <g font-size="12.5">
+        <text style="--d:33.8s" x="796" y="244" class="a v90 mm">reading 1 file, 42 lines…</text>
+        <text style="--d:34.4s" x="796" y="272" class="a v80 m">1 blocking issue:</text>
+        <text style="--d:35.0s" x="796" y="298" class="a v75 m">ctx is unvalidated on the</text>
+        <text style="--d:35.0s" x="796" y="318" class="a v75 m">deny() path.</text>
+      </g>
+      <g class="a s60" style="--d:36.8s">
+        <rect x="796" y="466" width="300" height="62" rx="5" fill="#343b49" stroke="#a3be8c" stroke-opacity=".6"/>
+        <text x="818" y="494" class="m gr">review done</text>
+        <text x="818" y="515" class="k">herdr · notification.show</text>
+      </g>
+      <g class="a v40" style="--d:38.4s">
+        <rect x="424" y="330" width="324" height="200" rx="4" fill="#2b313c" stroke="#434c5e"/>
+        <text x="444" y="358" class="k">lazygit — opened in a new tab</text>
+        <rect x="444" y="376" width="180" height="8" rx="4" fill="#4c566a"/>
+        <rect x="444" y="396" width="240" height="8" rx="4" fill="#434c5e"/>
+        <rect x="444" y="416" width="140" height="8" rx="4" fill="#434c5e"/>
+      </g>
+
+      <g class="a pill" style="--d:31.6s">
+        <rect x="368" y="160" width="196" height="26" rx="13" fill="#ebcb8b" fill-opacity=".16" stroke="#ebcb8b" stroke-opacity=".55"/>
+        <text x="384" y="178" font-size="12" class="yl">steps.diff.stdout →</text>
+      </g>
+
+      <text style="--d:39.6s" x="56" y="580" class="a v30 p">Steps run in order. Each result is there for the next one.</text>
+      <text style="--d:40.6s" x="56" y="606" class="a v20 p">Panes, tabs and notifications stay herdr's job — the workflow just asks.</text>
+    </g>
+
+    <!-- ── 5 · share it ───────────────────────────────────────────────── -->
+    <g class="a sc5">
+      <text x="56" y="96" class="k">CHAPTER FIVE — HAND IT TO THE HERD</text>
+      <text style="--d:43.1s" x="56" y="150" class="a v65 h2">Build it in the workbench. Send it as one line.</text>
+
+      <g class="a v65" style="--d:43.3s">
+        <rect class="well" x="56" y="186" width="420" height="272" rx="6"/>
+        <line x1="56" y1="220" x2="476" y2="220" stroke="#434c5e"/>
+        <text x="76" y="209" class="k">localhost:7645 · hwf web</text>
+        <rect x="72" y="236" width="104" height="206" rx="4" fill="#2b313c"/>
+        <text x="86" y="262" class="k">handoff</text><text x="86" y="288" class="k cy">ship</text><text x="86" y="314" class="k">worktree</text>
+        <rect x="192" y="236" width="268" height="58" rx="4" fill="#343b49" stroke="#434c5e"/>
+        <text x="208" y="270" class="mm"><tspan class="gr">run</tspan> · git diff --staged</text>
+        <rect x="192" y="310" width="268" height="58" rx="4" fill="#343b49" stroke="#434c5e"/>
+        <text x="208" y="344" class="mm"><tspan class="cy">agent</tspan> · review the diff</text>
+        <rect x="192" y="384" width="268" height="58" rx="4" fill="#343b49" stroke="#434c5e"/>
+        <text x="208" y="418" class="mm"><tspan class="yl">herdr</tspan> · notification.show</text>
+      </g>
+      <text style="--d:43.6s" x="56" y="484" class="a v60 mm">edit · validate · share — never runs</text>
+
+      <g class="a v55" style="--d:44.3s">
+        <rect x="504" y="298" width="192" height="44" rx="22" fill="#88c0d0" fill-opacity=".14" stroke="#88c0d0" stroke-opacity=".55"/>
+        <text x="522" y="325" font-size="12" class="cy">hwf workflow import "…"</text>
+        <path d="M516 362 H700" stroke="#434c5e" stroke-dasharray="4 5"/>
+        <path d="M690 356 l10 6 -10 6" fill="none" stroke="#4c566a"/>
+      </g>
+
+      <g class="a v45" style="--d:45.2s">
+        <rect class="well" x="724" y="186" width="420" height="272" rx="6"/>
+        <line x1="724" y1="220" x2="1144" y2="220" stroke="#434c5e"/>
+        <text x="744" y="209" class="k">teammate ~/acme-api</text>
+      </g>
+      <g font-size="13">
+        <g class="a v35" style="--d:46.2s"><rect x="748" y="248" width="372" height="52" rx="4" fill="#343b49" stroke="#434c5e"/><text x="768" y="279" class="mm"><tspan class="gr">run</tspan> · git diff --staged</text></g>
+        <g class="a v30" style="--d:46.5s"><rect x="748" y="316" width="372" height="52" rx="4" fill="#343b49" stroke="#434c5e"/><text x="768" y="347" class="mm"><tspan class="cy">agent</tspan> · review the diff</text></g>
+        <g class="a v30" style="--d:46.8s"><rect x="748" y="384" width="372" height="52" rx="4" fill="#343b49" stroke="#434c5e"/><text x="768" y="415" class="mm"><tspan class="yl">herdr</tspan> · notification.show</text></g>
+      </g>
+      <text style="--d:47.0s" x="724" y="484" class="a v25 mm">import prints the YAML and asks before writing</text>
+
+      <g class="a p20" style="--d:47.6s">
+        <rect x="56" y="536" width="616" height="52" rx="5" fill="#272d38" stroke="#88c0d0" stroke-opacity=".45"/>
+        <text x="80" y="568" class="m"><tspan class="cy">$ </tspan>herdr plugin install aorumbayev/herdr-workflows</text>
+      </g>
+      <text style="--d:48.2s" x="700" y="568" class="a v15 p">needs herdr ≥ 0.7.5 · MIT</text>
+    </g>
+
+    <!-- chapter nav -->
+    <line x1="0" y1="646" x2="1200" y2="646" stroke="#434c5e"/>
+    <rect x="56" y="662" width="1088" height="2" fill="#434c5e"/>
+    <rect class="a bar" x="56" y="662" width="1088" height="2" fill="#88c0d0"/>
+
+    <g class="nav" tabindex="0" role="button" aria-label="Chapter 1, the ritual" data-t="0">
+      <rect class="ring" x="46" y="678" width="200" height="30" rx="4" fill="none" stroke="#88c0d0" opacity="0"/>
+      <rect x="46" y="678" width="200" height="30" fill="transparent"/>
+      <circle cx="60" cy="693" r="3.5" fill="#4c566a"/>
+      <text x="76" y="698" class="k lbl">1 · the ritual</text>
+      <g class="a on1"><circle cx="60" cy="693" r="3.5" fill="#88c0d0"/><text x="76" y="698" class="k" fill="#eceff4">1 · the ritual</text></g>
+    </g>
+    <g class="nav" tabindex="0" role="button" aria-label="Chapter 2, write it once" data-t="9">
+      <rect class="ring" x="266" y="678" width="200" height="30" rx="4" fill="none" stroke="#88c0d0" opacity="0"/>
+      <rect x="266" y="678" width="200" height="30" fill="transparent"/>
+      <circle cx="280" cy="693" r="3.5" fill="#4c566a"/>
+      <text x="296" y="698" class="k lbl">2 · write it once</text>
+      <g class="a on2"><circle cx="280" cy="693" r="3.5" fill="#88c0d0"/><text x="296" y="698" class="k" fill="#eceff4">2 · write it once</text></g>
+    </g>
+    <g class="nav" tabindex="0" role="button" aria-label="Chapter 3, pick it" data-t="20">
+      <rect class="ring" x="486" y="678" width="200" height="30" rx="4" fill="none" stroke="#88c0d0" opacity="0"/>
+      <rect x="486" y="678" width="200" height="30" fill="transparent"/>
+      <circle cx="500" cy="693" r="3.5" fill="#4c566a"/>
+      <text x="516" y="698" class="k lbl">3 · pick it</text>
+      <g class="a on3"><circle cx="500" cy="693" r="3.5" fill="#88c0d0"/><text x="516" y="698" class="k" fill="#eceff4">3 · pick it</text></g>
+    </g>
+    <g class="nav" tabindex="0" role="button" aria-label="Chapter 4, watch it run" data-t="29">
+      <rect class="ring" x="706" y="678" width="200" height="30" rx="4" fill="none" stroke="#88c0d0" opacity="0"/>
+      <rect x="706" y="678" width="200" height="30" fill="transparent"/>
+      <circle cx="720" cy="693" r="3.5" fill="#4c566a"/>
+      <text x="736" y="698" class="k lbl">4 · watch it run</text>
+      <g class="a on4"><circle cx="720" cy="693" r="3.5" fill="#88c0d0"/><text x="736" y="698" class="k" fill="#eceff4">4 · watch it run</text></g>
+    </g>
+    <g class="nav" tabindex="0" role="button" aria-label="Chapter 5, share it" data-t="43">
+      <rect class="ring" x="926" y="678" width="180" height="30" rx="4" fill="none" stroke="#88c0d0" opacity="0"/>
+      <rect x="926" y="678" width="180" height="30" fill="transparent"/>
+      <circle cx="940" cy="693" r="3.5" fill="#4c566a"/>
+      <text x="956" y="698" class="k lbl">5 · share it</text>
+      <g class="a on5"><circle cx="940" cy="693" r="3.5" fill="#88c0d0"/><text x="956" y="698" class="k" fill="#eceff4">5 · share it</text></g>
+    </g>
+
+    <g id="pp" class="nav" tabindex="0" role="button" aria-label="Pause or resume">
+      <rect class="ring" x="1112" y="678" width="34" height="30" rx="4" fill="none" stroke="#88c0d0" opacity="0"/>
+      <rect x="1112" y="678" width="34" height="30" fill="transparent"/>
+      <g id="ppPause"><rect x="1122" y="686" width="4" height="14" fill="#8792a8"/><rect x="1131" y="686" width="4" height="14" fill="#8792a8"/></g>
+      <path id="ppPlay" d="M1122 686 l14 7 -14 7 z" fill="#8792a8" opacity="0"/>
+    </g>
+  </g>
+
+  <script><![CDATA[
+    // Interactive only where scripts run (inline or <object>); as a plain <img> it just loops.
+    (function () {
+      var svg = document.documentElement, LOOP = 50, delay = 0;
+      var pausedAt = null, lost = 0;
+      var now = function () { return performance.now() / 1000; };
+      var clock = function () { return now() - lost - (pausedAt === null ? 0 : now() - pausedAt); };
+
+      function seek(t) {
+        delay = clock() - t;
+        svg.style.setProperty('--seek', delay + 's');
+      }
+      function chapter(step) {
+        var pos = ((clock() - delay) % LOOP + LOOP) % LOOP, i = 0;
+        for (var n = 0; n < STOPS.length; n++) if (pos >= STOPS[n] - 0.25) i = n;
+        seek(STOPS[(i + step + STOPS.length) % STOPS.length]);
+      }
+      function toggle() {
+        if (pausedAt === null) { pausedAt = now(); svg.classList.add('paused'); }
+        else { lost += now() - pausedAt; pausedAt = null; svg.classList.remove('paused'); }
+        document.getElementById('ppPlay').style.opacity = pausedAt === null ? 0 : 1;
+        document.getElementById('ppPause').style.opacity = pausedAt === null ? 1 : 0;
+      }
+
+      var STOPS = [];
+      [].forEach.call(document.querySelectorAll('[data-t]'), function (el) {
+        var t = parseFloat(el.getAttribute('data-t'));
+        STOPS.push(t);
+        el.addEventListener('click', function () { seek(t); });
+        el.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); seek(t); } });
+      });
+      STOPS.sort(function (a, b) { return a - b; });
+
+      var pp = document.getElementById('pp');
+      pp.addEventListener('click', toggle);
+      pp.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowRight') chapter(1);
+        else if (e.key === 'ArrowLeft') chapter(-1);
+        else return;
+        e.preventDefault();
+      });
+
+    })();
+  ]]></script>
+</svg>

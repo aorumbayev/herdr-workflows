@@ -206,6 +206,15 @@ export function profileNames(config: WorkflowsConfig): string[] {
   return Object.keys(config.profiles).sort();
 }
 
+/** Shared hint when merged config has no profiles / no default_profile. */
+export function configPathsHint(globalPath: string, repoPath: string): string {
+  return `looked in ${globalPath} and ${repoPath}`;
+}
+
+export function noProfilesConfiguredMessage(globalPath: string, repoPath: string): string {
+  return `no profiles configured (${configPathsHint(globalPath, repoPath)}); run \`hwf init\` or \`hwf init --global\``;
+}
+
 export function resolveProfile(config: WorkflowsConfig, name: string): AgentProfile | undefined {
   return config.profiles[name];
 }

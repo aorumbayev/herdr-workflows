@@ -1,6 +1,14 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { loadConfig, profileNames, resolveProfile, type WorkflowsConfig } from "../config";
+import {
+  globalConfigPath,
+  loadConfig,
+  noProfilesConfiguredMessage,
+  profileNames,
+  repoConfigPath,
+  resolveProfile,
+  type WorkflowsConfig,
+} from "../config";
 import { CaptureLimitError } from "../limits";
 import { spawnCapture } from "../run/steps/shell";
 import {
@@ -241,6 +249,14 @@ async function finalizeInputs(
   const out: InputSpec[] = [];
   for (const input of inputs) {
     if (input.type === "profile") {
+      if (profiles.length === 0) {
+        bail(
+          file,
+          undefined,
+          `inputs.${input.name}`,
+          noProfilesConfiguredMessage(await globalConfigPath(), repoConfigPath(repoRoot)),
+        );
+      }
       const next: InputSpec = { ...input, options: profiles };
       if (next.default !== undefined && !resolveProfile(config, next.default)) {
         bail(
@@ -271,7 +287,12 @@ async function finalizeInputs(
       out.push(next);
       continue;
     }
-    if (input.type === "choice") assertDefaultInOptions(file, input);
+    if (input.type === "choice") {
+      if (input.options !== undefined && input.options.length === 0) {
+        bail(file, undefined, `inputs.${input.name}`, "choice produced no options");
+      }
+      assertDefaultInOptions(file, input);
+    }
     out.push(input);
   }
   return out;

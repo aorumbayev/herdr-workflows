@@ -17,7 +17,6 @@ import {
 } from "@opentui/core";
 import type { InvocationContext, WorkflowsConfig } from "../config";
 import { sanitizeDisplay } from "../herdr";
-import { runWorkflow } from "../run/runner";
 import { loadWorkflowEntry } from "../workflow/load";
 import {
   analyzeResolvedSensitivity,
@@ -25,6 +24,7 @@ import {
   workflowDisplayTitle,
 } from "../workflow/trust";
 import type { InputSpec, LoadedWorkflow, WorkflowListEntry } from "../workflow/types";
+import { launchDetachedRun, type DetachedRunHandle, type LaunchRunRequest } from "./run-launch";
 import { resolveHostTheme, type HostTheme } from "./theme";
 
 function stripFilePrefix(error: string, file: string): string {
@@ -123,6 +123,8 @@ export type PickerState = {
     repoRoot: string,
     config: WorkflowsConfig,
   ) => Promise<LoadedWorkflow>;
+  launchRun?: (req: LaunchRunRequest) => DetachedRunHandle;
+  runHandle?: DetachedRunHandle;
   workflow?: LoadedWorkflow;
   renderer: CliRenderer;
   filter: InputRenderable;
@@ -136,6 +138,7 @@ export type PickerState = {
 const LIST_HINT = "type filter · ↑↓ move · enter run · esc cancel";
 const PROMPT_HINT = "enter submit · esc back";
 const CHOICE_HINT = "type filter · ↑↓ move · enter select · esc back";
+const RUN_HINT = "esc dismiss · run continues";
 const FAIL_HINT = "enter/esc close";
 
 function setListOptions(state: PickerState, options: SelectOption[]): void {
@@ -217,14 +220,30 @@ function setListMode(state: PickerState): void {
   state.filter.focus();
 }
 
+export function formatInputPrompt(spec: InputSpec): string {
+  const desc = spec.description?.trim();
+  const label = desc ? `${spec.name} — ${desc}` : spec.name;
+  if (spec.type === "text") return `${label} · type free text`;
+  return `${label} · type to filter, enter to select`;
+}
+
 function inputStatusLine(entry: WorkflowListEntry, spec: InputSpec): string {
   const title = workflowDisplayTitle(entry.name, entry.title);
-  const kind = spec.type === "profile" ? "profile" : spec.type === "choice" ? "choice" : "text";
-  const desc = spec.description?.trim() ? ` — ${spec.description.trim()}` : "";
-  return `${title} · ${entry.source} · ${spec.name} (${kind})${desc}`;
+  return `${title} · ${entry.source}\n${formatInputPrompt(spec)}`;
+}
+
+function emptyInputOptionsError(spec: InputSpec): string {
+  if (spec.type === "profile") {
+    return `input '${spec.name}': no profiles configured; run \`hwf init\` or \`hwf init --global\``;
+  }
+  return `input '${spec.name}': choice produced no options`;
 }
 
 function setInputMode(state: PickerState, entry: WorkflowListEntry, spec: InputSpec): void {
+  if ((spec.type === "choice" || spec.type === "profile") && (spec.options?.length ?? 0) === 0) {
+    showFailure(state, entry, new Error(emptyInputOptionsError(spec)));
+    return;
+  }
   state.mode = "input";
   state.pending = entry;
   state.invalid.visible = false;
@@ -254,10 +273,12 @@ function setRunMode(state: PickerState, entry: WorkflowListEntry): void {
   state.progressLines = [];
   hideBrowserChrome(state);
   showStatus(state, formatRunProgress(entry.name, []), 1);
-  state.footer.content = "running…";
+  state.footer.content = RUN_HINT;
 }
 
 function finish(state: PickerState, code: number): void {
+  state.runHandle?.detach();
+  state.runHandle = undefined;
   state.exit = { code };
   state.renderer.destroy();
 }
@@ -288,8 +309,13 @@ function handleInputKey(state: PickerState, key: KeyEvent): void {
 }
 
 function handleRunKey(state: PickerState, key: KeyEvent): void {
+  if (key.name === "escape") {
+    key.preventDefault();
+    finish(state, 0);
+    return;
+  }
   if (state.running) return;
-  if (key.name === "escape" || key.name === "return" || key.name === "linefeed") {
+  if (key.name === "return" || key.name === "linefeed") {
     key.preventDefault();
     finish(state, 1);
   }
@@ -422,26 +448,29 @@ export async function startRun(
   );
   setRunMode(state, entry);
   try {
-    const workflow =
+    state.workflow =
       state.workflow ?? (await state.loadWorkflow(entry, state.repoRoot, state.config));
-    const result = await runWorkflow({
+    const launch = state.launchRun ?? launchDetachedRun;
+    const handle = launch({
       name: entry.name,
       repoRoot: state.repoRoot,
-      config: state.config,
       ctx: state.ctx,
-      prompt: sanitizeDisplay(prompt),
       inputs,
-      workflow,
-      onProgress: (step, total, label, outcome = "ok") => {
-        const suffix = outcome === "ok" ? "" : ` ${outcome}`;
-        state.progressLines.push(`[${step}/${total}] ${truncate(label, 40)}${suffix}`);
+      prompt: sanitizeDisplay(prompt),
+      onProgressLine: (line) => {
+        if (state.exit) return;
+        state.progressLines.push(truncate(line, 48));
         state.status.content = formatRunProgress(entry.name, state.progressLines);
       },
     });
+    state.runHandle = handle;
+    const result = await handle.result;
+    if (state.exit) return;
+    state.runHandle = undefined;
     state.running = false;
     state.status.content = formatRunProgress(entry.name, state.progressLines, {
       ok: result.ok,
-      detail: result.ok ? "" : result.error,
+      detail: result.ok ? "" : result.detail,
     });
     if (result.ok) {
       finish(state, 0);
@@ -449,6 +478,7 @@ export async function startRun(
     }
     state.footer.content = FAIL_HINT;
   } catch (error) {
+    state.runHandle = undefined;
     showFailure(state, entry, error);
   }
 }

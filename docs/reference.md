@@ -45,6 +45,8 @@ Prompt text is the `agent:` value. Mutually exclusive `using:` (new managed agen
 
 Blocking result: `{response, agent, pane_id}`. Turn timeout default 30 minutes; native startup default 30 seconds. `blocked` notifies once per episode and keeps waiting. `unknown` never succeeds.
 
+`{{context.agent}}` is the invoking agent's live name, or its pane ID when Herdr reports no name — agents you start yourself are unnamed, and a pane ID is an accepted target. A workflow that targets `{{context.agent}}` must therefore be launched while that agent is idle or done: `prefix+k` from a settled pane works, asking the agent itself to run it cannot, because the agent is busy serving your request.
+
 Also: `cwd`, `env`, `pane`, `background`, `timeout`.
 
 ### `herdr:`

@@ -5,6 +5,7 @@ import {
   entrySensitivity,
   filterChoiceOptions,
   filterWorkflowEntries,
+  formatInputPrompt,
   formatInvalidLines,
   formatRunProgress,
   hasVisibleEntries,
@@ -166,6 +167,30 @@ describe("filterChoiceOptions", () => {
     expect(filterChoiceOptions(options, "")).toEqual(options);
     expect(filterChoiceOptions(options, "feat")).toEqual(["feat/workflow-inputs"]);
     expect(filterChoiceOptions(options, "zzz")).toEqual([]);
+  });
+});
+
+describe("formatInputPrompt", () => {
+  test("names the input, description, and line role", () => {
+    expect(formatInputPrompt({ name: "target", type: "profile" })).toBe(
+      "target · type to filter, enter to select",
+    );
+    expect(
+      formatInputPrompt({
+        name: "target",
+        type: "profile",
+        description: "Agent to hand off to",
+      }),
+    ).toBe("target — Agent to hand off to · type to filter, enter to select");
+    expect(formatInputPrompt({ name: "focus", type: "text" })).toBe("focus · type free text");
+    expect(
+      formatInputPrompt({
+        name: "branch",
+        type: "choice",
+        options: ["main"],
+        description: "Which branch",
+      }),
+    ).toBe("branch — Which branch · type to filter, enter to select");
   });
 });
 

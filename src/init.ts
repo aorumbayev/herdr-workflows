@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import {
+  globalConfigPath,
   parseConfigText,
   PROFILE_NAME_RE,
   repoConfigPath,
@@ -79,15 +80,21 @@ async function readPreservedTranscripts(path: string): Promise<WorkflowsConfig["
 async function ensureLocalConfigGitignored(repoRoot: string): Promise<void> {
   const hwfDir = dirname(repoConfigPath(repoRoot));
   const ignorePath = join(hwfDir, ".gitignore");
-  const marker = basename(repoLocalConfigPath(repoRoot));
-  if (await Bun.file(ignorePath).exists()) {
-    const text = await Bun.file(ignorePath).text();
-    if (text.split(/\r?\n/).some((line) => line.trim() === marker)) return;
-    const next = text.endsWith("\n") ? `${text}${marker}\n` : `${text}\n${marker}\n`;
-    await Bun.write(ignorePath, next);
-    return;
+  const markers = [basename(repoLocalConfigPath(repoRoot)), "tmp/"];
+  let text = (await Bun.file(ignorePath).exists()) ? await Bun.file(ignorePath).text() : "";
+  const lines = new Set(
+    text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean),
+  );
+  let changed = false;
+  for (const marker of markers) {
+    if (lines.has(marker)) continue;
+    text = text.length === 0 || text.endsWith("\n") ? `${text}${marker}\n` : `${text}\n${marker}\n`;
+    changed = true;
   }
-  await Bun.write(ignorePath, `${marker}\n`);
+  if (changed || !(await Bun.file(ignorePath).exists())) await Bun.write(ignorePath, text);
 }
 
 export type InitResult =
@@ -100,9 +107,10 @@ export async function runInit(
   opts: {
     force?: boolean;
     confirm?: () => Promise<boolean>;
+    global?: boolean;
   } = {},
 ): Promise<InitResult> {
-  const path = repoConfigPath(repoRoot);
+  const path = opts.global ? await globalConfigPath() : repoConfigPath(repoRoot);
   const existed = await Bun.file(path).exists();
   if (existed && !opts.force) {
     if (!opts.confirm) return { kind: "exists", path };
@@ -111,12 +119,12 @@ export async function runInit(
 
   const profiles = await detectProfiles();
   const names = Object.keys(profiles).sort();
-  const hwfDir = dirname(path);
-  const workflowsDir = join(repoRoot, ".hwf", "workflows");
 
-  await mkdir(hwfDir, { recursive: true });
-  await mkdir(workflowsDir, { recursive: true });
-  await ensureLocalConfigGitignored(repoRoot);
+  await mkdir(dirname(path), { recursive: true });
+  if (!opts.global) {
+    await mkdir(join(repoRoot, ".hwf", "workflows"), { recursive: true });
+    await ensureLocalConfigGitignored(repoRoot);
+  }
 
   const transcripts = existed ? await readPreservedTranscripts(path) : {};
   await Bun.write(

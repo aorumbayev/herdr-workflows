@@ -30,6 +30,7 @@ import type {
 import { loadWorkflow } from "../workflow/load";
 import {
   errorText,
+  runScratchDir,
   type RunnerDeps,
   type StepCtx,
   type StepFailure,
@@ -96,6 +97,15 @@ export function resolveInputValues(
   }
   const values: Record<string, string> = Object.create(null) as Record<string, string>;
   for (const spec of specs) {
+    if (spec.options !== undefined && spec.options.length === 0) {
+      return {
+        ok: false,
+        error:
+          spec.type === "profile"
+            ? `input '${spec.name}': no profiles configured; run \`hwf init\` or \`hwf init --global\``
+            : `input '${spec.name}': choice produced no options`,
+      };
+    }
     const value = Object.hasOwn(provided, spec.name) ? provided[spec.name] : spec.default;
     if (value === undefined) {
       return { ok: false, error: `missing input '${spec.name}' (--input ${spec.name}=…)` };
@@ -266,6 +276,7 @@ async function runSteps(
       await logStep(opts, n, total, label, { ok: true, skipped: true });
       continue;
     }
+    opts.onProgress?.(n, total, label, "start");
     const outcome = await executeWithRetry(step, n, values, opts);
     if (!outcome.ok) {
       opts.onProgress?.(n, total, label, "fail");
@@ -391,6 +402,7 @@ type PreflightArgs = {
   config: WorkflowsConfig;
   deps: RunnerDeps;
   runId: string;
+  repoRoot: string;
   inputs: Record<string, string>;
 };
 
@@ -398,18 +410,26 @@ type Preflight =
   | { ok: true; values: TemplateNamespace; transcriptFile?: string }
   | { ok: false; error: string };
 
-async function invokingAgentName(args: PreflightArgs): Promise<string> {
+/** Live name when set; else pane id (Herdr accepts either as agent.prompt/wait target). */
+async function invokingAgentTarget(args: PreflightArgs): Promise<string> {
   const paneId = args.ctx.paneId;
   if (!paneId) throw new Error("context.agent needs an invoking herdr pane");
   const info = await args.deps.agentInfo(paneId);
-  const name = typeof info.name === "string" ? info.name : "";
-  if (!name) throw new Error(`context.agent is unavailable: no named agent in pane ${paneId}`);
-  return name;
+  const name = typeof info.name === "string" ? info.name.trim() : "";
+  if (name) return name;
+  const kind = typeof info.agent === "string" ? info.agent.trim() : "";
+  if (!kind) {
+    throw new Error(
+      "context.agent is unavailable: no recognized agent in this pane — run this from a pane running a recognized agent",
+    );
+  }
+  return paneId;
 }
 
-async function writeTranscriptFile(runId: string, text: string): Promise<string> {
-  const path = join(pluginStateDir(), "transcripts", `${runId}.txt`);
-  await mkdir(join(pluginStateDir(), "transcripts"), { recursive: true });
+async function writeTranscriptFile(repoRoot: string, runId: string, text: string): Promise<string> {
+  const dir = runScratchDir(repoRoot);
+  await mkdir(dir, { recursive: true });
+  const path = join(dir, `${runId}-transcript.txt`);
   await Bun.write(path, text);
   return path;
 }
@@ -425,7 +445,7 @@ async function preflightContext(args: PreflightArgs): Promise<Preflight> {
   let transcript: string | undefined;
   let transcriptFile: string | undefined;
   try {
-    if (keys.has("agent")) agent = await invokingAgentName(args);
+    if (keys.has("agent")) agent = await invokingAgentTarget(args);
     if (TRANSCRIPT_KEYS.some((key) => keys.has(key))) {
       const paneId = args.ctx.paneId;
       if (!paneId) return { ok: false, error: "context.transcript needs an invoking herdr pane" };
@@ -433,7 +453,7 @@ async function preflightContext(args: PreflightArgs): Promise<Preflight> {
         invocationCwd: args.ctx.cwd,
       });
       if (keys.has("transcript_file")) {
-        transcriptFile = await writeTranscriptFile(args.runId, transcript);
+        transcriptFile = await writeTranscriptFile(args.repoRoot, args.runId, transcript);
       }
     }
   } catch (error) {
@@ -518,6 +538,7 @@ export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
       config: opts.config,
       deps,
       runId,
+      repoRoot: opts.repoRoot,
       inputs: inputs.values,
     });
     if (!context.ok) return await failPrecondition(context.error);

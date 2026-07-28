@@ -1,0 +1,207 @@
+import { statSync } from "node:fs";
+import type { InvocationContext } from "../config";
+
+type DetachedRunResult = { ok: boolean; detail: string };
+
+export type DetachedRunHandle = {
+  result: Promise<DetachedRunResult>;
+  detach: () => void;
+};
+
+/** Secrets for a detached `hwf run` — sent on stdin, never on argv. */
+export type LaunchPayload = {
+  name: string;
+  inputs: Record<string, string>;
+  prompt: string;
+};
+
+export type LaunchRunRequest = {
+  name: string;
+  repoRoot: string;
+  ctx: InvocationContext;
+  inputs: Record<string, string>;
+  prompt: string;
+  onProgressLine: (line: string) => void;
+  env?: NodeJS.ProcessEnv;
+  spawn?: typeof Bun.spawn;
+};
+
+/** Env the detached `hwf run` child must inherit so context.* stays the caller's. */
+export function buildInvocationEnv(
+  ctx: InvocationContext,
+  repoRoot: string,
+): Record<string, string> {
+  const json: Record<string, unknown> = {
+    selected_text: ctx.selection,
+    cwd: ctx.cwd,
+  };
+  if (ctx.paneId) json.focused_pane_id = ctx.paneId;
+  if (ctx.tabId) json.tab_id = ctx.tabId;
+  if (ctx.workspaceId) json.workspace_id = ctx.workspaceId;
+  if (ctx.worktreePath) json.worktree = { path: ctx.worktreePath };
+
+  const env: Record<string, string> = {
+    HERDR_WORKFLOWS_REPO_ROOT: repoRoot,
+    HERDR_PLUGIN_CONTEXT_JSON: JSON.stringify(json),
+  };
+  if (ctx.paneId) env.HERDR_PANE_ID = ctx.paneId;
+  if (ctx.tabId) env.HERDR_TAB_ID = ctx.tabId;
+  if (ctx.workspaceId) env.HERDR_WORKSPACE_ID = ctx.workspaceId;
+  return env;
+}
+
+/** True when argv[1] is a real on-disk script the runtime must re-pass (dev `bun src/cli.ts`). */
+export function isRuntimeScriptEntry(entry: string | undefined): boolean {
+  if (typeof entry !== "string" || entry.length === 0) return false;
+  // Compiled bun binaries expose an embedded virtual path — not a host file to re-exec.
+  if (entry.startsWith("/$bunfs/")) return false;
+  try {
+    return statSync(entry).isFile();
+  } catch {
+    return false;
+  }
+}
+
+export function selfRunArgv(
+  runArgs: string[],
+  opts?: { execPath?: string; argv1?: string },
+): string[] {
+  const execPath = opts?.execPath ?? process.execPath;
+  const entry = opts?.argv1 ?? process.argv[1];
+  if (entry !== undefined && isRuntimeScriptEntry(entry)) {
+    return [execPath, entry, "run", ...runArgs];
+  }
+  return [execPath, "run", ...runArgs];
+}
+
+/** Argv after `run` — workflow name + flag only; inputs/prompt travel on stdin. */
+export function buildRunArgs(name: string): string[] {
+  return [name, "--launch-payload"];
+}
+
+export function buildLaunchPayload(
+  name: string,
+  inputs: Record<string, string>,
+  prompt: string,
+): LaunchPayload {
+  return { name, inputs, prompt };
+}
+
+export function parseLaunchPayload(text: string): LaunchPayload {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("launch payload is not valid JSON");
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("launch payload must be a JSON object");
+  }
+  const row = parsed as Record<string, unknown>;
+  if (typeof row.name !== "string" || !row.name) {
+    throw new Error("launch payload requires a string name");
+  }
+  const inputs: Record<string, string> = {};
+  if (row.inputs !== undefined) {
+    if (row.inputs === null || typeof row.inputs !== "object" || Array.isArray(row.inputs)) {
+      throw new Error("launch payload inputs must be an object");
+    }
+    for (const [key, value] of Object.entries(row.inputs as Record<string, unknown>)) {
+      if (typeof value !== "string") {
+        throw new Error(`launch payload inputs.${key} must be a string`);
+      }
+      inputs[key] = value;
+    }
+  }
+  const prompt = row.prompt === undefined ? "" : row.prompt;
+  if (typeof prompt !== "string") {
+    throw new Error("launch payload prompt must be a string");
+  }
+  return { name: row.name, inputs, prompt };
+}
+
+function decodeLines(
+  stream: ReadableStream<Uint8Array> | null,
+  onLine: (line: string) => void,
+): Promise<string> {
+  if (!stream) return Promise.resolve("");
+  return (async () => {
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let all = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      all += chunk;
+      buf += chunk;
+      for (;;) {
+        const nl = buf.indexOf("\n");
+        if (nl === -1) break;
+        onLine(buf.slice(0, nl));
+        buf = buf.slice(nl + 1);
+      }
+    }
+    buf += decoder.decode();
+    if (buf) onLine(buf);
+    return all;
+  })();
+}
+
+/** Spawn `hwf run` in its own process group so the picker popup can exit freely. */
+export function launchDetachedRun(req: LaunchRunRequest): DetachedRunHandle {
+  const spawn = req.spawn ?? Bun.spawn.bind(Bun);
+  const argv = selfRunArgv(buildRunArgs(req.name));
+  const payload = JSON.stringify(buildLaunchPayload(req.name, req.inputs, req.prompt));
+  const env = {
+    ...process.env,
+    ...req.env,
+    ...buildInvocationEnv(req.ctx, req.repoRoot),
+  };
+  const proc = spawn(argv, {
+    cwd: req.repoRoot,
+    env,
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+    detached: true,
+  });
+
+  // Feed secrets once and close — never block the picker on the child's stdin.
+  proc.stdin.write(payload);
+  proc.stdin.end();
+
+  let detached = false;
+  const detach = () => {
+    if (detached) return;
+    detached = true;
+    proc.unref();
+  };
+
+  const result = (async (): Promise<DetachedRunResult> => {
+    let lastProgress = "";
+    const onLine = (line: string) => {
+      const trimmed = line.trimEnd();
+      if (!trimmed) return;
+      if (/^\[\d+\/\d+\]/.test(trimmed)) {
+        lastProgress = trimmed;
+        if (!detached) req.onProgressLine(trimmed);
+      }
+    };
+    const [stdoutText, stderrText, code] = await Promise.all([
+      decodeLines(proc.stdout, onLine),
+      decodeLines(proc.stderr, () => undefined),
+      proc.exited,
+    ]);
+    if (code === 0) return { ok: true, detail: "" };
+    const detail =
+      stderrText.trim().split("\n").at(-1)?.trim() ||
+      stdoutText.trim().split("\n").at(-1)?.trim() ||
+      lastProgress ||
+      `run exited ${code}`;
+    return { ok: false, detail };
+  })();
+
+  return { result, detach };
+}

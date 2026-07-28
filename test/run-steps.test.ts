@@ -211,4 +211,19 @@ describe("resolveInputValues", () => {
     const bad = resolveInputValues(specs, { mode: "turbo" });
     expect(bad).toEqual({ ok: false, error: "input 'mode' must be one of: fast, full" });
   });
+
+  test("empty profile or choice options fail at collection", () => {
+    expect(
+      resolveInputValues([{ name: "target", type: "profile", options: [] }], { target: "claude" }),
+    ).toEqual({
+      ok: false,
+      error: "input 'target': no profiles configured; run `hwf init` or `hwf init --global`",
+    });
+    expect(
+      resolveInputValues([{ name: "pick", type: "choice", options: [] }], { pick: "a" }),
+    ).toEqual({
+      ok: false,
+      error: "input 'pick': choice produced no options",
+    });
+  });
 });
