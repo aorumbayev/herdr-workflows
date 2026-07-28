@@ -2,10 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runWorkflow } from "../src/runner";
-import type { PickerState } from "../src/tui/picker-modes";
-import { acceptWorkflow, startRun } from "../src/tui/picker-run";
-import { listWorkflows, loadWorkflow, loadWorkflowEntry } from "../src/workflows";
+import { listWorkflows, loadWorkflowEntry } from "../src/workflow/load";
+import type { PickerState } from "../src/tui/picker";
+import { acceptWorkflow, startRun } from "../src/tui/picker";
+import type { LoadedWorkflow } from "../src/workflow/types";
 
 const dirs: string[] = [];
 
@@ -35,8 +35,7 @@ function pickerState(): PickerState {
     running: false,
     progressLines: [],
     repoRoot: "/repo",
-    agents: {},
-    sessions: {},
+    config: { profiles: {}, transcripts: {} },
     ctx: { selection: "", cwd: "/repo" },
     loadWorkflow: async () => {
       throw new Error("reload failed");
@@ -51,101 +50,39 @@ function pickerState(): PickerState {
   } as unknown as PickerState;
 }
 
+const V1 = "version: v1alpha1\n";
+
 describe("review regressions", () => {
-  test("listing dynamic options does not execute their command", async () => {
+  test("listing marks dynamic choice inputs without executing them", async () => {
     const root = await repoWith({
-      dynamic: `inputs:
+      dynamic: `${V1}inputs:
   target:
-    options: "touch option-command-ran; printf main"
+    type: choice
+    options:
+      run: [printf, main]
 steps:
-  - shell: cat
-    stdin: "{input.target}"
+  - run: [echo, "{{inputs.target}}"]
 `,
     });
 
-    await listWorkflows(root);
-    expect(await Bun.file(join(root, "option-command-ran")).exists()).toBe(false);
-
-    const workflow = await loadWorkflow("dynamic", root);
-    expect(workflow.inputs[0]?.options).toEqual(["main"]);
-    expect(await Bun.file(join(root, "option-command-ran")).exists()).toBe(true);
+    const entries = await listWorkflows(root, { profiles: {}, transcripts: {} });
+    expect(entries.find((e) => e.name === "dynamic")?.dynamicOptions).toBe(true);
   });
 
-  test("listing validates dynamic workflows without executing choices", async () => {
+  test("exact global entry file is preserved during load", async () => {
     const root = await repoWith({
-      invalid: `inputs:
-  unused:
-    options: "touch invalid-option-ran; printf value"
-steps:
-  - shell: "true"
-`,
-    });
-
-    const entry = (await listWorkflows(root)).find((candidate) => candidate.name === "invalid");
-    expect(entry?.error).toContain("declared but never referenced");
-    expect(await Bun.file(join(root, "invalid-option-ran")).exists()).toBe(false);
-  });
-
-  test("exact global entry cannot be replaced by repo shadow during load", async () => {
-    const root = await repoWith({
-      entry: `inputs:
-  target:
-    options: "touch repo-shadow-ran; printf value"
-steps:
-  - shell: cat
-    stdin: "{input.target}"
-`,
+      entry: `${V1}steps:\n  - run: "true"\n`,
     });
     const globalFile = join(root, "global-entry.yaml");
-    await writeFile(globalFile, 'steps:\n  - shell: "true"\n');
+    await writeFile(globalFile, `${V1}steps:\n  - run: "true"\n`);
 
     const workflow = await loadWorkflowEntry(
       { name: "entry", source: "global", file: globalFile },
       root,
+      { profiles: {}, transcripts: {} },
     );
     expect(workflow.file).toBe(globalFile);
-    expect(await Bun.file(join(root, "repo-shadow-ran")).exists()).toBe(false);
-  });
-
-  test("exact global entry records repo-owned composition", async () => {
-    const root = await repoWith({ child: 'steps:\n  - shell: "true"\n' });
-    const globalFile = join(root, "global-entry.yaml");
-    await writeFile(globalFile, "steps:\n  - run: child\n");
-
-    const workflow = await loadWorkflowEntry(
-      { name: "global-entry", source: "global", file: globalFile },
-      root,
-    );
-    expect(workflow.repoOwned).toBe(true);
-  });
-
-  test("validated recovery reuses entry input values", async () => {
-    const root = await repoWith({
-      rescue: `steps:
-  - shell: cat
-    stdin: "recovered {input.focus}"
-`,
-      workflow: `inputs:
-  focus: {}
-on_fail: rescue
-steps:
-  - shell: exit 1
-`,
-    });
-
-    const result = await runWorkflow({
-      name: "workflow",
-      repoRoot: root,
-      agents: {},
-      ctx: { selection: "", cwd: root },
-      inputs: { focus: "value" },
-      deps: {
-        notificationShow: async () => undefined,
-        reportToken: async () => undefined,
-      },
-    });
-
-    expect(result).toEqual({ ok: true, last: "recovered value" });
+    expect(workflow.repoOwned).toBe(false);
   });
 
   test("picker renders loader errors as terminal failures", async () => {
@@ -157,22 +94,34 @@ steps:
     expect(String(state.footer.content)).toBe("enter/esc close");
   });
 
-  test("global entries with repo-owned composition require confirmation", () => {
+  test("picker loads selected workflows without a second confirmation gate", async () => {
     const state = pickerState();
     let loads = 0;
-    state.loadWorkflow = async () => {
+    state.loadWorkflow = async (entry) => {
       loads += 1;
-      throw new Error("must not load before confirmation");
+      const workflow: LoadedWorkflow = {
+        name: entry.name,
+        file: entry.file,
+        version: "v1alpha1",
+        hidden: false,
+        steps: [{ action: { kind: "run", payload: { form: "argv", argv: ["true"] } } }],
+        inputs: [],
+        repoOwned: entry.source === "repo",
+        needsTranscript: false,
+        needsInvokingAgent: false,
+      };
+      return workflow;
     };
 
     acceptWorkflow(state, {
       name: "global-entry",
       source: "global",
       file: "/global/entry.yaml",
-      repoOwned: true,
+      repoOwned: false,
     });
 
-    expect(state.mode).toBe("confirm");
-    expect(loads).toBe(0);
+    await Bun.sleep(0);
+    expect(loads).toBe(1);
+    expect(state.mode).not.toBe("list");
   });
 });

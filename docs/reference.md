@@ -1,106 +1,151 @@
 # Reference
 
-`hwf` ≡ `herdr-workflows`.
+Contract for `version: v1alpha1`. Cross-field rules are enforced by the loader; `docs/workflow.schema.json` covers shape only.
 
-## CLI
+## Document
 
-| Command                                                 | Does                                                                                                      |
-| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `hwf` (TTY, no args)                                    | web workbench (same as `hwf web`)                                                                         |
-| `hwf run <name> [--prompt …] [--input k=v …]`           | run; live progress/stderr; nonzero on fail                                                                |
-| `hwf init [--force\|--yes] [--seed=global\|repo\|none]` | write `.hwf/config.yaml` + repo `review`; optionally seed `handoff`/`worktree` (TTY asks; default global) |
-| `hwf launch`                                            | open the picker in a herdr popup pane                                                                     |
-| `hwf picker`                                            | run the picker full-screen in the current terminal (the popup's internal entrypoint)                      |
-| `hwf web [--port <n>] [--no-open]`                      | localhost workbench: browse/edit/validate/share workflows + config; default port 7317, auto-increments    |
+| Key           | Required | Notes                                          |
+| ------------- | -------- | ---------------------------------------------- |
+| `version`     | yes      | Must be `v1alpha1`                             |
+| `steps`       | yes      | Non-empty list                                 |
+| `title`       | no       | Picker label; defaults from humanized filename |
+| `description` | no       | Picker subtitle                                |
+| `hidden`      | no       | Hide from picker; `hwf run` still works        |
+| `inputs`      | no       | Entry workflow only prompts                    |
+| `returns`     | no       | Child export map or template                   |
+| `on_failure`  | no       | Entry-only recovery action                     |
 
-### Web workbench
+Unsupported format versions fail load with rewrite-or-upgrade guidance. Package stays semver `0.x`; a later incompatible alpha uses `v1alphaN`. Workflow YAML never declares a Herdr version.
 
-Localhost-only HTTP UI over the same core the CLI uses — browse repo + global workflows, edit with live validation (same errors as `hwf run`), edit config, browse the run log, and share via copy/download/move (move refuses to clobber an existing name unless forced). **It never runs workflows** (needs herdr panes); it surfaces `hwf run <name>` instead. Bound to `127.0.0.1` with a per-launch token (`x-hwf-token`) and `Origin`/`Host` allowlist on every route.
+## Actions
 
-## Picker
+Exactly one of `agent`, `run`, `herdr`, `workflow` per step. Optional on every step: `id`, `when`, `continue_on_error`.
 
-List: `type filter · ↑↓ move · enter run · esc cancel`. Choice input: `type filter · ↑↓ move · enter select · esc back`. Text input / prompt: `enter submit · esc back`.
+### `run:`
 
-Declared `inputs:` ask one screen each (declaration order), then the prompt line only if the workflow uses `{prompt}`.
+| Form   | Behavior                                                          |
+| ------ | ----------------------------------------------------------------- |
+| list   | argv, no shell; templates allowed per element                     |
+| string | shell (`sh` on macOS/Linux, `cmd` on Windows) unless `shell:` set |
 
-## Files
+Natural result: `{stdout, stderr, exit_code, failed}`. Inputs export as `HWF_<name>`. Explicit `env:` cannot use the reserved `HWF_` prefix. Omit `cwd` → invocation cwd. Omit `timeout` → no workflow timeout.
 
-| Path                                                              | Holds                      |
-| ----------------------------------------------------------------- | -------------------------- |
-| `.hwf/workflows/<name>.yaml`                                      | repo workflows             |
-| `~/.hwf/workflows/<name>.yaml`                                    | global (repo shadows)      |
-| `.hwf/config.yaml` / `~/.hwf/config.yaml`                         | agents + optional sessions |
-| `$HERDR_PLUGIN_STATE_DIR/runs.jsonl` or `~/.hwf/state/runs.jsonl` | append-only history        |
+Placed `run:` (`pane.open: beside|below`) preserves the anchor pane via `pane.split`, then submits the argv as a shell-quoted line through `pane.send_input` (Herdr has no socket `pane.run`, and `layout.apply` replaces the tab without preserving live processes). `pane.open: tab` still launches argv directly through `layout.apply`.
 
-Editor schema (optional): `# yaml-language-server: $schema=https://raw.githubusercontent.com/aorumbayev/herdr-workflows/main/docs/workflow.schema.json`
+Also: `shell`, `cwd`, `env`, `pane`, `background`, `ready_when`, `timeout`, `retry`.
+
+### `agent:`
+
+Prompt text is the `agent:` value. Mutually exclusive `using:` (new managed agent) and `target:` (existing agent).
+
+| Mode                       | Behavior                                        |
+| -------------------------- | ----------------------------------------------- |
+| `using:` / default profile | Create pane → `agent.start` → `agent.prompt`    |
+| `target:`                  | Require idle/done, then prompt; no pane/cwd/env |
+
+Blocking result: `{response, agent, pane_id}`. Turn timeout default 30 minutes; native startup default 30 seconds. `blocked` notifies once per episode and keeps waiting. `unknown` never succeeds.
+
+Also: `cwd`, `env`, `pane`, `background`, `timeout`.
+
+### `herdr:`
+
+```yaml
+- herdr: notification.show
+  params:
+    title: done
+```
+
+No context autofill. Denied methods fail at load. Success result is the complete structured Herdr payload. Also: `params`, `retry`.
+
+### `workflow:`
+
+```yaml
+- workflow: child
+  inputs:
+    branch: "{{inputs.branch}}"
+```
+
+Child runs in isolation. Optional child `returns:` become this step's natural result. Child `on_failure` does not run during a parent invocation.
+
+## Pane block
+
+```yaml
+pane:
+  open: tab # tab | beside | below
+  target: "…" # split anchor; default invocation pane
+  workspace: "…" # tab workspace; default invocation workspace
+  size: 40 # percent for the NEW pane
+  focus: true
+  close: success # agent-only: success | always
+```
+
+`beside` → Herdr right split; `below` → down. Herdr clamps split ratios to 0.1–0.9 (`layout.rs` `valid_split_ratio`), so `pane.size` below 10 or above 90 is clamped. Background processes are pane-owned: they survive client detach, not an ordinary server restart, and are never implicitly stopped after a later workflow failure.
+
+## Readiness
+
+`ready_when: /regex/` on a placed `run:` delegates to `pane.wait_for_output` with source `recent`, 80 rendered rows, ANSI stripped, one logical-line regex. Required `timeout`. Succeeds only on native match. Already-present snapshot text can match. Does not detect process exit.
+
+## Templates
+
+`{{inputs.name}}`, `{{steps.id.field}}`, `{{context.key}}` only. Whole-value templates in structured YAML keep source type; embedded templates render text. `{{prompt}}` is config-only and is not a workflow template.
+
+### Context
+
+| Key                                             | Meaning                                  |
+| ----------------------------------------------- | ---------------------------------------- |
+| `workspace`, `tab`, `pane`, `worktree`, `agent` | Invocation identity                      |
+| `selection`                                     | Selected text (empty if none)            |
+| `platform`                                      | `macos` \| `linux` \| `windows`          |
+| `transcript`, `transcript_file`                 | Sensitive; fail preflight if unavailable |
+| `error`                                         | Recovery only (`on_failure`)             |
+
+## Inputs
+
+Names: `[a-z][a-z0-9_]{0,31}`. Types: `text`, `choice` (static list or `{run: argv}`), `profile` (merged profile names, never args). Choice/profile defaults must exist in available values. Only the entry workflow prompts, in declaration order.
+
+Dynamic choice: argv from repo root, 10s timeout, ≤1,000 options, 8 MiB capture cap.
 
 ## Config
 
 ```yaml
-agents:
-  <name>: [<argv>…] # exactly one literal "{prompt}" element
-sessions:
-  <agent>:
-    [<argv>…] # optional; stdout → {session}
-    # env: HERDR_WORKFLOWS_SESSION_{ID,CWD,AGENT}
+profiles:
+  name:
+    kind: claude # non-empty; live agent.start is authoritative
+    args: ["--model", "…"] # optional
+default_profile: name
+transcripts:
+  claude:
+    command: [extractor, argv…]
 ```
 
-`{session}` resolve order: `sessions:` command → built-in Claude JSONL → error.
+Layers: global plugin config dir → `.hwf/config.yaml` → `.hwf/config.local.yaml`. Whole-entry replacement by name. No `agents:` or `sessions:`.
 
-## Inputs
+## Control flow
 
-```yaml
-inputs:
-  <name>: # [a-z][a-z0-9_]{0,31}
-    options: agents | <shell> | [<value>…] # present → choice
-    label: <text> # picker screen title; default = name
-    default: <value> # optional; picker prefill (text) / preselect (choice) / CLI fallback
-```
+| Construct           | Behavior                                                       |
+| ------------------- | -------------------------------------------------------------- |
+| `when:`             | Scalar truthiness or `==` / `!=`; false → skip (no recovery)   |
+| `continue_on_error` | Tolerate failure; suppress recovery; run exits nonzero         |
+| `retry`             | Total attempts including first; local `run:` / `herdr:` only   |
+| `on_failure`        | Entry-only, once, after first non-tolerated failure            |
+| Transport loss      | Stop, keep panes, skip recovery, report uncertain coordination |
 
-| `options:`        | Meaning                                                       |
-| ----------------- | ------------------------------------------------------------- |
-| `[a, b, …]`       | literal choices                                               |
-| `agents`          | builtin — config agent names                                  |
-| `"shell command"` | `sh -c` in repo cwd at load; non-empty stdout lines → choices |
+## Caps
 
-`{input.<name>}` in `stdin` / `prompt` / `params`. `agent:` may be exactly `"{input.<name>}"` for a choice whose options are all config agents. Declare `inputs:` only on the entry workflow — spliced (`run:`) and recovery (`on_fail:`) targets may reference entry inputs but must not declare their own. Load errors: undeclared reference, declared-but-unused input, `inputs:` on spliced or recovery workflows, `options: agents` with empty config, options command fail/empty/timeout, default outside options. Picker: one screen per input (never skipped by `default`), declaration order, before the `{prompt}` line. Choice values validated again at run time. Options shell commands are author-controlled (same trust as workflow `shell:` steps).
+| Source                                                          | Limit  |
+| --------------------------------------------------------------- | ------ |
+| Generated `HWF_*` env block                                     | 24 KiB |
+| Command / managed response / transcript / dynamic-choice stdout | 8 MiB  |
+| Dynamic choices                                                 | 1,000  |
+| Dynamic choice timeout                                          | 10s    |
+| Transcript extractor timeout                                    | 30s    |
 
-`stdin` substitution is literal text replacement, not shell escaping. Never use `{input.*}` to construct shell source, such as quoted assignments, commands, or heredocs. Use fixed author-controlled shell programs. Declared inputs are also exported to `shell` steps as `HWF_INPUT_<name>` environment variables for argv-safe CLI wrappers.
+## Trust and denylist
 
-## Verbs & modifiers
+Workflow files are reviewed executable code. Import requires full YAML review and confirmation. Picker and workbench show repo vs global provenance and flag commands, transcript references, and sensitive Herdr methods.
 
-| Key            | Where              | Role                                                         |
-| -------------- | ------------------ | ------------------------------------------------------------ |
-| `shell`        | step               | blocking `sh -c`; stdout → `{last}`; 300s; `HWF_INPUT_*` env |
-| `stdin`        | shell              | piped stdin; placeholders ok                                 |
-| `open`         | step               | new tab                                                      |
-| `wait_for`     | open               | regex; block (default 60s)                                   |
-| `agent`        | step               | named config agent                                           |
-| `prompt`       | agent              | placeholders ok                                              |
-| `wait`         | agent              | literal `done`; poll until finish (default 1800s)            |
-| `close_source` | agent              | after successful open, close invoking `tabId`                |
-| `timeout`      | with wait/wait_for | seconds                                                      |
-| `herdr`        | step               | socket method                                                |
-| `params`       | herdr              | placeholders in string values; ids auto-filled               |
-| `run`          | step               | load-time splice                                             |
-| `inputs`       | top-level          | declared user inputs; picker screens / `--input`             |
-| `on_fail`      | top-level          | one-shot recovery workflow name                              |
+The method denylist (server/plugin lifecycle, identity authority, experimental graphics, and similar) is an accidental-misuse and runtime-safety rail. It is not a sandbox. Trusted `run:` can invoke the complete Herdr CLI or socket as the current user.
 
-Placeholders: `{pane}` `{selection}` `{prompt}` `{last}` `{error}` `{session}` `{session_file}` `{tab}` `{prev_tab}` `{agent}` `{input.<name>}`. Only in `stdin`/`prompt`/`params` (and `agent: "{agent}"` / `agent: "{input.<name>}"`). `{session}` / `{session_file}` → `stdin` only. `{session_file}` is a temp-file path holding the transcript — use it when `stdin` is a shell script (splicing `{session}` text into a script can break its quoting/heredocs); the file is deleted when the run ends, so copy it during the step if a background job needs it.
+## Portability
 
-## Semantics
-
-- Linear foreground steps. First **step** failure → one notification → optional `on_fail` once. If recovery fails, that error is final (no nested `on_fail`).
-- **Preflight** failures (e.g. `{session}` / `{agent}` required but unavailable) abort before any step — `on_fail` does not run.
-- Run log = observability only (web workbench **Runs** tab). Optional sidebar: `$herdr-workflows` in herdr config.
-- `run:` flattened + validated at load. Repo shadows global for names.
-- herdr ≥ 0.7.5, POSIX. Keybinding installed into `config.toml` (no manifest field).
-- `agent` / `open` push opened tab ids → `{tab}` / `{prev_tab}`.
-- Without `wait` / `wait_for`, `agent` and `open` are fire-and-forget — `on_fail` cannot see their failure.
-
-## Ceilings
-
-- `{pane}` / post-`wait: done` read: up to 100k lines (`recent-unwrapped`); still capped by herdr scrollback retention.
-- `{session}` built-in: Claude JSONL only; others need `sessions:`.
-- Fixed 300s shell timeout.
-- No branches, loops, retries, parallelism, Windows.
+v1alpha1 syntax and argv behavior are cross-platform. Runtime capability follows the installed Herdr platform support. Native Windows is beta; use `{{context.platform}}` with `when:` for OS-specific steps.

@@ -1,512 +1,827 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { WorkflowsConfig } from "../src/config";
+import { loadWorkflow, parseWorkflowText } from "../src/workflow/load";
 import {
-  loadWorkflow,
-  WorkflowLoadError,
-  substitute,
+  isWholeValueTemplate,
+  parseDurationMs,
+  parseRaw,
+  parseTemplatePath,
+  renderScalar,
   substituteParams,
-  type FlatStep,
-  type LoadedWorkflow,
-  type WorkflowListEntry,
-  type PlaceholderValues,
-} from "../src/workflows";
-
-void null as unknown as FlatStep;
-void null as unknown as LoadedWorkflow;
-void null as unknown as WorkflowListEntry;
-void null as unknown as PlaceholderValues;
+  substituteText,
+  substituteValue,
+  textTemplates,
+} from "../src/workflow/parse";
+import type { TemplateNamespace } from "../src/workflow/types";
 
 const dirs: string[] = [];
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
 
-async function repoWithWorkflows(files: Record<string, string>): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "herdr-workflows-workflows-"));
+const emptyConfig: WorkflowsConfig = { profiles: {}, transcripts: {} };
+
+async function repoWith(
+  files: Record<string, string>,
+  config: WorkflowsConfig = emptyConfig,
+): Promise<{ root: string; config: WorkflowsConfig }> {
+  const root = await mkdtemp(join(tmpdir(), "herdr-workflows-loader-"));
   dirs.push(root);
   const dir = join(root, ".hwf", "workflows");
   await mkdir(dir, { recursive: true });
-  for (const [name, body] of Object.entries(files)) {
-    await writeFile(join(dir, `${name}.yaml`), body);
-  }
-  return root;
+  await Promise.all(
+    Object.entries(files).map(([name, body]) => writeFile(join(dir, `${name}.yaml`), body)),
+  );
+  return { root, config };
 }
 
-describe("workflow schema", () => {
-  test("valid shell+stdin parses", async () => {
-    const root = await repoWithWorkflows({
-      ok: `steps:\n  - shell: echo hi\n    stdin: "{pane}"\n`,
-    });
-    const m = await loadWorkflow("ok", root);
-    expect(m.steps).toEqual([{ verb: "shell", command: "echo hi", stdin: "{pane}" }]);
-  });
-
-  test("two verbs rejected with step position", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:\n  - shell: echo\n    open: lazygit\n`,
-    });
-    expect(loadWorkflow("bad", root)).rejects.toThrow(/step 1/);
-  });
-
-  test("modifier on wrong verb rejected", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:\n  - open: lazygit\n    prompt: hi\n`,
-    });
-    await expect(loadWorkflow("bad", root)).rejects.toThrow(/step 1.*prompt/);
-  });
-
-  test("modifier on run rejected", async () => {
-    const root = await repoWithWorkflows({
-      other: `steps:\n  - shell: "true"\n`,
-      bad: `steps:\n  - run: other\n    stdin: x\n`,
-    });
-    await expect(loadWorkflow("bad", root)).rejects.toThrow(/step 1/);
-  });
-
-  test("unknown top-level key rejected", async () => {
-    const root = await repoWithWorkflows({
-      bad: `retries: 3\nsteps:\n  - shell: "true"\n`,
-    });
-    await expect(loadWorkflow("bad", root)).rejects.toThrow(/retries/);
-  });
-
-  test("empty steps rejected", async () => {
-    const root = await repoWithWorkflows({ bad: `steps: []\n` });
-    await expect(loadWorkflow("bad", root)).rejects.toThrow(/steps/);
-  });
-
-  test("unknown agent rejected at load", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:\n  - agent: gemini\n    prompt: hi\n`,
-    });
-    await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(/gemini/);
-  });
-
-  test('agent: "{agent}" accepted at load', async () => {
-    const root = await repoWithWorkflows({
-      ok: `steps:\n  - agent: "{agent}"\n    prompt: hi\n`,
-    });
-    const m = await loadWorkflow("ok", root, ["claude"]);
-    expect(m.steps[0]).toEqual({ verb: "agent", name: "{agent}", prompt: "hi" });
-    expect(m.needsInvokingAgent).toBe(true);
-  });
-
-  test("wait on shell rejected", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:\n  - shell: echo hi\n    wait: done\n`,
-    });
-    await expect(loadWorkflow("bad", root)).rejects.toThrow(/wait only allowed on agent/);
-  });
-
-  test("wait_for on agent rejected", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:\n  - agent: claude\n    wait_for: ready\n`,
-    });
-    await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(
-      /wait_for only allowed on open/,
-    );
-  });
-
-  test("timeout without wait rejected", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:\n  - shell: echo hi\n    timeout: 10\n`,
-    });
-    await expect(loadWorkflow("bad", root)).rejects.toThrow(/timeout requires wait or wait_for/);
-  });
-
-  test("wait: whatever rejected", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:\n  - agent: claude\n    wait: whatever\n`,
-    });
-    await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(/wait/);
-  });
-
-  test("valid wait/wait_for parse to FlatStep with timeoutMs", async () => {
-    const root = await repoWithWorkflows({
-      ok: `steps:
-  - agent: claude
-    prompt: hi
-    wait: done
-  - open: bun run dev
-    wait_for: "Listening on :3000"
-    timeout: 45
-`,
-    });
-    const m = await loadWorkflow("ok", root, ["claude"]);
-    expect(m.steps).toEqual([
-      { verb: "agent", name: "claude", prompt: "hi", wait: true, timeoutMs: 1_800_000 },
-      {
-        verb: "open",
-        command: "bun run dev",
-        waitFor: "Listening on :3000",
-        timeoutMs: 45_000,
-      },
-    ]);
-  });
-});
-
-describe("substitution safety", () => {
-  test("placeholder in shell command rejected", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:\n  - shell: "echo {pane}"\n`,
-    });
-    await expect(loadWorkflow("bad", root)).rejects.toMatchObject({
-      name: "WorkflowLoadError",
-      message: expect.stringMatching(/step 1.*placeholder \{pane\}/),
-    });
-  });
-
-  test("placeholder in open command rejected", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:\n  - open: "echo {selection}"\n`,
-    });
-    await expect(loadWorkflow("bad", root)).rejects.toThrow(/step 1/);
-  });
-
-  test("unknown token passes through in substitute", () => {
-    expect(
-      substitute("{branch}", {
-        pane: "",
-        selection: "",
-        prompt: "",
-        last: "",
-        error: "",
-        session: "",
-        session_file: "",
-        tab: "",
-        prev_tab: "",
-        agent: "",
-        inputs: {},
-      }),
-    ).toBe("{branch}");
-  });
-
-  test("tab prev_tab agent substitute", () => {
-    expect(
-      substitute("t={tab} p={prev_tab} a={agent}", {
-        pane: "",
-        selection: "",
-        prompt: "",
-        last: "",
-        error: "",
-        session: "",
-        session_file: "",
-        tab: "t2",
-        prev_tab: "t1",
-        agent: "codex",
-        inputs: {},
-      }),
-    ).toBe("t=t2 p=t1 a=codex");
-  });
-
-  test("{session} in prompt is load error", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:\n  - agent: claude\n    prompt: "{session}"\n`,
-    });
-    await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(
-      /\{session\}\/\{session_file\} only allowed in stdin/,
-    );
-  });
-
-  test("{session} in stdin ok; needsSession true", async () => {
-    const root = await repoWithWorkflows({
-      ok: `steps:\n  - shell: cat\n    stdin: "{session}"\n`,
-    });
-    const m = await loadWorkflow("ok", root);
-    expect(m.needsSession).toBe(true);
-    expect(m.steps).toEqual([{ verb: "shell", command: "cat", stdin: "{session}" }]);
-  });
-
-  test("{session_file} in prompt is load error", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:\n  - agent: claude\n    prompt: "{session_file}"\n`,
-    });
-    await expect(loadWorkflow("bad", root, ["claude"])).rejects.toThrow(
-      /\{session\}\/\{session_file\} only allowed in stdin/,
-    );
-  });
-
-  test("{session_file} in stdin ok; needsSession true", async () => {
-    const root = await repoWithWorkflows({
-      ok: `steps:\n  - shell: cat\n    stdin: "{session_file}"\n`,
-    });
-    const m = await loadWorkflow("ok", root);
-    expect(m.needsSession).toBe(true);
-  });
-
-  test("workflow without {session} has needsSession false", async () => {
-    const root = await repoWithWorkflows({
-      ok: `steps:\n  - shell: "true"\n`,
-    });
-    const m = await loadWorkflow("ok", root);
-    expect(m.needsSession).toBe(false);
-  });
-});
-
-describe("composition", () => {
-  test("run splices steps in place", async () => {
-    const root = await repoWithWorkflows({
-      gate: `steps:\n  - shell: test\n`,
-      ship: `steps:\n  - shell: lint\n  - run: gate\n  - open: lazygit\n`,
-    });
-    const m = await loadWorkflow("ship", root);
-    expect(m.steps.map((s) => ("command" in s ? s.command : s.verb))).toEqual([
-      "lint",
-      "test",
-      "lazygit",
-    ]);
-  });
-
-  test("unknown run target rejected", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:\n  - run: nonexistent\n`,
-    });
-    await expect(loadWorkflow("bad", root)).rejects.toThrow(/nonexistent/);
-  });
-
-  test("cycle rejected", async () => {
-    const root = await repoWithWorkflows({
-      a: `steps:\n  - run: b\n`,
-      b: `steps:\n  - run: a\n`,
-    });
-    await expect(loadWorkflow("a", root)).rejects.toThrow(/cycle/);
-  });
-
-  test("self-reference rejected", async () => {
-    const root = await repoWithWorkflows({
-      a: `steps:\n  - run: a\n`,
-    });
-    await expect(loadWorkflow("a", root)).rejects.toThrow(/cycle/);
-  });
-
-  test("on_fail on run target rejected", async () => {
-    const root = await repoWithWorkflows({
-      gate: `steps:\n  - shell: "true"\non_fail: handoff\n`,
-      handoff: `steps:\n  - shell: "true"\n`,
-      ship: `steps:\n  - run: gate\n`,
-    });
-    await expect(loadWorkflow("ship", root)).rejects.toThrow(/on_fail/);
-  });
-
-  test("on_fail on recovery target rejected", async () => {
-    const root = await repoWithWorkflows({
-      nested: `steps:\n  - shell: "true"\non_fail: x\n`,
-      x: `steps:\n  - shell: "true"\n`,
-      ship: `steps:\n  - shell: "true"\non_fail: nested\n`,
-    });
-    await expect(loadWorkflow("ship", root)).rejects.toThrow(/on_fail/);
-  });
-
-  test("needsPrompt true when recovery references prompt", async () => {
-    const root = await repoWithWorkflows({
-      handoff: `steps:\n  - agent: claude\n    prompt: "{prompt}"\n`,
-      ship: `steps:\n  - shell: "true"\non_fail: handoff\n`,
-    });
-    const m = await loadWorkflow("ship", root, ["claude"]);
-    expect(m.needsPrompt).toBe(true);
-    expect(m.onFail).toBe("handoff");
-  });
-});
-
-describe("inputs", () => {
-  const values = (inputs: Record<string, string>) => ({
-    pane: "",
-    selection: "",
-    prompt: "",
-    last: "",
-    error: "",
-    session: "",
-    session_file: "",
+const emptyNs: TemplateNamespace = {
+  inputs: {},
+  steps: {},
+  context: {
+    workspace: "",
     tab: "",
-    prev_tab: "",
+    pane: "",
+    worktree: "",
     agent: "",
-    inputs,
+    selection: "",
+    platform: "macos",
+  },
+};
+
+function parse(body: string) {
+  return parseRaw("test.yaml", body);
+}
+
+describe("v1alpha1 grammar", () => {
+  test("minimal alpha document", () => {
+    const doc = parse(`version: v1alpha1\nsteps:\n  - run: bun test\n`);
+    expect(doc.version).toBe("v1alpha1");
+    expect(doc.steps).toHaveLength(1);
+    expect(doc.steps[0]!.action).toMatchObject({
+      kind: "run",
+      payload: { form: "shell", command: "bun test" },
+    });
   });
 
-  test("{input.x} substitutes from inputs map", () => {
-    expect(substitute("to {input.target}!", values({ target: "codex" }))).toBe("to codex!");
-    expect(substitute("{input.missing}", values({}))).toBe("");
+  test("unsupported alpha revision", () => {
+    expect(() => parse(`version: v1alpha2\nsteps:\n  - run: "true"\n`)).toThrow(
+      /unsupported workflow format 'v1alpha2'.*v1alpha1/,
+    );
   });
 
-  test("params substitution descends through arrays and preserves non-strings", () => {
+  test("missing version", () => {
+    expect(() => parse(`steps:\n  - run: "true"\n`)).toThrow(/version is required/);
+  });
+
+  test("unknown top-level key", () => {
+    expect(() => parse(`version: v1alpha1\nretries: 3\nsteps:\n  - run: "true"\n`)).toThrow(
+      /Unrecognized key: "retries"/,
+    );
+  });
+
+  test("title description hidden metadata", () => {
+    const doc = parse(
+      `version: v1alpha1\ntitle: Ship\ndescription: push\nhidden: true\nsteps:\n  - run: "true"\n`,
+    );
+    expect(doc.title).toBe("Ship");
+    expect(doc.description).toBe("push");
+    expect(doc.hidden).toBe(true);
+  });
+
+  test("four actions parse", () => {
+    const doc = parse(`version: v1alpha1
+steps:
+  - agent: review this
+    using: deep-review
+  - run: [git, status]
+  - herdr: notification.show
+    params: { title: done }
+  - workflow: gate
+    inputs: { suite: unit }
+`);
+    expect(doc.steps.map((s) => s.action.kind)).toEqual(["agent", "run", "herdr", "workflow"]);
+  });
+
+  test("multiple actions rejected", () => {
+    expect(() => parse(`version: v1alpha1\nsteps:\n  - run: "true"\n    agent: hi\n`)).toThrow(
+      /multiple action keys: agent, run|multiple action keys: run, agent/,
+    );
+  });
+
+  test("removed keys fail as unknown keys", () => {
+    for (const key of ["out", "wait", "in", "ratio", "allow_fail", "for", "as"]) {
+      expect(() => parse(`version: v1alpha1\nsteps:\n  - run: "true"\n    ${key}: x\n`)).toThrow(
+        new RegExp(`Unrecognized key: "${key}"`),
+      );
+    }
+  });
+
+  test("shell templates rejected", () => {
+    expect(() => parse(`version: v1alpha1\nsteps:\n  - run: "echo {{inputs.base}}"\n`)).toThrow(
+      /templates are not allowed in shell command text/,
+    );
+  });
+
+  test("argv templates accepted", () => {
+    const doc = parse(
+      `version: v1alpha1\ninputs:\n  base: text\nsteps:\n  - run: [git, checkout, "{{inputs.base}}"]\n`,
+    );
+    expect(doc.steps[0]!.action).toMatchObject({
+      kind: "run",
+      payload: { form: "argv", argv: ["git", "checkout", "{{inputs.base}}"] },
+    });
+  });
+
+  test("shell on argv rejected", () => {
+    expect(() =>
+      parse(`version: v1alpha1\nsteps:\n  - run: [git, status]\n    shell: bash\n`),
+    ).toThrow(/argv form does not use a shell/);
+  });
+
+  test("explicit shell", () => {
+    const doc = parse(`version: v1alpha1\nsteps:\n  - run: Get-ChildItem\n    shell: pwsh\n`);
+    expect(doc.steps[0]!.action).toMatchObject({
+      kind: "run",
+      payload: { form: "shell", shell: "pwsh", command: "Get-ChildItem" },
+    });
+  });
+
+  test("agent using and target exclusive", () => {
+    expect(() =>
+      parse(
+        `version: v1alpha1\nsteps:\n  - agent: hi\n    using: a\n    target: "{{context.agent}}"\n`,
+      ),
+    ).toThrow(/mutually exclusive/);
+  });
+
+  test("target rejects pane", () => {
+    expect(() =>
+      parse(
+        `version: v1alpha1\nsteps:\n  - agent: hi\n    target: x\n    pane:\n      open: tab\n`,
+      ),
+    ).toThrow(/target: rejects pane/);
+  });
+
+  test("pane size bounds", () => {
+    expect(() =>
+      parse(`version: v1alpha1
+steps:
+  - run: sleep 1
+    pane:
+      open: beside
+      size: 100
+    background: true
+`),
+    ).toThrow(/<=99|size/);
+  });
+
+  test("pane open required fields", () => {
+    const doc = parse(`version: v1alpha1
+steps:
+  - run: sleep 1
+    pane:
+      open: beside
+      size: 40
+      target: "{{context.pane}}"
+    ready_when: /listening/
+    timeout: 30s
+`);
+    expect(doc.steps[0]!.action).toMatchObject({
+      kind: "run",
+      readyWhen: "listening",
+      timeoutMs: 30_000,
+      pane: { open: "beside", size: 40, target: "{{context.pane}}" },
+    });
+  });
+
+  test("run rejects pane.close", () => {
+    expect(() =>
+      parse(`version: v1alpha1
+steps:
+  - run: sleep 1
+    pane:
+      open: tab
+      close: always
+    background: true
+`),
+    ).toThrow(/run: rejects pane.close/);
+  });
+
+  test("tab rejects target", () => {
+    expect(() =>
+      parse(`version: v1alpha1
+steps:
+  - agent: hi
+    pane:
+      open: tab
+      target: "{{context.pane}}"
+`),
+    ).toThrow(/pane.target applies only to beside\/below/);
+  });
+
+  test("ready_when requires timeout and pane", () => {
+    expect(() =>
+      parse(`version: v1alpha1\nsteps:\n  - run: sleep 1\n    ready_when: /ok/\n`),
+    ).toThrow(/ready_when/);
+  });
+
+  test("ready_when flagless validation", () => {
+    expect(() =>
+      parse(`version: v1alpha1
+steps:
+  - run: sleep 1
+    pane: { open: tab }
+    ready_when: //
+    timeout: 1s
+`),
+    ).toThrow(/ready_when/);
+  });
+
+  test("duration grammar", () => {
+    expect(parseDurationMs("500ms")).toBe(500);
+    expect(parseDurationMs("2s")).toBe(2000);
+    expect(parseDurationMs("3m")).toBe(180_000);
+    expect(parseDurationMs("1h")).toBe(3_600_000);
+    expect(() => parseDurationMs("0s")).toThrow(/duration/);
+    expect(() => parseDurationMs("5")).toThrow(/duration/);
+  });
+
+  test("retry attempts and delay", () => {
+    const doc = parse(`version: v1alpha1
+steps:
+  - run: "true"
+    retry:
+      attempts: 3
+      delay: 250ms
+`);
+    expect(doc.steps[0]!.action).toMatchObject({
+      kind: "run",
+      retry: { attempts: 3, delayMs: 250 },
+    });
+  });
+
+  test("agent rejects retry as unknown key", () => {
+    expect(() =>
+      parse(`version: v1alpha1\nsteps:\n  - agent: hi\n    retry:\n      attempts: 2\n`),
+    ).toThrow(/Unrecognized key: "retry"/);
+  });
+
+  test("when truthiness and equality", () => {
+    const doc = parse(`version: v1alpha1
+steps:
+  - run: "true"
+    when: "{{inputs.x}}"
+  - run: "true"
+    when: '{{context.platform}} == "windows"'
+  - run: "true"
+    when: '{{context.platform}} != "linux"'
+`);
+    expect(doc.steps[0]!.when).toEqual({ kind: "truthy", path: "inputs.x" });
+    expect(doc.steps[1]!.when).toEqual({
+      kind: "eq",
+      path: "context.platform",
+      value: "windows",
+      negate: false,
+    });
+    expect(doc.steps[2]!.when).toEqual({
+      kind: "eq",
+      path: "context.platform",
+      value: "linux",
+      negate: true,
+    });
+  });
+
+  test("when arbitrary expression rejected", () => {
+    expect(() =>
+      parse(`version: v1alpha1\nsteps:\n  - run: "true"\n    when: "test -n x"\n`),
+    ).toThrow(/when/);
+  });
+
+  test("on_failure single recovery action", () => {
+    const doc = parse(`version: v1alpha1
+on_failure:
+  herdr: notification.show
+  params: { title: failed }
+steps:
+  - run: "true"
+`);
+    expect(doc.onFailure).toMatchObject({ kind: "herdr", method: "notification.show" });
+  });
+
+  test("on_failure rejects background", () => {
+    expect(() =>
+      parse(`version: v1alpha1
+on_failure:
+  run: "true"
+  background: true
+  pane: { open: tab }
+steps:
+  - run: "true"
+`),
+    ).toThrow(/on_failure rejects background/);
+  });
+
+  test("returns template and map", () => {
+    const whole = parse(
+      `version: v1alpha1\nreturns: "{{steps.a}}"\nsteps:\n  - id: a\n    run: "true"\n`,
+    );
+    expect(whole.returns).toEqual({ kind: "template", template: "{{steps.a}}" });
+    const mapped = parse(
+      `version: v1alpha1\nreturns:\n  findings: "{{steps.a}}"\nsteps:\n  - id: a\n    run: "true"\n`,
+    );
+    expect(mapped.returns).toEqual({ kind: "map", fields: { findings: "{{steps.a}}" } });
+  });
+
+  test("inputs forms", () => {
+    const doc = parse(`version: v1alpha1
+inputs:
+  note: text
+  role: profile
+  branch: [main, develop]
+  pick:
+    type: choice
+    options: [a, b]
+    default: a
+steps:
+  - run: [echo, "{{inputs.note}}"]
+`);
+    expect(doc.inputs?.note).toBe("text");
+    expect(doc.inputs?.role).toBe("profile");
+    expect(doc.inputs?.branch).toEqual(["main", "develop"]);
+  });
+
+  test("denied herdr method", () => {
+    expect(() => parse(`version: v1alpha1\nsteps:\n  - herdr: server.stop\n`)).toThrow(/server/);
+  });
+
+  test("unknown herdr method", () => {
+    expect(() =>
+      parse(
+        `version: v1alpha1\nsteps:\n  - herdr: pane.splitt\n    params: { direction: right }\n`,
+      ),
+    ).toThrow(/unknown herdr method/);
+  });
+
+  test("dotted keys are not actions", () => {
+    expect(() =>
+      parse(`version: v1alpha1\nsteps:\n  - pane.split: { direction: right }\n`),
+    ).toThrow(/no action key|Unrecognized key/);
+  });
+
+  test("unknown template root rejected", () => {
+    expect(() => parse(`version: v1alpha1\nsteps:\n  - agent: "see {{foo.bar}}"\n`)).toThrow(
+      /invalid template '\{\{foo\.bar\}\}'/,
+    );
+  });
+
+  test("near-miss template roots rejected", () => {
+    expect(() =>
+      parse(
+        `version: v1alpha1\ninputs:\n  base: text\nsteps:\n  - run: [echo, "{{input.base}}"]\n`,
+      ),
+    ).toThrow(/invalid template '\{\{input\.base\}\}'/);
+    expect(() => parse(`version: v1alpha1\nsteps:\n  - agent: "{{step.diff}}"\n`)).toThrow(
+      /invalid template '\{\{step\.diff\}\}'/,
+    );
+  });
+
+  test("bare template root without path rejected", () => {
+    expect(() => parse(`version: v1alpha1\nsteps:\n  - agent: "{{steps}}"\n`)).toThrow(
+      /invalid template '\{\{steps\}\}'/,
+    );
+  });
+
+  test("unclosed template rejected", () => {
+    expect(() => parse(`version: v1alpha1\nsteps:\n  - agent: "see {{inputs.base"\n`)).toThrow(
+      /invalid template '\{\{inputs\.base'/,
+    );
+  });
+
+  test("malformed when template names the bad mustache", () => {
+    expect(() =>
+      parse(`version: v1alpha1\nsteps:\n  - run: "true"\n    when: "{{stepz.x}}"\n`),
+    ).toThrow(/invalid template '\{\{stepz\.x\}\}'/);
+  });
+
+  test("valid templates and JSON single braces still parse", () => {
+    const doc = parse(`version: v1alpha1
+inputs:
+  base: text
+steps:
+  - id: probe
+    run: [echo, "{{inputs.base}}", '{"key": "value"}']
+  - agent: "review {{steps.probe.stdout}} with {\\"a\\":1}"
+  - herdr: notification.show
+    params:
+      title: "{{inputs.base}}"
+      body: '{"ok": true}'
+  - workflow: gate
+    inputs:
+      suite: "{{inputs.base}}"
+returns: "{{steps.probe}}"
+`);
+    expect(doc.steps).toHaveLength(4);
+    expect(doc.returns).toEqual({ kind: "template", template: "{{steps.probe}}" });
+  });
+
+  test("on_failure templates are validated", () => {
+    expect(() =>
+      parse(`version: v1alpha1
+on_failure:
+  agent: "failed {{foo.bar}}"
+steps:
+  - run: "true"
+`),
+    ).toThrow(/on_failure\.agent.*invalid template/);
+  });
+});
+
+describe("typed templates", () => {
+  test("path parsing", () => {
+    expect(parseTemplatePath("steps.assess.response")).toEqual({
+      root: "steps",
+      segments: ["assess", "response"],
+    });
+    expect(parseTemplatePath("prompt")).toBeUndefined();
+    expect(parseTemplatePath("inputs")).toBeUndefined();
+    expect(parseTemplatePath("inputs.base")).toEqual({ root: "inputs", segments: ["base"] });
+  });
+
+  test("whole-value vs embedded", () => {
+    expect(isWholeValueTemplate("{{steps.a}}")).toBe(true);
+    expect(isWholeValueTemplate("x {{steps.a}}")).toBe(false);
+  });
+
+  test("canonical scalar rendering", () => {
+    expect(renderScalar("hi")).toBe("hi");
+    expect(renderScalar(true)).toBe("true");
+    expect(renderScalar(false)).toBe("false");
+    expect(renderScalar(1.5)).toBe("1.5");
+    expect(renderScalar(null)).toBe("");
+    expect(renderScalar({ a: 1 })).toBe('{"a":1}');
+    expect(renderScalar([1, 2])).toBe("[1,2]");
+  });
+
+  test("text and structured substitution", () => {
+    const ns: TemplateNamespace = {
+      ...emptyNs,
+      inputs: { base: "main" },
+      steps: { review: { response: "ok", agent: { name: "claude" }, pane_id: "p1" } },
+    };
+    expect(substituteText("branch {{inputs.base}}", ns)).toBe("branch main");
+    expect(substituteValue("{{steps.review}}", ns)).toEqual({
+      response: "ok",
+      agent: { name: "claude" },
+      pane_id: "p1",
+    });
+    expect(substituteValue("got {{steps.review.response}}", ns)).toBe("got ok");
+  });
+
+  test("params substitution preserves structure", () => {
+    const ns: TemplateNamespace = {
+      ...emptyNs,
+      steps: { create: { pane_id: "p9" } },
+      inputs: { n: 3 },
+    };
     expect(
       substituteParams(
-        { items: ["{input.target}", { prompt: "{prompt}", count: 3 }, false, null] },
-        { ...values({ target: "codex" }), prompt: "ship it" },
+        { pane_id: "{{steps.create.pane_id}}", nested: { count: "{{inputs.n}}" }, flag: true },
+        ns,
       ),
-    ).toEqual({ items: ["codex", { prompt: "ship it", count: 3 }, false, null] });
+    ).toEqual({ pane_id: "p9", nested: { count: 3 }, flag: true });
   });
 
-  test("params substitution preserves __proto__ as data", () => {
-    const params = Bun.YAML.parse("payload:\n  __proto__:\n    preserved: yes\n") as Record<
-      string,
-      unknown
-    >;
-    const output = substituteParams(params, values({}))!;
-    const payload = output.payload as Record<string, unknown>;
-    expect(Object.hasOwn(payload, "__proto__")).toBe(true);
-    expect(payload.__proto__).toEqual({ preserved: "yes" });
+  test("JSON braces pass through", () => {
+    expect(substituteText('{"key": "value"}', emptyNs)).toBe('{"key": "value"}');
   });
 
-  test("input refs and prompt in params arrays are discovered", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:
-  target: {}
-steps:
-  - herdr: pane.send
-    params:
-      items: ["{input.target}", { prompt: "{prompt}" }]
-`,
-    });
-    const m = await loadWorkflow("wf", root);
-    expect(m.inputs.map((input) => input.name)).toEqual(["target"]);
-    expect(m.needsPrompt).toBe(true);
-  });
-
-  test("{session} in params arrays is load error", async () => {
-    const root = await repoWithWorkflows({
-      bad: `steps:
-  - herdr: pane.send
-    params:
-      items: ["{session}"]
-`,
-    });
-    await expect(loadWorkflow("bad", root)).rejects.toThrow(
-      /\{session\}\/\{session_file\} only allowed in stdin/,
-    );
-  });
-
-  test("choice and text inputs resolve; agents sentinel expands", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:
-  target:
-    options: agents
-  focus:
-    label: focus area
-    default: ""
-steps:
-  - agent: "{input.target}"
-    prompt: "{input.focus}"
-`,
-    });
-    const m = await loadWorkflow("wf", root, ["claude", "codex"]);
-    expect(m.inputs).toEqual([
-      { name: "target", label: "target", options: ["claude", "codex"], default: undefined },
-      { name: "focus", label: "focus area", options: undefined, default: "" },
+  test("textTemplates finds refs", () => {
+    expect(textTemplates("{{inputs.a}} and {{steps.b.c}}")).toEqual([
+      { root: "inputs", segments: ["a"] },
+      { root: "steps", segments: ["b", "c"] },
     ]);
-  });
-
-  test("undeclared {input.x} rejected", async () => {
-    const root = await repoWithWorkflows({
-      wf: `steps:\n  - shell: cat\n    stdin: "{input.nope}"\n`,
-    });
-    await expect(loadWorkflow("wf", root)).rejects.toThrow(/undeclared input/);
-  });
-
-  test("declared but unused input rejected", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:\n  ghost: {}\nsteps:\n  - shell: "true"\n`,
-    });
-    await expect(loadWorkflow("wf", root)).rejects.toThrow(/never referenced/);
-  });
-
-  test("agent input option outside config rejected", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:\n  target:\n    options: [claude, ghost]\nsteps:\n  - agent: "{input.target}"\n`,
-    });
-    await expect(loadWorkflow("wf", root, ["claude"])).rejects.toThrow(/not a config agent/);
-  });
-
-  test("text input as agent rejected", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:\n  target: {}\nsteps:\n  - agent: "{input.target}"\n`,
-    });
-    await expect(loadWorkflow("wf", root, ["claude"])).rejects.toThrow(/needs options/);
-  });
-
-  test("{input.x} in shell command text rejected", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:\n  x: {}\nsteps:\n  - shell: "echo {input.x}"\n`,
-    });
-    await expect(loadWorkflow("wf", root)).rejects.toThrow(/input.x.*not allowed in command/);
-  });
-
-  test("spliced workflow with inputs rejected", async () => {
-    const root = await repoWithWorkflows({
-      part: `inputs:\n  x: {}\nsteps:\n  - shell: cat\n    stdin: "{input.x}"\n`,
-      wf: `steps:\n  - run: part\n`,
-    });
-    await expect(loadWorkflow("wf", root)).rejects.toThrow(/declares inputs/);
-  });
-
-  test("options agents with no configured agents rejected", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:\n  target:\n    options: agents\nsteps:\n  - agent: "{input.target}"\n`,
-    });
-    await expect(loadWorkflow("wf", root)).rejects.toThrow(/no agents configured/);
-  });
-
-  test("choice default outside options rejected", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:\n  target:\n    options: [a, b]\n    default: c\nsteps:\n  - shell: cat\n    stdin: "{input.target}"\n`,
-    });
-    await expect(loadWorkflow("wf", root)).rejects.toThrow(/not in options/);
-  });
-
-  test("recovery may reference entry inputs", async () => {
-    const root = await repoWithWorkflows({
-      rescue: `steps:\n  - shell: cat\n    stdin: "{input.focus}"\n`,
-      wf: `inputs:\n  focus: {}\non_fail: rescue\nsteps:\n  - shell: cat\n    stdin: "{input.focus}"\n`,
-    });
-    const m = await loadWorkflow("wf", root);
-    expect(m.inputs.map((i) => i.name)).toEqual(["focus"]);
-  });
-
-  test("options shell command expands stdout lines", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:
-  branch:
-    options: "printf 'main\\nfeat/x\\n'"
-steps:
-  - shell: cat
-    stdin: "{input.branch}"
-`,
-    });
-    const m = await loadWorkflow("wf", root);
-    expect(m.inputs[0]).toEqual({
-      name: "branch",
-      label: "branch",
-      options: ["main", "feat/x"],
-      default: undefined,
-    });
-  });
-
-  test("options shell command failure rejected", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:\n  branch:\n    options: "exit 1"\nsteps:\n  - shell: cat\n    stdin: "{input.branch}"\n`,
-    });
-    await expect(loadWorkflow("wf", root)).rejects.toThrow(/options command failed/);
-  });
-
-  test("options shell command empty stdout rejected", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:\n  branch:\n    options: "true"\nsteps:\n  - shell: cat\n    stdin: "{input.branch}"\n`,
-    });
-    await expect(loadWorkflow("wf", root)).rejects.toThrow(/no choices/);
-  });
-
-  test("dynamic options default outside resolved set rejected", async () => {
-    const root = await repoWithWorkflows({
-      wf: `inputs:\n  branch:\n    options: "printf 'main\\n'"\n    default: other\nsteps:\n  - shell: cat\n    stdin: "{input.branch}"\n`,
-    });
-    await expect(loadWorkflow("wf", root)).rejects.toThrow(/not in options/);
   });
 });
 
-describe("WorkflowLoadError", () => {
-  test("is throwable type", () => {
-    expect(new WorkflowLoadError("x")).toBeInstanceOf(Error);
+describe("loader references and composition", () => {
+  test("duplicate and forward step ids", async () => {
+    await expect(
+      parseWorkflowText(
+        "dup",
+        `version: v1alpha1\nsteps:\n  - id: a\n    run: "true"\n  - id: a\n    run: "true"\n`,
+      ),
+    ).rejects.toThrow(/duplicate step id 'a'/);
+
+    await expect(
+      parseWorkflowText(
+        "fwd",
+        `version: v1alpha1\nsteps:\n  - run: [echo, "{{steps.later.stdout}}"]\n  - id: later\n    run: [echo, hi]\n`,
+      ),
+    ).rejects.toThrow(/forward reference to step 'later'/);
+  });
+
+  test("background when and tolerated non-command results rejected", async () => {
+    await expect(
+      parseWorkflowText(
+        "bg",
+        `version: v1alpha1\nsteps:\n  - id: launch\n    run: sleep 1\n    background: true\n    pane: { open: tab }\n  - run: [echo, "{{steps.launch.pane_id}}"]\n`,
+      ),
+    ).rejects.toThrow(/background steps produce no result/);
+
+    await expect(
+      parseWorkflowText(
+        "skip",
+        `version: v1alpha1\nsteps:\n  - id: maybe\n    run: [echo, hi]\n    when: "{{inputs.flag}}"\n  - run: [echo, "{{steps.maybe.stdout}}"]\n`,
+      ),
+    ).rejects.toThrow(/unknown input 'flag'|may be skipped by when/);
+
+    await expect(
+      parseWorkflowText(
+        "skip2",
+        `version: v1alpha1\ninputs:\n  flag: text\nsteps:\n  - id: maybe\n    run: [echo, hi]\n    when: "{{inputs.flag}}"\n  - run: [echo, "{{steps.maybe.stdout}}"]\n`,
+      ),
+    ).rejects.toThrow(/may be skipped by when/);
+
+    await expect(
+      parseWorkflowText(
+        "tol-agent",
+        `version: v1alpha1\nsteps:\n  - id: ask\n    agent: hi\n    continue_on_error: true\n  - run: [echo, "{{steps.ask.response}}"]\n`,
+      ),
+    ).rejects.toThrow(/continue_on_error step may fail without a natural result/);
+
+    const ok = await parseWorkflowText(
+      "tol-cmd",
+      `version: v1alpha1\nsteps:\n  - id: probe\n    run: [sh, -c, "exit 1"]\n    continue_on_error: true\n  - run: [echo, "{{steps.probe.exit_code}}"]\n`,
+    );
+    expect(ok.steps).toHaveLength(2);
+  });
+
+  test("managed agent and herdr result fields", async () => {
+    const agent = await parseWorkflowText(
+      "agent",
+      `version: v1alpha1\nsteps:\n  - id: review\n    agent: look\n  - run: [echo, "{{steps.review.response}}", "{{steps.review.pane_id}}"]\n`,
+    );
+    expect(agent.steps).toHaveLength(2);
+
+    await expect(
+      parseWorkflowText(
+        "bad-agent",
+        `version: v1alpha1\nsteps:\n  - id: review\n    agent: look\n  - run: [echo, "{{steps.review.stdout}}"]\n`,
+      ),
+    ).rejects.toThrow(/unknown managed agent result field/);
+
+    const herdr = await parseWorkflowText(
+      "herdr",
+      `version: v1alpha1\nsteps:\n  - id: tree\n    herdr: worktree.create\n    params: { cwd: /repo }\n  - run: [echo, "{{steps.tree.worktree.path}}"]\n`,
+    );
+    expect(herdr.steps).toHaveLength(2);
+
+    await expect(
+      parseWorkflowText(
+        "bad-herdr",
+        `version: v1alpha1\nsteps:\n  - id: tree\n    herdr: worktree.create\n    params: { cwd: /repo }\n  - run: [echo, "{{steps.tree.not_a_field}}"]\n`,
+      ),
+    ).rejects.toThrow(/unknown herdr result field/);
+
+    await expect(
+      parseWorkflowText(
+        "split-focus",
+        `version: v1alpha1\nsteps:\n  - herdr: pane.split\n    params: { direction: right }\n`,
+      ),
+    ).rejects.toThrow(/target_pane_id is required/);
+
+    await expect(
+      parseWorkflowText(
+        "worktree-templated-branch",
+        `version: v1alpha1\nsteps:\n  - herdr: worktree.create\n    params: { branch: "{{inputs.branch}}" }\n`,
+      ),
+    ).rejects.toThrow(/needs exactly one of workspace_id or cwd/);
+
+    await expect(
+      parseWorkflowText(
+        "tab-templated-label",
+        `version: v1alpha1\nsteps:\n  - herdr: tab.create\n    params: { label: "{{inputs.l}}" }\n`,
+      ),
+    ).rejects.toThrow(/params.workspace_id is required/);
+
+    const templatedEnum = await parseWorkflowText(
+      "split-templated-direction",
+      `version: v1alpha1\ninputs:\n  d: text\nsteps:\n  - herdr: pane.split\n    params: { direction: "{{inputs.d}}", target_pane_id: w1:p1 }\n`,
+    );
+    expect(templatedEnum.steps[0]?.action).toMatchObject({
+      kind: "herdr",
+      method: "pane.split",
+    });
+  });
+
+  test("child returns isolation cycles and required inputs", async () => {
+    const { root, config } = await repoWith({
+      inspect: `version: v1alpha1
+inputs:
+  base: text
+returns:
+  findings: "{{steps.review}}"
+steps:
+  - id: review
+    agent: "review {{inputs.base}}"
+`,
+      parent: `version: v1alpha1
+inputs:
+  base: text
+steps:
+  - id: inspection
+    workflow: inspect
+    inputs:
+      base: "{{inputs.base}}"
+  - run: [echo, "{{steps.inspection.findings.response}}"]
+`,
+      leak: `version: v1alpha1
+steps:
+  - run: [echo, "{{steps.diff.stdout}}"]
+`,
+      bare: `version: v1alpha1
+steps:
+  - run: "true"
+`,
+      uses_bare: `version: v1alpha1
+steps:
+  - id: child
+    workflow: bare
+  - run: [echo, "{{steps.child}}"]
+`,
+      a: `version: v1alpha1
+steps:
+  - workflow: b
+`,
+      b: `version: v1alpha1
+steps:
+  - workflow: a
+`,
+      needs: `version: v1alpha1
+inputs:
+  suite: text
+steps:
+  - run: [echo, "{{inputs.suite}}"]
+`,
+      missing: `version: v1alpha1
+steps:
+  - workflow: needs
+`,
+      typed: `version: v1alpha1
+inputs:
+  n: text
+steps:
+  - run: [echo, "{{inputs.n}}"]
+`,
+      bad_type: `version: v1alpha1
+steps:
+  - id: probe
+    run: [echo, hi]
+  - workflow: typed
+    inputs:
+      n: "{{steps.probe}}"
+`,
+    });
+
+    const parent = await loadWorkflow("parent", root, config);
+    expect(parent.steps[0]?.action).toMatchObject({ kind: "workflow", name: "inspect" });
+
+    await expect(loadWorkflow("leak", root, config)).rejects.toThrow(/unknown step id 'diff'/);
+    await expect(loadWorkflow("uses_bare", root, config)).rejects.toThrow(
+      /child workflow declares no returns/,
+    );
+    await expect(loadWorkflow("a", root, config)).rejects.toThrow(/workflow cycle: a → b → a/);
+    await expect(loadWorkflow("missing", root, config)).rejects.toThrow(
+      /missing required child input 'suite'/,
+    );
+    await expect(loadWorkflow("bad_type", root, config)).rejects.toThrow(
+      /must resolve to text \(source type object\)/,
+    );
+  });
+
+  test("returns reject transcript and require whole-value templates", async () => {
+    await expect(
+      parseWorkflowText(
+        "ret",
+        `version: v1alpha1\nreturns: "{{context.transcript}}"\nsteps:\n  - run: "true"\n`,
+      ),
+    ).rejects.toThrow(/cannot reference context\.transcript/);
+
+    expect(() =>
+      parse(
+        `version: v1alpha1\nreturns: "x {{steps.a.stdout}}"\nsteps:\n  - id: a\n    run: "true"\n`,
+      ),
+    ).toThrow(/must be a whole-value template/);
+  });
+
+  test("herdr result fields are method-scoped", async () => {
+    await expect(
+      parseWorkflowText(
+        "cross-method",
+        `version: v1alpha1\nsteps:\n  - id: notify\n    herdr: notification.show\n    params: { title: done }\n  - run: [echo, "{{steps.notify.worktree.path}}"]\n`,
+      ),
+    ).rejects.toThrow(/unknown herdr result field 'worktree\.path'/);
+
+    const ok = await parseWorkflowText(
+      "notify-ok",
+      `version: v1alpha1\nsteps:\n  - id: notify\n    herdr: notification.show\n    params: { title: done }\n  - run: [echo, "{{steps.notify.shown}}"]\n`,
+    );
+    expect(ok.steps).toHaveLength(2);
+  });
+
+  test("readiness result fields follow pane.wait_for_output plus created ids", async () => {
+    const ok = await parseWorkflowText(
+      "ready-ok",
+      `version: v1alpha1\nsteps:\n  - id: boot\n    run: [echo, ready]\n    pane: { open: tab }\n    ready_when: "/ready/"\n    timeout: 5s\n  - run: [echo, "{{steps.boot.matched_line}}", "{{steps.boot.pane_id}}", "{{steps.boot.tab_id}}"]\n`,
+    );
+    expect(ok.steps).toHaveLength(2);
+
+    await expect(
+      parseWorkflowText(
+        "ready-bad",
+        `version: v1alpha1\nsteps:\n  - id: boot\n    run: [echo, ready]\n    pane: { open: tab }\n    ready_when: "/ready/"\n    timeout: 5s\n  - run: [echo, "{{steps.boot.worktree.path}}"]\n`,
+      ),
+    ).rejects.toThrow(/unknown readiness result field 'worktree\.path'/);
+  });
+
+  test("context.error is recovery-only", async () => {
+    await expect(
+      parseWorkflowText(
+        "err-step",
+        `version: v1alpha1\nsteps:\n  - run: [echo, "{{context.error.message}}"]\n`,
+      ),
+    ).rejects.toThrow(/context\.error is only available inside on_failure/);
+
+    await expect(
+      parseWorkflowText(
+        "err-returns",
+        `version: v1alpha1\nreturns: "{{context.error}}"\nsteps:\n  - run: "true"\n`,
+      ),
+    ).rejects.toThrow(/context\.error is only available inside on_failure/);
+
+    const ok = await parseWorkflowText(
+      "err-recovery",
+      `version: v1alpha1
+on_failure:
+  herdr: notification.show
+  params: { title: "{{context.error.message}}" }
+steps:
+  - run: "true"
+`,
+    );
+    expect(ok.onFailure).toMatchObject({ kind: "herdr", method: "notification.show" });
+  });
+
+  test("literal using profile must exist; templates defer", async () => {
+    await expect(
+      parseWorkflowText(
+        "bad-using",
+        `version: v1alpha1\nsteps:\n  - agent: hi\n    using: nonexistent\n`,
+      ),
+    ).rejects.toThrow(/unknown profile 'nonexistent'/);
+
+    const withProfile: WorkflowsConfig = {
+      profiles: { review: { kind: "claude" } },
+      transcripts: {},
+    };
+    const ok = await parseWorkflowText(
+      "good-using",
+      `version: v1alpha1\nsteps:\n  - agent: hi\n    using: review\n`,
+      withProfile,
+    );
+    expect(ok.steps[0]?.action).toMatchObject({ kind: "agent", using: "review" });
+
+    const templated = await parseWorkflowText(
+      "tmpl-using",
+      `version: v1alpha1\ninputs:\n  role: text\nsteps:\n  - agent: hi\n    using: "{{inputs.role}}"\n`,
+    );
+    expect(templated.steps[0]?.action).toMatchObject({ kind: "agent", using: "{{inputs.role}}" });
+  });
+
+  test("action template errors name the precise key", async () => {
+    await expect(
+      parseWorkflowText(
+        "bad-cwd",
+        `version: v1alpha1\nsteps:\n  - run: [echo, hi]\n    cwd: "{{steps.missing.stdout}}"\n`,
+      ),
+    ).rejects.toThrow(/\.cwd:.*unknown step id 'missing'|cwd:.*unknown step id 'missing'/);
+
+    await expect(
+      parseWorkflowText(
+        "bad-env",
+        `version: v1alpha1\nsteps:\n  - run: [echo, hi]\n    env: { FOO: "{{steps.missing.stdout}}" }\n`,
+      ),
+    ).rejects.toThrow(/env\.FOO:.*unknown step id 'missing'/);
+
+    await expect(
+      parseWorkflowText(
+        "bad-run",
+        `version: v1alpha1\nsteps:\n  - run: [echo, "{{steps.missing.stdout}}"]\n`,
+      ),
+    ).rejects.toThrow(/run\[1\]:.*unknown step id 'missing'/);
   });
 });

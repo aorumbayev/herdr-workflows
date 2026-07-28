@@ -8,6 +8,7 @@ bun-debug.log*
 
 # build / compile
 dist/
+target/
 bin/herdr-workflows
 *.tsbuildinfo
 

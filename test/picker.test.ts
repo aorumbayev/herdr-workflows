@@ -1,17 +1,28 @@
 import { describe, expect, test } from "bun:test";
-import type { WorkflowListEntry } from "../src/workflows";
+import type { WorkflowListEntry } from "../src/workflow/types";
 import {
   buildPickerOptions,
+  entrySensitivity,
   filterChoiceOptions,
   filterWorkflowEntries,
   formatInvalidLines,
   formatRunProgress,
-} from "../src/tui/picker-rows";
-import { truncate } from "../src/tui/text";
+  hasVisibleEntries,
+  truncate,
+} from "../src/tui/picker";
+import { humanizeWorkflowName, workflowDisplayTitle } from "../src/workflow/trust";
 
 const entries: WorkflowListEntry[] = [
-  { name: "chat-handoff", source: "repo", file: "/r/chat.yaml", needsPrompt: true },
-  { name: "deploy", source: "global", file: "/g/deploy.yaml" },
+  {
+    name: "chat-handoff",
+    source: "repo",
+    file: "/r/chat.yaml",
+    title: "Chat handoff",
+    description: "Pass transcript to a reviewer",
+    needsTranscript: true,
+    hasCommands: false,
+  },
+  { name: "deploy", source: "global", file: "/g/deploy.yaml", hasCommands: true },
   {
     name: "broken",
     source: "repo",
@@ -39,40 +50,92 @@ describe("filterWorkflowEntries", () => {
     expect(invalid.map((e) => e.name)).toEqual(["chat-broken"]);
   });
 
-  test("empty match yields empty lists", () => {
-    const { valid, invalid } = filterWorkflowEntries(entries, "zzz");
-    expect(valid).toEqual([]);
-    expect(invalid).toEqual([]);
+  test("hidden workflows are kept out of the picker", () => {
+    const withBg: WorkflowListEntry[] = [
+      ...entries,
+      { name: "ship-bg", source: "repo", file: "/r/ship-bg.yaml", hidden: true },
+      { name: "broken-bg", source: "repo", file: "/r/broken-bg.yaml", hidden: true, error: "boom" },
+    ];
+    const { valid, invalid } = filterWorkflowEntries(withBg, "");
+    expect(valid.map((e) => e.name)).toEqual(["chat-handoff", "deploy"]);
+    expect(invalid.map((e) => e.name)).toEqual(["broken", "chat-broken"]);
+    expect(filterWorkflowEntries(withBg, "bg").valid).toEqual([]);
+  });
+
+  test("hasVisibleEntries is false when every workflow is hidden", () => {
+    const hidden: WorkflowListEntry[] = [
+      { name: "ship-bg", source: "repo", file: "/r/ship-bg.yaml", hidden: true },
+      { name: "broken-bg", source: "repo", file: "/r/broken-bg.yaml", hidden: true, error: "boom" },
+    ];
+    expect(hasVisibleEntries(hidden)).toBe(false);
+    expect(hasVisibleEntries([])).toBe(false);
+    expect(hasVisibleEntries([...hidden, entries[0]!])).toBe(true);
   });
 });
 
 describe("buildPickerOptions", () => {
-  test("inputs flagged in row suffix", () => {
+  test("title, provenance, inputs, and sensitivity flags", () => {
     const entry: WorkflowListEntry = {
       name: "handover",
       source: "repo",
       file: "/r/handover.yaml",
-      inputs: [{ name: "target", label: "target", options: ["claude"] }],
+      title: "Handover",
+      description: "Pick a profile",
+      inputs: [{ name: "target", type: "profile", options: ["claude"] }],
+      hasCommands: true,
+      needsTranscript: true,
+      sensitiveMethods: ["pane.close"],
     };
     const options = buildPickerOptions([entry]);
-    expect(options[0]!.name).toBe("handover · repo · inputs");
+    expect(options[0]!.name).toBe(
+      "Handover · repo · inputs · commands · transcript · herdr:pane.close",
+    );
+    expect(options[0]!.description).toBe("Pick a profile");
   });
 
-  test("single-line name with source; prompt flagged", () => {
+  test("humanized title default and provenance badges", () => {
     const { valid } = filterWorkflowEntries(entries, "");
     const options = buildPickerOptions(valid);
-    expect(options).toEqual([
-      {
-        name: "chat-handoff · repo · prompt",
-        description: "",
-        value: { entry: entries[0]! },
-      },
-      {
-        name: "deploy · global",
-        description: "",
-        value: { entry: entries[1]! },
-      },
-    ]);
+    expect(options[0]!.name).toContain("Chat handoff · repo");
+    expect(options[0]!.name).toContain("transcript");
+    expect(options[0]!.description).toBe("Pass transcript to a reviewer");
+    expect(options[1]!.name).toBe("Deploy · global · commands");
+    expect(options[1]!.description).toBe("deploy");
+  });
+
+  test("profile input options never expose args", () => {
+    const entry: WorkflowListEntry = {
+      name: "pick",
+      source: "global",
+      file: "/g/pick.yaml",
+      inputs: [{ name: "who", type: "profile", options: ["claude", "codex"] }],
+    };
+    expect(entry.inputs?.[0]?.options).toEqual(["claude", "codex"]);
+    expect(JSON.stringify(entry.inputs)).not.toContain("args");
+  });
+});
+
+describe("entrySensitivity", () => {
+  test("aggregates command transcript and sensitive methods", () => {
+    expect(
+      entrySensitivity({
+        name: "x",
+        source: "repo",
+        file: "/x",
+        hasCommands: true,
+        needsTranscript: true,
+        sensitiveMethods: ["layout.apply"],
+        unresolvedChildren: ["missing"],
+      }),
+    ).toEqual(["commands", "transcript", "herdr:layout.apply", "unresolved:missing"]);
+  });
+});
+
+describe("display titles", () => {
+  test("humanize filename when title omitted", () => {
+    expect(humanizeWorkflowName("chat-handoff")).toBe("Chat Handoff");
+    expect(workflowDisplayTitle("chat-handoff")).toBe("Chat Handoff");
+    expect(workflowDisplayTitle("chat-handoff", "Custom")).toBe("Custom");
   });
 });
 

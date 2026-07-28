@@ -4,29 +4,59 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap"
+    />
     <title>herdr-workflows</title>
     <style>
       :root {
         color-scheme: dark;
-        --bg: rgb(44 50 60);
-        --bg-elevated: rgb(52 58 70);
-        --ink: rgb(236 239 244);
-        --ink-soft: rgb(216 222 233);
-        --muted: rgb(154 163 181);
-        --line: rgb(61 68 82);
+        --bg: rgb(46 52 64);
+        --bg-elevated: rgb(52 59 73);
+        --ink: rgb(255 255 255);
+        --ink-soft: rgb(236 239 244);
+        --muted: rgb(135 146 168);
+        --muted-2: rgb(95 106 128);
+        --line: rgb(67 76 94);
         --line-strong: rgb(76 86 106);
-        --accent: rgb(233 226 118);
-        --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+        --accent: rgb(136 192 208);
+        --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
         --green: rgb(163 190 140);
-        --red: rgb(201 131 138);
-        --term-bg: rgb(35 40 49);
-        --term-border: rgb(59 66 82);
-        --term-text: rgb(216 222 233);
+        --yellow: rgb(235 203 139);
+        --red: rgb(191 97 106);
+        --term-bg: rgb(59 66 82);
+        --term-border: rgb(67 76 94);
+        --term-text: rgb(236 239 244);
         --fill: var(--accent);
-        --fill-ink: rgb(38 41 42);
+        --fill-ink: rgb(46 52 64);
+        --canvas-bg: rgb(46 52 64);
+        --canvas-dot: rgb(76 86 106);
+        --edge: rgb(95 106 128);
+        --scrim: rgb(24 27 33 / 72%);
+        --n-trigger: rgb(180 142 173);
+        --n-run: rgb(163 190 140);
+        --n-agent: rgb(129 161 193);
+        --n-use: rgb(235 203 139);
+        --n-prim: rgb(143 188 187);
+        --tok-key: var(--n-agent);
+        --tok-verb: var(--yellow);
+        --tok-str: var(--green);
+        --tok-num: var(--n-use);
+        --tok-com: var(--muted);
+        --tok-blk: var(--n-prim);
+        --tok-ph: var(--n-trigger);
+        --tok-pun: var(--muted);
+        --caret: var(--accent);
+        --pop-bg: var(--bg-elevated);
+        --pop-sel: var(--accent-soft);
+        --toast-bg: var(--bg-elevated);
+        --num-bg: var(--line-strong);
         --radius: 4px;
         --radius-sm: 2px;
-        --mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       }
       * {
         box-sizing: border-box;
@@ -45,7 +75,7 @@
         min-height: 100vh;
       }
       ::selection {
-        background: color-mix(in srgb, var(--accent) 25%, transparent);
+        background: var(--accent-soft);
       }
       ::-webkit-scrollbar {
         width: 10px;
@@ -55,20 +85,50 @@
         background: var(--line-strong);
         border-radius: 6px;
       }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          transition-duration: 1ms !important;
+          animation-duration: 1ms !important;
+        }
+      }
 
       header {
         display: flex;
-        gap: 0.5rem;
+        gap: 1.2rem;
         align-items: center;
         padding: 0.7rem 1.1rem;
         border-bottom: 1px solid var(--line);
-        background: var(--bg-elevated);
+        background: color-mix(in srgb, var(--bg) 92%, transparent);
+        backdrop-filter: blur(12px);
+        position: sticky;
+        top: 0;
+        z-index: 10;
       }
       header h1 {
         font-size: 14px;
-        margin-right: 1rem;
         font-weight: 700;
-        letter-spacing: -0.01em;
+        letter-spacing: -0.04em;
+      }
+      header h1 span {
+        color: var(--muted);
+        font-weight: 400;
+      }
+      header .tabs {
+        display: flex;
+        gap: 0.25rem;
+        padding-left: 1.2rem;
+        border-left: 1px solid var(--line-strong);
+      }
+      header .repo {
+        margin-left: auto;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      header .repo b {
+        color: var(--ink-soft);
+        font-weight: 600;
       }
 
       button,
@@ -86,13 +146,28 @@
           border-color 120ms ease,
           color 120ms ease;
       }
-      button:hover,
+      button:hover:not(:disabled),
       select:hover {
         border-color: var(--accent);
         background: var(--accent-soft);
       }
-      button:active {
+      button:not(.plus):active {
         transform: translateY(1px);
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      button.primary {
+        background: var(--ink);
+        border-color: transparent;
+        color: var(--bg);
+        font-weight: 600;
+      }
+      button.primary:hover:not(:disabled) {
+        background: var(--accent);
+        border-color: transparent;
+        color: var(--ink);
       }
       input {
         min-width: 9rem;
@@ -173,6 +248,34 @@
         font-size: 11px;
         color: var(--muted);
       }
+      .flags {
+        font-size: 11px;
+        color: var(--n-use);
+        margin: 0.35rem 0 0.6rem;
+      }
+      .flags.warn {
+        padding: 0.4rem 0.55rem;
+        border: 1px solid color-mix(in srgb, var(--n-use) 40%, var(--line));
+        border-radius: var(--radius);
+        background: color-mix(in srgb, var(--n-use) 12%, transparent);
+      }
+      .row-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 0.1rem;
+        min-width: 0;
+      }
+      .row-meta .sub {
+        font-size: 11px;
+        color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      aside .row.on .row-meta .sub {
+        color: var(--fill-ink);
+        opacity: 0.85;
+      }
 
       section {
         display: flex;
@@ -186,6 +289,13 @@
         gap: 0.5rem;
         flex-wrap: wrap;
         align-items: center;
+      }
+      .bar .cap {
+        font-size: 11px;
+        color: var(--muted);
+        text-transform: lowercase;
+        letter-spacing: 0.06em;
+        font-weight: 600;
       }
       textarea {
         flex: 1;
@@ -211,6 +321,10 @@
       .status.ok {
         color: var(--green);
       }
+      .status.jump {
+        cursor: pointer;
+        text-decoration: underline dotted;
+      }
       code {
         background: var(--term-bg);
         border: 1px solid var(--term-border);
@@ -226,7 +340,120 @@
         display: none !important;
       }
 
-      /* segmented text/visual toggle */
+      .toast {
+        position: fixed;
+        right: 1.1rem;
+        bottom: 1.1rem;
+        z-index: 50;
+        padding: 0.55rem 0.9rem;
+        border-radius: var(--radius);
+        background: var(--toast-bg);
+        border: 1px solid var(--line-strong);
+        box-shadow: 0 6px 20px var(--scrim);
+        font-size: 0.85rem;
+      }
+      .toast.ok {
+        border-color: var(--green);
+        color: var(--green);
+      }
+      .toast.bad {
+        border-color: var(--red);
+        color: var(--red);
+      }
+
+      /* yaml editor: highlighted <pre> under a transparent-text textarea; metrics must match exactly */
+      .ed {
+        position: relative;
+        flex: 1;
+        min-height: 55vh;
+      }
+      .ed .hl,
+      .ed textarea {
+        position: absolute;
+        inset: 0;
+        margin: 0;
+        font: inherit;
+        font-family: var(--mono);
+        font-size: 14px;
+        line-height: 1.7;
+        letter-spacing: normal;
+        tab-size: 2;
+        padding: 0.8rem 1rem;
+        border: 1px solid var(--term-border);
+        border-radius: var(--radius);
+        white-space: pre-wrap;
+        overflow-wrap: break-word;
+        overflow-y: scroll;
+        overflow-x: hidden;
+      }
+      .ed .hl {
+        border-color: transparent;
+        background: var(--term-bg);
+        color: var(--term-text);
+        pointer-events: none;
+      }
+      .ed .hl::-webkit-scrollbar-thumb {
+        background: transparent;
+      }
+      .ed .hl.mirror {
+        visibility: hidden;
+      }
+      .ed textarea {
+        resize: none;
+        background: transparent;
+        color: transparent;
+        caret-color: var(--caret);
+      }
+      .tok-key {
+        color: var(--tok-key);
+      }
+      .tok-verb {
+        color: var(--tok-verb);
+        font-weight: 600;
+      }
+      .tok-str {
+        color: var(--tok-str);
+      }
+      .tok-num {
+        color: var(--tok-num);
+      }
+      .tok-com {
+        color: var(--tok-com);
+        font-style: italic;
+      }
+      .tok-blk {
+        color: var(--tok-blk);
+      }
+      .tok-ph {
+        color: var(--tok-ph);
+      }
+      .tok-pun {
+        color: var(--tok-pun);
+      }
+
+      .ac {
+        position: absolute;
+        z-index: 6;
+        min-width: 12rem;
+        max-width: 22rem;
+        max-height: 12rem;
+        overflow: auto;
+        background: var(--pop-bg);
+        border: 1px solid var(--line-strong);
+        border-radius: var(--radius);
+        box-shadow: 0 6px 20px var(--scrim);
+        font-size: 0.85rem;
+      }
+      .ac div {
+        padding: 0.2rem 0.6rem;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .ac div.on {
+        background: var(--pop-sel);
+        color: var(--accent);
+      }
+
       .seg {
         display: inline-flex;
         border: 1px solid var(--line-strong);
@@ -245,91 +472,329 @@
       .seg button.on:hover {
         background: var(--fill);
       }
-      .spacer {
-        flex: 1;
+      .addbar {
+        display: flex;
+        gap: 0.4rem;
+        flex-wrap: wrap;
+        align-items: center;
       }
 
-      /* visual step cards */
-      #visual {
-        display: flex;
-        flex-direction: column;
-        gap: 0.6rem;
-        min-height: 40vh;
+      /* canvas */
+      .canvas {
+        position: relative;
         flex: none;
-      }
-      .step {
+        height: 62vh;
+        min-height: 22rem;
+        overflow: hidden;
         border: 1px solid var(--line);
         border-radius: var(--radius);
-        background: var(--bg-elevated);
-        padding: 0.7rem 0.8rem;
-        display: grid;
-        grid-template-columns: auto auto 1fr auto;
-        gap: 0.5rem 0.6rem;
-        align-items: start;
-      }
-      .step.drag {
-        opacity: 0.4;
-      }
-      .step.over {
-        border-color: var(--accent);
-      }
-      .step .grip {
+        background-color: var(--canvas-bg);
+        background-image: radial-gradient(var(--canvas-dot) 1px, transparent 1px);
+        touch-action: none;
         cursor: grab;
-        color: var(--muted);
-        user-select: none;
-        padding-top: 0.4rem;
-        line-height: 1;
-        font-size: 1.1rem;
       }
-      .step .grip:active {
+      .canvas:focus {
+        outline: none;
+      }
+      .canvas:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: -2px;
+      }
+      .canvas.panning {
         cursor: grabbing;
       }
-      .step select.verb {
-        align-self: start;
+      .canvas .edges {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+        pointer-events: none;
       }
-      .step .fields {
-        grid-column: 3;
+      .canvas .edges path {
+        fill: none;
+        stroke: var(--edge);
+        stroke-width: 2;
+      }
+      .canvas .layer {
+        position: absolute;
+        inset: 0;
+        transform-origin: 0 0;
+        pointer-events: none;
+      }
+      .canvas .layer > * {
+        pointer-events: auto;
+      }
+      .canvas .empty {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        align-content: center;
+        gap: 0.6rem;
+        pointer-events: none;
+        text-align: center;
+      }
+      .canvas .empty p {
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      .canvas .empty button {
+        pointer-events: auto;
+        background: var(--bg-elevated);
+      }
+
+      .node {
+        position: absolute;
+        width: 96px;
+        height: 96px;
+        border-radius: 8px;
+        border: 1px solid var(--line-strong);
+        background: var(--bg-elevated);
+        display: grid;
+        place-items: center;
+        cursor: grab;
+        user-select: none;
+      }
+      .node:active {
+        cursor: grabbing;
+      }
+      .node.sel,
+      .node:focus-visible {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px var(--accent-soft);
+        outline: none;
+      }
+      .node.trigger {
+        border-radius: 46px 8px 8px 46px;
+        cursor: default;
+      }
+      .node .icon {
+        font-size: 1.5rem;
+        line-height: 1;
+        color: var(--tint);
+      }
+      .node .num {
+        position: absolute;
+        top: -9px;
+        left: -9px;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 4px;
+        border-radius: 10px;
+        background: var(--num-bg);
+        color: var(--ink);
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 20px;
+        text-align: center;
+      }
+      .node .ext {
+        position: absolute;
+        top: -9px;
+        right: -9px;
+        width: 20px;
+        height: 20px;
+        border-radius: 10px;
+        background: var(--n-trigger);
+        color: var(--fill-ink);
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 20px;
+        text-align: center;
+      }
+      .node .label {
+        position: absolute;
+        top: 104px;
+        left: -42px;
+        width: 180px;
+        text-align: center;
+        font-size: 12px;
+        line-height: 1.35;
+        color: var(--ink-soft);
+        pointer-events: none;
+      }
+      .node .label small {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .node .port {
+        position: absolute;
+        top: 50%;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--edge);
+        transform: translateY(-50%);
+      }
+      .node .port.in {
+        left: -5px;
+      }
+      .node .port.out {
+        right: -5px;
+      }
+      .node .tools {
+        position: absolute;
+        top: -30px;
+        right: 0;
+        display: none;
+        gap: 0.25rem;
+      }
+      .node:hover .tools,
+      .node.sel .tools {
+        display: flex;
+      }
+      .node .tools button {
+        padding: 0.1rem 0.35rem;
+        font-size: 12px;
+        background: var(--bg-elevated);
+      }
+      .plus {
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        padding: 0;
+        min-width: 0;
+        display: grid;
+        place-items: center;
+        font-size: 13px;
+        line-height: 1;
+        border-radius: var(--radius-sm);
+        background: var(--canvas-bg);
+        color: var(--muted);
+      }
+      .plus:hover {
+        color: var(--accent);
+      }
+
+      .zoombar {
+        position: absolute;
+        left: 0.6rem;
+        bottom: 0.6rem;
+        display: flex;
+        gap: 0.25rem;
+      }
+      .zoombar button {
+        padding: 0.2rem 0.5rem;
+        background: var(--bg-elevated);
+      }
+      .canvas .addnode {
+        position: absolute;
+        top: 0.6rem;
+        right: 0.6rem;
+        background: var(--bg-elevated);
+      }
+      .canvas .tip {
+        position: absolute;
+        right: 0.6rem;
+        bottom: 0.6rem;
+        font-size: 11px;
+        color: var(--muted);
+        pointer-events: none;
+      }
+
+      .palette {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 17rem;
+        padding: 0.6rem;
         display: flex;
         flex-direction: column;
         gap: 0.4rem;
+        background: var(--bg-elevated);
+        border-left: 1px solid var(--line);
+        overflow: auto;
+        z-index: 4;
       }
-      .step .fields label {
+      .palette h3 {
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .palette .item {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.1rem 0.6rem;
+        text-align: left;
+        padding: 0.5rem 0.6rem;
+      }
+      .palette .item .icon {
+        grid-row: span 2;
+        align-self: center;
+        font-size: 1.1rem;
+        color: var(--tint);
+      }
+      .palette .item small {
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.4;
+      }
+
+      /* node parameters modal — scoped to the canvas so editor teardown removes it */
+      .ndv {
+        position: absolute;
+        inset: 0;
+        background: var(--scrim);
+        display: grid;
+        place-items: center;
+        z-index: 10;
+      }
+      .ndv .panel {
+        width: min(46rem, 92%);
+        max-height: 94%;
+        overflow: auto;
+        background: var(--bg);
+        border: 1px solid var(--line-strong);
+        border-radius: var(--radius);
+        padding: 1rem 1.1rem;
         display: flex;
         flex-direction: column;
-        gap: 0.15rem;
+        gap: 0.7rem;
+      }
+      .ndv .head {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+      }
+      .ndv .head .icon {
+        font-size: 1.3rem;
+        color: var(--tint);
+      }
+      .ndv .head input {
+        flex: 1;
+      }
+      .ndv .kept {
+        font-size: 0.75rem;
+        color: var(--n-trigger);
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
         font-size: 0.72rem;
         color: var(--muted);
       }
-      .step .fields input,
-      .step .fields textarea {
+      .field textarea {
+        min-height: 5rem;
+        font-size: 0.85rem;
+        flex: none;
+      }
+      .field input,
+      .field select {
         font-size: 0.85rem;
       }
-      .step .fields textarea {
-        min-height: 3.5rem;
-        resize: vertical;
-      }
-      .step .fields .inline {
+      .field.inline {
         flex-direction: row;
         align-items: center;
         gap: 0.4rem;
         font-size: 0.8rem;
         color: var(--ink-soft);
-      }
-      .step .rm {
-        align-self: start;
-        color: var(--muted);
-        border-color: transparent;
-        padding: 0.3rem 0.5rem;
-      }
-      .step .rm:hover {
-        color: var(--red);
-        border-color: var(--red);
-        background: transparent;
-      }
-      .addbar {
-        display: flex;
-        gap: 0.4rem;
-        flex-wrap: wrap;
       }
 
       /* runs */
@@ -377,11 +842,13 @@
   </head>
   <body>
     <header>
-      <h1>herdr-workflows</h1>
-      <button class="tab on" data-tab="workflows">Workflows</button>
-      <button class="tab" data-tab="config">Config</button>
-      <button class="tab" data-tab="runs">Runs</button>
-      <span id="repo" class="badge" style="margin-left: auto"></span>
+      <h1>herdr<span>-workflows</span></h1>
+      <nav class="tabs">
+        <button class="tab on" data-tab="workflows">Workflows</button>
+        <button class="tab" data-tab="config">Config</button>
+        <button class="tab" data-tab="runs">Runs</button>
+      </nav>
+      <span id="repo" class="repo"></span>
     </header>
     <main>
       <aside id="list"></aside>
@@ -390,39 +857,80 @@
     <script>
       const TOKEN = "__HWF_TOKEN__";
       const $ = (id) => document.getElementById(id);
-      let state = { entries: [], agents: [], repoRoot: "" };
+      let state = { entries: [], profiles: [], repoRoot: "" };
       let tab = "workflows";
       let current = null; // {name, scope}
       let openSeq = 0; // last-click-wins token for openWorkflow
       let configDirty = false;
+      let editorDirty = false;
+      let editorFileText = ""; // open workflow as last read from disk — live reload compares to it
+      let editorMode = "text"; // desired mode, kept across live reloads
+      let wantOpen = null; // {name, scope} from the URL hash; opened as soon as the file exists
+
+      function errMsg(e) {
+        return (e && e.message) || String(e);
+      }
+
+      function esc(s) {
+        return String(s == null ? "" : s).replace(
+          /[&<>"]/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+        );
+      }
+
+      // Lives on <body>, so it outlives the post-save re-render of the editor pane.
+      function toast(msg, ok) {
+        const t = document.createElement("div");
+        t.className = "toast " + (ok ? "ok" : "bad");
+        t.setAttribute("role", "status");
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(() => t.remove(), 2600);
+      }
 
       async function api(path, opts) {
         const o = opts || {};
         o.headers = Object.assign({ "x-hwf-token": TOKEN }, o.headers || {});
         if (o.body) o.headers["content-type"] = "application/json";
-        const res = await fetch(path, o);
-        return { status: res.status, data: await res.json().catch(() => ({})) };
+        let res;
+        try {
+          res = await fetch(path, o);
+        } catch (e) {
+          return {
+            status: 0,
+            data: { ok: false, error: "cannot reach the server — " + errMsg(e) },
+          };
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          data.ok = false;
+          if (!data.error) data.error = "server returned " + res.status;
+        }
+        return { status: res.status, data };
+      }
+
+      function confirmLeave() {
+        if (configDirty && !confirm("discard unsaved config changes?")) return false;
+        if (editorDirty && !confirm("discard unsaved workflow changes?")) return false;
+        configDirty = false;
+        editorDirty = false;
+        return true;
       }
 
       async function loadState() {
-        try {
-          const { data } = await api("/api/state");
-          if (data.error) throw new Error(data.error);
-          state = Object.assign({ entries: [], agents: [], repoRoot: "" }, data);
-          $("repo").textContent = state.repoRoot;
-        } catch (e) {
-          state = { entries: [], agents: [], repoRoot: "" };
+        const { status, data } = await api("/api/state");
+        if (status !== 200 || data.error) {
+          state = { entries: [], profiles: [], repoRoot: "" };
           const pane = $("pane");
           pane.innerHTML = "";
           const p = document.createElement("p");
           p.className = "status bad";
-          p.textContent =
-            "cannot reach the hwf server — reload to retry (" +
-            (e && e.message ? e.message : e) +
-            ")";
+          p.textContent = "cannot reach the hwf server — reload to retry (" + data.error + ")";
           pane.appendChild(p);
           return;
         }
+        state = Object.assign({ entries: [], profiles: [], repoRoot: "" }, data);
+        $("repo").innerHTML = "repo <b>" + esc(state.repoRoot) + "</b>";
         render();
       }
 
@@ -446,20 +954,39 @@
         nu.style.width = "100%";
         nu.onclick = newWorkflow;
         list.appendChild(nu);
-        for (const e of state.entries) {
+        const addRow = (e) => {
           const row = document.createElement("button");
           row.type = "button";
           row.className =
             "row" + (!e.valid ? " bad" : "") + (current && current.name === e.name ? " on" : "");
+          const meta = document.createElement("div");
+          meta.className = "row-meta";
           const name = document.createElement("span");
-          name.textContent = e.name;
+          name.textContent = e.title || e.name;
+          const sub = document.createElement("span");
+          sub.className = "sub";
+          const bits = [e.provenance || e.source];
+          if (e.flags && e.flags.length) bits.push(e.flags.join(" · "));
+          sub.textContent = bits.join(" · ");
+          meta.append(name, sub);
           const badge = document.createElement("span");
           badge.className = "badge";
           badge.textContent =
-            e.inRepo && e.inGlobal ? "local + global" : e.source === "repo" ? "local" : "global";
-          row.append(name, badge);
-          row.onclick = () => openWorkflow(e.name, e.source);
+            e.inRepo && e.inGlobal ? "repo + global" : e.source === "repo" ? "repo" : "global";
+          row.append(meta, badge);
+          row.onclick = () => {
+            if (confirmLeave()) openWorkflow(e.name, e.source);
+          };
           list.appendChild(row);
+        };
+        for (const e of state.entries) if (!e.hidden) addRow(e);
+        const hidden = state.entries.filter((e) => e.hidden);
+        if (hidden.length) {
+          const head = document.createElement("p");
+          head.className = "hint";
+          head.textContent = "background — not shown in the picker";
+          list.appendChild(head);
+          for (const e of hidden) addRow(e);
         }
         if (state.entries.length === 0) {
           const empty = document.createElement("p");
@@ -473,47 +1000,1396 @@
       async function openWorkflow(name, scope) {
         const seq = ++openSeq;
         current = { name, scope };
+        wantOpen = null;
+        setHash("w=" + scope + ":" + name);
         renderWorkflows();
         const pane = $("pane");
         pane.innerHTML = "<p class=hint>loading…</p>";
-        const { data } = await api(
-          "/api/workflow?name=" + encodeURIComponent(name) + "&scope=" + scope,
-        );
+        const r = await api("/api/workflow?name=" + encodeURIComponent(name) + "&scope=" + scope);
         if (seq !== openSeq) return;
-        if (data.error) {
+        // A stored file that fails to parse still opens: the text came back, the error is pinned.
+        if (r.status !== 200) {
           pane.innerHTML = "";
           const p = document.createElement("p");
           p.className = "status bad";
-          p.textContent = data.error;
+          p.textContent = r.data.error || "could not load " + name;
           pane.appendChild(p);
           return;
         }
-        renderEditor(name, scope, data.text || "");
+        renderEditor(name, scope, r.data.text || "", r.data.error || "", r.data.flags || []);
       }
 
       function newWorkflow() {
+        if (!confirmLeave()) return;
         openSeq += 1; // cancel any in-flight openWorkflow
         current = { name: "", scope: "repo" };
-        renderEditor("", "repo", "steps:\n  - shell: echo hello\n");
+        renderWorkflows();
+        renderEditor("", "repo", "version: v1alpha1\nsteps:\n  - run: [echo, hello]\n", "", []);
       }
 
       // Readable step blocks appended at the end of the step list (the right slot for a linear runner).
       const SKELETONS = {
-        shell: "  - shell: ",
-        agent: "  - agent: \n    prompt: |-\n      ",
-        open: "  - open: ",
-        herdr: "  - herdr: \n    params: {}",
-        run: "  - run: ",
+        run: "  - run: [echo, hello]\n",
+        agent:
+          "  - agent: |\n      review this\n    using: claude\n    pane:\n      open: beside\n",
+        herdr: "  - herdr: notification.show\n    params: { title: done }\n",
+        workflow: "  - workflow: child\n",
       };
 
-      const VERBS = ["shell", "agent", "open", "herdr", "run"];
+      const VERBS = ["run", "agent", "herdr", "workflow"];
 
-      function renderEditor(name, scope, text) {
+      // Mirrors the Zod schema in src/workflow/parse.ts.
+      const TOP_KEYS = [
+        "version",
+        "title",
+        "description",
+        "hidden",
+        "inputs",
+        "returns",
+        "on_failure",
+        "steps",
+      ];
+      const STEP_KEYS = [
+        "agent",
+        "run",
+        "herdr",
+        "workflow",
+        "id",
+        "using",
+        "target",
+        "shell",
+        "params",
+        "inputs",
+        "cwd",
+        "env",
+        "pane",
+        "background",
+        "ready_when",
+        "timeout",
+        "retry",
+        "when",
+        "continue_on_error",
+      ];
+      const CONTEXT_HINTS = [
+        "context.workspace",
+        "context.tab",
+        "context.pane",
+        "context.worktree",
+        "context.agent",
+        "context.selection",
+        "context.platform",
+        "context.transcript",
+        "context.transcript_file",
+        "steps.<id>.response",
+        "steps.<id>.agent",
+        "steps.<id>.pane_id",
+        "steps.<id>.stdout",
+        "steps.<id>.stderr",
+        "steps.<id>.exit_code",
+        "steps.<id>.failed",
+      ];
+
+      const NODE_TYPES = {
+        run: {
+          title: "Command",
+          icon: ">_",
+          tint: "var(--n-run)",
+          desc: "Local argv or shell command with natural result",
+        },
+        agent: {
+          title: "Managed agent",
+          icon: "✦",
+          tint: "var(--n-agent)",
+          desc: "Native Herdr agent via profile or existing target",
+        },
+        herdr: {
+          title: "Herdr",
+          icon: "⌗",
+          tint: "var(--n-prim)",
+          desc: "Explicit herdr: method with params",
+        },
+        workflow: {
+          title: "Child workflow",
+          icon: "⊞",
+          tint: "var(--n-use)",
+          desc: "Invoke another workflow with isolated inputs",
+        },
+      };
+
+      const SVGNS = "http://www.w3.org/2000/svg";
+      const NODE_W = 96;
+      const NODE_H = 96;
+      const GAP_X = 240;
+
+      function verbOf(step) {
+        if (step.run !== undefined) return "run";
+        if (step.agent !== undefined) return "agent";
+        if (step.herdr !== undefined) return "herdr";
+        if (step.workflow !== undefined) return "workflow";
+        return "run";
+      }
+
+      function paneFields() {
+        return [
+          { k: "pane.open", l: "pane open", t: "select", opts: ["", "tab", "beside", "below"] },
+          { k: "pane.target", l: "pane target (split anchor)" },
+          { k: "pane.workspace", l: "pane workspace (tab)" },
+          { k: "pane.size", l: "pane size %" },
+          { k: "pane.focus", l: "focus new pane", t: "check" },
+          {
+            k: "pane.close",
+            l: "close pane",
+            t: "select",
+            opts: ["", "success", "always"],
+          },
+        ];
+      }
+
+      function fieldsFor(verb) {
+        const common = [
+          { k: "when", l: "when" },
+          { k: "continue_on_error", l: "continue on error", t: "check" },
+          { k: "timeout", l: "timeout (e.g. 30s)" },
+          { k: "retry", l: "retry — JSON {attempts, delay?}", t: "area" },
+        ];
+        if (verb === "run")
+          return [
+            { k: "run", l: "command (string) or argv JSON array", t: "area" },
+            { k: "argv", l: "treat run as argv JSON array", t: "check" },
+            { k: "shell", l: "shell (string form only)" },
+            { k: "cwd", l: "cwd" },
+            { k: "env", l: "env — JSON object", t: "area" },
+            { k: "background", l: "background", t: "check" },
+            { k: "ready_when", l: "ready_when regex" },
+          ]
+            .concat(paneFields())
+            .concat(common);
+        if (verb === "agent")
+          return [
+            { k: "agent", l: "prompt", t: "area" },
+            {
+              k: "mode",
+              l: "mode",
+              t: "select",
+              opts: ["using", "target"],
+            },
+            { k: "using", l: "using profile", t: "select", opts: [""].concat(state.profiles) },
+            { k: "target", l: "target agent/pane" },
+            { k: "cwd", l: "cwd (new-agent only)" },
+            { k: "env", l: "env — JSON object", t: "area" },
+            { k: "background", l: "background", t: "check" },
+          ]
+            .concat(paneFields())
+            .concat(common);
+        if (verb === "workflow")
+          return [
+            {
+              k: "workflow",
+              l: "workflow",
+              t: "select",
+              opts: [""].concat(state.entries.map((e) => e.name)),
+            },
+            { k: "inputs", l: "inputs — JSON object", t: "area" },
+            { k: "when", l: "when" },
+            { k: "continue_on_error", l: "continue on error", t: "check" },
+          ];
+        return [
+          { k: "herdr", l: "method (e.g. notification.show)" },
+          { k: "params", l: "params — JSON object", t: "area" },
+        ].concat(common);
+      }
+
+      function jsonOf(v) {
+        return v && typeof v === "object" ? JSON.stringify(v) : "";
+      }
+
+      function formFrom(verb, step) {
+        const f = { id: typeof step.id === "string" ? step.id : "" };
+        const pane = step.pane && typeof step.pane === "object" ? step.pane : {};
+        f["pane.open"] = pane.open || "";
+        f["pane.target"] = pane.target || "";
+        f["pane.workspace"] = pane.workspace || "";
+        f["pane.size"] = pane.size != null ? String(pane.size) : "";
+        f["pane.focus"] = pane.focus === true;
+        f["pane.close"] = pane.close || "";
+        f.when = typeof step.when === "string" ? step.when : step.when ? jsonOf(step.when) : "";
+        f.continue_on_error = step.continue_on_error === true;
+        f.timeout = step.timeout ? String(step.timeout) : "";
+        f.retry = jsonOf(step.retry);
+        f.cwd = step.cwd || "";
+        f.env = jsonOf(step.env);
+        f.background = step.background === true;
+        f.ready_when = step.ready_when || "";
+        if (verb === "run") {
+          f.argv = Array.isArray(step.run);
+          f.run = f.argv ? JSON.stringify(step.run) : typeof step.run === "string" ? step.run : "";
+          f.shell = step.shell || "";
+        } else if (verb === "agent") {
+          f.agent = typeof step.agent === "string" ? step.agent : "";
+          f.mode = step.target ? "target" : "using";
+          f.using = step.using || "";
+          f.target = step.target || "";
+        } else if (verb === "workflow") {
+          f.workflow = step.workflow || "";
+          f.inputs = jsonOf(step.inputs);
+        } else {
+          f.herdr = step.herdr || "";
+          f.params = jsonOf(step.params);
+        }
+        return f;
+      }
+
+      // Step keys the form has no widget for: carried through untouched.
+      function extraOf(verb, step) {
+        const used = new Set([
+          "id",
+          "when",
+          "continue_on_error",
+          "timeout",
+          "retry",
+          "cwd",
+          "env",
+          "pane",
+          "background",
+          "ready_when",
+        ]);
+        if (verb === "run") {
+          used.add("run");
+          used.add("shell");
+        } else if (verb === "agent") {
+          used.add("agent");
+          used.add("using");
+          used.add("target");
+        } else if (verb === "workflow") {
+          used.add("workflow");
+          used.add("inputs");
+        } else {
+          used.add("herdr");
+          used.add("params");
+        }
+        const extra = {};
+        for (const k of Object.keys(step)) if (!used.has(k)) extra[k] = step[k];
+        return extra;
+      }
+
+      function readPane(form) {
+        const open = String(form["pane.open"] || "").trim();
+        if (!open) return null;
+        const pane = { open };
+        const target = String(form["pane.target"] || "").trim();
+        const workspace = String(form["pane.workspace"] || "").trim();
+        const size = String(form["pane.size"] || "").trim();
+        const close = String(form["pane.close"] || "").trim();
+        if (target) pane.target = target;
+        if (workspace) pane.workspace = workspace;
+        if (size) {
+          const n = Number(size);
+          if (!Number.isInteger(n) || n <= 0 || n >= 100)
+            return { error: "pane.size must be 1–99" };
+          pane.size = n;
+        }
+        if (form["pane.focus"]) pane.focus = true;
+        if (close) pane.close = close;
+        return { pane };
+      }
+
+      // Live form values → a raw step the /api/format endpoint accepts, or an error to show.
+      function stepFrom(verb, form, extra) {
+        const out = Object.assign({}, extra);
+        const s = (k) => String(form[k] ?? "").trim();
+        const jsonInto = (key, raw, label) => {
+          try {
+            out[key] = JSON.parse(raw);
+            return null;
+          } catch {
+            return label + " must be valid JSON";
+          }
+        };
+        if (verb === "run") {
+          if (form.argv) {
+            const err = jsonInto("run", s("run") || "[]", "run argv");
+            if (err) return { error: err };
+            if (!Array.isArray(out.run)) return { error: "run argv must be a JSON array" };
+          } else {
+            out.run = String(form.run ?? "");
+          }
+          if (s("shell")) out.shell = s("shell");
+        } else if (verb === "agent") {
+          out.agent = String(form.agent ?? "");
+          if (form.mode === "target") {
+            if (s("target")) out.target = s("target");
+          } else if (s("using")) out.using = s("using");
+        } else if (verb === "workflow") {
+          out.workflow = s("workflow");
+          if (s("inputs")) {
+            const err = jsonInto("inputs", s("inputs"), "inputs");
+            if (err) return { error: err };
+          }
+        } else {
+          out.herdr = s("herdr");
+          if (s("params")) {
+            const err = jsonInto("params", s("params"), "params");
+            if (err) return { error: err };
+          }
+        }
+        if (verb === "run" || (verb === "agent" && form.mode !== "target")) {
+          if (s("cwd")) out.cwd = s("cwd");
+          if (s("env")) {
+            const err = jsonInto("env", s("env"), "env");
+            if (err) return { error: err };
+          }
+          if (form.background) out.background = true;
+          if (verb === "run" && s("ready_when")) out.ready_when = s("ready_when");
+          const placed = readPane(form);
+          if (placed && placed.error) return { error: placed.error };
+          if (placed && placed.pane) out.pane = placed.pane;
+        } else if (verb === "agent" && form.background) {
+          out.background = true;
+        }
+        if (s("timeout")) out.timeout = s("timeout");
+        if (s("retry")) {
+          const err = jsonInto("retry", s("retry"), "retry");
+          if (err) return { error: err };
+        }
+        if (s("when")) out.when = s("when");
+        if (form.continue_on_error) out.continue_on_error = true;
+        if (s("id")) out.id = s("id");
+        return { step: out };
+      }
+
+      function seedStep(verb) {
+        if (verb === "herdr") return { herdr: "notification.show", params: { title: "done" } };
+        if (verb === "agent")
+          return {
+            agent: "review this",
+            using: state.profiles[0] || "claude",
+            pane: { open: "beside" },
+          };
+        if (verb === "workflow") return { workflow: "" };
+        return { run: ["echo", "hello"] };
+      }
+
+      function nodeSummary(verb, form) {
+        if (verb === "run") return form.run || "no command";
+        if (verb === "agent")
+          return form.mode === "target"
+            ? form.target || "no target"
+            : form.using || form.agent || "no profile";
+        if (verb === "workflow") return form.workflow || "no workflow";
+        return form.herdr || "herdr";
+      }
+
+      function nodeTitle(verb, form) {
+        return form.id || NODE_TYPES[verb].title;
+      }
+
+      function clamp(v, lo, hi) {
+        return Math.max(lo, Math.min(hi, v));
+      }
+
+      // n8n-style canvas: pan/zoom surface, one box per step, execution order = left-to-right.
+      function makeCanvas(root, onChange, triggerLabel) {
+        const svg = document.createElementNS(SVGNS, "svg");
+        svg.setAttribute("class", "edges");
+        const g = document.createElementNS(SVGNS, "g");
+        svg.appendChild(g);
+        const layer = document.createElement("div");
+        layer.className = "layer";
+        root.append(svg, layer);
+        root.tabIndex = 0;
+
+        let nodes = [];
+        let view = { x: 60, y: 90, z: 1 };
+        let selected = null;
+        let palette = null;
+        let ndv = null;
+        const undos = [];
+
+        const trigger = document.createElement("div");
+        trigger.className = "node trigger";
+        trigger.style.setProperty("--tint", "var(--n-trigger)");
+        trigger.innerHTML =
+          '<span class="icon">⚡</span><span class="port out"></span><span class="label"></span>';
+        trigger.querySelector(".label").textContent = triggerLabel();
+        layer.appendChild(trigger);
+
+        const empty = document.createElement("div");
+        empty.className = "empty hide";
+        const emptyMsg = document.createElement("p");
+        emptyMsg.textContent = "This workflow has no steps yet.";
+        const emptyBtn = document.createElement("button");
+        emptyBtn.textContent = "add your first step";
+        emptyBtn.onclick = () => openPalette(null);
+        empty.append(emptyMsg, emptyBtn);
+        root.appendChild(empty);
+
+        function ordered() {
+          return nodes.slice().sort((a, b) => a.x - b.x || a.y - b.y);
+        }
+
+        function snap() {
+          undos.push(
+            nodes.map((n) => ({
+              verb: n.verb,
+              form: Object.assign({}, n.form),
+              extra: n.extra,
+              x: n.x,
+              y: n.y,
+            })),
+          );
+          if (undos.length > 40) undos.shift();
+        }
+
+        function setNodes(recs) {
+          for (const n of nodes) n.el.remove();
+          nodes = recs.map((r) => ({
+            verb: r.verb,
+            form: Object.assign({}, r.form),
+            extra: r.extra,
+            x: r.x,
+            y: r.y,
+          }));
+          for (const n of nodes) makeNodeEl(n);
+          selected = null;
+        }
+
+        function undo() {
+          const prev = undos.pop();
+          if (!prev) return;
+          setNodes(prev);
+          draw();
+          onChange();
+        }
+
+        function applyView() {
+          const t = "translate(" + view.x + "px," + view.y + "px) scale(" + view.z + ")";
+          layer.style.transform = t;
+          g.setAttribute(
+            "transform",
+            "translate(" + view.x + "," + view.y + ") scale(" + view.z + ")",
+          );
+          root.style.backgroundSize = 20 * view.z + "px " + 20 * view.z + "px";
+          root.style.backgroundPosition = view.x + "px " + view.y + "px";
+        }
+
+        // Counter-scale so the 20px hit target stays clickable when the canvas is zoomed out.
+        function plusScale() {
+          return "translate(-50%,-50%) scale(" + Math.max(1, 1 / view.z) + ")";
+        }
+
+        function rescalePlus() {
+          const t = plusScale();
+          layer.querySelectorAll(".plus").forEach((b) => (b.style.transform = t));
+        }
+
+        function edge(x1, y1, x2, y2) {
+          const d = Math.max(50, (x2 - x1) / 2);
+          const p = document.createElementNS(SVGNS, "path");
+          p.setAttribute(
+            "d",
+            "M " +
+              x1 +
+              " " +
+              y1 +
+              " C " +
+              (x1 + d) +
+              " " +
+              y1 +
+              ", " +
+              (x2 - d) +
+              " " +
+              y2 +
+              ", " +
+              x2 +
+              " " +
+              y2,
+          );
+          g.appendChild(p);
+        }
+
+        // `before` is the node the new step lands in front of (null = append), re-resolved on click.
+        function plusAt(x, y, before) {
+          const b = document.createElement("button");
+          b.className = "plus";
+          b.textContent = "+";
+          b.title = "add a step here";
+          b.style.left = x + "px";
+          b.style.top = y + "px";
+          b.style.transform = plusScale();
+          b.onclick = (e) => {
+            e.stopPropagation();
+            openPalette(before);
+          };
+          layer.appendChild(b);
+        }
+
+        function place() {
+          ordered().forEach((n, i) => {
+            n.el.style.left = n.x + "px";
+            n.el.style.top = n.y + "px";
+            n.el.classList.toggle("sel", selected === n);
+            n.el.querySelector(".num").textContent = i + 1;
+          });
+        }
+
+        function draw() {
+          place();
+          g.innerHTML = "";
+          layer.querySelectorAll(".plus").forEach((el) => el.remove());
+          const seq = ordered();
+          empty.classList.toggle("hide", seq.length > 0);
+          let px = NODE_W;
+          let py = NODE_H / 2;
+          seq.forEach((n) => {
+            const cy = n.y + NODE_H / 2;
+            edge(px, py, n.x, cy);
+            plusAt((px + n.x) / 2, (py + cy) / 2, n);
+            px = n.x + NODE_W;
+            py = cy;
+          });
+          edge(px, py, px + 56, py);
+          plusAt(px + 66, py, null);
+        }
+
+        function relabel(n) {
+          const label = n.el.querySelector(".label");
+          const title = nodeTitle(n.verb, n.form);
+          const summary = nodeSummary(n.verb, n.form);
+          label.textContent = title;
+          const sub = document.createElement("small");
+          sub.textContent = summary;
+          label.appendChild(sub);
+          const keys = Object.keys(n.extra);
+          const ext = n.el.querySelector(".ext");
+          ext.classList.toggle("hide", keys.length === 0);
+          ext.title = keys.length
+            ? "kept from YAML, not shown in this form: " + keys.join(", ")
+            : "";
+          n.el.setAttribute("aria-label", "step " + title + " — " + summary);
+        }
+
+        function makeNodeEl(n) {
+          const el = document.createElement("div");
+          el.className = "node";
+          el.tabIndex = 0;
+          el.setAttribute("role", "button");
+          el.style.setProperty("--tint", NODE_TYPES[n.verb].tint);
+          el.innerHTML =
+            '<span class="icon"></span><span class="num"></span><span class="ext hide">⚙</span>' +
+            '<span class="port in"></span><span class="port out"></span>' +
+            '<span class="label"></span><span class="tools"></span>';
+          el.querySelector(".icon").textContent = NODE_TYPES[n.verb].icon;
+          const del = document.createElement("button");
+          del.textContent = "✕";
+          del.title = "delete step";
+          del.onclick = (e) => {
+            e.stopPropagation();
+            remove(n);
+          };
+          el.querySelector(".tools").appendChild(del);
+          el.ondblclick = (e) => {
+            e.stopPropagation();
+            openNdv(n);
+          };
+          wireNodeDrag(n, el);
+          wireNodeKeys(n, el);
+          n.el = el;
+          layer.appendChild(el);
+          relabel(n);
+          return el;
+        }
+
+        function wireNodeKeys(n, el) {
+          el.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              selected = n;
+              openNdv(n);
+              return;
+            }
+            const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+            if (!step) return;
+            e.preventDefault();
+            const seq = ordered();
+            const next = seq[clamp(seq.indexOf(n) + step, 0, seq.length - 1)];
+            if (!next) return;
+            selected = next;
+            place();
+            next.el.focus();
+          });
+        }
+
+        function wireNodeDrag(n, el) {
+          let start = null;
+          el.addEventListener("pointerdown", (e) => {
+            if (e.button !== 0 || e.target.closest(".tools")) return;
+            e.stopPropagation();
+            el.setPointerCapture(e.pointerId);
+            start = { px: e.clientX, py: e.clientY, x: n.x, y: n.y, moved: false };
+            selected = n;
+            el.focus();
+            place();
+          });
+          el.addEventListener("pointermove", (e) => {
+            if (!start) return;
+            const dx = (e.clientX - start.px) / view.z;
+            const dy = (e.clientY - start.py) / view.z;
+            if (!start.moved && Math.abs(dx) + Math.abs(dy) > 3) {
+              start.moved = true;
+              snap();
+            }
+            n.x = start.x + dx;
+            n.y = start.y + dy;
+            place();
+          });
+          const end = () => {
+            if (!start) return;
+            // Snap back to lanes so the x order that defines execution order is unambiguous.
+            if (start.moved) {
+              ordered().forEach((m, i) => {
+                m.x = GAP_X * (i + 1);
+              });
+            }
+            draw();
+            if (start.moved) onChange();
+            start = null;
+          };
+          el.addEventListener("pointerup", end);
+          el.addEventListener("pointercancel", end);
+        }
+
+        function remove(n) {
+          snap();
+          n.el.remove();
+          nodes = nodes.filter((x) => x !== n);
+          if (selected === n) selected = null;
+          draw();
+          onChange();
+        }
+
+        // Slot a new node into the gap before `index`, shifting the tail right when there is no room.
+        function placeAt(index) {
+          const seq = ordered();
+          if (index >= seq.length) {
+            const last = seq[seq.length - 1];
+            return last ? { x: last.x + GAP_X, y: last.y } : { x: GAP_X, y: 0 };
+          }
+          const next = seq[index];
+          const prev = index > 0 ? seq[index - 1] : null;
+          const prevX = prev ? prev.x : 0;
+          if (next.x - prevX >= GAP_X * 1.6)
+            return { x: (prevX + next.x) / 2, y: prev ? prev.y : next.y };
+          for (const n of seq.slice(index)) n.x += GAP_X;
+          return { x: prevX + GAP_X, y: next.y };
+        }
+
+        function add(verb, index, pos) {
+          snap();
+          const at = pos || placeAt(index == null ? nodes.length : index);
+          const n = { verb, form: formFrom(verb, seedStep(verb)), extra: {}, x: at.x, y: at.y };
+          nodes.push(n);
+          makeNodeEl(n);
+          selected = n;
+          draw();
+          openNdv(n); // the sync fires when the modal closes, so a blank step never flashes an error
+        }
+
+        function slotOf(before) {
+          if (!before) return nodes.length;
+          const i = ordered().indexOf(before);
+          return i < 0 ? nodes.length : i;
+        }
+
+        function openPalette(before) {
+          closePalette();
+          palette = document.createElement("div");
+          palette.className = "palette";
+          const head = document.createElement("h3");
+          head.textContent = "add a step — click, or drag onto the canvas";
+          palette.appendChild(head);
+          for (const verb of VERBS) {
+            const t = NODE_TYPES[verb];
+            const item = document.createElement("button");
+            item.className = "item";
+            item.draggable = true;
+            item.style.setProperty("--tint", t.tint);
+            const icon = document.createElement("span");
+            icon.className = "icon";
+            icon.textContent = t.icon;
+            const title = document.createElement("span");
+            title.textContent = t.title;
+            const desc = document.createElement("small");
+            desc.textContent = t.desc;
+            item.append(icon, title, desc);
+            item.ondragstart = (e) => e.dataTransfer.setData("text/plain", verb);
+            item.onclick = () => {
+              const index = slotOf(before);
+              closePalette();
+              add(verb, index);
+            };
+            palette.appendChild(item);
+          }
+          const close = document.createElement("button");
+          close.textContent = "close";
+          close.onclick = closePalette;
+          palette.appendChild(close);
+          root.appendChild(palette);
+        }
+
+        function closePalette() {
+          if (palette) palette.remove();
+          palette = null;
+        }
+
+        function toCanvas(clientX, clientY) {
+          const r = root.getBoundingClientRect();
+          return {
+            x: (clientX - r.left - view.x) / view.z,
+            y: (clientY - r.top - view.y) / view.z,
+          };
+        }
+
+        root.addEventListener("dragover", (e) => e.preventDefault());
+        root.addEventListener("drop", (e) => {
+          e.preventDefault();
+          const verb = e.dataTransfer.getData("text/plain");
+          if (!NODE_TYPES[verb]) return;
+          closePalette();
+          const p = toCanvas(e.clientX, e.clientY);
+          add(verb, null, { x: p.x - NODE_W / 2, y: p.y - NODE_H / 2 });
+        });
+
+        let pan = null;
+        root.addEventListener("pointerdown", (e) => {
+          if (e.button !== 0) return;
+          if (e.target.closest(".node, .plus, .palette, .zoombar, .addnode, .ndv, .empty")) return;
+          selected = null;
+          place();
+          pan = { px: e.clientX, py: e.clientY, x: view.x, y: view.y };
+          root.classList.add("panning");
+          root.setPointerCapture(e.pointerId);
+        });
+        root.addEventListener("pointermove", (e) => {
+          if (!pan) return;
+          view.x = pan.x + (e.clientX - pan.px);
+          view.y = pan.y + (e.clientY - pan.py);
+          applyView();
+        });
+        const endPan = () => {
+          pan = null;
+          root.classList.remove("panning");
+        };
+        root.addEventListener("pointerup", endPan);
+        root.addEventListener("pointercancel", endPan);
+
+        function bounds() {
+          let minX = 0;
+          let minY = 0;
+          let maxX = NODE_W;
+          let maxY = NODE_H;
+          for (const n of nodes) {
+            minX = Math.min(minX, n.x);
+            minY = Math.min(minY, n.y);
+            maxX = Math.max(maxX, n.x + NODE_W);
+            maxY = Math.max(maxY, n.y + NODE_H);
+          }
+          return { minX, minY, maxX, maxY: maxY + 40 }; // node labels hang below the box
+        }
+
+        // Only swallow the wheel when there is off-screen content in that direction.
+        function canPan(dx, dy) {
+          const r = root.getBoundingClientRect();
+          const b = bounds();
+          if (dy > 0 && view.y + b.maxY * view.z > r.height) return true;
+          if (dy < 0 && view.y + b.minY * view.z < 0) return true;
+          if (dx > 0 && view.x + b.maxX * view.z > r.width) return true;
+          if (dx < 0 && view.x + b.minX * view.z < 0) return true;
+          return false;
+        }
+
+        root.addEventListener(
+          "wheel",
+          (e) => {
+            if (e.ctrlKey || e.metaKey) {
+              e.preventDefault();
+              zoomAt(Math.exp(-e.deltaY / 300), e.clientX, e.clientY);
+              return;
+            }
+            if (!canPan(e.deltaX, e.deltaY)) return;
+            e.preventDefault();
+            view.x -= e.deltaX;
+            view.y -= e.deltaY;
+            applyView();
+          },
+          { passive: false },
+        );
+
+        root.addEventListener("keydown", (e) => {
+          if (ndv || e.target.closest("input, textarea, select, .palette")) return;
+          if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+            e.preventDefault();
+            undo();
+            return;
+          }
+          if ((e.key === "Delete" || e.key === "Backspace") && selected) {
+            e.preventDefault();
+            remove(selected);
+          }
+          if (e.key === "Escape") closePalette();
+        });
+
+        function zoomAt(factor, clientX, clientY) {
+          const r = root.getBoundingClientRect();
+          const cx = clientX === undefined ? r.width / 2 : clientX - r.left;
+          const cy = clientY === undefined ? r.height / 2 : clientY - r.top;
+          const z = clamp(view.z * factor, 0.25, 2.5);
+          const k = z / view.z;
+          view.x = cx - (cx - view.x) * k;
+          view.y = cy - (cy - view.y) * k;
+          view.z = z;
+          applyView();
+          rescalePlus();
+        }
+
+        function fit() {
+          const r = root.getBoundingClientRect();
+          if (!r.width) return;
+          const b = bounds();
+          const z = clamp(
+            Math.min((r.width - 120) / (b.maxX - b.minX), (r.height - 120) / (b.maxY - b.minY)),
+            0.25,
+            1.2,
+          );
+          view.z = z;
+          view.x = (r.width - (b.maxX - b.minX) * z) / 2 - b.minX * z;
+          view.y = (r.height - (b.maxY - b.minY) * z) / 2 - b.minY * z;
+          applyView();
+          rescalePlus();
+        }
+
+        const zoombar = document.createElement("div");
+        zoombar.className = "zoombar";
+        for (const [label, fn] of [
+          ["−", () => zoomAt(1 / 1.2)],
+          ["+", () => zoomAt(1.2)],
+          ["⤢", fit],
+          ["1:1", () => zoomAt(1 / view.z)],
+        ]) {
+          const b = document.createElement("button");
+          b.textContent = label;
+          b.onclick = fn;
+          zoombar.appendChild(b);
+        }
+        root.appendChild(zoombar);
+
+        const addBtn = document.createElement("button");
+        addBtn.className = "addnode";
+        addBtn.textContent = "+ add step";
+        addBtn.onclick = () => openPalette(null);
+        root.appendChild(addBtn);
+
+        const tip = document.createElement("span");
+        tip.className = "tip";
+        tip.textContent =
+          "drag to move · scroll to pan · ⌘/ctrl+scroll to zoom · ⌘/ctrl+Z undo · Enter opens a step";
+        root.appendChild(tip);
+
+        function closeNdv() {
+          if (!ndv) return;
+          const n = ndv.node;
+          ndv.wrap.remove();
+          ndv = null;
+          relabel(n);
+          draw();
+          onChange();
+        }
+
+        function trapTab(wrap, e) {
+          const f = wrap.querySelectorAll("input, select, textarea, button");
+          if (!f.length) return;
+          const first = f[0];
+          const last = f[f.length - 1];
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+
+        // Node parameters, n8n's detail view: edits write straight into the node's form.
+        function openNdv(n) {
+          closeNdv();
+          const t = NODE_TYPES[n.verb];
+          const wrap = document.createElement("div");
+          wrap.className = "ndv";
+          wrap.setAttribute("role", "dialog");
+          wrap.setAttribute("aria-modal", "true");
+          wrap.setAttribute("aria-label", nodeTitle(n.verb, n.form));
+          const panel = document.createElement("div");
+          panel.className = "panel";
+          panel.style.setProperty("--tint", t.tint);
+          const head = document.createElement("div");
+          head.className = "head";
+          const icon = document.createElement("span");
+          icon.className = "icon";
+          icon.textContent = t.icon;
+          const nameIn = document.createElement("input");
+          nameIn.placeholder = "step id (optional)";
+          nameIn.value = n.form.id || "";
+          nameIn.oninput = () => {
+            n.form.id = nameIn.value;
+            relabel(n);
+          };
+          head.append(icon, nameIn);
+          panel.appendChild(head);
+
+          const keptKeys = Object.keys(n.extra);
+          if (keptKeys.length) {
+            const kept = document.createElement("p");
+            kept.className = "kept";
+            kept.textContent = "⚙ kept from YAML, edit in yaml mode: " + keptKeys.join(", ");
+            panel.appendChild(kept);
+          }
+
+          for (const f of fieldsFor(n.verb)) {
+            const wrapF = document.createElement("label");
+            wrapF.className = "field" + (f.t === "check" ? " inline" : "");
+            let el;
+            if (f.t === "check") {
+              el = document.createElement("input");
+              el.type = "checkbox";
+              el.checked = !!n.form[f.k];
+              el.onchange = () => {
+                n.form[f.k] = el.checked;
+                relabel(n);
+              };
+              wrapF.append(el, document.createTextNode(f.l));
+            } else {
+              const cap = document.createElement("span");
+              cap.textContent = f.l;
+              if (f.t === "select") {
+                el = document.createElement("select");
+                const opts = f.opts.includes(n.form[f.k] || "")
+                  ? f.opts
+                  : f.opts.concat([n.form[f.k]]);
+                for (const o of opts) {
+                  const opt = document.createElement("option");
+                  opt.value = o;
+                  opt.textContent = o || "—";
+                  if (o === (n.form[f.k] || "")) opt.selected = true;
+                  el.appendChild(opt);
+                }
+              } else {
+                el = document.createElement(f.t === "area" ? "textarea" : "input");
+                el.value = n.form[f.k] || "";
+              }
+              const write = () => {
+                n.form[f.k] = el.value;
+                relabel(n);
+              };
+              el.oninput = write;
+              el.onchange = write;
+              wrapF.append(cap, el);
+            }
+            panel.appendChild(wrapF);
+          }
+
+          const done = document.createElement("button");
+          done.textContent = "back to canvas";
+          done.onclick = closeNdv;
+          panel.appendChild(done);
+
+          wrap.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") {
+              e.stopPropagation();
+              closeNdv();
+              return;
+            }
+            if (e.key === "Tab") trapTab(wrap, e);
+          });
+          wrap.onpointerdown = (e) => {
+            e.stopPropagation();
+            if (e.target === wrap) closeNdv();
+          };
+          wrap.appendChild(panel);
+          root.appendChild(wrap);
+          ndv = { wrap, node: n };
+          nameIn.focus();
+        }
+
+        applyView();
+        draw();
+
+        return {
+          load(steps) {
+            closePalette();
+            closeNdv();
+            undos.length = 0;
+            setNodes(
+              steps.map((step, i) => {
+                const verb = verbOf(step);
+                return {
+                  verb,
+                  form: formFrom(verb, step),
+                  extra: extraOf(verb, step),
+                  x: GAP_X * (i + 1),
+                  y: 0,
+                };
+              }),
+            );
+            draw();
+            fit();
+          },
+          steps() {
+            const out = [];
+            for (const n of ordered()) {
+              const r = stepFrom(n.verb, n.form, n.extra);
+              if (r.error) return { error: nodeTitle(n.verb, n.form) + ": " + r.error };
+              out.push(r.step);
+            }
+            return { steps: out };
+          },
+          setTrigger(label) {
+            trigger.querySelector(".label").textContent = label;
+          },
+        };
+      }
+
+      /* ---------- YAML syntax highlighting ---------- */
+
+      const VERB_RE = /^(?:run|agent|herdr|workflow|[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+)$/;
+      const PH_RE = /\{\{[^}]+\}\}|context\.transcript(?:_file)?/g;
+      const KV_RE = /^("[^"]*"|'[^']*'|[A-Za-z_][\w.-]*):(\s|$)/;
+
+      function span(cls, text) {
+        return '<span class="' + cls + '">' + esc(text) + "</span>";
+      }
+
+      function hlText(raw) {
+        return esc(raw).replace(PH_RE, (m) => '<span class="tok-ph">' + m + "</span>");
+      }
+
+      function hlValue(raw) {
+        const t = raw.trim();
+        if (!t) return esc(raw);
+        let cls = "";
+        if (/^[|>][-+\d]*$/.test(t)) cls = "tok-blk";
+        else if (/^"[\s\S]*"$/.test(t) || /^'[\s\S]*'$/.test(t)) cls = "tok-str";
+        else if (/^(-?\d+(\.\d+)?|true|false|null|~)$/i.test(t)) cls = "tok-num";
+        const inner = hlText(raw);
+        return cls ? '<span class="' + cls + '">' + inner + "</span>" : inner;
+      }
+
+      function hlLine(line) {
+        const lead = /^(\s*(?:-\s+)?)/.exec(line)[1];
+        let rest = line.slice(lead.length);
+        if (!rest) return esc(line);
+        if (rest.startsWith("#")) return esc(lead) + span("tok-com", rest);
+        // Trailing comments only when no quoting is in play, so `echo "# x"` stays intact.
+        let trail = "";
+        const hash = rest.indexOf(" #");
+        if (hash >= 0 && !/["']/.test(rest.slice(0, hash))) {
+          trail = span("tok-com", rest.slice(hash + 1));
+          rest = rest.slice(0, hash + 1);
+        }
+        const kv = KV_RE.exec(rest);
+        if (!kv) return esc(lead) + hlValue(rest) + trail;
+        const cls = VERB_RE.test(kv[1]) ? "tok-verb" : "tok-key";
+        return (
+          esc(lead) +
+          span(cls, kv[1]) +
+          span("tok-pun", ":") +
+          hlValue(rest.slice(kv[0].length - kv[2].length)) +
+          trail
+        );
+      }
+
+      // Trailing newline: without it the browser collapses the last line and the layers drift apart.
+      function highlight(text) {
+        return text.split("\n").map(hlLine).join("\n") + "\n";
+      }
+
+      /* ---------- YAML textarea: highlight + smart indent + autocomplete ---------- */
+
+      function mkCodeEditor(initial, onInput) {
+        const wrap = document.createElement("div");
+        wrap.className = "ed";
+        const pre = document.createElement("pre");
+        pre.className = "hl";
+        pre.setAttribute("aria-hidden", "true");
+        const mirror = document.createElement("pre");
+        mirror.className = "hl mirror";
+        mirror.setAttribute("aria-hidden", "true");
+        const ta = document.createElement("textarea");
+        ta.spellcheck = false;
+        ta.setAttribute("aria-label", "workflow YAML");
+        ta.value = initial;
+        const pop = document.createElement("div");
+        pop.className = "ac hide";
+        pop.setAttribute("role", "listbox");
+        wrap.append(pre, mirror, ta, pop);
+
+        let hlTimer = null;
+        let composing = false;
+        let escaped = false;
+        let items = [];
+        let sel = 0;
+        let tokenStart = 0;
+        let suffix = "";
+
+        const paint = () => {
+          pre.innerHTML = highlight(ta.value);
+        };
+        const refresh = () => {
+          clearTimeout(hlTimer);
+          if (composing) return;
+          hlTimer = setTimeout(paint, 60);
+        };
+        const lineHeight = () => parseFloat(getComputedStyle(ta).lineHeight) || 22;
+
+        function hideAc() {
+          pop.classList.add("hide");
+          items = [];
+        }
+
+        function acOpen() {
+          return !pop.classList.contains("hide");
+        }
+
+        function context() {
+          const v = ta.value;
+          const p = ta.selectionStart;
+          if (p !== ta.selectionEnd) return null;
+          const ls = v.lastIndexOf("\n", p - 1) + 1;
+          const line = v.slice(ls, p);
+          if (line.includes("#")) return null;
+          const named = /^\s*(?:-\s+)?(using|workflow)\s*:\s*(\S*)$/.exec(line);
+          if (named) {
+            const pool = named[1] === "using" ? state.profiles : state.entries.map((e) => e.name);
+            return { start: p - named[2].length, prefix: named[2], pool, suffix: "" };
+          }
+          const tmpl = /\{\{([a-zA-Z0-9_.]*)$/.exec(line);
+          if (tmpl) {
+            return {
+              start: p - tmpl[1].length,
+              prefix: tmpl[1],
+              pool: CONTEXT_HINTS.map((h) => h.replace(/^\{\{|\}\}$/g, "")),
+              suffix: "}}",
+            };
+          }
+          const key = /^(\s*)(-\s+)?([a-z][a-z0-9_.]*)?$/.exec(line);
+          if (!key) return null;
+          const prefix = key[3] || "";
+          if (!prefix) return null;
+          const pool = key[1].length === 0 && !key[2] ? TOP_KEYS : STEP_KEYS;
+          return { start: p - prefix.length, prefix, pool, suffix: ": " };
+        }
+
+        function caretTop() {
+          mirror.textContent = ta.value.slice(0, ta.selectionStart);
+          const mark = document.createElement("span");
+          mark.textContent = "\u200b";
+          mirror.appendChild(mark);
+          return { top: mark.offsetTop, left: mark.offsetLeft };
+        }
+
+        function paintAc() {
+          pop.innerHTML = "";
+          items.forEach((it, i) => {
+            const row = document.createElement("div");
+            row.textContent = it;
+            row.setAttribute("role", "option");
+            row.className = i === sel ? "on" : "";
+            row.onmousedown = (e) => {
+              e.preventDefault();
+              sel = i;
+              accept();
+            };
+            pop.appendChild(row);
+          });
+          pop.classList.remove("hide");
+          const box = caretTop();
+          const lh = lineHeight();
+          let top = box.top - ta.scrollTop + lh;
+          if (top + pop.offsetHeight > wrap.clientHeight)
+            top = box.top - ta.scrollTop - pop.offsetHeight;
+          pop.style.top = Math.max(0, top) + "px";
+          pop.style.left = Math.max(0, Math.min(box.left, wrap.clientWidth - 200)) + "px";
+        }
+
+        function suggest() {
+          const c = context();
+          if (!c) return hideAc();
+          const list = c.pool.filter((x) => x.startsWith(c.prefix) && x !== c.prefix);
+          if (!list.length) return hideAc();
+          items = list.slice(0, 8);
+          sel = 0;
+          tokenStart = c.start;
+          suffix = c.suffix;
+          paintAc();
+        }
+
+        // execCommand keeps the native undo stack alive; setting .value directly would wipe it.
+        function accept() {
+          const val = items[sel];
+          if (val == null) return;
+          ta.focus();
+          ta.setSelectionRange(tokenStart, ta.selectionStart);
+          document.execCommand("insertText", false, val + suffix);
+          hideAc();
+        }
+
+        function indent(back) {
+          const v = ta.value;
+          const a = ta.selectionStart;
+          const b = ta.selectionEnd;
+          if (a === b && !back) {
+            document.execCommand("insertText", false, "  ");
+            return;
+          }
+          const ls = v.lastIndexOf("\n", a - 1) + 1;
+          let le = v.indexOf("\n", b);
+          if (le < 0) le = v.length;
+          const next = v
+            .slice(ls, le)
+            .split("\n")
+            .map((l) => (back ? l.replace(/^ {1,2}/, "") : "  " + l))
+            .join("\n");
+          ta.setSelectionRange(ls, le);
+          document.execCommand("insertText", false, next);
+          ta.setSelectionRange(ls, ls + next.length);
+        }
+
+        function newline() {
+          const v = ta.value;
+          const p = ta.selectionStart;
+          const line = v.slice(v.lastIndexOf("\n", p - 1) + 1, p);
+          const lead = /^[ \t]*/.exec(line)[0];
+          document.execCommand(
+            "insertText",
+            false,
+            "\n" + lead + (/[:-]\s*$/.test(line) ? "  " : ""),
+          );
+        }
+
+        ta.addEventListener("keydown", (e) => {
+          if (acOpen()) {
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+              e.preventDefault();
+              sel = (sel + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length;
+              paintAc();
+              return;
+            }
+            if (e.key === "Enter" || e.key === "Tab") {
+              e.preventDefault();
+              accept();
+              return;
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              hideAc();
+              return;
+            }
+          }
+          if (e.key === "Escape") {
+            escaped = true; // Escape then Tab moves focus out instead of indenting
+            return;
+          }
+          if (e.key === "Tab") {
+            if (escaped) {
+              escaped = false;
+              return;
+            }
+            e.preventDefault();
+            indent(e.shiftKey);
+            return;
+          }
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            newline();
+            return;
+          }
+          escaped = false;
+        });
+
+        ta.addEventListener("input", () => {
+          refresh();
+          suggest();
+          onInput();
+        });
+        ta.addEventListener("compositionstart", () => {
+          composing = true;
+        });
+        ta.addEventListener("compositionend", () => {
+          composing = false;
+          refresh();
+        });
+        ta.addEventListener("scroll", () => {
+          pre.scrollTop = ta.scrollTop;
+          pre.scrollLeft = ta.scrollLeft;
+        });
+        ta.addEventListener("blur", hideAc);
+        paint();
+
+        return {
+          wrap,
+          ta,
+          setValue(text) {
+            ta.value = text;
+            hideAc();
+            paint();
+          },
+          gotoLine(i) {
+            const lines = ta.value.split("\n");
+            if (i < 0 || i >= lines.length) return;
+            let start = 0;
+            for (let k = 0; k < i; k++) start += lines[k].length + 1;
+            ta.focus();
+            ta.setSelectionRange(start, start + lines[i].length);
+            ta.scrollTop = Math.max(0, i * lineHeight() - ta.clientHeight / 2);
+            pre.scrollTop = ta.scrollTop;
+          },
+        };
+      }
+
+      // "buffer.yaml, step 2, run: …" → the 0-based line of that step (and its key, when named).
+      function errorLine(text, err) {
+        const sm = /\bstep (\d+)/.exec(err || "");
+        if (!sm) return -1;
+        const lines = text.split("\n");
+        const want = Number(sm[1]);
+        let inSteps = false;
+        let seen = 0;
+        let at = -1;
+        for (let i = 0; i < lines.length && at < 0; i++) {
+          if (/^steps:/.test(lines[i])) inSteps = true;
+          else if (!inSteps) continue;
+          else if (/^\S/.test(lines[i])) inSteps = false;
+          else if (/^\s*-\s/.test(lines[i]) && ++seen === want) at = i;
+        }
+        if (at < 0) return -1;
+        const km = /\bstep \d+, ([a-z_][a-z0-9_.]*):/.exec(err);
+        if (!km) return at;
+        const keyRe = new RegExp("(^|-\\s+)" + km[1].replace(/\./g, "\\.") + "\\s*:");
+        for (let i = at; i < lines.length; i++) {
+          if (i > at && /^\s*-\s/.test(lines[i])) break;
+          if (keyRe.test(lines[i])) return i;
+        }
+        return at;
+      }
+
+      function renderEditor(name, scope, text, loadError, flags) {
         const pane = $("pane");
         pane.innerHTML = "";
+        editorDirty = false;
+        editorFileText = text;
         let mode = "text";
-        let extras = {}; // inputs / on_fail carried through visual mode untouched
+        let extras = { version: "v1alpha1" }; // metadata carried through canvas mode untouched
         let validateTimer = null;
+        let syncTimer = null;
+        let syncSeq = 0;
 
         const nameIn = document.createElement("input");
         nameIn.placeholder = "name";
@@ -522,26 +2398,52 @@
 
         const modeSeg = document.createElement("div");
         modeSeg.className = "seg";
-        const textBtn = mkBtn("text", () => setMode("text"));
-        const visBtn = mkBtn("visual", () => setMode("visual"));
+        const textBtn = mkBtn("yaml", () => setMode("text"));
+        const visBtn = mkBtn("canvas", () => setMode("visual"));
         textBtn.classList.add("on");
         modeSeg.append(textBtn, visBtn);
 
         const addbar = document.createElement("div");
         addbar.className = "addbar";
+        const addCap = document.createElement("span");
+        addCap.className = "cap";
+        addCap.textContent = "append";
+        addbar.appendChild(addCap);
         for (const verb of VERBS) addbar.appendChild(mkBtn("+ " + verb, () => addStep(verb)));
 
         const bar1 = document.createElement("div");
         bar1.className = "bar";
         bar1.append(nameIn, scopeSel, modeSeg, addbar);
 
-        const ta = document.createElement("textarea");
-        ta.value = text;
+        const flagBox = document.createElement("div");
+        flagBox.className = "flags";
+        function paintFlags(list) {
+          const items = list || [];
+          if (!items.length) {
+            flagBox.classList.remove("warn");
+            flagBox.textContent = "";
+            flagBox.classList.add("hide");
+            return;
+          }
+          flagBox.classList.remove("hide");
+          flagBox.classList.add("warn");
+          flagBox.textContent = "sensitive: " + items.join(" · ");
+        }
+        paintFlags(flags);
 
-        const visual = document.createElement("div");
-        visual.id = "visual";
-        visual.classList.add("hide");
-        wireDragContainer(visual, () => syncFromVisual());
+        const ed = mkCodeEditor(text, () => {
+          editorDirty = true;
+          runValidate();
+        });
+        const ta = ed.ta;
+
+        const canvasHost = document.createElement("div");
+        canvasHost.className = "canvas hide";
+        const canvas = makeCanvas(
+          canvasHost,
+          () => scheduleSync(),
+          () => "When you run: hwf run " + (nameIn.value.trim() || "<name>"),
+        );
 
         const status = document.createElement("div");
         status.className = "status";
@@ -554,21 +2456,36 @@
               body: JSON.stringify({ name: nameIn.value.trim() || "buffer", text: ta.value }),
             });
             if (!ta.isConnected) return; // editor was replaced while the request was in flight
-            setStatus(status, r.data.ok, r.data.ok ? "valid" : r.data.error);
+            showProblem(r.data.ok, r.data.ok ? "valid" : r.data.error);
+            const t = ta.value;
+            const next = [];
+            if (/^\s*-\s*run\s*:/m.test(t) || /\n\s*-\s*run\s*:/.test(t)) next.push("commands");
+            if (/context\.transcript(?:_file)?/.test(t)) next.push("transcript");
+            for (const m of t.matchAll(/^\s*herdr:\s*(\S+)/gm)) {
+              const method = m[1];
+              if (
+                /^(pane\.close|tab\.close|workspace\.close|agent\.send_keys|pane\.send_keys|pane\.send_text|pane\.send_input|worktree\.create|layout\.apply)$/.test(
+                  method,
+                )
+              )
+                next.push("herdr:" + method);
+            }
+            paintFlags([...new Set(next)]);
           }, 350);
         }
 
-        // Append a well-formed step at the end of the list (text mode) or as a new card (visual).
+        function showProblem(ok, msg) {
+          const line = ok ? -1 : errorLine(ta.value, msg);
+          setStatus(status, ok, msg, line < 0 ? null : () => ed.gotoLine(line));
+        }
+
         function addStep(verb) {
-          if (mode === "visual") {
-            visual.appendChild(buildCard({ [verb]: "" }));
-            syncFromVisual();
-            return;
-          }
           let t = ta.value.replace(/\s+$/, "");
           if (!/^steps:/m.test(t)) t = (t ? t + "\n" : "") + "steps:";
-          ta.value = t + "\n\n" + SKELETONS[verb] + "\n";
+          ed.setValue(t + "\n\n" + SKELETONS[verb] + "\n");
+          editorDirty = true;
           ta.focus();
+          ta.setSelectionRange(ta.value.length, ta.value.length);
           runValidate();
         }
 
@@ -580,55 +2497,73 @@
               body: JSON.stringify({ text: ta.value }),
             });
             if (!r.data.ok) {
-              setStatus(status, false, "fix YAML before visual edit — " + r.data.error);
+              showProblem(
+                false,
+                "fix YAML before canvas edit — " + (r.data.error || "parse failed"),
+              );
               return;
             }
-            extras = {};
+            extras = { version: "v1alpha1" };
+            if (r.data.doc.version) extras.version = r.data.doc.version;
+            if (r.data.doc.title) extras.title = r.data.doc.title;
+            if (r.data.doc.description) extras.description = r.data.doc.description;
+            if (r.data.doc.hidden) extras.hidden = r.data.doc.hidden;
             if (r.data.doc.inputs) extras.inputs = r.data.doc.inputs;
-            if (r.data.doc.on_fail) extras.on_fail = r.data.doc.on_fail;
-            visual.innerHTML = "";
-            for (const step of r.data.doc.steps) visual.appendChild(buildCard(step));
-          } else {
-            await syncFromVisual();
+            if (r.data.doc.returns) extras.returns = r.data.doc.returns;
+            if (r.data.doc.on_failure) extras.on_failure = r.data.doc.on_failure;
+            canvasHost.classList.remove("hide");
+            canvas.load(r.data.doc.steps);
+          } else if (!(await syncFromCanvas())) {
+            return; // stale YAML would wipe the node edits on the way back in
           }
           mode = next;
+          editorMode = next;
           textBtn.classList.toggle("on", mode === "text");
           visBtn.classList.toggle("on", mode === "visual");
-          ta.classList.toggle("hide", mode !== "text");
-          visual.classList.toggle("hide", mode !== "visual");
+          ed.wrap.classList.toggle("hide", mode !== "text");
+          addbar.classList.toggle("hide", mode !== "text");
+          canvasHost.classList.toggle("hide", mode !== "visual");
         }
 
-        // Read cards → raw steps → server format → back into the shared YAML buffer, then validate.
-        async function syncFromVisual() {
-          const steps = [];
-          for (const card of visual.querySelectorAll(".step")) {
-            const raw = card.toRaw();
-            if (raw.error) {
-              setStatus(status, false, raw.error);
-              return;
-            }
-            steps.push(raw.step);
+        function scheduleSync() {
+          clearTimeout(syncTimer);
+          syncTimer = setTimeout(() => syncFromCanvas(), 300);
+        }
+
+        // Canvas → raw steps → server format → back into the shared YAML buffer, then validate.
+        async function syncFromCanvas() {
+          clearTimeout(syncTimer);
+          const built = canvas.steps();
+          if (built.error) {
+            setStatus(status, false, built.error);
+            return false;
           }
-          if (steps.length === 0) {
-            setStatus(status, false, "add at least one step");
-            return;
+          if (built.steps.length === 0) {
+            setStatus(status, "info", "no steps yet — add your first step on the canvas");
+            return false;
           }
+          const seq = ++syncSeq;
           const r = await api("/api/format", {
             method: "POST",
-            body: JSON.stringify({ doc: Object.assign({}, extras, { steps }) }),
+            body: JSON.stringify({
+              doc: Object.assign({ version: "v1alpha1" }, extras, { steps: built.steps }),
+            }),
           });
+          if (seq !== syncSeq || !ta.isConnected) return false; // a newer sync already won
           if (!r.data.ok) {
             setStatus(status, false, r.data.error || "format failed");
-            return;
+            return false;
           }
-          ta.value = r.data.text;
+          ed.setValue(r.data.text);
+          editorDirty = true;
           runValidate();
+          return true;
         }
 
         const bar2 = document.createElement("div");
         bar2.className = "bar";
         const save = mkBtn("save", async () => {
-          if (mode === "visual") await syncFromVisual();
+          if (mode === "visual" && !(await syncFromCanvas())) return;
           const newName = nameIn.value.trim();
           const newScope = scopeSel.value;
           const r = await api("/api/workflow", {
@@ -636,17 +2571,26 @@
             body: JSON.stringify({ name: newName, scope: newScope, text: ta.value }),
           });
           if (!r.data.ok) {
-            setStatus(status, false, r.data.error || "save failed");
+            showProblem(false, r.data.error || "save failed");
+            toast("not saved — " + (r.data.error || "save failed"), false);
             return;
           }
+          editorDirty = false;
           // Renamed or re-scoped: drop the previous file so a save doesn't silently fork.
           if (name && (name !== newName || scope !== newScope)) {
             await api("/api/workflow", { method: "DELETE", body: JSON.stringify({ name, scope }) });
           }
+          toast("saved " + newName, true);
           await loadState();
           await openWorkflow(newName, newScope);
         });
-        const copy = mkBtn("copy", () => navigator.clipboard.writeText(ta.value));
+        save.className = "primary";
+        const copy = mkBtn("copy", () => {
+          navigator.clipboard.writeText(ta.value).then(
+            () => toast("YAML copied to clipboard", true),
+            (e) => toast("copy failed — " + errMsg(e), false),
+          );
+        });
         const download = mkBtn("download", () => {
           const blob = new Blob([ta.value], { type: "text/yaml" });
           const a = document.createElement("a");
@@ -682,7 +2626,8 @@
               method: "DELETE",
               body: JSON.stringify({ name: mvName, scope: fromScope }),
             });
-            setStatus(status, true, "moved to " + otherLabel(fromScope));
+            editorDirty = false;
+            toast("moved to " + otherLabel(fromScope), true);
             await loadState();
             await openWorkflow(mvName, to);
           });
@@ -692,6 +2637,18 @@
           scopeSel.addEventListener("change", syncMoveLabel);
           syncMoveLabel();
           bar2.appendChild(move);
+        }
+
+        async function dropScopes(scopes) {
+          for (const s of scopes)
+            await api("/api/workflow", {
+              method: "DELETE",
+              body: JSON.stringify({ name, scope: s }),
+            });
+          editorDirty = false;
+          current = null;
+          toast("deleted " + name, true);
+          await loadState();
         }
 
         // Delete: when the name exists in both scopes, let the user pick which variant(s) to remove.
@@ -707,26 +2664,17 @@
             o.textContent = lbl;
             delSel.appendChild(o);
           }
-          const del = mkBtn("delete", async () => {
+          const del = mkBtn("delete", () => {
             const which = delSel.value;
             if (!confirm("delete " + name + " (" + (which === "repo" ? "local" : which) + ")?"))
               return;
-            const scopes = which === "both" ? ["repo", "global"] : [which];
-            for (const s of scopes)
-              await api("/api/workflow", {
-                method: "DELETE",
-                body: JSON.stringify({ name, scope: s }),
-              });
-            current = null;
-            await loadState();
+            dropScopes(which === "both" ? ["repo", "global"] : [which]);
           });
           bar2.append(delSel, del);
         } else {
-          const del = mkBtn("delete", async () => {
+          const del = mkBtn("delete", () => {
             if (!confirm("delete " + name + "?")) return;
-            await api("/api/workflow", { method: "DELETE", body: JSON.stringify({ name, scope }) });
-            current = null;
-            await loadState();
+            dropScopes([scope]);
           });
           bar2.appendChild(del);
         }
@@ -738,13 +2686,18 @@
         foot.append(footCmd, " (no run from browser)");
         const setFoot = () => {
           footCmd.textContent = "hwf run " + (nameIn.value.trim() || "<name>");
+          canvas.setTrigger("When you run: hwf run " + (nameIn.value.trim() || "<name>"));
         };
         setFoot();
-        nameIn.oninput = setFoot;
-        ta.oninput = runValidate;
-        runValidate();
+        nameIn.oninput = () => {
+          editorDirty = true;
+          setFoot();
+        };
 
-        pane.append(bar1, ta, visual, status, bar2, foot);
+        pane.append(bar1, flagBox, ed.wrap, canvasHost, status, bar2, foot);
+        if (loadError) showProblem(false, loadError);
+        runValidate();
+        if (editorMode === "visual") setMode("visual");
       }
 
       function mkScopeSelect(scope) {
@@ -759,162 +2712,6 @@
         return sel;
       }
 
-      function verbOf(step) {
-        return VERBS.find((v) => step[v] !== undefined) || "shell";
-      }
-
-      // One draggable step card. Attaches toRaw() reading its live field values back into a raw step.
-      function buildCard(step) {
-        const verb = verbOf(step);
-        const card = document.createElement("div");
-        card.className = "step";
-        card.draggable = true;
-
-        const grip = document.createElement("span");
-        grip.className = "grip";
-        grip.textContent = "⠿";
-
-        const verbSel = document.createElement("select");
-        verbSel.className = "verb";
-        for (const v of VERBS) {
-          const o = document.createElement("option");
-          o.value = o.textContent = v;
-          if (v === verb) o.selected = true;
-          verbSel.appendChild(o);
-        }
-        verbSel.onchange = () => {
-          const fresh = buildCard({ [verbSel.value]: "" });
-          card.replaceWith(fresh);
-          fresh.dispatchEvent(new Event("step-changed", { bubbles: true }));
-        };
-
-        const fields = document.createElement("div");
-        fields.className = "fields";
-        const rm = mkBtn("✕", () => {
-          const p = card.parentElement;
-          card.remove();
-          p.dispatchEvent(new Event("step-changed", { bubbles: true }));
-        });
-        rm.className = "rm";
-
-        const inputs = {};
-        const textField = (key, label, val, ta) => {
-          const wrap = document.createElement("label");
-          wrap.textContent = label;
-          const el = document.createElement(ta ? "textarea" : "input");
-          el.value = val || "";
-          wrap.appendChild(el);
-          fields.appendChild(wrap);
-          inputs[key] = el;
-          return el;
-        };
-        const checkField = (key, label, on) => {
-          const wrap = document.createElement("label");
-          wrap.className = "inline";
-          const el = document.createElement("input");
-          el.type = "checkbox";
-          el.checked = !!on;
-          wrap.append(el, document.createTextNode(label));
-          fields.appendChild(wrap);
-          inputs[key] = el;
-        };
-
-        if (verb === "shell") {
-          textField("shell", "command", step.shell);
-          textField("stdin", "stdin (optional)", step.stdin);
-        } else if (verb === "open") {
-          textField("open", "command", step.open);
-          textField("wait_for", "wait_for (optional)", step.wait_for);
-          textField("timeout", "timeout seconds (optional)", step.timeout);
-        } else if (verb === "agent") {
-          textField("agent", "agent name", step.agent);
-          textField("prompt", "prompt", step.prompt, true);
-          checkField("wait", "wait for done", step.wait === "done");
-          textField("timeout", "timeout seconds (optional)", step.timeout);
-          checkField("close_source", "close source pane", step.close_source);
-        } else if (verb === "herdr") {
-          textField("herdr", "method", step.herdr);
-          textField("params", "params (JSON)", step.params ? JSON.stringify(step.params) : "");
-        } else if (verb === "run") {
-          textField("run", "workflow name", step.run);
-        }
-
-        card.toRaw = () => {
-          const out = {};
-          const s = (k) => (inputs[k] ? inputs[k].value.trim() : "");
-          const num = (k) => {
-            const v = s(k);
-            if (!v) return true;
-            const n = Number(v);
-            if (!Number.isInteger(n) || n <= 0) return false;
-            out.timeout = n;
-            return true;
-          };
-          if (verb === "shell") {
-            out.shell = s("shell");
-            if (s("stdin")) out.stdin = inputs.stdin.value;
-          } else if (verb === "open") {
-            out.open = s("open");
-            if (s("wait_for")) out.wait_for = s("wait_for");
-            if (!num("timeout")) return { error: "timeout must be a positive integer" };
-          } else if (verb === "agent") {
-            out.agent = s("agent");
-            if (inputs.prompt.value !== "") out.prompt = inputs.prompt.value;
-            if (inputs.wait.checked) out.wait = "done";
-            if (!num("timeout")) return { error: "timeout must be a positive integer" };
-            if (inputs.close_source.checked) out.close_source = true;
-          } else if (verb === "herdr") {
-            out.herdr = s("herdr");
-            const p = s("params");
-            if (p) {
-              try {
-                out.params = JSON.parse(p);
-              } catch {
-                return { error: "step params must be valid JSON" };
-              }
-            }
-          } else if (verb === "run") {
-            out.run = s("run");
-          }
-          return { step: out };
-        };
-
-        card.append(grip, verbSel, fields, rm);
-        for (const el of card.querySelectorAll("input, textarea")) {
-          el.oninput = () => card.dispatchEvent(new Event("step-changed", { bubbles: true }));
-        }
-        return card;
-      }
-
-      // Native drag reorder for the card list; `onChange` fires after any drop or edit.
-      function wireDragContainer(container, onChange) {
-        let dragEl = null;
-        let debounce = null;
-        const fire = () => {
-          clearTimeout(debounce);
-          debounce = setTimeout(onChange, 300);
-        };
-        container.addEventListener("step-changed", fire);
-        container.addEventListener("dragstart", (e) => {
-          dragEl = e.target.closest(".step");
-          if (dragEl) dragEl.classList.add("drag");
-        });
-        container.addEventListener("dragend", () => {
-          if (dragEl) dragEl.classList.remove("drag");
-          container.querySelectorAll(".over").forEach((c) => c.classList.remove("over"));
-          dragEl = null;
-          fire();
-        });
-        container.addEventListener("dragover", (e) => {
-          e.preventDefault();
-          const over = e.target.closest(".step");
-          if (!over || over === dragEl || !dragEl) return;
-          const rect = over.getBoundingClientRect();
-          const after = e.clientY > rect.top + rect.height / 2;
-          over.parentElement.insertBefore(dragEl, after ? over.nextSibling : over);
-        });
-      }
-
       function mkBtn(label, fn) {
         const b = document.createElement("button");
         b.textContent = label;
@@ -922,9 +2719,11 @@
         return b;
       }
 
-      function setStatus(el, ok, msg) {
+      function setStatus(el, ok, msg, jump) {
         el.textContent = msg || "";
-        el.className = "status " + (ok ? "ok" : "bad");
+        el.className = "status " + (ok === "info" ? "" : ok ? "ok" : "bad") + (jump ? " jump" : "");
+        el.onclick = jump || null;
+        el.title = jump ? "jump to the line" : "";
       }
 
       async function renderConfig() {
@@ -933,24 +2732,41 @@
         pane.innerHTML = "";
         const bar = document.createElement("div");
         bar.className = "bar";
-        const scopeSel = document.createElement("select");
-        for (const s of ["repo", "global"]) {
-          const o = document.createElement("option");
-          o.value = s;
-          o.textContent = s === "repo" ? "local" : "global";
-          scopeSel.appendChild(o);
-        }
+        const scopeSel = mkScopeSelect("repo");
         let shownScope = scopeSel.value;
+        let cfgSeq = 0;
         const ta = document.createElement("textarea");
+        ta.setAttribute("aria-label", "config YAML");
         const status = document.createElement("div");
         status.className = "status";
-        const load = async () => {
-          setStatus(status, true, "loading…");
-          const { data } = await api("/api/config?scope=" + scopeSel.value);
-          ta.value = data.text || "";
-          setStatus(status, true, data.error || "");
-          shownScope = scopeSel.value;
+        const save = mkBtn("save", async () => {
+          const r = await api("/api/config", {
+            method: "PUT",
+            body: JSON.stringify({ scope: shownScope, text: ta.value }),
+          });
+          setStatus(status, !!r.data.ok, r.data.ok ? "saved" : r.data.error || "save failed");
+          if (!r.data.ok) return;
           configDirty = false;
+          toast("saved " + (shownScope === "repo" ? "local" : "global") + " config", true);
+        });
+        save.className = "primary";
+        // Last-write-wins: a superseded load must not drop its text into a newer scope's buffer.
+        const load = async () => {
+          const seq = ++cfgSeq;
+          const want = scopeSel.value;
+          save.disabled = true;
+          setStatus(status, "info", "loading…");
+          const r = await api("/api/config?scope=" + want);
+          if (seq !== cfgSeq || !ta.isConnected) return;
+          save.disabled = false;
+          if (r.status !== 200) {
+            setStatus(status, false, r.data.error || "load failed");
+            return;
+          }
+          ta.value = r.data.text || "";
+          shownScope = want;
+          configDirty = false;
+          setStatus(status, "info", "");
         };
         scopeSel.onchange = () => {
           if (configDirty && !confirm("discard unsaved config changes?")) {
@@ -962,14 +2778,6 @@
         ta.oninput = () => {
           configDirty = true;
         };
-        const save = mkBtn("save", async () => {
-          const r = await api("/api/config", {
-            method: "PUT",
-            body: JSON.stringify({ scope: scopeSel.value, text: ta.value }),
-          });
-          setStatus(status, !!r.data.ok, r.data.ok ? "saved" : r.data.error || "save failed");
-          if (r.data.ok) configDirty = false;
-        });
         bar.append(scopeSel, save);
         pane.append(bar, ta, status);
         await load();
@@ -984,12 +2792,6 @@
           hour: "2-digit",
           minute: "2-digit",
         });
-      }
-
-      function esc(s) {
-        const d = document.createElement("div");
-        d.textContent = s == null ? "" : String(s);
-        return d.innerHTML;
       }
 
       async function renderRuns() {
@@ -1033,19 +2835,78 @@
       document.querySelectorAll(".tab").forEach(
         (b) =>
           (b.onclick = () => {
-            if (
-              tab === "config" &&
-              b.dataset.tab !== "config" &&
-              configDirty &&
-              !confirm("discard unsaved config changes?")
-            )
-              return;
+            if (!confirmLeave()) return;
             tab = b.dataset.tab;
             if (tab === "workflows") current = null;
             render();
           }),
       );
-      loadState();
+      addEventListener("beforeunload", (e) => {
+        if (!editorDirty && !configDirty) return;
+        e.preventDefault();
+        e.returnValue = "";
+      });
+
+      function setHash(h) {
+        if (location.hash !== "#" + h) location.hash = h;
+      }
+
+      // #w=<scope>:<name> — a link straight to one workflow, so an agent can hand over a
+      // single URL and then keep rewriting the file while the page follows along.
+      function applyHash() {
+        const m = /^#w=(repo|global):([a-z0-9][a-z0-9-_]*)$/.exec(location.hash);
+        if (!m) return;
+        const [, scope, name] = m;
+        if (current && current.name === name && current.scope === scope) return;
+        if (!confirmLeave()) return;
+        tab = "workflows";
+        const entry = state.entries.find((e) => e.name === name);
+        if (entry) {
+          const has = scope === "repo" ? entry.inRepo : entry.inGlobal;
+          return openWorkflow(name, has ? scope : entry.source);
+        }
+        wantOpen = { name, scope }; // not written yet — liveTick opens it once it appears
+        current = null;
+        renderWorkflows();
+        $("pane").innerHTML = "<p class=hint>waiting for " + esc(name) + "…</p>";
+      }
+
+      let liveSig = "";
+      let liveBusy = false;
+
+      // Poll disk so a workflow an agent is writing shows up (and redraws) without a reload.
+      // Local edits win: a dirty buffer is never overwritten.
+      async function liveTick() {
+        if (liveBusy || document.hidden || tab !== "workflows" || editorDirty || configDirty)
+          return;
+        liveBusy = true;
+        try {
+          const s = await api("/api/state");
+          if (s.status === 200 && !s.data.error) {
+            const sig = JSON.stringify(s.data.entries || []);
+            if (sig !== liveSig) {
+              liveSig = sig;
+              state = Object.assign(state, s.data);
+              renderWorkflows();
+              if (wantOpen) applyHash();
+            }
+          }
+          if (!current || !current.name || editorDirty) return;
+          const r = await api(
+            "/api/workflow?name=" + encodeURIComponent(current.name) + "&scope=" + current.scope,
+          );
+          if (r.status !== 200 || editorDirty) return;
+          const text = r.data.text || "";
+          if (text === editorFileText) return;
+          renderEditor(current.name, current.scope, text, r.data.error || "");
+        } finally {
+          liveBusy = false;
+        }
+      }
+
+      addEventListener("hashchange", applyHash);
+      setInterval(liveTick, 1500);
+      loadState().then(applyHash);
     </script>
   </body>
 </html>

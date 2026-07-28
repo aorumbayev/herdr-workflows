@@ -1,13 +1,4 @@
-import {
-  DEFAULT_BACKGROUND_RGB,
-  DEFAULT_FOREGROUND_RGB,
-  RGBA,
-  type CliRenderer,
-  type ColorInput,
-  type TerminalColors,
-  type ThemeMode,
-} from "@opentui/core";
-import { contrastRatio, hexOrNull, MIN_CONTRAST, mutedOn, rgbHex } from "./contrast";
+import { RGBA, type CliRenderer, type ColorInput, type TerminalColors } from "@opentui/core";
 
 export type HostTheme = {
   text: { fg: ColorInput };
@@ -28,69 +19,32 @@ export type HostTheme = {
     descriptionColor: ColorInput;
     selectedDescriptionColor: ColorInput;
   };
-  tab: {
-    backgroundColor: ColorInput;
-    textColor: ColorInput;
-    focusedBackgroundColor: ColorInput;
-    focusedTextColor: ColorInput;
-    selectedBackgroundColor: ColorInput;
-    selectedTextColor: ColorInput;
-    selectedDescriptionColor: ColorInput;
-  };
 };
 
-function modeFallback(mode: ThemeMode | null): { fg: string; bg: string } {
-  const ink = rgbHex(DEFAULT_FOREGROUND_RGB);
-  const paper = rgbHex(DEFAULT_BACKGROUND_RGB);
-  if (mode === "light") return { fg: paper, bg: ink };
-  return { fg: ink, bg: paper };
-}
-
-function pickSelection(
-  colors: TerminalColors | null,
-  fgHex: string,
-  bgHex: string,
-  fallback: { fg: string; bg: string },
-): { selBg: string; selFg: string } {
-  const hiBg = hexOrNull(colors?.highlightBackground);
-  const hiFg = hexOrNull(colors?.highlightForeground);
-  if (hiBg && hiFg && contrastRatio(hiBg, hiFg) >= MIN_CONTRAST) {
-    return { selBg: hiBg, selFg: hiFg };
-  }
-  if (contrastRatio(fgHex, bgHex) >= MIN_CONTRAST) {
-    // Reverse video as RGB (not SGR default slots — those flip by paint side).
-    return { selBg: fgHex, selFg: bgHex };
-  }
-  return { selBg: fallback.fg, selFg: fallback.bg };
-}
-
-function pickMuted(colors: TerminalColors | null, fgHex: string, bgHex: string): ColorInput {
-  const paletteMuted = hexOrNull(colors?.palette?.[8] ?? null);
-  if (paletteMuted && contrastRatio(paletteMuted, bgHex) >= 3) {
-    return RGBA.fromIndex(8, paletteMuted);
-  }
-  return RGBA.fromHex(mutedOn(bgHex, fgHex));
+function hexOrNull(value: string | null | undefined): string | null {
+  const m = value ? /^#([0-9a-fA-F]{6})/.exec(value) : null;
+  return m ? `#${m[1]!.toLowerCase()}` : null;
 }
 
 /**
- * Build TUI colors from a detected host palette.
+ * Selection as reverse video of the host defaults, baked to literal RGB.
  *
- * Body text → terminal default fg. Selection → reverse video of host defaults
- * (or highlight pair if AA). Selected description shares selected title ink.
+ * SGR default slots can't express it: there is one "default" intent and the
+ * emitter picks 39 or 49 by paint side, so a default-fg handed to a background
+ * comes out as default-bg. Select also never passes TextAttributes.INVERSE.
+ * Without a palette answer, fall back to the terminal's own palette slots.
  */
-export function themeFromPalette(
-  colors: TerminalColors | null,
-  mode: ThemeMode | null = null,
-): HostTheme {
-  const fallback = modeFallback(mode);
-  const fgHex = hexOrNull(colors?.defaultForeground) ?? fallback.fg;
-  const bgHex = hexOrNull(colors?.defaultBackground) ?? fallback.bg;
-  const { selBg, selFg } = pickSelection(colors, fgHex, bgHex, fallback);
+function selection(colors: TerminalColors | null): { bg: ColorInput; fg: ColorInput } {
+  const fgHex = hexOrNull(colors?.defaultForeground);
+  const bgHex = hexOrNull(colors?.defaultBackground);
+  if (!fgHex || !bgHex) return { bg: RGBA.fromIndex(7), fg: RGBA.fromIndex(0) };
+  return { bg: RGBA.fromHex(fgHex), fg: RGBA.fromHex(bgHex) };
+}
 
-  const fg = RGBA.defaultForeground(fgHex);
-  const muted = pickMuted(colors, fgHex, bgHex);
-  const selectedBg = RGBA.fromHex(selBg);
-  const selectedFg = RGBA.fromHex(selFg);
+export function themeFromPalette(colors: TerminalColors | null): HostTheme {
+  const fg = RGBA.defaultForeground(hexOrNull(colors?.defaultForeground) ?? undefined);
+  const muted = RGBA.fromIndex(8, hexOrNull(colors?.palette?.[8] ?? null) ?? undefined);
+  const sel = selection(colors);
 
   return {
     text: { fg },
@@ -106,31 +60,18 @@ export function themeFromPalette(
       textColor: fg,
       focusedBackgroundColor: "transparent",
       focusedTextColor: fg,
-      selectedBackgroundColor: selectedBg,
-      selectedTextColor: selectedFg,
+      selectedBackgroundColor: sel.bg,
+      selectedTextColor: sel.fg,
       descriptionColor: muted,
-      selectedDescriptionColor: selectedFg,
-    },
-    tab: {
-      backgroundColor: "transparent",
-      textColor: fg,
-      focusedBackgroundColor: "transparent",
-      focusedTextColor: fg,
-      selectedBackgroundColor: selectedBg,
-      selectedTextColor: selectedFg,
-      selectedDescriptionColor: selectedFg,
+      selectedDescriptionColor: sel.fg,
     },
   };
 }
 
 export async function resolveHostTheme(renderer: CliRenderer): Promise<HostTheme> {
-  const mode = await renderer.waitForThemeMode(300);
   try {
-    const colors = await renderer.getPalette({ size: 16, timeout: 400 });
-    return themeFromPalette(colors, mode);
+    return themeFromPalette(await renderer.getPalette({ size: 16, timeout: 400 }));
   } catch {
-    return themeFromPalette(null, mode);
+    return themeFromPalette(null);
   }
 }
-
-export { contrastRatio } from "./contrast";

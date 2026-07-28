@@ -2,19 +2,57 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { HerdrError, notificationShow, pluginPaneOpen } from "./adapter/client";
-import { die } from "./adapter/popup";
-import { parseArgs } from "./cli-args";
-import { cmdInit } from "./cmd-init";
-import { loadConfig } from "./config";
-import { readInvocationContext } from "./context";
-import { WorkflowLoadError } from "./workflows";
-import { resolveRepoRoot } from "./repo";
-import { runWorkflow } from "./runner";
+import {
+  die,
+  ensureHerdrProtocol,
+  HerdrError,
+  notificationShow,
+  pluginPaneOpen,
+  readLine,
+} from "./herdr";
+import { loadConfig, readInvocationContext, resolveRepoRoot } from "./config";
+import { EXAMPLES_URL, runInit } from "./init";
+import { IMPORT_DISCLAIMER, parseImportScope, runImport } from "./workflow/import";
+import { listWorkflows } from "./workflow/load";
+import { WorkflowLoadError } from "./workflow/types";
+import { runWorkflow } from "./run/runner";
 import { startWebServer } from "./web/server";
 
+export function parseArgs(args: string[]): {
+  flags: Record<string, string>;
+  bools: Set<string>;
+  positional: string[];
+  multi: Record<string, string[]>;
+} {
+  const flags: Record<string, string> = {};
+  const bools = new Set<string>();
+  const positional: string[] = [];
+  const multi: Record<string, string[]> = {};
+  const setFlag = (key: string, value: string) => {
+    flags[key] = value;
+    (multi[key] ??= []).push(value);
+  };
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!;
+    if (a.startsWith("--") && a.includes("=")) {
+      const eq = a.indexOf("=");
+      setFlag(a.slice(2, eq), a.slice(eq + 1));
+    } else if (a.startsWith("--")) {
+      const key = a.slice(2);
+      const next = args[i + 1];
+      if (next !== undefined && !next.startsWith("--")) {
+        setFlag(key, next);
+        i += 1;
+      } else bools.add(key);
+    } else positional.push(a);
+  }
+  return { flags, bools, positional, multi };
+}
+
 function usage(): never {
-  die("usage: hwf|herdr-workflows [<run|init|launch|picker|web>]  (no args: web UI)");
+  die(
+    "usage: hwf|herdr-workflows [<run|init|workflow import|launch|picker|web>]  (no args: web UI)",
+  );
 }
 
 function parseInputFlags(values: string[]): Record<string, string> {
@@ -27,9 +65,84 @@ function parseInputFlags(values: string[]): Record<string, string> {
   return inputs;
 }
 
+async function cmdInit(args: string[]): Promise<void> {
+  const { bools } = parseArgs(args);
+  const repoRoot = await resolveRepoRoot();
+  const result = await runInit(repoRoot, {
+    force: bools.has("force") || bools.has("yes"),
+    confirm: async () => {
+      if (!process.stdin.isTTY) return false;
+      process.stdout.write(`.hwf/config.yaml exists — overwrite? [y/N] `);
+      const line = await readLine();
+      return line.kind === "line" && line.text.trim().toLowerCase() === "y";
+    },
+  });
+  if (result.kind === "exists") die(`${result.path} already exists (pass --force to overwrite)`);
+  const profiles = result.profiles.length
+    ? ` (${result.profiles.join(", ")})`
+    : " (no agent kinds on PATH)";
+  process.stdout.write(
+    `wrote ${result.path}${profiles}\n` +
+      `no workflows yet — pick ready-made ones at ${EXAMPLES_URL}\n` +
+      `each card copies an \`hwf workflow import\` command you can paste here\n`,
+  );
+}
+
+async function cmdWorkflowImport(args: string[]): Promise<void> {
+  const { bools, flags, positional } = parseArgs(args);
+  const payload = positional[0];
+  if (!payload) {
+    die('usage: hwf workflow import "<base64>" [--to=repo|global] [--yes] [--force]');
+  }
+  const scope = flags.to ? parseImportScope(flags.to) : undefined;
+  if (flags.to && !scope) die(`--to expects repo or global, got '${flags.to}'`);
+  const tty = process.stdin.isTTY && process.stdout.isTTY;
+  const preapproved = bools.has("yes") || bools.has("y");
+  if (!tty && !(preapproved && scope)) {
+    die("not a tty: pass --yes and --to=repo|global to import without the review prompts");
+  }
+  const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot());
+  try {
+    const outcome = await runImport(payload, {
+      repoRoot,
+      scope,
+      force: bools.has("force"),
+      prompts: preapproved
+        ? undefined
+        : {
+            confirm: async (preview) => {
+              process.stdout.write(`${IMPORT_DISCLAIMER}\n\n${preview}\n`);
+              process.stdout.write("Reviewed the workflow above and want it? [y/N] ");
+              const line = await readLine();
+              return line.kind === "line" && line.text.trim().toLowerCase() === "y";
+            },
+            chooseScope: async () => {
+              process.stdout.write(`Install into [r]epo ${repoRoot}/.hwf / [g]lobal ~/.hwf [R]: `);
+              const line = await readLine();
+              if (line.kind !== "line") return "repo";
+              return parseImportScope(line.text || "r") ?? "repo";
+            },
+          },
+    });
+    if ("aborted" in outcome) {
+      process.stdout.write("aborted — nothing written\n");
+      return;
+    }
+    const r = outcome.result;
+    process.stdout.write(
+      r.status === "written"
+        ? `wrote ${r.path}\n`
+        : `kept existing ${r.path} (--force to replace)\n`,
+    );
+  } catch (error) {
+    if (error instanceof WorkflowLoadError) die(error.message);
+    throw error;
+  }
+}
+
 async function cmdLaunch(): Promise<void> {
-  // The picker runs in a fresh popup pane rooted at the plugin dir, so forward the invoking
-  // pane's repo (and raw context) — otherwise workflow discovery and {pane} target the wrong place.
+  await ensureHerdrProtocol();
+  // Picker popup is rooted at the plugin dir; forward the invoking repo and context.
   const ctx = readInvocationContext();
   const repoRoot = await resolveRepoRoot(ctx.cwd);
   const env: Record<string, string> = { HERDR_WORKFLOWS_REPO_ROOT: repoRoot };
@@ -47,23 +160,26 @@ async function cmdLaunch(): Promise<void> {
 }
 
 async function cmdRun(args: string[]): Promise<void> {
+  await ensureHerdrProtocol();
   const { flags, positional, multi } = parseArgs(args);
   const name = positional[0];
   if (!name) die("usage: hwf|herdr-workflows run <name> [--prompt …] [--input name=value …]");
-  const repoRoot = await resolveRepoRoot();
-  const { agents, sessions } = await loadConfig(repoRoot);
+  const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || resolveRepoRoot();
+  const config = await loadConfig(repoRoot);
   const ctx = readInvocationContext();
   ctx.cwd = repoRoot;
   try {
     const result = await runWorkflow({
       name,
       repoRoot,
-      agents,
-      sessions,
+      config,
       ctx,
       prompt: flags.prompt,
       inputs: parseInputFlags(multi.input ?? []),
-      onProgress: (i, n, label) => process.stdout.write(`[${i}/${n}] ${label}\n`),
+      onProgress: (i, n, label, outcome = "ok") => {
+        const suffix = outcome === "ok" ? "" : ` ${outcome}`;
+        process.stdout.write(`[${i}/${n}] ${label}${suffix}\n`);
+      },
       onStderr: (t) => process.stderr.write(t.endsWith("\n") ? t : `${t}\n`),
     });
     if (!result.ok) die(result.error);
@@ -74,12 +190,7 @@ async function cmdRun(args: string[]): Promise<void> {
 }
 
 function openBrowser(url: string): void {
-  const cmd =
-    process.platform === "darwin"
-      ? ["open", url]
-      : process.platform === "win32"
-        ? ["cmd", "/c", "start", "", url]
-        : ["xdg-open", url];
+  const cmd = process.platform === "darwin" ? ["open", url] : ["xdg-open", url];
   try {
     Bun.spawn(cmd, { stdout: "ignore", stderr: "ignore" });
   } catch {
@@ -92,7 +203,7 @@ async function cmdWeb(args: string[]): Promise<void> {
   const port = flags.port !== undefined ? Number(flags.port) : undefined;
   if (port !== undefined && (!Number.isInteger(port) || port < 1 || port > 65535))
     die(`--port expects an integer between 1 and 65535, got '${flags.port}'`);
-  const repoRoot = await resolveRepoRoot();
+  const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot());
   const { url } = await startWebServer({ repoRoot, port });
   process.stdout.write(`herdr-workflows web · ${url}\n`);
   if (!bools.has("no-open")) openBrowser(url);
@@ -120,24 +231,43 @@ function preferOnDiskOpentuiLib(): void {
   }
 }
 
+async function runPickerPopup(picker: typeof import("./tui/picker")): Promise<void> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) die("picker requires a tty");
+
+  const ctx = readInvocationContext();
+  const root = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot(ctx.cwd));
+  const config = await loadConfig(root);
+  const entries = await listWorkflows(root, config);
+  if (!picker.hasVisibleEntries(entries)) die("no workflows found");
+
+  ctx.cwd = root;
+  const code = await picker.runPickerSession({
+    entries,
+    repoRoot: root,
+    config,
+    ctx,
+  });
+  process.exit(code);
+}
+
 async function main(): Promise<void> {
-  // Older cached manifests invoked `bin/hook.mjs herdr <cmd>`; strip that prefix so a stale
-  // plugins.json still reaches launch/picker until the next `bun run install:dev` re-links.
-  const argv = process.argv.slice(2);
-  const args = argv[0] === "herdr" ? argv.slice(1) : argv;
-  const [command, ...rest] = args;
+  const [command, ...rest] = process.argv.slice(2);
   if (!command) {
     if (process.stdin.isTTY && process.stdout.isTTY) return cmdWeb([]);
     usage();
   }
   if (command === "launch") return cmdLaunch();
   if (command === "picker") {
+    await ensureHerdrProtocol();
     preferOnDiskOpentuiLib();
-    const { runPickerPopup } = await import("./adapter/picker");
-    return runPickerPopup();
+    return runPickerPopup(await import("./tui/picker"));
   }
   if (command === "run") return cmdRun(rest);
   if (command === "init") return cmdInit(rest);
+  if (command === "workflow") {
+    if (rest[0] !== "import") die('usage: hwf workflow import "<base64>"');
+    return cmdWorkflowImport(rest.slice(1));
+  }
   if (command === "web") return cmdWeb(rest);
   usage();
 }

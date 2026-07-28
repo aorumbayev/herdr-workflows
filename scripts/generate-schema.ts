@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { rawWorkflowSchema } from "../src/workflows/parse";
+import { rawWorkflowSchema } from "../src/workflow/parse";
 
 const OUT = join(import.meta.dir, "..", "docs", "workflow.schema.json");
 
@@ -12,7 +12,7 @@ export function buildSchema(): unknown {
     $id: "https://raw.githubusercontent.com/aorumbayev/herdr-workflows/main/docs/workflow.schema.json",
     title: "herdr-workflows workflow",
     description:
-      "Linear YAML workflow for the herdr-workflows herdr plugin. Cross-field rules (one verb per step; wait only on agent; wait_for only on open; timeout requires wait/wait_for; {session} only in stdin) are enforced by the loader, not this schema.",
+      "Linear YAML workflow for the herdr-workflows herdr plugin (format v1alpha1). Cross-field rules are enforced by the parser and loader, not this schema.",
   };
 }
 

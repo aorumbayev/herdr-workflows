@@ -1,6 +1,6 @@
 # Guide
 
-Linear path from install to writing your own workflows. Lookup tables live in the [Reference](/reference).
+Linear path from install to writing your own workflows. Contract tables live in the [Reference](/reference).
 
 ## Install
 
@@ -19,99 +19,95 @@ cd your-repo
 hwf init
 ```
 
-Writes `.hwf/config.yaml` (agent definitions) plus a starter `review` workflow, and asks where to seed the `handoff` / `worktree` recipes (`--seed=global|repo|none` to skip the prompt).
+Writes `.hwf/config.yaml`, probing your PATH for the agent kinds it knows (`claude`, `codex`, `aider`, `cursor`, `opencode`) and writing one profile per kind found, with the first as `default_profile`. It also creates `.hwf/workflows/` and gitignores `.hwf/config.local.yaml`.
+
+### Profiles
+
+A profile is the name a workflow's `using:` refers to — not an agent binary. `kind` is the native Herdr agent kind; live `agent.start` decides whether it is supported. Optional `args` pin startup flags, so one kind can back several roles:
+
+```yaml
+# .hwf/config.yaml
+profiles:
+  claude:
+    kind: claude
+  deep-review:
+    kind: claude
+    args: ["--model", "opus"]
+default_profile: claude
+```
+
+`hwf init` gets you the plain one-profile-per-kind form; role names and `args` are yours to add. An `agent:` step with no `using:` and no `target:` uses `default_profile`.
+
+Config merges across three layers, each replacing whole entries by name: the global plugin config dir (`hwf` finds it through Herdr), committed `.hwf/config.yaml`, then gitignored `.hwf/config.local.yaml` for per-machine choices — point `deep-review` at a different kind locally without touching what the team shares.
+
+No workflows yet — import ready-made ones from [Examples](/examples). Each card copies `hwf workflow import "<base64>"`; import prints the YAML, flags sensitive bits, asks before writing to this repo's `.hwf/workflows` or global `~/.hwf/workflows`.
+
+Workflow YAML is reviewed executable code. Opening a repository never runs a workflow. There is no sandbox — a trusted `run:` can invoke the whole Herdr CLI or socket as your user.
 
 ## Run your first workflow
 
 ```yaml
 # .hwf/workflows/scratch.yaml
+version: v1alpha1
 steps:
-  - open: lazygit
+  - run: [lazygit]
+    pane:
+      open: tab
+    background: true
 ```
 
-- `prefix+k` → type `scratch` → enter. Done.
-- Same thing from a terminal: `hwf run scratch` (live step output — best for debugging).
-- Workflows live in `.hwf/workflows/` (repo) or `~/.hwf/workflows/` (global, every project). Repo shadows global on the same name.
+- `prefix+k` → type `scratch` → enter
+- From a terminal: `hwf run scratch`
+- Workflows live in `.hwf/workflows/` (repo) or `~/.hwf/workflows/` (global); repo shadows global on the same name
+
+Minimal document:
+
+```yaml
+version: v1alpha1
+steps:
+  - run: [bun, test]
+```
 
 ## Pick a surface
 
-| Where                     | Use it for                                                     |
-| ------------------------- | -------------------------------------------------------------- |
-| `prefix+k` (picker)       | running — collects inputs and a prompt line, then fires        |
-| `hwf run <name>`          | running from scripts/terminal, with `--input k=v` / `--prompt` |
-| `hwf web` (or bare `hwf`) | editing — browser workbench: build, validate, share, run log   |
+| Where                     | Use it for                                        |
+| ------------------------- | ------------------------------------------------- |
+| `prefix+k` (picker)       | running — collects entry inputs, then fires       |
+| `hwf run <name>`          | running from scripts/terminal, with `--input k=v` |
+| `hwf web` (or bare `hwf`) | editing — build, validate, share, browse run log  |
 
-The web workbench never runs workflows — running needs real herdr panes. It shows you the `hwf run <name>` line to paste instead.
+Running always goes through the picker or `hwf run`. The workbench builds and shares but never executes.
 
-## The five verbs
+## Format
 
-One verb per step. Steps run top to bottom.
+Every workflow declares `version: v1alpha1`. The package stays semver `0.x`; a later incompatible alpha increments `v1alphaN`. Workflow YAML never declares a Herdr version — the plugin manifest and CLI own that.
 
-- `shell: <cmd>` — blocking `sh -c` in the repo root. Stdout becomes `{last}` for later steps.
-- `open: <cmd>` — fire a command in a new herdr tab. `wait_for: <regex>` makes it block until output matches.
-- `agent: <name>` — launch a configured agent in a new tab. `wait: done` blocks until it finishes; `close_source: true` closes the invoking tab after the new one opens.
-- `herdr: <method>` — call herdr's socket API with `params:`.
-- `run: <workflow>` — splice another workflow's steps in here (composition).
+Optional `title` and `description` appear in the picker (title defaults from the humanized filename). `hidden: true` hides a workflow from the picker but still allows `hwf run`.
 
-`shell` vs `agent`: use `shell` for one-shot CLI calls (`claude -p …`), `agent` when you want an interactive pane a human can watch.
+## Four actions
 
-## Placeholders
+Exactly one action key per step:
 
-Workflows get data through placeholders — but **only** inside `stdin`, `prompt`, and `params` strings. A placeholder in `shell:` / `open:` command text is a load error:
+| Action      | Role                                                                   |
+| ----------- | ---------------------------------------------------------------------- |
+| `run:`      | local argv or shell command → `{stdout, stderr, exit_code, failed}`    |
+| `agent:`    | managed native agent turn → `{response, agent, pane_id}` when blocking |
+| `herdr:`    | explicit socket method + `params:` → that method's structured result   |
+| `workflow:` | isolated child workflow with its own inputs and optional `returns:`    |
 
-```yaml
-# ✗ load error            # ✓
-- shell: echo {pane}      - shell: claude -p "summarize"
-                            stdin: "{pane}"
-```
+Templates use `{{inputs.name}}`, `{{steps.id.field}}`, and `{{context.key}}` only. Results are automatic — there is no `out:` binding.
 
-The everyday three: `{pane}` (invoking pane's scrollback), `{prompt}` (one ad hoc line from the picker or `--prompt`), `{last}` (previous step's output). Full list: [Reference](/reference#verbs--modifiers).
+Config is only `profiles` / `default_profile` / `transcripts` — see [Profiles](#profiles) for the shape and [Reference](/reference#config) for transcript extractors.
 
-## Inputs
+## Agent skill
 
-When a run needs named values, declare them:
-
-```yaml
-inputs:
-  branch:
-    options: "git branch --format='%(refname:short)'"
-  focus:
-    default: ""
-steps:
-  - agent: claude
-    prompt: "Branch {input.branch}\nFocus: {input.focus}\n\n{pane}"
-```
-
-The picker asks one screen per input (choice list with type-to-filter, or a text line); the CLI takes `--input branch=main --input focus=perf`. `options:` can be a literal list, the builtin `agents` (your config's agent names), or a shell command whose stdout lines become choices. Rules and validation: [Reference](/reference#inputs).
-
-Inside `shell:` commands, read inputs from `HWF_INPUT_<name>` environment variables — never interpolate `{input.*}` into command text.
-
-## Failure handling
-
-`on_fail: <workflow>` on the entry workflow runs a recovery sequence once if a step fails:
-
-```yaml
-on_fail: continue
-steps:
-  - run: gate
-  - shell: git push
-```
-
-Recovery sees everything the original run saw, plus `{error}`. It runs once, may not declare its own `inputs:`, and only the entry workflow may declare `on_fail`.
-
-## Web workbench
+To author workflows with an agent, install `skills/herdr-workflow-create` (see the [README](https://github.com/aorumbayev/herdr-workflows#agent-skill) for the paste-in prompt):
 
 ```bash
-hwf web   # opens http://127.0.0.1:7317/?token=… — or just run bare `hwf`
+npx -y skills add aorumbayev/herdr-workflows --skill herdr-workflow-create -y
 ```
-
-- **Workflows** tab: text editor with live validation, or visual mode (drag-reorderable step cards that round-trip to YAML). Copy, download, move between repo/global, delete.
-- **Config** tab: edit repo/global `config.yaml`.
-- **Runs** tab: read-only run history.
-
-Bound to `127.0.0.1` with a per-launch token; the token dies with the process. Treat the URL as a secret while it runs — it can write your `.hwf` files.
 
 ## Next
 
-- [Examples](/examples) — recipes from trivial to agent handoffs.
-- [Reference](/reference) — CLI flags, picker keys, load rules, ceilings.
+- [Examples](/examples) — import ready-made workflows
+- [Reference](/reference) — panes, readiness, inputs, control flow, caps, trust, denylist
