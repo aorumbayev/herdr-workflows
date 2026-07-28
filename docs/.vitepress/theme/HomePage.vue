@@ -24,8 +24,8 @@ const initCmd = "hwf init";
         <p class="eyebrow"><span class="dot" aria-hidden="true" /> herdr plugin · linear yaml</p>
         <h1>Workflows for the herd.</h1>
         <p class="lede">
-          Short YAML that runs commands, managed agents, and explicit Herdr calls — from the picker,
-          CLI, or workbench.
+          Short YAML that runs commands, managed agents, and explicit herdr calls. Use the picker,
+          the CLI, or the workbench.
         </p>
         <div class="actions">
           <a class="btn btn-primary" href="#install">Quick start</a>
@@ -48,7 +48,7 @@ const initCmd = "hwf init";
     <section id="install" class="install">
       <p class="kicker">get running</p>
       <h2>Install, init, run</h2>
-      <p class="section-lede">Three commands. Then <code>prefix+k</code> opens the picker.</p>
+      <p class="section-lede">Run three commands. Then <code>prefix+k</code> opens the picker.</p>
 
       <div class="install-stack">
         <div class="install-card">
@@ -76,7 +76,8 @@ steps:
       open: tab
     background: true</code></pre>
         <p class="scratch-hint">
-          Press <code>prefix+k</code>, pick <code>scratch</code>, hit enter — a lazygit tab opens.
+          Press <code>prefix+k</code>, pick <code>scratch</code>, then press enter. A lazygit tab
+          opens.
         </p>
       </div>
     </section>
@@ -88,17 +89,17 @@ steps:
         <article>
           <h3>prefix+k</h3>
           <p>
-            Picker runs workflows; list-mode <code>Ctrl+E</code> / <code>Ctrl+Y</code> /
+            The picker runs workflows. In list mode, <code>Ctrl+E</code>, <code>Ctrl+Y</code>, and
             <code>Ctrl+O</code> open edit, share, or import in the workbench.
           </p>
         </article>
         <article>
           <h3>hwf run</h3>
-          <p>Same runner from the terminal or scripts, with <code>--input k=v</code>.</p>
+          <p>Use the same runner from the terminal or scripts, with <code>--input k=v</code>.</p>
         </article>
         <article>
           <h3>hwf web</h3>
-          <p>Browser workbench to build, validate, share, and import — never executes.</p>
+          <p>Use the browser workbench to build, validate, share, and import. It never executes.</p>
         </article>
       </div>
     </section>

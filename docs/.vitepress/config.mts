@@ -2,7 +2,7 @@ import { defineConfig } from "vitepress";
 
 export default defineConfig({
   title: "herdr-workflows",
-  description: "Short linear YAML workflows for herdr",
+  description: "Short linear YAML workflows for herdr. Run commands, agents, and herdr calls.",
   base: "/herdr-workflows/",
   appearance: "force-dark",
   head: [

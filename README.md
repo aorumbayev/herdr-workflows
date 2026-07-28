@@ -14,7 +14,9 @@
 
 ---
 
-herdr-workflows is a [herdr](https://herdr.dev) plugin that runs short linear YAML workflows — `run:`, `agent:`, `herdr:`, and `workflow:` — from a picker (`prefix+k`), the `hwf` CLI, or a local web workbench. herdr owns panes and UI; this plugin sequences steps. Format is `version: v1alpha1`.
+herdr-workflows is a [herdr](https://herdr.dev) plugin. It runs short linear YAML workflows with `run:`, `agent:`, `herdr:`, and `workflow:` steps.
+
+Start a run from the picker (`prefix+k`), the `hwf` CLI, or a local web workbench. herdr owns panes and UI. This plugin only loads and sequences steps. The format is `version: v1alpha1`.
 
 ```yaml
 # .hwf/workflows/review.yaml
@@ -32,7 +34,7 @@ steps:
       open: beside
 ```
 
-Workflow YAML is reviewed executable code. There is no sandbox: a trusted `run:` can invoke the whole Herdr CLI or socket as your user. The method denylist only blocks accidental misuse of server/plugin/identity APIs.
+Treat workflow YAML as reviewed executable code. There is no sandbox. A trusted `run:` can call the full herdr CLI or socket as your user. The method denylist only blocks accidental misuse of server, plugin, and identity APIs.
 
 ## Install
 
@@ -42,21 +44,21 @@ You need [herdr](https://herdr.dev) **0.7.5** or newer.
 herdr plugin install aorumbayev/herdr-workflows
 ```
 
-That compiles the plugin, puts `herdr-workflows` / `hwf` on your PATH, and binds `prefix+k` to the workflow picker.
+The install compiles the plugin, puts `herdr-workflows` / `hwf` on your PATH, and binds `prefix+k` to the workflow picker.
 
 Then set up profiles:
 
 ```bash
 cd your-repo
 hwf init            # team / repo-local: writes .hwf/config.yaml
-hwf init --global   # personal: writes Herdr plugin config dir (for ~/.hwf/workflows)
+hwf init --global   # personal: writes herdr plugin config dir (for ~/.hwf/workflows)
 ```
 
-Both probe PATH for the kinds they know (`claude`, `codex`, `aider`, `cursor`, `opencode`) and write
-one profile per kind, with the first as `default_profile`. Use repo init for shared team config; use
-`--global` when you run workflows from `~/.hwf/workflows` without a per-repo `.hwf`. A profile is what a
-workflow's `using:` names, so add role-oriented ones with startup `args` when a single kind should back
-several roles:
+Both commands probe PATH for known kinds (`claude`, `codex`, `aider`, `cursor`, `opencode`). Each found kind becomes one profile. The first kind is `default_profile`.
+
+Use repo init for shared team config. Use `--global` when you run workflows from `~/.hwf/workflows` without a per-repo `.hwf`.
+
+A profile is the name a workflow `using:` refers to. Add role-oriented profiles with startup `args` when one kind backs several roles:
 
 ```yaml
 # .hwf/config.yaml  (or the global plugin config.yaml)
@@ -69,17 +71,13 @@ profiles:
 default_profile: claude
 ```
 
-Config merges global (Herdr's plugin config dir) → committed `.hwf/config.yaml` → gitignored
-`.hwf/config.local.yaml`, replacing whole entries by name, so you can repoint a shared profile per machine.
+Config merges in this order: global herdr plugin config, committed `.hwf/config.yaml`, then gitignored `.hwf/config.local.yaml`. Each layer replaces whole entries by name. You can repoint a shared profile on one machine.
 
-Ready-made workflows live in [`examples/`](examples) and on the
-[Examples page](https://aorumbayev.github.io/herdr-workflows/examples), where each card copies a
-`hwf workflow import "<bundle>"` command — import reviews every bundled YAML (with sensitive flags),
-asks for one repo or global destination, and confirms before writing. Name conflicts: workbench
-asks replace-all; CLI needs `--force` on rerun. Old single-workflow payloads are unsupported.
+Ready-made workflows live in [`examples/`](examples) and on the [Examples page](https://aorumbayev.github.io/herdr-workflows/examples). Each card copies a `hwf workflow import "<bundle>"` command.
 
-Press `prefix+k` to pick and run a workflow (`Ctrl+E` edit, `Ctrl+Y` share, `Ctrl+O` import open the
-workbench), or use the CLI:
+Import reviews every bundled YAML and flags sensitive parts. It asks for one repo or global destination, then confirms before it writes. On name conflicts, the workbench asks for replace-all. The CLI needs `--force` on a rerun. Old single-workflow payloads are unsupported.
+
+Press `prefix+k` to pick and run a workflow. In list mode, `Ctrl+E` edits, `Ctrl+Y` shares, and `Ctrl+O` opens import. Or use the CLI:
 
 ```bash
 hwf run review      # run the workflow above, live progress in the terminal
@@ -87,11 +85,11 @@ hwf web             # browser workbench: build/edit/validate/share/import — ne
 hwf                 # same as `hwf web`
 ```
 
-Running always happens through the picker or `hwf run` — it needs real herdr panes, so the web workbench builds, shares, and imports but never runs. Picker shortcuts reuse one live workbench per repository when it is still reachable.
+Runs always go through the picker or `hwf run`. They need real herdr panes. The web workbench builds, shares, and imports. It never runs. Picker shortcuts reuse one live workbench per repository when that workbench is still reachable.
 
 ## Agent skill
 
-`skills/herdr-workflow-create` walks you through authoring a v1alpha1 workflow, keeps the web workbench canvas drawing it, and validates against this plugin's loader before saving:
+`skills/herdr-workflow-create` walks you through a v1alpha1 workflow. It keeps the web workbench canvas in sync and validates with this plugin loader before save:
 
 ```
 Install the herdr-workflows toolkit so you can build workflows for me:
