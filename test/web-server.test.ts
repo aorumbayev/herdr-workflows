@@ -340,3 +340,87 @@ steps:
     }
   });
 });
+
+describe("web share and import APIs", () => {
+  test("share returns command and display provenance without encoding source", async () => {
+    const root = await repo();
+    await writeFile(
+      join(root, ".hwf", "workflows", "handoff.yaml"),
+      `${V1}steps:\n  - run: echo hi\n`,
+    );
+    const { base, token } = await serve(root);
+    const res = await fetch(`${base}/api/share?name=handoff&scope=repo`, {
+      headers: { "x-hwf-token": token },
+    });
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as {
+      ok: boolean;
+      command: string;
+      entries: { name: string; yaml: string }[];
+      provenance: { name: string; source: string }[];
+    };
+    expect(data.ok).toBe(true);
+    expect(data.command.startsWith('hwf workflow import "')).toBe(true);
+    expect(data.entries).toEqual([{ name: "handoff", yaml: `${V1}steps:\n  - run: echo hi\n` }]);
+    expect(data.provenance).toEqual([{ name: "handoff", source: "repo" }]);
+    expect(JSON.stringify(data.entries)).not.toContain('"source"');
+  });
+
+  test("import preview accepts command text and rejects old payloads", async () => {
+    const root = await repo();
+    const { base, token } = await serve(root);
+    const { encodePayload, formatImportCommand } = await import("../src/workflow/payload");
+    const payload = encodePayload([{ name: "demo", yaml: `${V1}steps:\n  - run: x\n` }]);
+    const ok = await fetch(`${base}/api/import/preview`, {
+      method: "POST",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({ text: formatImportCommand(payload) }),
+    });
+    expect(ok.status).toBe(200);
+    const preview = (await ok.json()) as {
+      ok: boolean;
+      entries: { name: string; yaml: string }[];
+      availability: { repo: { conflicts: unknown[] } };
+    };
+    expect(preview.ok).toBe(true);
+    expect(preview.entries[0]?.name).toBe("demo");
+
+    const old = Buffer.from(
+      Bun.gzipSync(
+        new TextEncoder().encode(
+          JSON.stringify({ v: 1, name: "demo", body: `${V1}steps:\n  - run: x\n` }),
+        ),
+      ),
+    ).toString("base64");
+    const rejected = await fetch(`${base}/api/import/preview`, {
+      method: "POST",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({ text: old }),
+    });
+    expect(rejected.status).toBe(400);
+    expect(((await rejected.json()) as { error: string }).error).toMatch(/removed single-workflow/);
+  });
+
+  test("import requires replace-all when any destination conflicts", async () => {
+    const root = await repo();
+    await writeFile(join(root, ".hwf", "workflows", "demo.yaml"), `${V1}steps:\n  - run: mine\n`);
+    const { base, token } = await serve(root);
+    const { encodePayload } = await import("../src/workflow/payload");
+    const text = encodePayload([{ name: "demo", yaml: `${V1}steps:\n  - run: new\n` }]);
+    const conflict = await fetch(`${base}/api/import`, {
+      method: "POST",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({ text, scope: "repo" }),
+    });
+    expect(conflict.status).toBe(409);
+    expect(await Bun.file(join(root, ".hwf", "workflows", "demo.yaml")).text()).toContain("mine");
+
+    const replaced = await fetch(`${base}/api/import`, {
+      method: "POST",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({ text, scope: "repo", replaceAll: true }),
+    });
+    expect(replaced.status).toBe(200);
+    expect(await Bun.file(join(root, ".hwf", "workflows", "demo.yaml")).text()).toContain("new");
+  });
+});

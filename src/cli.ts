@@ -15,6 +15,7 @@ import { EXAMPLES_URL, runInit } from "./init";
 import { IMPORT_DISCLAIMER, parseImportScope, runImport } from "./workflow/import";
 import { listWorkflows } from "./workflow/load";
 import { WorkflowLoadError } from "./workflow/types";
+import { CaptureLimitError } from "./limits";
 import { runWorkflow } from "./run/runner";
 import { parseLaunchPayload } from "./tui/run-launch";
 import { ensureWorkbench } from "./web/endpoint";
@@ -136,13 +137,16 @@ async function cmdWorkflowImport(args: string[]): Promise<void> {
       return;
     }
     const r = outcome.result;
-    process.stdout.write(
-      r.status === "written"
-        ? `wrote ${r.path}\n`
-        : `kept existing ${r.path} (--force to replace)\n`,
-    );
+    if (r.status === "conflicts") {
+      const names = r.conflicts.map((c) => c.name).join(", ");
+      die(`existing workflows would be replaced (${names}); pass --force to replace all`);
+    }
+    for (const row of r.results) {
+      process.stdout.write(`wrote ${row.path}\n`);
+    }
   } catch (error) {
-    if (error instanceof WorkflowLoadError) die(error.message);
+    if (error instanceof WorkflowLoadError || error instanceof CaptureLimitError)
+      die(error.message);
     throw error;
   }
 }

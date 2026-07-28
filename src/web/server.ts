@@ -1,8 +1,16 @@
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { globalConfigPath, loadConfig, parseConfigText, repoConfigPath } from "../config";
 import { readRunLog, recentRuns } from "../runlog";
+import { exportWorkflowBundle } from "../workflow/export";
+import {
+  checkPayload,
+  parseImportScope,
+  preflightConflicts,
+  previewBundle,
+  runImport,
+} from "../workflow/import";
 import { listWorkflows, parseWorkflowText, workflowPath } from "../workflow/load";
 import { parseRaw, rawWorkflowSchema, type RawStep, type RawWorkflowDoc } from "../workflow/parse";
 import { analyzeYamlTree, sensitivityLabels, workflowDisplayTitle } from "../workflow/trust";
@@ -416,6 +424,84 @@ async function handleConfig(
   return new Response("method not allowed", { status: 405 });
 }
 
+async function handleShare(repoRoot: string, url: URL): Promise<Response> {
+  const name = url.searchParams.get("name") ?? "";
+  const checked = requireNameScope(name, scopeOf(url.searchParams.get("scope")));
+  if (!checked.ok) return checked.response;
+  try {
+    const exported = await exportWorkflowBundle({
+      name,
+      scope: checked.scope,
+      repoRoot,
+    });
+    return json({
+      ok: true,
+      command: exported.command,
+      payload: exported.payload,
+      entries: exported.entries.map((e) => ({ name: e.name, yaml: e.yaml })),
+      provenance: exported.provenance,
+    });
+  } catch (error) {
+    return json({ ok: false, error: errText(error) }, 400);
+  }
+}
+
+async function handleImportPreview(
+  repoRoot: string,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  try {
+    const bundle = checkPayload(String(body.text ?? ""));
+    const preview = previewBundle(bundle);
+    const home = process.env.HOME ?? homedir();
+    const repoConflicts = await preflightConflicts(bundle, join(repoRoot, ".hwf", "workflows"));
+    const globalConflicts = await preflightConflicts(bundle, join(home, ".hwf", "workflows"));
+    return json({
+      ok: true,
+      entries: preview.entries,
+      warnings: preview.warnings,
+      unresolvedChildren: preview.unresolvedChildren,
+      banner: preview.banner,
+      availability: {
+        repo: { conflicts: repoConflicts },
+        global: { conflicts: globalConflicts },
+      },
+    });
+  } catch (error) {
+    return json({ ok: false, error: errText(error) }, 400);
+  }
+}
+
+async function handleImportWrite(
+  repoRoot: string,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const scope = scopeOf(body.scope) ?? parseImportScope(String(body.scope ?? ""));
+  if (!scope) return json({ ok: false, error: "scope required" }, 400);
+  const replaceAll = body.replaceAll === true || body.force === true;
+  try {
+    const outcome = await runImport(String(body.text ?? ""), {
+      repoRoot,
+      scope,
+      force: replaceAll,
+    });
+    if ("aborted" in outcome) return json({ ok: false, error: "aborted" }, 400);
+    if (outcome.result.status === "conflicts") {
+      return json(
+        {
+          ok: false,
+          error: "existing workflows require replace-all confirmation",
+          conflicts: outcome.result.conflicts,
+        },
+        409,
+      );
+    }
+    return json({ ok: true, results: outcome.result.results });
+  } catch (error) {
+    return json({ ok: false, error: errText(error) }, 400);
+  }
+}
+
 function createHandler(
   repoRoot: string,
   token: string,
@@ -456,6 +542,11 @@ function createHandler(
         return handlePromote(repoRoot, body);
       if (url.pathname === "/api/config") return handleConfig(repoRoot, req, url, body);
       if (url.pathname === "/api/runs" && req.method === "GET") return handleRuns();
+      if (url.pathname === "/api/share" && req.method === "GET") return handleShare(repoRoot, url);
+      if (url.pathname === "/api/import/preview" && req.method === "POST")
+        return handleImportPreview(repoRoot, body);
+      if (url.pathname === "/api/import" && req.method === "POST")
+        return handleImportWrite(repoRoot, body);
       return new Response("not found", { status: 404 });
     } catch (error) {
       return json({ ok: false, error: errText(error) }, 500);

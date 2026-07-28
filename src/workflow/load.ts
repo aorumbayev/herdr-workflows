@@ -61,7 +61,7 @@ export function workflowPath(scope: "repo" | "global", repoRoot: string, name: s
   return join(scope === "repo" ? repoDir(repoRoot) : globalDir(), `${name}.yaml`);
 }
 
-async function resolveWorkflowFile(
+export async function resolveWorkflowFile(
   name: string,
   repoRoot: string,
 ): Promise<{ file: string; source: "repo" | "global" } | undefined> {

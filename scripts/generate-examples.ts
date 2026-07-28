@@ -26,7 +26,7 @@ export async function buildExamples(dir = EXAMPLES_DIR): Promise<ExampleCard[]> 
       name,
       desc: raw.description ?? "",
       body,
-      payload: encodePayload({ v: 1, name, body }),
+      payload: encodePayload([{ name, yaml: body }]),
     });
   }
   return cards;
