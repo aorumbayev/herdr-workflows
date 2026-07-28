@@ -46,25 +46,24 @@ const baseConfig: WorkflowsConfig = {
   transcripts: {},
 };
 
+type MockAgent = {
+  status: string;
+  pane_id: string;
+  name: string;
+  interactive_ready: boolean;
+  launch_pending: boolean;
+};
+
 function mockDeps(overrides: Partial<RunnerDeps> & { writeManagedResponse?: boolean } = {}): {
   deps: RunnerDeps;
   notes: string[];
   calls: { method: string; params: Record<string, unknown> }[];
-  agents: Map<string, { status: string; pane_id: string; name: string }>;
+  agents: Map<string, MockAgent>;
 } {
   const { writeManagedResponse = true, ...depOverrides } = overrides;
   const notes: string[] = [];
   const calls: { method: string; params: Record<string, unknown> }[] = [];
-  const agents = new Map<
-    string,
-    {
-      status: string;
-      pane_id: string;
-      name: string;
-      interactive_ready: boolean;
-      launch_pending: boolean;
-    }
-  >();
+  const agents = new Map<string, MockAgent>();
   const deps: RunnerDeps = {
     herdrCall: async (method, params = {}) => {
       calls.push({ method, params });
@@ -827,7 +826,79 @@ steps:
     expect(log.some((e) => e.interrupted)).toBe(true);
   });
 
-  test("context.agent preflight fails when unavailable", async () => {
+  test("context.agent uses pane id when the detected agent has a null name", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - agent: continue
+    target: "{{context.agent}}"
+`,
+    });
+    const { deps, calls, agents } = mockDeps();
+    agents.set("w2T:p1", {
+      status: "idle",
+      pane_id: "w2T:p1",
+      name: "",
+      interactive_ready: true,
+      launch_pending: false,
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, paneId: "w2T:p1" },
+      deps: {
+        ...deps,
+        agentInfo: async () => ({
+          name: null,
+          pane_id: "w2T:p1",
+          agent_status: agents.get("w2T:p1")?.status ?? "idle",
+          agent: "claude",
+        }),
+      },
+    });
+    expect(result.ok).toBe(true);
+    const prompt = calls.find((c) => c.method === "agent.prompt");
+    expect(prompt?.params.target).toBe("w2T:p1");
+  });
+
+  test("context.agent prefers the live name over the pane id", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - agent: continue
+    target: "{{context.agent}}"
+`,
+    });
+    const { deps, calls, agents } = mockDeps();
+    agents.set("reviewer", {
+      status: "idle",
+      pane_id: "w2T:p1",
+      name: "reviewer",
+      interactive_ready: true,
+      launch_pending: false,
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, paneId: "w2T:p1" },
+      deps: {
+        ...deps,
+        agentInfo: async () => ({
+          name: "reviewer",
+          pane_id: "w2T:p1",
+          agent_status: agents.get("reviewer")?.status ?? "idle",
+          agent: "claude",
+        }),
+      },
+    });
+    expect(result.ok).toBe(true);
+    const prompt = calls.find((c) => c.method === "agent.prompt");
+    expect(prompt?.params.target).toBe("reviewer");
+  });
+
+  test("context.agent preflight fails when the pane has no recognized agent", async () => {
     const root = await repoWith({
       m: `version: v1alpha1
 steps:
@@ -836,9 +907,12 @@ steps:
 `,
     });
     const { deps } = mockDeps({
-      agentInfo: async () => {
-        throw new Error("context.agent is unavailable: no named agent in pane w1:p1");
-      },
+      agentInfo: async () => ({
+        name: null,
+        pane_id: "w1:p1",
+        agent_status: null,
+        agent: null,
+      }),
     });
     const result = await runWorkflow({
       name: "m",
@@ -848,7 +922,46 @@ steps:
       deps,
     });
     const err = failed(result);
-    expect(err.error).toMatch(/context\.agent|no named agent/);
+    expect(err.error).toMatch(/no recognized agent in this pane/);
+    expect(err.error).toMatch(/run this from a pane running a recognized agent/);
+  });
+
+  test("target-mode step prompts the pane id from a null-named context.agent", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - agent: distill
+    target: "{{context.agent}}"
+`,
+    });
+    const { deps, calls, agents } = mockDeps();
+    agents.set("w2V:p1", {
+      status: "idle",
+      pane_id: "w2V:p1",
+      name: "",
+      interactive_ready: true,
+      launch_pending: false,
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, paneId: "w2V:p1" },
+      deps: {
+        ...deps,
+        agentInfo: async () => ({
+          name: null,
+          pane_id: "w2V:p1",
+          agent_status: agents.get("w2V:p1")?.status ?? "idle",
+          agent: "claude",
+        }),
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(calls.some((c) => c.method === "agent.start")).toBe(false);
+    expect(calls.find((c) => c.method === "agent.prompt")?.params).toMatchObject({
+      target: "w2V:p1",
+    });
   });
 
   test("readiness uses pane.wait_for_output defaults", async () => {

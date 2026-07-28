@@ -407,13 +407,20 @@ type Preflight =
   | { ok: true; values: TemplateNamespace; transcriptFile?: string }
   | { ok: false; error: string };
 
-async function invokingAgentName(args: PreflightArgs): Promise<string> {
+/** Live name when set; else pane id (Herdr accepts either as agent.prompt/wait target). */
+async function invokingAgentTarget(args: PreflightArgs): Promise<string> {
   const paneId = args.ctx.paneId;
   if (!paneId) throw new Error("context.agent needs an invoking herdr pane");
   const info = await args.deps.agentInfo(paneId);
-  const name = typeof info.name === "string" ? info.name : "";
-  if (!name) throw new Error(`context.agent is unavailable: no named agent in pane ${paneId}`);
-  return name;
+  const name = typeof info.name === "string" ? info.name.trim() : "";
+  if (name) return name;
+  const kind = typeof info.agent === "string" ? info.agent.trim() : "";
+  if (!kind) {
+    throw new Error(
+      "context.agent is unavailable: no recognized agent in this pane — run this from a pane running a recognized agent",
+    );
+  }
+  return paneId;
 }
 
 async function writeTranscriptFile(runId: string, text: string): Promise<string> {
@@ -434,7 +441,7 @@ async function preflightContext(args: PreflightArgs): Promise<Preflight> {
   let transcript: string | undefined;
   let transcriptFile: string | undefined;
   try {
-    if (keys.has("agent")) agent = await invokingAgentName(args);
+    if (keys.has("agent")) agent = await invokingAgentTarget(args);
     if (TRANSCRIPT_KEYS.some((key) => keys.has(key))) {
       const paneId = args.ctx.paneId;
       if (!paneId) return { ok: false, error: "context.transcript needs an invoking herdr pane" };
