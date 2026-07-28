@@ -34,12 +34,9 @@ coverage/
 docs/.vitepress/cache/
 docs/.vitepress/dist/
 
-# local scratch / agent / openspec
+# local scratch / agent harness
 .plans/
-references/
-openspec/
 .cursor/
-.claude/
 .opencode/
 .idea/
 *.swp
@@ -48,3 +45,10 @@ openspec/
 
 .hwf/
 .kimi/
+
+# local Herdr and other reference checkouts (tracked instructions only)
+.agents/references/**
+!.agents/references/AGENTS.md
+
+# leftover untracked clone path from older layouts
+/references/

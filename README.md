@@ -2,7 +2,7 @@
   herdr-workflows
 </h3>
 
-<p align="center">Automate the boring and repetitive stuff in herdr</p>
+<p align="center">Automate repetitive work in herdr</p>
 
 <p align="center">
   <a href="https://aorumbayev.github.io/herdr-workflows/guide">Guide</a> · <a href="https://aorumbayev.github.io/herdr-workflows/examples">Examples</a> · <a href="https://aorumbayev.github.io/herdr-workflows/reference">Reference</a>
@@ -44,7 +44,7 @@ You need [herdr](https://herdr.dev) **0.7.5** or newer.
 herdr plugin install aorumbayev/herdr-workflows
 ```
 
-The install compiles the plugin, then attempts to link `herdr-workflows` / `hwf` into `~/.local/bin` (or `$XDG_BIN_HOME`) and append a validated `prefix+k` picker binding. Both steps are nonfatal — skips print a note and continue. If needed: `command -v hwf`, `herdr config check`, and add the bin dir to PATH when the install warns it is missing.
+The install compiles the plugin, then tries to link `herdr-workflows` / `hwf` into `~/.local/bin` (or `$XDG_BIN_HOME`) and append a validated `prefix+k` picker binding. Both steps are nonfatal. Skips print a note and continue. If needed: `command -v hwf`, `herdr config check`, and add the bin dir to PATH when the install warns it is missing.
 
 Then set up profiles:
 
@@ -115,6 +115,7 @@ npx -y skills add aorumbayev/herdr-workflows --skill herdr-workflow-create -y
 - [Guide](https://aorumbayev.github.io/herdr-workflows/guide)
 - [Examples](https://aorumbayev.github.io/herdr-workflows/examples)
 - [Reference](https://aorumbayev.github.io/herdr-workflows/reference)
+- [Contributing](CONTRIBUTING.md)
 
 ## License
 

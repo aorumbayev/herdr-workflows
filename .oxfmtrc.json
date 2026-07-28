@@ -1,13 +1,12 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "ignorePatterns": [
-    ".claude/**",
+    ".agents/references/**",
     ".cursor/**",
     ".opencode/**",
     "docs/.vitepress/theme/examples.generated.ts",
     "examples/**",
     "openspec/**",
-    "references/**",
     "schemas/**",
     "src/herdr-methods.generated.ts"
   ]
