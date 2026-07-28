@@ -1,12 +1,22 @@
 #!/usr/bin/env node
-import { existsSync, lstatSync, mkdirSync, readlinkSync, symlinkSync, unlinkSync } from "node:fs";
-import { delimiter, dirname, join, resolve } from "node:path";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readlinkSync,
+  symlinkSync,
+  unlinkSync,
+} from "node:fs";
+import { delimiter, dirname, join, resolve, sep } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const binary = join(root, "bin", "herdr-workflows");
 const names = ["herdr-workflows", "hwf"];
+const ephemeral = root.split(sep).some((part) => part.startsWith(".tmp-install-"));
 
 function binDir() {
   if (process.env.XDG_BIN_HOME) return process.env.XDG_BIN_HOME;
@@ -18,26 +28,44 @@ function onPath(dir) {
   return path.split(delimiter).some((entry) => entry && resolve(entry) === resolve(dir));
 }
 
-function linkName(dir, name) {
-  const link = join(dir, name);
+function entryExists(path) {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-  if (existsSync(link)) {
-    const stat = lstatSync(link);
+function installName(dir, name) {
+  const dest = join(dir, name);
+
+  if (entryExists(dest)) {
+    const stat = lstatSync(dest);
     if (stat.isSymbolicLink()) {
-      const target = resolve(dirname(link), readlinkSync(link));
-      if (target === resolve(binary)) {
-        console.log(`${name} already linked at ${link}`);
+      const target = resolve(dirname(dest), readlinkSync(dest));
+      if (!ephemeral && target === resolve(binary)) {
+        console.log(`${name} already linked at ${dest}`);
         return;
       }
-      unlinkSync(link);
+      unlinkSync(dest);
+    } else if (ephemeral) {
+      unlinkSync(dest);
     } else {
-      console.log(`skipped cli install: ${link} exists and is not a symlink`);
+      console.log(`skipped cli install: ${dest} exists and is not a symlink`);
       return;
     }
   }
 
-  symlinkSync(binary, link);
-  console.log(`linked ${binary} → ${link}`);
+  if (ephemeral) {
+    copyFileSync(binary, dest);
+    chmodSync(dest, 0o755);
+    console.log(`copied ${binary} → ${dest}`);
+    return;
+  }
+
+  symlinkSync(binary, dest);
+  console.log(`linked ${binary} → ${dest}`);
 }
 
 try {
@@ -48,7 +76,7 @@ try {
 
   const dir = binDir();
   mkdirSync(dir, { recursive: true });
-  for (const name of names) linkName(dir, name);
+  for (const name of names) installName(dir, name);
 
   if (!onPath(dir)) {
     console.log(`warning: ${dir} is not on PATH — add it to your shell profile`);
