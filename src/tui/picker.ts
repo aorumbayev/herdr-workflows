@@ -85,23 +85,43 @@ export function entrySensitivity(entry: WorkflowListEntry): string[] {
   });
 }
 
-export function buildPickerOptions(valid: WorkflowListEntry[]): SelectOption[] {
-  return valid.map((entry) => {
-    const title = workflowDisplayTitle(entry.name, entry.title);
-    const parts = [title, entry.source === "repo" ? "repo" : "global"];
-    if (entry.inputs?.length) parts.push("inputs");
-    parts.push(...entrySensitivity(entry));
-    return {
-      name: parts.join(" · "),
-      description: entry.description?.trim() || entry.name,
-      value: { entry } satisfies PickerRowValue,
-    };
-  });
+// @opentui/core SelectRenderable: name text starts at contentX+1+indicatorWidth (1 pad + 2-col indicator).
+const SELECT_NAME_OFFSET = 3;
+const LOCATION_WIDTH = 7;
+const WARNING_WIDTH = 2;
+
+function formatPickerRowName(
+  title: string,
+  location: "global" | "repo" | "invalid",
+  warned: boolean,
+  rowWidth: number,
+): string {
+  const titleW = Math.max(0, rowWidth - SELECT_NAME_OFFSET - 1 - WARNING_WIDTH - LOCATION_WIDTH);
+  const warning = warned ? "! " : "  ";
+  return `${truncate(title, titleW).padEnd(titleW)} ${warning}${location.padStart(LOCATION_WIDTH)}`;
 }
 
-function buildInvalidOptions(invalid: WorkflowListEntry[]): SelectOption[] {
+export function buildPickerOptions(valid: WorkflowListEntry[], rowWidth: number): SelectOption[] {
+  return valid.map((entry) => ({
+    name: formatPickerRowName(
+      workflowDisplayTitle(entry.name, entry.title),
+      entry.source === "repo" ? "repo" : "global",
+      entrySensitivity(entry).length > 0,
+      rowWidth,
+    ),
+    description: entry.description?.trim() || entry.name,
+    value: { entry } satisfies PickerRowValue,
+  }));
+}
+
+function buildInvalidOptions(invalid: WorkflowListEntry[], rowWidth: number): SelectOption[] {
   return invalid.map((entry) => ({
-    name: entry.name,
+    name: formatPickerRowName(
+      workflowDisplayTitle(entry.name, entry.title),
+      "invalid",
+      entrySensitivity(entry).length > 0,
+      rowWidth,
+    ),
     description: stripFilePrefix(entry.error ?? "", entry.file),
     value: { entry } satisfies PickerRowValue,
   }));
@@ -220,7 +240,10 @@ function setListOptions(state: PickerState, options: SelectOption[]): void {
 
 function applyFilter(state: PickerState): void {
   const { valid, invalid } = filterWorkflowEntries(state.entries, state.filter.value);
-  setListOptions(state, [...buildPickerOptions(valid), ...buildInvalidOptions(invalid)]);
+  setListOptions(state, [
+    ...buildPickerOptions(valid, state.contentWidth),
+    ...buildInvalidOptions(invalid, state.contentWidth),
+  ]);
   refreshListChrome(state);
 }
 
@@ -758,7 +781,7 @@ function bindPickerEvents(state: PickerState): void {
   state.renderer.on("resize", (width: number) => {
     state.contentWidth = pickerContentWidth(width);
     state.rule.content = formatRule(state.contentWidth);
-    if (state.mode === "list") refreshListChrome(state);
+    if (state.mode === "list") applyFilter(state);
   });
 }
 

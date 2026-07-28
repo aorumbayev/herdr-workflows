@@ -89,20 +89,21 @@ describe("buildPickerOptions", () => {
       needsTranscript: true,
       sensitiveMethods: ["pane.close"],
     };
-    const options = buildPickerOptions([entry]);
-    expect(options[0]!.name).toBe(
-      "Handover · repo · inputs · commands · transcript · herdr:pane.close",
-    );
+    const options = buildPickerOptions([entry], 60);
+    expect(options[0]!.name).toBe(`${"Handover".padEnd(47)} ! ${"repo".padStart(7)}`);
+    expect(options[0]!.name).not.toContain("inputs");
+    expect(options[0]!.name).not.toContain("commands");
+    expect(options[0]!.name).not.toContain("transcript");
+    expect(options[0]!.name).not.toContain("herdr:pane.close");
     expect(options[0]!.description).toBe("Pick a profile");
   });
 
   test("humanized title default and provenance badges", () => {
     const { valid } = filterWorkflowEntries(entries, "");
-    const options = buildPickerOptions(valid);
-    expect(options[0]!.name).toContain("Chat handoff · repo");
-    expect(options[0]!.name).toContain("transcript");
+    const options = buildPickerOptions(valid, 60);
+    expect(options[0]!.name).toBe(`${"Chat handoff".padEnd(47)} ! ${"repo".padStart(7)}`);
     expect(options[0]!.description).toBe("Pass transcript to a reviewer");
-    expect(options[1]!.name).toBe("Deploy · global · commands");
+    expect(options[1]!.name).toBe(`${"Deploy".padEnd(47)} ! ${"global".padStart(7)}`);
     expect(options[1]!.description).toBe("deploy");
   });
 
