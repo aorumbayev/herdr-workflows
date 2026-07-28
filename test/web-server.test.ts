@@ -246,6 +246,28 @@ describe("web server writes", () => {
     expect(await Bun.file(join(root, ".hwf", "workflows", "buf.yaml")).exists()).toBe(false);
   });
 
+  test("validate does not execute dynamic-choice option commands", async () => {
+    const root = await repo();
+    const marker = join(root, "dynamic-choice-marker");
+    const { base, token } = await serve(root);
+    const text = `${V1}inputs:
+  pick:
+    type: choice
+    options:
+      run: [touch, ${JSON.stringify(marker).slice(1, -1)}]
+steps:
+  - run: [echo, "{{inputs.pick}}"]
+`;
+    const res = await fetch(`${base}/api/validate`, {
+      method: "POST",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({ name: "dyn", text }),
+    });
+    const body = (await res.json()) as { ok: boolean; error?: string };
+    expect(body.ok).toBe(true);
+    expect(await Bun.file(marker).exists()).toBe(false);
+  });
+
   test("invalid save rejected, not written", async () => {
     const root = await repo();
     const { base, token } = await serve(root);

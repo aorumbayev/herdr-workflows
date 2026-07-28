@@ -112,6 +112,53 @@ steps:
     expect(previewText(bundle)).toContain("--- demo.yaml");
     expect(previewText(bundle)).toContain("commands");
   });
+
+  test("preview aggregates commands from a bundled child before per-file sections", () => {
+    const multi = {
+      v: 1 as const,
+      files: [
+        {
+          name: "parent",
+          body: `version: v1alpha1
+steps:
+  - workflow: child
+`,
+        },
+        {
+          name: "child",
+          body: `version: v1alpha1
+steps:
+  - run: [echo, hi]
+`,
+        },
+      ],
+    };
+    const preview = previewText(multi);
+    const payloadIdx = preview.indexOf("⚠ payload: commands");
+    const parentIdx = preview.indexOf("--- parent.yaml");
+    const childIdx = preview.indexOf("--- child.yaml");
+    expect(payloadIdx).toBeGreaterThanOrEqual(0);
+    expect(parentIdx).toBeGreaterThan(payloadIdx);
+    expect(childIdx).toBeGreaterThan(parentIdx);
+    expect(preview.slice(parentIdx, childIdx)).not.toContain("commands");
+    expect(preview.slice(childIdx)).toContain("commands");
+  });
+
+  test("preview lists workflow children missing from the bundle", () => {
+    const preview = previewText({
+      v: 1,
+      files: [
+        {
+          name: "parent",
+          body: `version: v1alpha1
+steps:
+  - workflow: missing-child
+`,
+        },
+      ],
+    });
+    expect(preview).toContain("⚠ payload: unresolved:missing-child");
+  });
 });
 
 describe("hwf workflow import", () => {

@@ -1017,6 +1017,79 @@ steps:
     expect(logText).not.toContain("TRANSCRIPT");
   });
 
+  test("close always closes the pane when agent.start fails after placement", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: summarize
+    using: claude
+    pane: { open: beside, close: always }
+`,
+    });
+    const { deps, calls } = mockDeps();
+    const baseCall = deps.herdrCall;
+    const closed: string[] = [];
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: {
+        ...deps,
+        ...fastClock(),
+        herdrCall: async (method, params = {}) => {
+          if (method === "agent.start") {
+            throw new HerdrError("agent_start_failed", "simulated start failure");
+          }
+          return baseCall(method, params);
+        },
+        paneClose: async (paneId) => {
+          closed.push(paneId);
+        },
+      },
+    });
+    expect(result.ok).toBe(false);
+    expect(closed).toEqual(["w1:p3"]);
+    expect(calls.filter((c) => c.method === "pane.split")).toHaveLength(1);
+  });
+
+  test("close success leaves the pane open when agent.start fails after placement", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: summarize
+    using: claude
+    pane: { open: beside, close: success }
+`,
+    });
+    const { deps } = mockDeps();
+    const baseCall = deps.herdrCall;
+    const closed: string[] = [];
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: {
+        ...deps,
+        ...fastClock(),
+        herdrCall: async (method, params = {}) => {
+          if (method === "agent.start") {
+            throw new HerdrError("agent_start_failed", "simulated start failure");
+          }
+          return baseCall(method, params);
+        },
+        paneClose: async (paneId) => {
+          closed.push(paneId);
+        },
+      },
+    });
+    expect(result.ok).toBe(false);
+    expect(closed).toEqual([]);
+  });
+
   test("stalled agent.prompt gets exactly one enter nudge then completes", async () => {
     const root = await repoWith({
       m: `version: v1alpha1

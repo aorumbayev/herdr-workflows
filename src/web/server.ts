@@ -270,6 +270,7 @@ async function handleValidate(repoRoot: string, body: Record<string, unknown>): 
       await configOf(repoRoot),
       repoRoot,
       `${name}.yaml`,
+      false,
     );
     return json({ ok: true });
   } catch (error) {
@@ -298,7 +299,7 @@ async function writeWorkflow(
 ): Promise<Response> {
   if (!WORKFLOW_NAME_RE.test(name)) return json({ ok: false, error: "invalid workflow name" }, 400);
   try {
-    await parseWorkflowText(name, text, await configOf(repoRoot), repoRoot, `${name}.yaml`);
+    await parseWorkflowText(name, text, await configOf(repoRoot), repoRoot, `${name}.yaml`, false);
   } catch (error) {
     return json({ ok: false, error: errText(error) }, 400);
   }
@@ -325,7 +326,14 @@ async function handleWorkflow(
     let error: string | undefined;
     if (text) {
       try {
-        await parseWorkflowText(name, text, await configOf(repoRoot), repoRoot, `${name}.yaml`);
+        await parseWorkflowText(
+          name,
+          text,
+          await configOf(repoRoot),
+          repoRoot,
+          `${name}.yaml`,
+          false,
+        );
       } catch (e) {
         valid = false;
         error = errText(e);

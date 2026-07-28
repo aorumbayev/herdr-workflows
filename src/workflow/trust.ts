@@ -79,6 +79,33 @@ export function analyzeRawWorkflow(raw: RawWorkflow): WorkflowSensitivity {
   return analyzeWorkflowSensitivity(raw.steps, raw.returns, raw.onFailure);
 }
 
+/** Union sensitivity across every file in an import payload; missing `workflow:` children are listed. */
+export function analyzeBundleSensitivity(
+  files: readonly { name: string; body: string }[],
+): WorkflowSensitivity {
+  const rawByName = new Map<string, RawWorkflow>();
+  for (const file of files) {
+    rawByName.set(file.name, parseRaw(`${file.name}.yaml`, file.body));
+  }
+  const aggregated: WorkflowSensitivity = {
+    hasCommands: false,
+    hasTranscript: false,
+    sensitiveMethods: [],
+    unresolvedChildren: [],
+  };
+  for (const raw of rawByName.values()) {
+    mergeSensitivity(aggregated, analyzeRawWorkflow(raw));
+    for (const child of childWorkflowNames(raw.steps, raw.onFailure)) {
+      if (!rawByName.has(child) && !aggregated.unresolvedChildren.includes(child)) {
+        aggregated.unresolvedChildren.push(child);
+      }
+    }
+  }
+  aggregated.sensitiveMethods.sort();
+  aggregated.unresolvedChildren.sort();
+  return aggregated;
+}
+
 /** Same repo-over-global resolution the loader uses. */
 async function resolveWorkflowFile(name: string, repoRoot: string): Promise<string | undefined> {
   const repo = join(repoRoot, ".hwf", "workflows", `${name}.yaml`);
@@ -180,8 +207,8 @@ export function sensitivityLabels(flags: WorkflowSensitivity): string[] {
   return labels;
 }
 
-export function formatSensitivityBanner(flags: WorkflowSensitivity): string {
+export function formatSensitivityBanner(flags: WorkflowSensitivity, label = "sensitive"): string {
   const labels = sensitivityLabels(flags);
   if (labels.length === 0) return "";
-  return `⚠ sensitive: ${labels.join(" · ")}\n`;
+  return `⚠ ${label}: ${labels.join(" · ")}\n`;
 }

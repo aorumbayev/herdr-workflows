@@ -3,7 +3,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseRaw } from "./parse";
 import { decodeBundle, type WorkflowBundle } from "./bundle";
-import { analyzeRawWorkflow, formatSensitivityBanner, workflowDisplayTitle } from "./trust";
+import {
+  analyzeBundleSensitivity,
+  analyzeRawWorkflow,
+  formatSensitivityBanner,
+  workflowDisplayTitle,
+} from "./trust";
 import { WorkflowLoadError } from "./types";
 
 export type ImportScope = "repo" | "global";
@@ -35,6 +40,7 @@ export function checkBundle(payload: string): WorkflowBundle {
 }
 
 export function previewText(bundle: WorkflowBundle): string {
+  const payloadBanner = formatSensitivityBanner(analyzeBundleSensitivity(bundle.files), "payload");
   const parts = bundle.files.map((f) => {
     const raw = parseRaw(`${f.name}.yaml`, f.body);
     const banner = formatSensitivityBanner(analyzeRawWorkflow(raw));
@@ -42,7 +48,8 @@ export function previewText(bundle: WorkflowBundle): string {
     const desc = raw.description?.trim() ? `${raw.description.trim()}\n` : "";
     return `--- ${f.name}.yaml (${title}) ---\n${banner}${desc}${f.body}`;
   });
-  return `${parts.join("\n\n")}\n`;
+  const body = parts.join("\n\n");
+  return payloadBanner ? `${payloadBanner}\n${body}\n` : `${body}\n`;
 }
 
 export type ImportOutcome = { name: string; path: string; status: "written" | "exists" };

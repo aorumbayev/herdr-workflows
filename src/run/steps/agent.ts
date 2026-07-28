@@ -291,10 +291,9 @@ async function closePane(c: StepCtx, placed: PlacedPane): Promise<void> {
   await c.opts.deps.paneClose(placed.pane_id).catch(() => undefined);
 }
 
-async function startNewAgent(
+async function placeNewAgentPane(
   c: StepCtx,
   action: AgentAction,
-  profile: AgentProfile,
 ): Promise<{ name: string; placed: PlacedPane }> {
   const pane = action.pane ?? { open: "tab" as const };
   const sub = (text?: string) => (text === undefined ? undefined : substituteText(text, c.values));
@@ -312,15 +311,25 @@ async function startNewAgent(
     deps: c.opts.deps,
     invocation: c.opts.ctx,
   });
-  const name = generateAgentName(c.step.id, c.stepIndex, c.opts.runId);
-  await startAgentWhenShellReady(c.opts.deps, {
+  return {
+    name: generateAgentName(c.step.id, c.stepIndex, c.opts.runId),
+    placed,
+  };
+}
+
+async function bootNewAgent(
+  deps: RunnerDeps,
+  name: string,
+  profile: AgentProfile,
+  placed: PlacedPane,
+): Promise<void> {
+  await startAgentWhenShellReady(deps, {
     name,
     kind: profile.kind,
     pane_id: placed.pane_id,
     args: profile.args ?? [],
   });
-  await awaitAgentInteractiveReady(c.opts.deps, name);
-  return { name, placed };
+  await awaitAgentInteractiveReady(deps, name);
 }
 
 async function newAgentTurn(c: StepCtx, action: AgentAction): Promise<StepOutcome> {
@@ -335,7 +344,8 @@ async function newAgentTurn(c: StepCtx, action: AgentAction): Promise<StepOutcom
       ...(placement ? { target: placement.name, pane: placement.placed } : {}),
     });
   try {
-    placement = await startNewAgent(c, action, chosen.profile);
+    placement = await placeNewAgentPane(c, action);
+    await bootNewAgent(c.opts.deps, placement.name, chosen.profile, placement.placed);
     const prompt = substituteText(action.prompt, c.values);
     if (action.background === true) {
       await submitPrompt(c, placement.name, prompt);
