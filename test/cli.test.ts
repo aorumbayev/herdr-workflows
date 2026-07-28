@@ -17,21 +17,29 @@ async function runCli(
 ): Promise<{ stdout: string; stderr: string; code: number }> {
   const home = await mkdtemp(join(tmpdir(), "hwf-cli-home-"));
   const state = await mkdtemp(join(tmpdir(), "hwf-cli-state-"));
-  dirs.push(home, state);
+  const plugin = await mkdtemp(join(tmpdir(), "hwf-cli-plugin-"));
+  dirs.push(home, state, plugin);
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
     HOME: home,
+    HERDR_PLUGIN_CONFIG_DIR: plugin,
     HERDR_PLUGIN_STATE_DIR: state,
   };
   delete env.HERDR_SOCKET_PATH;
   delete env.HERDR_PLUGIN_CONTEXT_JSON;
+  delete env.HERDR_PANE_ID;
+  delete env.HERDR_TAB_ID;
+  delete env.HERDR_WORKSPACE_ID;
   Object.assign(env, extraEnv);
-  const proc = Bun.spawn(["bun", join(import.meta.dir, "..", "src", "cli.ts"), ...args], {
-    cwd,
-    env,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const proc = Bun.spawn(
+    [process.execPath, join(import.meta.dir, "..", "src", "cli.ts"), ...args],
+    {
+      cwd,
+      env,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
   const [stdout, stderr, code] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),

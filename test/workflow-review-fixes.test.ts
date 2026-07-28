@@ -99,7 +99,7 @@ steps:
 
   test("picker renders loader errors as terminal failures", async () => {
     const state = pickerState();
-    await startRun(state, { name: "broken", source: "global", file: "/global/broken.yaml" }, "");
+    await startRun(state, { name: "broken", source: "global", file: "/global/broken.yaml" });
 
     expect(state.running).toBe(false);
     expect(String(state.status.content)).toContain("Failed · reload failed");
@@ -120,7 +120,6 @@ steps:
         inputs: [],
         repoOwned: entry.source === "repo",
         needsTranscript: false,
-        needsInvokingAgent: false,
       };
       return workflow;
     };

@@ -1,11 +1,27 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { gzipSync } from "node:zlib";
-import { mkdir, mkdtemp, readFile, readdir, rename, rm, unlink, writeFile } from "node:fs/promises";
+import {
+  link,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../src/limits";
 import { exportWorkflowBundle } from "../src/workflow/export";
-import { checkPayload, parseImportScope, previewBundle, runImport } from "../src/workflow/import";
+import {
+  checkPayload,
+  parseImportScope,
+  previewBundle,
+  publishStaged,
+  runImport,
+} from "../src/workflow/import";
 import {
   decodePayload,
   encodePayload,
@@ -503,5 +519,38 @@ describe("workflow bundle export", () => {
     await expect(
       exportWorkflowBundle({ name: "bad", scope: "repo", repoRoot: root }),
     ).rejects.toThrow();
+  });
+});
+
+describe("publication without hard-link support", () => {
+  const unsupported = async () => {
+    const error: NodeJS.ErrnoException = new Error("link unsupported");
+    error.code = "EOPNOTSUPP";
+    throw error;
+  };
+
+  test("falls back to a checked rename", async () => {
+    const { root } = await scratch();
+    const tmp = join(root, "staged.tmp");
+    const dest = join(root, "demo.yaml");
+    await writeFile(tmp, exactBody);
+
+    await publishStaged(tmp, dest, unsupported as unknown as typeof link);
+
+    expect(await readFile(dest, "utf8")).toBe(exactBody);
+    expect(await Bun.file(tmp).exists()).toBe(false);
+  });
+
+  test("still reports a conflict when the destination exists", async () => {
+    const { root } = await scratch();
+    const tmp = join(root, "staged.tmp");
+    const dest = join(root, "demo.yaml");
+    await writeFile(tmp, exactBody);
+    await writeFile(dest, "version: v1alpha1\nsteps:\n  - run: mine\n");
+
+    await expect(
+      publishStaged(tmp, dest, unsupported as unknown as typeof link),
+    ).rejects.toMatchObject({ code: "EEXIST" });
+    expect(await readFile(dest, "utf8")).toContain("run: mine");
   });
 });

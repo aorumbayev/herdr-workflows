@@ -153,7 +153,7 @@ export function filterChoiceOptions(options: string[], filter: string): string[]
 }
 
 export type PickerState = {
-  mode: "list" | "input" | "prompt" | "run";
+  mode: "list" | "input" | "run";
   entries: WorkflowListEntry[];
   pending?: WorkflowListEntry;
   inputQueue: InputSpec[];
@@ -190,7 +190,6 @@ export type PickerState = {
 };
 
 export const LIST_HINT = "enter run · ^e edit · ^y share · ^o import · esc";
-const PROMPT_HINT = "enter submit · esc back";
 const CHOICE_HINT = "type filter · up/down move · enter select · esc back";
 const RUN_HINT = "esc dismiss · run continues";
 const FAIL_HINT = "enter/esc close";
@@ -361,7 +360,7 @@ function focusTextField(state: PickerState, placeholder: string, value: string):
   state.promptInput.visible = true;
   state.promptInput.placeholder = placeholder;
   state.promptInput.value = value;
-  state.footer.content = PROMPT_HINT;
+  state.footer.content = "enter submit · esc back";
   state.promptInput.focus();
 }
 
@@ -549,7 +548,6 @@ function handlePickerKey(state: PickerState, key: KeyEvent): void {
     return;
   }
   if (state.mode === "input") return handleInputKey(state, key);
-  if (state.mode === "prompt") return;
   if (tryListWorkbenchShortcut(state, key)) return;
   navigateSelectList(state, key);
 }
@@ -603,7 +601,7 @@ function showFailure(state: PickerState, entry: WorkflowListEntry, error: unknow
 function advanceInput(state: PickerState, entry: WorkflowListEntry): void {
   const spec = state.inputQueue[state.inputIndex];
   if (spec) return setInputMode(state, entry, spec);
-  void startRun(state, entry, "");
+  void startRun(state, entry);
 }
 
 function storeInput(state: PickerState, value: string): void {
@@ -676,17 +674,7 @@ async function prepareWorkflow(state: PickerState, entry: WorkflowListEntry): Pr
   }
 }
 
-function submitPrompt(state: PickerState, value: string): void {
-  if (state.mode === "prompt" && state.pending) {
-    void startRun(state, state.pending, value.trim());
-  }
-}
-
-export async function startRun(
-  state: PickerState,
-  entry: WorkflowListEntry,
-  prompt: string,
-): Promise<void> {
+export async function startRun(state: PickerState, entry: WorkflowListEntry): Promise<void> {
   const inputs = Object.fromEntries(
     Object.entries(state.inputValues).map(([key, value]) => [key, sanitizeDisplay(value)]),
   );
@@ -700,7 +688,6 @@ export async function startRun(
       repoRoot: state.repoRoot,
       ctx: state.ctx,
       inputs,
-      prompt: sanitizeDisplay(prompt),
       onProgressLine: (line) => {
         if (state.exit) return;
         state.progressLines.push(truncate(line, state.contentWidth));
@@ -855,9 +842,7 @@ function bindPickerEvents(state: PickerState): void {
     if (state.mode === "list") applyFilter(state);
     else if (state.mode === "input" && state.choiceOptions.length > 0) applyChoiceFilter(state);
   });
-  state.promptInput.on(InputRenderableEvents.ENTER, (value) =>
-    state.mode === "input" ? submitInputText(state, value) : submitPrompt(state, value),
-  );
+  state.promptInput.on(InputRenderableEvents.ENTER, (value) => submitInputText(state, value));
   state.renderer.keyInput.on("keypress", (key) => handlePickerKey(state, key));
   state.renderer.on("resize", (width: number) => {
     state.contentWidth = pickerContentWidth(width);

@@ -146,39 +146,9 @@ export type TemplatePath = {
   segments: string[];
 };
 
-type ManagedAgentResult = {
-  response: string;
-  agent: Record<string, unknown>;
-  pane_id: string;
-};
-
-type CommandResult = {
-  stdout: string;
-  stderr: string;
-  exit_code: number;
-  failed: boolean;
-};
-
-type ReadinessResult = {
-  pane_id: string;
-  tab_id: string;
-  workspace_id: string;
-} & Record<string, unknown>;
-
-type HerdrResult = Record<string, unknown>;
-
-type ChildResult = unknown;
-
-type NaturalStepResult =
-  | ManagedAgentResult
-  | CommandResult
-  | ReadinessResult
-  | HerdrResult
-  | ChildResult;
-
 export type TemplateNamespace = {
   inputs: Record<string, unknown>;
-  steps: Record<string, NaturalStepResult>;
+  steps: Record<string, unknown>;
   context: Record<string, unknown>;
 };
 
@@ -218,7 +188,6 @@ export type LoadedWorkflow = {
   onFailure?: RecoveryAction;
   repoOwned: boolean;
   needsTranscript: boolean;
-  needsInvokingAgent: boolean;
 };
 
 export type WorkflowListEntry = {

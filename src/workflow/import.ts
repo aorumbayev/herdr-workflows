@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { link, mkdir, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { copyFile, link, mkdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { decodePayload, type WorkflowBundle } from "./payload";
@@ -139,6 +139,49 @@ async function rollbackPublished(published: PublishedLink[]): Promise<void> {
   }
 }
 
+/** Filesystems that reject hard links entirely (exFAT, some network and container mounts). */
+const LINK_UNSUPPORTED = new Set(["EOPNOTSUPP", "ENOTSUP", "ENOSYS", "EPERM", "EXDEV", "EMLINK"]);
+
+function linkUnsupported(error: unknown): boolean {
+  return LINK_UNSUPPORTED.has((error as NodeJS.ErrnoException).code ?? "");
+}
+
+function conflictError(dest: string): NodeJS.ErrnoException {
+  const error: NodeJS.ErrnoException = new Error(`EEXIST: file already exists, '${dest}'`);
+  error.code = "EEXIST";
+  return error;
+}
+
+/**
+ * `link` is the atomic create-if-absent primitive: EEXIST is how publication detects a conflict.
+ * ponytail: where links are unsupported, fall back to a checked rename — same outcome with a small
+ * TOCTOU window, which beats refusing the import outright.
+ */
+export async function publishStaged(
+  tmp: string,
+  dest: string,
+  linkImpl: typeof link = link,
+): Promise<void> {
+  try {
+    await linkImpl(tmp, dest);
+    await unlink(tmp);
+    return;
+  } catch (error) {
+    if (!linkUnsupported(error)) throw error;
+  }
+  if (await Bun.file(dest).exists()) throw conflictError(dest);
+  await rename(tmp, dest);
+}
+
+async function backupExisting(dest: string, backup: string): Promise<void> {
+  try {
+    await link(dest, backup);
+  } catch (error) {
+    if (!linkUnsupported(error)) throw error;
+    await copyFile(dest, backup);
+  }
+}
+
 type ReplaceSlot = {
   dest: string;
   backup: string | null;
@@ -192,7 +235,7 @@ async function writeBundleStaged(
       for (const row of staged) {
         if (await Bun.file(row.dest).exists()) {
           const backup = join(dir, `.${row.name}.yaml.${randomUUID()}.bak`);
-          await link(row.dest, backup);
+          await backupExisting(row.dest, backup);
           replaceSlots.push({ dest: row.dest, backup, published: false });
         } else {
           replaceSlots.push({ dest: row.dest, backup: null, published: false });
@@ -213,7 +256,7 @@ async function writeBundleStaged(
 
     for (const row of staged) {
       try {
-        await link(row.tmp, row.dest);
+        await publishStaged(row.tmp, row.dest);
       } catch (error) {
         const code = (error as NodeJS.ErrnoException).code;
         if (code === "EEXIST") {
@@ -225,7 +268,6 @@ async function writeBundleStaged(
       }
       const st = await stat(row.dest);
       published.push({ path: row.dest, dev: st.dev, ino: st.ino });
-      await unlink(row.tmp);
       results.push({ name: row.name, path: row.dest });
       if (afterPublish) await afterPublish({ name: row.name, path: row.dest });
     }

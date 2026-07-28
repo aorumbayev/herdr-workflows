@@ -1,4 +1,3 @@
-const WORKFLOW_NAME_RE = /^[a-z0-9][a-z0-9-_]*$/;
 const SCOPED_ROUTE_RE = /^(w|share)=(repo|global):([a-z0-9][a-z0-9-_]*)$/;
 
 export type WebRoute =
@@ -12,7 +11,6 @@ export function parseWebRoute(raw: string): WebRoute | undefined {
   const kind = m[1] as "w" | "share";
   const scope = m[2] as "repo" | "global";
   const name = m[3]!;
-  if (!WORKFLOW_NAME_RE.test(name)) return undefined;
   return { kind, scope, name, hash: `${kind}=${scope}:${name}` };
 }
 

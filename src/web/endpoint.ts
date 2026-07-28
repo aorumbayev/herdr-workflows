@@ -360,6 +360,16 @@ async function discardUnusableRecord(
   removeEndpointRecordIfUrl(repoRoot, stateDir, record.url);
 }
 
+/** An explicit --port is an instruction, so a live endpoint on another port is not a match. */
+function servesPort(url: string, port: number | undefined): boolean {
+  if (port === undefined) return true;
+  try {
+    return new URL(url).port === String(port);
+  } catch {
+    return false;
+  }
+}
+
 export async function ensureWorkbench(
   opts: { repoRoot: string; port?: number },
   deps: EnsureWorkbenchDeps = {},
@@ -380,7 +390,7 @@ export async function ensureWorkbench(
 
   for (let attempt = 0; attempt < lockAttempts; attempt++) {
     const existing = await probeLiveRecord(repoRoot, stateDir, fetchImpl);
-    if (existing) {
+    if (existing && servesPort(existing.url, opts.port)) {
       return { url: existing.url, owned: false, stop: () => undefined };
     }
 
@@ -392,11 +402,11 @@ export async function ensureWorkbench(
 
     try {
       const again = await probeLiveRecord(repoRoot, stateDir, fetchImpl);
-      if (again) {
+      if (again && servesPort(again.url, opts.port)) {
         return { url: again.url, owned: false, stop: () => undefined };
       }
 
-      await discardUnusableRecord(repoRoot, stateDir, fetchImpl);
+      if (!again) await discardUnusableRecord(repoRoot, stateDir, fetchImpl);
 
       const server = await start({ repoRoot, port: opts.port });
       const record: EndpointRecord = { repoRoot, url: server.url };

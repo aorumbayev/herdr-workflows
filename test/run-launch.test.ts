@@ -72,7 +72,6 @@ function pickerState(overrides: Partial<PickerState> = {}): PickerState {
         inputs: [],
         repoOwned: true,
         needsTranscript: false,
-        needsInvokingAgent: false,
       }) satisfies LoadedWorkflow,
     contentWidth: 80,
     theme: themeFromPalette(null),
@@ -163,8 +162,8 @@ describe("run argv", () => {
     ).toEqual(["/opt/herdr-workflows", "web", "import"]);
   });
 
-  test("parseLaunchPayload round-trips inputs and prompt", () => {
-    const payload = buildLaunchPayload("sleep", { focus: "x" }, "hi");
+  test("parseLaunchPayload round-trips inputs", () => {
+    const payload = buildLaunchPayload("sleep", { focus: "x" });
     expect(parseLaunchPayload(JSON.stringify(payload))).toEqual(payload);
   });
 });
@@ -210,11 +209,11 @@ describe("picker detached run", () => {
     };
 
     const state = pickerState({ launchRun });
-    const running = startRun(
-      state,
-      { name: "sleepy", source: "repo", file: "/repo/.hwf/workflows/sleepy.yaml" },
-      "",
-    );
+    const running = startRun(state, {
+      name: "sleepy",
+      source: "repo",
+      file: "/repo/.hwf/workflows/sleepy.yaml",
+    });
     await Bun.sleep(10);
     expect(state.running).toBe(true);
     expect(String(state.footer.content)).toContain("dismiss");
@@ -254,11 +253,11 @@ describe("picker detached run", () => {
         workspaceId: "wOrig",
       },
     });
-    await startRun(
-      state,
-      { name: "quick", source: "repo", file: "/repo/.hwf/workflows/quick.yaml" },
-      "",
-    );
+    await startRun(state, {
+      name: "quick",
+      source: "repo",
+      file: "/repo/.hwf/workflows/quick.yaml",
+    });
     expect(seen?.ctx.paneId).toBe("wOrig:p9");
     expect(seen?.ctx.tabId).toBe("wOrig:t2");
     expect(seen?.ctx.workspaceId).toBe("wOrig");
@@ -283,11 +282,11 @@ describe("picker detached run", () => {
         },
       } as PickerState["renderer"],
     });
-    await startRun(
-      state,
-      { name: "quick", source: "repo", file: "/repo/.hwf/workflows/quick.yaml" },
-      "",
-    );
+    await startRun(state, {
+      name: "quick",
+      source: "repo",
+      file: "/repo/.hwf/workflows/quick.yaml",
+    });
     expect(state.progressLines.some((line) => line.includes("[1/1]"))).toBe(true);
     expect(state.exit?.code).toBe(0);
     expect(destroyed).toBe(true);
@@ -327,7 +326,6 @@ await Bun.write(${JSON.stringify(marker)}, "ok");
         workspaceId: "wLive",
       },
       inputs: {},
-      prompt: "",
       onProgressLine: () => undefined,
       spawn: ((_argv, opts) =>
         Bun.spawn([process.execPath, script], {
@@ -352,11 +350,10 @@ await Bun.write(${JSON.stringify(marker)}, "ok");
     expect(env.repo).toBe(root);
   });
 
-  test("detached spawn argv never contains input values or prompt text", async () => {
+  test("detached spawn argv never contains input values", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-detach-argv-"));
     dirs.push(root);
     const secretInput = "cred-value-9f3a";
-    const secretPrompt = "selection-secret-text";
     const payloadFile = join(root, "payload.json");
     const reader = join(root, "read-stdin.ts");
     await writeFile(
@@ -373,7 +370,6 @@ await Bun.write(${JSON.stringify(payloadFile)}, text);
       repoRoot: root,
       ctx: { selection: "", cwd: root },
       inputs: { token: secretInput },
-      prompt: secretPrompt,
       onProgressLine: () => undefined,
       spawn: ((argv, opts) => {
         seenArgv = [...argv];
@@ -391,11 +387,9 @@ await Bun.write(${JSON.stringify(payloadFile)}, text);
     const result = await handle.result;
     expect(result.ok).toBe(true);
     expect(seenArgv.join("\0")).not.toContain(secretInput);
-    expect(seenArgv.join("\0")).not.toContain(secretPrompt);
     expect(seenArgv.slice(-2)).toEqual(["safe", "--launch-payload"]);
     const payload = parseLaunchPayload(await readFile(payloadFile, "utf8"));
     expect(payload.inputs.token).toBe(secretInput);
-    expect(payload.prompt).toBe(secretPrompt);
     expect(payload.name).toBe("safe");
   });
 });

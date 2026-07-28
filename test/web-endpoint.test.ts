@@ -144,6 +144,40 @@ describe("endpoint lifecycle", () => {
     expect(starts).toBe(1);
   });
 
+  test("an explicit port is honored instead of reusing an endpoint on another port", async () => {
+    const stateDir = await tempState();
+    const root = await tempRepo();
+    const requested: number[] = [];
+    const start = async (opts: { repoRoot: string; port?: number }) => {
+      requested.push(opts.port ?? 0);
+      const s = await startWebServer(opts);
+      servers.push(s);
+      return s;
+    };
+
+    const owned = await ensureWorkbench({ repoRoot: root }, { stateDir, start });
+    stops.push(owned.stop);
+    const ownedPort = Number(new URL(owned.url).port);
+
+    const samePort = await ensureWorkbench(
+      { repoRoot: root, port: ownedPort },
+      { stateDir, start },
+    );
+    expect(samePort.owned).toBe(false);
+    expect(samePort.url).toBe(owned.url);
+    expect(requested).toEqual([0]);
+
+    const probe = await startWebServer({ repoRoot: root });
+    const freePort = Number(new URL(probe.url).port);
+    probe.stop();
+
+    const other = await ensureWorkbench({ repoRoot: root, port: freePort }, { stateDir, start });
+    stops.push(other.stop);
+    expect(other.owned).toBe(true);
+    expect(Number(new URL(other.url).port)).toBe(freePort);
+    expect(requested).toEqual([0, freePort]);
+  });
+
   test("stop clears the owned endpoint record", async () => {
     const stateDir = await tempState();
     const root = await tempRepo();

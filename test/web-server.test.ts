@@ -6,9 +6,12 @@ import { startWebServer, type WebServer } from "../src/web/server";
 
 const dirs: string[] = [];
 const servers: WebServer[] = [];
+const prevPluginDir = process.env.HERDR_PLUGIN_CONFIG_DIR;
 afterEach(async () => {
   for (const s of servers.splice(0)) s.stop();
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
+  if (prevPluginDir === undefined) delete process.env.HERDR_PLUGIN_CONFIG_DIR;
+  else process.env.HERDR_PLUGIN_CONFIG_DIR = prevPluginDir;
 });
 
 async function repo(): Promise<string> {

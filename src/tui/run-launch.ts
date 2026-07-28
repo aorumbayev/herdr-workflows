@@ -12,7 +12,6 @@ export type DetachedRunHandle = {
 export type LaunchPayload = {
   name: string;
   inputs: Record<string, string>;
-  prompt: string;
 };
 
 export type LaunchRunRequest = {
@@ -20,7 +19,6 @@ export type LaunchRunRequest = {
   repoRoot: string;
   ctx: InvocationContext;
   inputs: Record<string, string>;
-  prompt: string;
   onProgressLine: (line: string) => void;
   env?: NodeJS.ProcessEnv;
   spawn?: typeof Bun.spawn;
@@ -89,17 +87,13 @@ export function selfWebArgv(
   return selfCommandArgv("web", webArgs, opts);
 }
 
-/** Argv after `run` — workflow name + flag only; inputs/prompt travel on stdin. */
+/** Argv after `run` — workflow name + flag only; inputs travel on stdin. */
 export function buildRunArgs(name: string): string[] {
   return [name, "--launch-payload"];
 }
 
-export function buildLaunchPayload(
-  name: string,
-  inputs: Record<string, string>,
-  prompt: string,
-): LaunchPayload {
-  return { name, inputs, prompt };
+export function buildLaunchPayload(name: string, inputs: Record<string, string>): LaunchPayload {
+  return { name, inputs };
 }
 
 export function parseLaunchPayload(text: string): LaunchPayload {
@@ -128,11 +122,7 @@ export function parseLaunchPayload(text: string): LaunchPayload {
       inputs[key] = value;
     }
   }
-  const prompt = row.prompt === undefined ? "" : row.prompt;
-  if (typeof prompt !== "string") {
-    throw new Error("launch payload prompt must be a string");
-  }
-  return { name: row.name, inputs, prompt };
+  return { name: row.name, inputs };
 }
 
 function decodeLines(
@@ -168,7 +158,7 @@ function decodeLines(
 export function launchDetachedRun(req: LaunchRunRequest): DetachedRunHandle {
   const spawn = req.spawn ?? Bun.spawn.bind(Bun);
   const argv = selfRunArgv(buildRunArgs(req.name));
-  const payload = JSON.stringify(buildLaunchPayload(req.name, req.inputs, req.prompt));
+  const payload = JSON.stringify(buildLaunchPayload(req.name, req.inputs));
   const env = {
     ...process.env,
     ...req.env,

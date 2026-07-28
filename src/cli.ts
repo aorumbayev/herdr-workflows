@@ -175,12 +175,9 @@ async function cmdRun(args: string[]): Promise<void> {
   const { flags, bools, positional, multi } = parseArgs(args);
   const name = positional[0];
   if (!name) {
-    die(
-      "usage: hwf|herdr-workflows run <name> [--prompt …] [--input name=value …] [--launch-payload]",
-    );
+    die("usage: hwf|herdr-workflows run <name> [--input name=value …] [--launch-payload]");
   }
   let inputs: Record<string, string> = {};
-  let prompt = flags.prompt;
   if (bools.has("launch-payload")) {
     let payload;
     try {
@@ -192,7 +189,6 @@ async function cmdRun(args: string[]): Promise<void> {
       die(`launch payload name '${payload.name}' does not match run name '${name}'`);
     }
     inputs = payload.inputs;
-    if (prompt === undefined) prompt = payload.prompt;
   }
   inputs = { ...inputs, ...parseInputFlags(multi.input ?? []) };
   const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || resolveRepoRoot();
@@ -205,7 +201,6 @@ async function cmdRun(args: string[]): Promise<void> {
       repoRoot,
       config,
       ctx,
-      prompt,
       inputs,
       onProgress: (i, n, label, outcome = "ok") => {
         if (outcome === "start") {

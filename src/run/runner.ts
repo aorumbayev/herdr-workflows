@@ -477,7 +477,6 @@ export type RunOptions = {
   repoRoot: string;
   config: WorkflowsConfig;
   ctx: InvocationContext;
-  prompt?: string;
   inputs?: Record<string, string>;
   workflow?: LoadedWorkflow;
   deps?: Partial<RunnerDeps>;
