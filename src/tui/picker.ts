@@ -1,6 +1,6 @@
-import { basename } from "node:path";
 import {
   Box,
+  BoxRenderable,
   createCliRenderer,
   Input,
   InputRenderable,
@@ -99,14 +99,12 @@ export function buildPickerOptions(valid: WorkflowListEntry[]): SelectOption[] {
   });
 }
 
-export function formatInvalidLines(invalid: WorkflowListEntry[], contentWidth: number): string {
-  if (invalid.length === 0) return "";
-  return invalid
-    .map((e) => {
-      const prefix = `${e.name} — invalid: `;
-      return `${prefix}${truncate(stripFilePrefix(e.error ?? "", e.file), Math.max(0, contentWidth - prefix.length))}`;
-    })
-    .join("\n");
+function buildInvalidOptions(invalid: WorkflowListEntry[]): SelectOption[] {
+  return invalid.map((entry) => ({
+    name: entry.name,
+    description: stripFilePrefix(entry.error ?? "", entry.file),
+    value: { entry } satisfies PickerRowValue,
+  }));
 }
 
 export function formatRunProgress(
@@ -149,19 +147,67 @@ export type PickerState = {
   workflow?: LoadedWorkflow;
   contentWidth: number;
   renderer: CliRenderer;
+  filterRow: BoxRenderable;
   filter: InputRenderable;
+  listBlock: BoxRenderable;
   list: SelectRenderable;
   status: TextRenderable;
-  invalid: TextRenderable;
+  detail: TextRenderable;
+  rule: TextRenderable;
   promptInput: InputRenderable;
   footer: TextRenderable;
 };
 
-export const LIST_HINT = "type filter · ↑↓ · enter run · ^e edit · ^y share · ^o import · esc";
+export const LIST_HINT = "enter run · ^e edit · ^y share · ^o import · esc";
 const PROMPT_HINT = "enter submit · esc back";
 const CHOICE_HINT = "type filter · ↑↓ move · enter select · esc back";
 const RUN_HINT = "esc dismiss · run continues";
 const FAIL_HINT = "enter/esc close";
+
+function formatRule(contentWidth: number): string {
+  return `  ${"-".repeat(Math.max(0, contentWidth - 4))}`;
+}
+
+function formatListFooter(contentWidth: number, selectedIndex: number, total: number): string {
+  if (total === 0) return truncate(LIST_HINT, contentWidth);
+  const counter = `${selectedIndex + 1}/${total}`;
+  if (LIST_HINT.length + 1 + counter.length <= contentWidth) {
+    const pad = contentWidth - LIST_HINT.length - counter.length;
+    return `${LIST_HINT}${" ".repeat(pad)}${counter}`;
+  }
+  const hint = truncate(LIST_HINT, Math.max(0, contentWidth - counter.length - 1));
+  const pad = Math.max(0, contentWidth - hint.length - counter.length);
+  return `${hint}${" ".repeat(pad)}${counter}`;
+}
+
+function formatDetailLine(description: string, contentWidth: number): string {
+  if (!description) return "";
+  return `  ${truncate(description, Math.max(0, contentWidth - 2))}`;
+}
+
+function updateDetail(state: PickerState): void {
+  if (state.mode !== "list") {
+    state.detail.content = "";
+    return;
+  }
+  const option =
+    state.list.options.length > 0 ? state.list.options[state.list.getSelectedIndex()] : undefined;
+  state.detail.content = formatDetailLine(option?.description ?? "", state.contentWidth);
+}
+
+function updateListFooter(state: PickerState): void {
+  if (state.mode !== "list") return;
+  state.footer.content = formatListFooter(
+    state.contentWidth,
+    state.list.getSelectedIndex(),
+    state.list.options.length,
+  );
+}
+
+function refreshListChrome(state: PickerState): void {
+  updateDetail(state);
+  updateListFooter(state);
+}
 
 function setListOptions(state: PickerState, options: SelectOption[]): void {
   state.list.options = options;
@@ -174,10 +220,8 @@ function setListOptions(state: PickerState, options: SelectOption[]): void {
 
 function applyFilter(state: PickerState): void {
   const { valid, invalid } = filterWorkflowEntries(state.entries, state.filter.value);
-  setListOptions(state, buildPickerOptions(valid));
-  const lines = formatInvalidLines(invalid, state.contentWidth);
-  state.invalid.content = lines;
-  state.invalid.visible = lines.length > 0;
+  setListOptions(state, [...buildPickerOptions(valid), ...buildInvalidOptions(invalid)]);
+  refreshListChrome(state);
 }
 
 function applyChoiceFilter(state: PickerState): void {
@@ -193,20 +237,37 @@ function applyChoiceFilter(state: PickerState): void {
 }
 
 function hideBrowserChrome(state: PickerState): void {
-  state.filter.visible = false;
+  state.filterRow.visible = false;
+  state.listBlock.visible = false;
   state.list.visible = false;
   state.list.flexGrow = 0;
-  state.invalid.visible = false;
+  state.detail.visible = false;
+  state.rule.visible = false;
   state.promptInput.visible = false;
 }
 
 function showBrowserChrome(state: PickerState): void {
   state.promptInput.visible = false;
+  state.filterRow.visible = true;
   state.filter.visible = true;
   state.filter.placeholder = "filter…";
   state.filter.value = "";
+  state.listBlock.visible = true;
   state.list.visible = true;
-  state.list.flexGrow = 1;
+  state.list.flexGrow = 0;
+  state.list.height = 6;
+}
+
+function showListChrome(state: PickerState): void {
+  state.detail.visible = true;
+  state.rule.visible = true;
+  state.rule.content = formatRule(state.contentWidth);
+}
+
+function hideListChrome(state: PickerState): void {
+  state.detail.visible = false;
+  state.detail.content = "";
+  state.rule.visible = false;
 }
 
 function showStatus(state: PickerState, content: string, flexGrow = 0): void {
@@ -233,11 +294,11 @@ function setListMode(state: PickerState): void {
   state.choiceOptions = [];
   state.progressLines = [];
   showBrowserChrome(state);
+  showListChrome(state);
   state.promptInput.value = "";
   state.status.visible = false;
   state.status.content = "";
   state.status.flexGrow = 0;
-  state.footer.content = LIST_HINT;
   applyFilter(state);
   state.filter.focus();
 }
@@ -268,7 +329,7 @@ function setInputMode(state: PickerState, entry: WorkflowListEntry, spec: InputS
   }
   state.mode = "input";
   state.pending = entry;
-  state.invalid.visible = false;
+  hideListChrome(state);
   showStatus(state, inputStatusLine(entry, spec));
   if (spec.type === "choice" || spec.type === "profile") {
     state.choiceOptions = spec.options ?? [];
@@ -283,7 +344,9 @@ function setInputMode(state: PickerState, entry: WorkflowListEntry, spec: InputS
     return;
   }
   state.choiceOptions = [];
+  state.filterRow.visible = false;
   state.filter.visible = false;
+  state.listBlock.visible = false;
   state.list.visible = false;
   state.list.flexGrow = 0;
   focusTextField(state, `${spec.name}…`, spec.default ?? "");
@@ -294,6 +357,7 @@ function setRunMode(state: PickerState, entry: WorkflowListEntry): void {
   state.running = true;
   state.progressLines = [];
   hideBrowserChrome(state);
+  hideListChrome(state);
   showStatus(state, formatRunProgress(entry.name, []), 1);
   state.footer.content = RUN_HINT;
 }
@@ -379,7 +443,7 @@ export function launchWorkbenchRoute(state: PickerState, route: string): void {
   } catch (error) {
     const detail = truncate(error instanceof Error ? error.message : String(error), 60);
     showStatus(state, `workbench failed · ${detail}`);
-    state.footer.content = LIST_HINT;
+    updateListFooter(state);
     return;
   }
   finish(state, 0);
@@ -475,6 +539,12 @@ function submitInputText(state: PickerState, value: string): void {
 }
 
 export function acceptWorkflow(state: PickerState, entry: WorkflowListEntry): void {
+  if (entry.error) {
+    const err = stripFilePrefix(entry.error, entry.file);
+    state.detail.content = formatDetailLine(err, state.contentWidth);
+    updateListFooter(state);
+    return;
+  }
   state.pending = entry;
   void prepareWorkflow(state, entry);
 }
@@ -574,7 +644,6 @@ export async function startRun(
 function mountPickerUi(
   renderer: CliRenderer,
   theme: HostTheme,
-  repoRoot: string,
 ): Omit<
   PickerState,
   | "mode"
@@ -604,18 +673,27 @@ function mountPickerUi(
         height: "100%",
         gap: 0,
       },
-      Text({ content: `Launch · ${basename(repoRoot)}`, ...theme.text }),
-      Input({ id: "filter", width: "100%", placeholder: "filter…", ...theme.input }),
-      Select({
-        id: "list",
-        flexGrow: 1,
-        options: [],
-        showDescription: true,
-        showScrollIndicator: true,
-        wrapSelection: true,
-        itemSpacing: 0,
-        ...theme.select,
-      }),
+      Box(
+        { id: "filter-row", flexDirection: "row", width: "100%" },
+        Text({ content: "/ ", ...theme.text }),
+        Input({ id: "filter", flexGrow: 1, placeholder: "filter…", ...theme.input }),
+      ),
+      Box(
+        { id: "list-block", flexDirection: "column", flexGrow: 0 },
+        Text({ content: " " }),
+        Select({
+          id: "list",
+          flexGrow: 0,
+          height: 6,
+          options: [],
+          showDescription: false,
+          showScrollIndicator: false,
+          wrapSelection: true,
+          itemSpacing: 0,
+          ...theme.select,
+        }),
+        Text({ content: " " }),
+      ),
       Text({
         id: "status",
         content: "",
@@ -623,7 +701,13 @@ function mountPickerUi(
         flexGrow: 1,
         ...theme.text,
       }),
-      Text({ id: "invalid", content: "", attributes: TextAttributes.DIM, ...theme.text }),
+      Text({ id: "detail", content: "", attributes: TextAttributes.DIM, ...theme.text }),
+      Text({
+        id: "rule",
+        content: "",
+        attributes: TextAttributes.DIM,
+        ...theme.text,
+      }),
       Input({
         id: "prompt-input",
         visible: false,
@@ -636,10 +720,13 @@ function mountPickerUi(
   );
   return {
     renderer,
+    filterRow: renderer.root.findDescendantById("filter-row") as BoxRenderable,
     filter: renderer.root.findDescendantById("filter") as InputRenderable,
+    listBlock: renderer.root.findDescendantById("list-block") as BoxRenderable,
     list: renderer.root.findDescendantById("list") as SelectRenderable,
     status: renderer.root.findDescendantById("status") as TextRenderable,
-    invalid: renderer.root.findDescendantById("invalid") as TextRenderable,
+    detail: renderer.root.findDescendantById("detail") as TextRenderable,
+    rule: renderer.root.findDescendantById("rule") as TextRenderable,
     promptInput: renderer.root.findDescendantById("prompt-input") as InputRenderable,
     footer: renderer.root.findDescendantById("footer") as TextRenderable,
   };
@@ -656,6 +743,10 @@ function bindPickerEvents(state: PickerState): void {
     if (!value) return;
     acceptWorkflow(state, value.entry);
   });
+  state.list.on(SelectRenderableEvents.SELECTION_CHANGED, () => {
+    if (state.mode !== "list") return;
+    refreshListChrome(state);
+  });
   state.filter.on(InputRenderableEvents.INPUT, () => {
     if (state.mode === "list") applyFilter(state);
     else if (state.mode === "input" && state.choiceOptions.length > 0) applyChoiceFilter(state);
@@ -666,6 +757,8 @@ function bindPickerEvents(state: PickerState): void {
   state.renderer.keyInput.on("keypress", (key) => handlePickerKey(state, key));
   state.renderer.on("resize", (width: number) => {
     state.contentWidth = pickerContentWidth(width);
+    state.rule.content = formatRule(state.contentWidth);
+    if (state.mode === "list") refreshListChrome(state);
   });
 }
 
@@ -685,7 +778,7 @@ export async function runPickerSession(opts: PickerSessionOpts): Promise<number>
     prependInputHandlers: leak.prepend,
   });
   const theme = await resolveHostTheme(renderer);
-  const ui = mountPickerUi(renderer, theme, opts.repoRoot);
+  const ui = mountPickerUi(renderer, theme);
 
   const state: PickerState = {
     mode: "list",

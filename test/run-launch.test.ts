@@ -75,10 +75,19 @@ function pickerState(overrides: Partial<PickerState> = {}): PickerState {
       }) satisfies LoadedWorkflow,
     contentWidth: 80,
     renderer: { destroy: () => undefined },
+    filterRow: { visible: true },
     filter: { visible: true },
-    list: { visible: true, flexGrow: 1 },
+    listBlock: { visible: true },
+    list: {
+      visible: true,
+      flexGrow: 0,
+      height: 6,
+      options: [],
+      getSelectedIndex: () => 0,
+    },
     status: { visible: false, flexGrow: 0, content: "" },
-    invalid: { visible: false },
+    detail: { visible: false, content: "" },
+    rule: { visible: false, content: "" },
     promptInput: { visible: false },
     footer: { content: "" },
     ...overrides,
@@ -529,7 +538,8 @@ describe("picker workbench handoff", () => {
     expect(state.status.visible).toBe(true);
     expect(String(state.status.content)).toContain("workbench failed");
     expect(String(state.status.content)).toContain("spawn ENOENT");
-    expect(String(state.footer.content)).toBe(LIST_HINT);
+    expect(String(state.footer.content).startsWith(LIST_HINT)).toBe(true);
+    expect(String(state.footer.content)).toMatch(/1\/1$/);
     expect(String(state.footer.content)).toContain("enter run");
     expect(String(state.footer.content)).not.toMatch(/enter\/esc close/);
     expect(state.list.visible).toBe(true);

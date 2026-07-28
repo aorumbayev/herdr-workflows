@@ -6,7 +6,6 @@ import {
   filterChoiceOptions,
   filterWorkflowEntries,
   formatInputPrompt,
-  formatInvalidLines,
   formatRunProgress,
   hasVisibleEntries,
   LIST_HINT,
@@ -140,14 +139,6 @@ describe("display titles", () => {
     expect(humanizeWorkflowName("chat-handoff")).toBe("Chat Handoff");
     expect(workflowDisplayTitle("chat-handoff")).toBe("Chat Handoff");
     expect(workflowDisplayTitle("chat-handoff", "Custom")).toBe("Custom");
-  });
-});
-
-describe("formatInvalidLines", () => {
-  test("truncates error and returns empty when none", () => {
-    expect(formatInvalidLines([], 44)).toBe("");
-    const lines = formatInvalidLines([entries[2]!], 44);
-    expect(lines).toBe("broken — invalid: step 2, agent: unknown ag…");
   });
 });
 
