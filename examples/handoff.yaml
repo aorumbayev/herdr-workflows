@@ -19,8 +19,9 @@ on_failure:
 steps:
   - id: brief
     agent: |
-      Below the --- marker is a coding agent session transcript. Distil it into
-      a handoff prompt for a fresh agent session.
+      The absolute path below is a UTF-8 file containing a coding agent session
+      transcript. Read that file and distil it into a handoff prompt for a fresh
+      agent session.
 
       Keep (signal): architectural decisions with rationale; working solutions
       adopted; configuration choices (versions, settings, flags, env vars);
@@ -49,8 +50,8 @@ steps:
       Never invent decisions or context not present in the transcript; note
       unclear items as open questions.
 
-      ---
-      {{context.transcript}}
+      Transcript file (read it; do not ask for its contents to be pasted):
+      {{context.transcript_file}}
     using: "{{inputs.target}}"
     timeout: 15m
     pane:

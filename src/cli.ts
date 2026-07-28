@@ -182,6 +182,10 @@ async function cmdRun(args: string[]): Promise<void> {
       prompt: flags.prompt,
       inputs: parseInputFlags(multi.input ?? []),
       onProgress: (i, n, label, outcome = "ok") => {
+        if (outcome === "start") {
+          process.stdout.write(`[${i}/${n}] ${label}…\n`);
+          return;
+        }
         const suffix = outcome === "ok" ? "" : ` ${outcome}`;
         process.stdout.write(`[${i}/${n}] ${label}${suffix}\n`);
       },

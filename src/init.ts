@@ -80,15 +80,21 @@ async function readPreservedTranscripts(path: string): Promise<WorkflowsConfig["
 async function ensureLocalConfigGitignored(repoRoot: string): Promise<void> {
   const hwfDir = dirname(repoConfigPath(repoRoot));
   const ignorePath = join(hwfDir, ".gitignore");
-  const marker = basename(repoLocalConfigPath(repoRoot));
-  if (await Bun.file(ignorePath).exists()) {
-    const text = await Bun.file(ignorePath).text();
-    if (text.split(/\r?\n/).some((line) => line.trim() === marker)) return;
-    const next = text.endsWith("\n") ? `${text}${marker}\n` : `${text}\n${marker}\n`;
-    await Bun.write(ignorePath, next);
-    return;
+  const markers = [basename(repoLocalConfigPath(repoRoot)), "tmp/"];
+  let text = (await Bun.file(ignorePath).exists()) ? await Bun.file(ignorePath).text() : "";
+  const lines = new Set(
+    text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean),
+  );
+  let changed = false;
+  for (const marker of markers) {
+    if (lines.has(marker)) continue;
+    text = text.length === 0 || text.endsWith("\n") ? `${text}${marker}\n` : `${text}\n${marker}\n`;
+    changed = true;
   }
-  await Bun.write(ignorePath, `${marker}\n`);
+  if (changed || !(await Bun.file(ignorePath).exists())) await Bun.write(ignorePath, text);
 }
 
 export type InitResult =

@@ -8,14 +8,20 @@ import {
   type AgentProfile,
 } from "../../config";
 import { HerdrError } from "../../herdr";
+import { assertUnderCaptureCap } from "../../limits";
+import { appendRunLog } from "../../runlog";
 import { substituteText } from "../../workflow/parse";
 import type { StepAction } from "../../workflow/types";
 import {
+  AGENT_PROMPT_BYTE_LIMIT,
   appendResponseInstruction,
   dispatchFailure,
   generateAgentName,
+  managedPromptSpillPath,
   managedResponsePath,
   readManagedResponse,
+  runScratchDir,
+  spilledPromptInstruction,
   type RunnerDeps,
   type StepCtx,
   type StepOutcome,
@@ -34,9 +40,16 @@ const SHELL_READY_POLL_MS = 50;
 /** Socket agent.start returns at launch_pending; CLI waits for interactive_ready (default 30s). */
 const AGENT_INTERACTIVE_DEADLINE_MS = 30_000;
 const AGENT_INTERACTIVE_POLL_MS = 100;
-/** Match Herdr agent_prompt_stalled effect window: multi-line paste may swallow the encoded Enter. */
-const SUBMIT_ADVANCE_DEADLINE_MS = 5_000;
-const SUBMIT_ADVANCE_POLL_MS = 100;
+/**
+ * Fresh agents (esp. opencode) can report interactive_ready before they accept input.
+ * Wait this long after each agent.prompt for status to leave idle.
+ */
+const SUBMIT_PICKUP_DEADLINE_MS = 10_000;
+const SUBMIT_PICKUP_POLL_MS = 100;
+/** After pickup wait fails, Enter once for bracketed-paste stall, then wait again briefly. */
+const SUBMIT_ENTER_FOLLOWUP_MS = 5_000;
+const SUBMIT_MAX_ATTEMPTS = 3;
+const SUBMIT_RETRY_BACKOFF_MS = 2_000;
 
 function processInfoRecord(result: Record<string, unknown>): Record<string, unknown> {
   const info = result.process_info;
@@ -128,8 +141,12 @@ async function chooseProfile(c: StepCtx, action: AgentAction): Promise<ProfileCh
   return { ok: true, name, profile };
 }
 
+function responseDirOf(c: StepCtx): string {
+  return c.opts.deps.responseDir ?? runScratchDir(c.opts.repoRoot);
+}
+
 async function preparedResponsePath(c: StepCtx): Promise<string> {
-  const path = managedResponsePath(c.opts.runId, c.stepIndex, c.opts.deps.responseDir);
+  const path = managedResponsePath(c.opts.runId, c.stepIndex, responseDirOf(c));
   await mkdir(dirname(path), { recursive: true });
   c.opts.managedResponseFiles.push(path);
   return path;
@@ -277,24 +294,77 @@ async function managedResult(
   }
 }
 
-function submitAdvanced(status: string, before: string): boolean {
-  return status === "working" || status === "blocked" || status !== before;
+/** Evidence the agent accepted input (not still sitting on a pristine idle welcome). */
+function promptPickedUp(status: string, before: string): boolean {
+  if (status === "working" || status === "blocked") return true;
+  return status !== "idle" && status !== before;
 }
 
-/** agent.prompt + one Enter if status never advances (bracketed-paste stall). Not prompt wait. */
-async function submitPrompt(c: StepCtx, target: string, text: string): Promise<void> {
-  const deps = c.opts.deps;
-  const before = await deps.agentStatus(target);
-  await deps.herdrCall("agent.prompt", { target, text });
-  const deadline = deps.now() + SUBMIT_ADVANCE_DEADLINE_MS;
+async function waitForPromptPickup(
+  deps: RunnerDeps,
+  target: string,
+  before: string,
+  deadlineMs: number,
+): Promise<boolean> {
+  const deadline = deps.now() + deadlineMs;
   while (deps.now() < deadline) {
     const status = await deps.agentStatus(target);
-    if (submitAdvanced(status, before)) return;
-    await deps.sleep(SUBMIT_ADVANCE_POLL_MS);
+    if (promptPickedUp(status, before)) return true;
+    await deps.sleep(SUBMIT_PICKUP_POLL_MS);
   }
-  const status = await deps.agentStatus(target);
-  if (submitAdvanced(status, before)) return;
-  await deps.herdrCall("agent.send_keys", { target, keys: ["enter"] });
+  return promptPickedUp(await deps.agentStatus(target), before);
+}
+
+/** Spill oversized bodies so agent.prompt does not silently drop them. */
+async function maybeSpillAgentPrompt(c: StepCtx, text: string): Promise<string> {
+  const bytes = Buffer.byteLength(text, "utf8");
+  if (bytes <= AGENT_PROMPT_BYTE_LIMIT) return text;
+  assertUnderCaptureCap("agent prompt", text);
+  const spill = managedPromptSpillPath(c.opts.runId, c.stepIndex, responseDirOf(c));
+  await mkdir(dirname(spill), { recursive: true });
+  await Bun.write(spill, text);
+  c.opts.managedResponseFiles.push(spill);
+  await appendRunLog({
+    ts: new Date().toISOString(),
+    run: c.opts.runId,
+    workflow: c.opts.name,
+    step: c.stepIndex,
+    label: `prompt spilled (${bytes}B > ${AGENT_PROMPT_BYTE_LIMIT}B): ${spill}`,
+    ok: true,
+  });
+  return spilledPromptInstruction(spill);
+}
+
+/**
+ * Submit until the agent leaves idle, re-sending the full prompt when a cold agent drops it.
+ * Enter nudge only handles the separate bracketed-paste case (text present, not submitted).
+ */
+async function submitPrompt(c: StepCtx, target: string, text: string): Promise<void> {
+  const deps = c.opts.deps;
+  const body = await maybeSpillAgentPrompt(c, text);
+  for (let attempt = 1; attempt <= SUBMIT_MAX_ATTEMPTS; attempt++) {
+    // A slow-but-successful earlier submit may land during backoff — never double-prompt.
+    if (attempt > 1 && promptPickedUp(await deps.agentStatus(target), "idle")) return;
+    const before = await deps.agentStatus(target);
+    await appendRunLog({
+      ts: new Date().toISOString(),
+      run: c.opts.runId,
+      workflow: c.opts.name,
+      step: c.stepIndex,
+      label: `agent.prompt attempt ${attempt}/${SUBMIT_MAX_ATTEMPTS} → ${target}`,
+      ok: true,
+    });
+    await deps.herdrCall("agent.prompt", { target, text: body });
+    if (await waitForPromptPickup(deps, target, before, SUBMIT_PICKUP_DEADLINE_MS)) return;
+    // Paste stall: text may be in the composer without an Enter. Never re-prompt if this wakes it.
+    await deps.herdrCall("agent.send_keys", { target, keys: ["enter"] });
+    if (await waitForPromptPickup(deps, target, before, SUBMIT_ENTER_FOLLOWUP_MS)) return;
+    if (attempt < SUBMIT_MAX_ATTEMPTS) await deps.sleep(SUBMIT_RETRY_BACKOFF_MS);
+  }
+  throw new HerdrError(
+    "agent_prompt_stalled",
+    `agent prompt to '${target}' was not accepted after ${SUBMIT_MAX_ATTEMPTS} attempts — agent never left idle (interactive_ready can be premature)`,
+  );
 }
 
 async function closePane(c: StepCtx, placed: PlacedPane): Promise<void> {

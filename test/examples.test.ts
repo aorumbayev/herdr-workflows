@@ -58,6 +58,20 @@ describe("shipped examples", () => {
     }
   });
 
+  test("handoff step 1 references transcript_file, not transcript", async () => {
+    const root = await mirrorExamples();
+    const workflow = await loadWorkflow("handoff", root, {
+      ...config,
+      profiles: { ...config.profiles, opencode: { kind: "opencode" } },
+    });
+    const brief = workflow.steps[0];
+    expect(brief?.action.kind).toBe("agent");
+    if (brief?.action.kind !== "agent") throw new Error("expected agent");
+    expect(brief.action.prompt).toContain("{{context.transcript_file}}");
+    expect(brief.action.prompt).not.toContain("{{context.transcript}}");
+    expect(brief.action.prompt).not.toMatch(/\{\{context\.transcript\}\}/);
+  });
+
   test("example gallery cards build without legacy keys", async () => {
     const cards = await buildExamples(EXAMPLES_DIR);
     expect(cards.map((c) => c.name).sort()).toEqual(["handoff", "prompt-enhance"]);

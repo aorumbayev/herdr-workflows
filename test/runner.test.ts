@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { WorkflowsConfig } from "../src/config";
 import { HerdrError } from "../src/herdr";
 import { CAPTURE_BYTE_LIMIT, HWF_ENV_BYTE_LIMIT } from "../src/limits";
-import { type RunnerDeps } from "../src/run/context";
+import { AGENT_PROMPT_BYTE_LIMIT, type RunnerDeps } from "../src/run/context";
 import { runWorkflow } from "../src/run/runner";
 import { runLogPath, type RunLogEntry } from "../src/runlog";
 
@@ -139,10 +139,15 @@ function mockDeps(overrides: Partial<RunnerDeps> & { writeManagedResponse?: bool
           launch_pending: false,
         };
         const text = String(params.text ?? "");
-        const match = /absolute path ([^\s,]+)/.exec(text);
-        if (writeManagedResponse && match?.[1]) {
-          await mkdir(join(match[1]!, ".."), { recursive: true });
-          await writeFile(match[1]!, "managed answer\n");
+        let responsePath = /absolute path ([^\s,]+)/.exec(text)?.[1];
+        if (responsePath?.endsWith("-prompt.txt")) {
+          const spilled = await Bun.file(responsePath).text();
+          const inner = /absolute path ([^\s,]+)/.exec(spilled)?.[1];
+          if (inner && !inner.endsWith("-prompt.txt")) responsePath = inner;
+        }
+        if (writeManagedResponse && responsePath) {
+          await mkdir(join(responsePath, ".."), { recursive: true });
+          await writeFile(responsePath, "managed answer\n");
         }
         info.status = "done";
         agents.set(target, info);
@@ -337,6 +342,69 @@ steps:
     });
   });
 
+  test("oversized managed prompts spill to a file; small ones submit directly", async () => {
+    const small = "x".repeat(100);
+    const large = "y".repeat(AGENT_PROMPT_BYTE_LIMIT + 64);
+    const root = await repoWith({
+      small: `version: v1alpha1
+steps:
+  - id: s
+    agent: ${JSON.stringify(small)}
+    using: claude
+`,
+      large: `version: v1alpha1
+steps:
+  - id: big
+    agent: ${JSON.stringify(large)}
+    using: claude
+`,
+    });
+    const responseDir = join(process.env.HERDR_PLUGIN_STATE_DIR!, "responses");
+    {
+      const { deps, calls } = mockDeps();
+      const result = await runWorkflow({
+        name: "small",
+        repoRoot: root,
+        config: baseConfig,
+        ctx: { selection: "", cwd: root, workspaceId: "w1", paneId: "w1:p1" },
+        deps: { ...deps, ...fastClock(), responseDir },
+      });
+      expect(result.ok).toBe(true);
+      const text = String(calls.find((c) => c.method === "agent.prompt")?.params.text ?? "");
+      expect(text).toContain(small);
+      expect(text).not.toMatch(/Read the absolute path/);
+    }
+    {
+      const { deps, calls } = mockDeps();
+      const result = await runWorkflow({
+        name: "large",
+        repoRoot: root,
+        config: baseConfig,
+        ctx: { selection: "", cwd: root, workspaceId: "w1", paneId: "w1:p1" },
+        deps: { ...deps, ...fastClock(), responseDir },
+      });
+      expect(result.ok).toBe(true);
+      const text = String(calls.find((c) => c.method === "agent.prompt")?.params.text ?? "");
+      expect(text).toMatch(/Read the absolute path /);
+      expect(text).not.toContain(large.slice(0, 80));
+      const spillMatch = /Read the absolute path (\S+)/.exec(text);
+      expect(spillMatch?.[1]).toBeTruthy();
+      const spillPath = spillMatch![1]!;
+      expect(spillPath).toContain("-prompt.txt");
+      expect(await Bun.file(spillPath).exists()).toBe(false);
+      const log = await readRunLog();
+      expect(
+        log.some(
+          (e) =>
+            e.workflow === "large" &&
+            typeof e.label === "string" &&
+            e.label.includes("prompt spilled") &&
+            e.label.includes(spillPath),
+        ),
+      ).toBe(true);
+    }
+  });
+
   test("new-agent retries agent_pane_busy once without creating a second pane", async () => {
     const root = await repoWith({
       m: `version: v1alpha1
@@ -388,8 +456,15 @@ steps:
     target: worker
 `,
     });
-    const { deps, calls } = mockDeps();
+    const { deps, calls, agents } = mockDeps();
     const baseCall = deps.herdrCall;
+    agents.set("worker", {
+      status: "idle",
+      pane_id: "w1:p9",
+      name: "worker",
+      interactive_ready: true,
+      launch_pending: false,
+    });
     const result = await runWorkflow({
       name: "m",
       repoRoot: root,
@@ -398,7 +473,6 @@ steps:
       deps: {
         ...deps,
         ...fastClock(),
-        agentStatus: async () => "idle",
         agentInfo: async () => ({
           name: "worker",
           pane_id: "w1:p9",
@@ -445,7 +519,7 @@ steps:
     expect(calls.some((c) => c.method === "agent.prompt")).toBe(true);
   });
 
-  test("new-agent does not fail-fast on idle before the agent starts working", async () => {
+  test("new-agent fail-fasts after pickup if it settles without a managed response", async () => {
     const root = await repoWith({
       m: `version: v1alpha1
 steps:
@@ -453,12 +527,11 @@ steps:
     agent: summarize
     using: claude
     pane: { open: beside }
-    timeout: 200ms
 `,
     });
     const { deps, agents } = mockDeps({ writeManagedResponse: false });
     const baseCall = deps.herdrCall;
-    const clock = fastClock();
+    let polls = 0;
     const result = await runWorkflow({
       name: "m",
       repoRoot: root,
@@ -466,25 +539,35 @@ steps:
       ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
       deps: {
         ...deps,
-        ...clock,
+        ...fastClock(),
         herdrCall: async (method, params = {}) => {
           const out = await baseCall(method, params);
           if (method === "agent.prompt") {
             const target = String(params.target);
             const info = agents.get(target);
             if (info) {
-              info.status = "idle";
+              info.status = "working";
               agents.set(target, info);
             }
+            polls = 0;
           }
           return out;
         },
-        agentStatus: async () => "idle",
+        agentStatus: async (target) => {
+          const info = agents.get(target);
+          if (!info) return "idle";
+          polls += 1;
+          if (polls > 3) {
+            info.status = "done";
+            agents.set(target, info);
+          }
+          return info.status;
+        },
       },
     });
     const err = failed(result);
-    expect(err.error).toMatch(/did not settle with a managed response within 0\.2s/);
-    expect(err.error).not.toMatch(/managed response file was not written/);
+    expect(err.error).toMatch(/managed response file was not written/);
+    expect(err.error).not.toMatch(/within \d+s/);
   });
 
   test("target mode keeps waiting for managed response until timeout", async () => {
@@ -496,8 +579,16 @@ steps:
     timeout: 200ms
 `,
     });
-    const { deps } = mockDeps({ writeManagedResponse: false });
-    const clock = fastClock();
+    const { deps, agents, calls } = mockDeps({ writeManagedResponse: false });
+    const baseCall = deps.herdrCall;
+    agents.set("worker", {
+      status: "idle",
+      pane_id: "w1:p9",
+      name: "worker",
+      interactive_ready: true,
+      launch_pending: false,
+    });
+    let polls = 0;
     const result = await runWorkflow({
       name: "m",
       repoRoot: root,
@@ -505,14 +596,36 @@ steps:
       ctx: { selection: "", cwd: root, paneId: "w1:p1" },
       deps: {
         ...deps,
-        ...clock,
-        agentStatus: async () => "idle",
+        ...fastClock(),
         agentInfo: async () => ({
           name: "worker",
           pane_id: "w1:p9",
           agent_status: "idle",
           agent: "claude",
         }),
+        herdrCall: async (method, params = {}) => {
+          if (method === "agent.prompt") {
+            agents.set("worker", {
+              status: "working",
+              pane_id: "w1:p9",
+              name: "worker",
+              interactive_ready: true,
+              launch_pending: false,
+            });
+            polls = 0;
+            calls.push({ method, params });
+            return {
+              type: "agent_prompted",
+              agent: { name: "worker", pane_id: "w1:p9", agent_status: "working" },
+            };
+          }
+          return baseCall(method, params);
+        },
+        agentStatus: async () => {
+          polls += 1;
+          if (polls > 3) return "idle";
+          return agents.get("worker")?.status ?? "idle";
+        },
       },
     });
     const err = failed(result);
@@ -532,7 +645,6 @@ steps:
     params: { title: kept, body: "{{steps.review.response}}" }
 `,
     });
-    const state = process.env.HERDR_PLUGIN_STATE_DIR!;
     const { deps, calls } = mockDeps();
     let responsePath = "";
     const result = await runWorkflow({
@@ -548,6 +660,7 @@ steps:
           if (method === "agent.prompt") {
             const match = /absolute path ([^\s,]+)/.exec(String(params.text ?? ""));
             if (match?.[1]) responsePath = match[1]!;
+            expect(responsePath).toContain(`${root}/.hwf/tmp/`);
             expect(await Bun.file(responsePath).exists()).toBe(true);
           }
           return out;
@@ -558,8 +671,8 @@ steps:
     expect(responsePath).not.toBe("");
     expect(await Bun.file(responsePath).exists()).toBe(false);
     const leftover = await Array.fromAsync(
-      new Bun.Glob("responses/*").scan({ cwd: state, absolute: true }),
-    );
+      new Bun.Glob("**/*").scan({ cwd: join(root, ".hwf", "tmp"), absolute: true }),
+    ).catch(() => [] as string[]);
     expect(leftover).toEqual([]);
     const notify = calls.find((c) => c.method === "notification.show" && c.params.title === "kept");
     expect(notify?.params.body).toBe("managed answer\n");
@@ -1074,7 +1187,36 @@ steps:
       },
     });
     expect(result.ok).toBe(true);
-    expect(lines).toEqual(["[1/2] go", "[2/2] skipme skip"]);
+    expect(lines).toEqual(["[1/2] go start", "[1/2] go", "[2/2] skipme skip"]);
+  });
+
+  test("CLI progress emits both start and outcome exactly once per step", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - run: [sh, -c, "printf a"]
+  - run: [sh, -c, "printf b"]
+`,
+    });
+    const { deps } = mockDeps();
+    const events: string[] = [];
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      deps,
+      onProgress: (i, n, label, outcome = "ok") => {
+        events.push(`${i}/${n}:${label}:${outcome}`);
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(events).toEqual([
+      "1/2:run: sh -c printf a:start",
+      "1/2:run: sh -c printf a:ok",
+      "2/2:run: sh -c printf b:start",
+      "2/2:run: sh -c printf b:ok",
+    ]);
   });
 
   test("background placed run launches without a result", async () => {
@@ -1301,7 +1443,107 @@ steps:
     expect(calls.filter((c) => c.method === "agent.send_keys")).toHaveLength(0);
   });
 
-  test("submit enter nudge never fires twice", async () => {
+  test("cold agent that ignores the first prompt gets exactly one re-submit", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: summarize
+    using: claude
+    pane: { open: beside }
+`,
+    });
+    const { deps, calls, agents } = mockDeps({ writeManagedResponse: false });
+    const baseCall = deps.herdrCall;
+    let prompts = 0;
+    let pendingPath: string | undefined;
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: {
+        ...deps,
+        ...fastClock(),
+        herdrCall: async (method, params = {}) => {
+          if (method === "agent.prompt") {
+            prompts += 1;
+            const text = String(params.text ?? "");
+            pendingPath = /absolute path ([^\s,]+)/.exec(text)?.[1];
+            const target = String(params.target);
+            const info = agents.get(target) ?? {
+              status: "idle",
+              pane_id: "w1:p3",
+              name: target,
+              interactive_ready: true,
+              launch_pending: false,
+            };
+            if (prompts >= 2) {
+              if (pendingPath) {
+                await mkdir(join(pendingPath, ".."), { recursive: true });
+                await writeFile(pendingPath, "second try\n");
+              }
+              agents.set(target, { ...info, status: "done" });
+            } else {
+              agents.set(target, { ...info, status: "idle" });
+            }
+            calls.push({ method, params });
+            return {
+              type: "agent_prompted",
+              agent: {
+                name: target,
+                pane_id: info.pane_id,
+                agent_status: prompts >= 2 ? "working" : "idle",
+              },
+            };
+          }
+          if (method === "agent.send_keys") {
+            calls.push({ method, params });
+            return { type: "ok" };
+          }
+          if (method === "tab.create" || method === "pane.split") {
+            const out = await baseCall(method, params);
+            return out;
+          }
+          return baseCall(method, params);
+        },
+        agentStatus: async (target) => agents.get(target)?.status ?? "idle",
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(calls.filter((c) => c.method === "agent.prompt")).toHaveLength(2);
+    expect(
+      calls.filter((c) => c.method === "tab.create" || c.method === "pane.split"),
+    ).toHaveLength(1);
+    const log = await readRunLog();
+    expect(log.some((e) => e.label?.includes("attempt 1/3"))).toBe(true);
+    expect(log.some((e) => e.label?.includes("attempt 2/3"))).toBe(true);
+  });
+
+  test("agent that goes working after the first prompt is not re-submitted", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: summarize
+    using: claude
+    pane: { open: beside }
+`,
+    });
+    const { deps, calls } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: { ...deps, ...fastClock() },
+    });
+    expect(result.ok).toBe(true);
+    expect(calls.filter((c) => c.method === "agent.prompt")).toHaveLength(1);
+    expect(calls.filter((c) => c.method === "agent.send_keys")).toHaveLength(0);
+  });
+
+  test("exhausted prompt attempts fail naming the stalled submission", async () => {
     const root = await repoWith({
       m: `version: v1alpha1
 steps:
@@ -1340,15 +1582,9 @@ steps:
       },
     });
     const err = failed(result);
-    expect(err.error).toMatch(/did not settle with a managed response within 0\.2s/);
-    expect(
-      calls.filter(
-        (c) =>
-          c.method === "agent.send_keys" &&
-          Array.isArray(c.params.keys) &&
-          c.params.keys[0] === "enter",
-      ),
-    ).toHaveLength(1);
+    expect(err.error).toMatch(/was not accepted after 3 attempts/);
+    expect(err.error).toMatch(/never left idle/);
+    expect(calls.filter((c) => c.method === "agent.prompt")).toHaveLength(3);
   });
 
   test("templated herdr enum param fails at runtime on a bad resolved value", async () => {

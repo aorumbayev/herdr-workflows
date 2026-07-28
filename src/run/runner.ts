@@ -30,6 +30,7 @@ import type {
 import { loadWorkflow } from "../workflow/load";
 import {
   errorText,
+  runScratchDir,
   type RunnerDeps,
   type StepCtx,
   type StepFailure,
@@ -275,6 +276,7 @@ async function runSteps(
       await logStep(opts, n, total, label, { ok: true, skipped: true });
       continue;
     }
+    opts.onProgress?.(n, total, label, "start");
     const outcome = await executeWithRetry(step, n, values, opts);
     if (!outcome.ok) {
       opts.onProgress?.(n, total, label, "fail");
@@ -400,6 +402,7 @@ type PreflightArgs = {
   config: WorkflowsConfig;
   deps: RunnerDeps;
   runId: string;
+  repoRoot: string;
   inputs: Record<string, string>;
 };
 
@@ -423,9 +426,10 @@ async function invokingAgentTarget(args: PreflightArgs): Promise<string> {
   return paneId;
 }
 
-async function writeTranscriptFile(runId: string, text: string): Promise<string> {
-  const path = join(pluginStateDir(), "transcripts", `${runId}.txt`);
-  await mkdir(join(pluginStateDir(), "transcripts"), { recursive: true });
+async function writeTranscriptFile(repoRoot: string, runId: string, text: string): Promise<string> {
+  const dir = runScratchDir(repoRoot);
+  await mkdir(dir, { recursive: true });
+  const path = join(dir, `${runId}-transcript.txt`);
   await Bun.write(path, text);
   return path;
 }
@@ -449,7 +453,7 @@ async function preflightContext(args: PreflightArgs): Promise<Preflight> {
         invocationCwd: args.ctx.cwd,
       });
       if (keys.has("transcript_file")) {
-        transcriptFile = await writeTranscriptFile(args.runId, transcript);
+        transcriptFile = await writeTranscriptFile(args.repoRoot, args.runId, transcript);
       }
     }
   } catch (error) {
@@ -534,6 +538,7 @@ export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
       config: opts.config,
       deps,
       runId,
+      repoRoot: opts.repoRoot,
       inputs: inputs.values,
     });
     if (!context.ok) return await failPrecondition(context.error);

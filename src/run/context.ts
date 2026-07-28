@@ -1,10 +1,5 @@
 import { join } from "node:path";
-import {
-  pluginStateDir,
-  type InvocationContext,
-  type TranscriptExtractor,
-  type WorkflowsConfig,
-} from "../config";
+import type { InvocationContext, TranscriptExtractor, WorkflowsConfig } from "../config";
 import { HerdrError } from "../herdr";
 import { assertUnderCaptureCap } from "../limits";
 import type { TemplateNamespace, WorkflowStep } from "../workflow/types";
@@ -146,16 +141,36 @@ export function generateAgentName(
   return `${prefix.slice(0, room)}-${tail}`.slice(0, AGENT_NAME_MAX);
 }
 
-export function managedResponsePath(
+/** Repo-local scratch for agent-readable/writable run files (transcripts, prompts, responses). */
+export function runScratchDir(repoRoot: string): string {
+  return join(repoRoot, ".hwf", "tmp");
+}
+
+export function managedResponsePath(runId: string, stepIndex: number, responseDir: string): string {
+  return join(responseDir, `${runId}-step-${stepIndex}.txt`);
+}
+
+/** Spill path for agent.prompt bodies that exceed AGENT_PROMPT_BYTE_LIMIT. */
+export function managedPromptSpillPath(
   runId: string,
   stepIndex: number,
-  responseDir?: string,
+  responseDir: string,
 ): string {
-  return join(responseDir ?? join(pluginStateDir(), "responses"), `${runId}-step-${stepIndex}.txt`);
+  return join(responseDir, `${runId}-step-${stepIndex}-prompt.txt`);
 }
+
+/**
+ * herdr agent.prompt silently drops ~21KB+ bodies; stay under this with a margin.
+ * Oversized prompts are written to a run-owned file and replaced by a short pointer.
+ */
+export const AGENT_PROMPT_BYTE_LIMIT = 16 * 1024;
 
 export function appendResponseInstruction(prompt: string, path: string): string {
   return `${prompt}\n\nRequired: use your file-write tool to write your full answer as plain UTF-8 text to the absolute path ${path}, overwriting whatever is there. Do not finish until that file exists with your answer. Write nothing else to that path and do not create other files for it. Printing the answer in chat is not enough.`;
+}
+
+export function spilledPromptInstruction(spillPath: string): string {
+  return `Read the absolute path ${spillPath} as UTF-8 and follow its instructions exactly. Do not invent content beyond that file.`;
 }
 
 export async function readManagedResponse(path: string): Promise<string> {
