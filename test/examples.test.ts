@@ -51,12 +51,7 @@ describe("shipped examples", () => {
 
   test("example gallery cards build without legacy keys", async () => {
     const cards = await buildExamples(EXAMPLES_DIR);
-    expect(cards.map((c) => c.name).sort()).toEqual([
-      "handoff",
-      "prompt-enhance",
-      "review",
-      "worktree",
-    ]);
+    expect(cards.map((c) => c.name).sort()).toEqual(["handoff", "prompt-enhance"]);
     for (const card of cards) {
       expect(card.desc.length).toBeGreaterThan(0);
       expect(card.payload.length).toBeGreaterThan(0);

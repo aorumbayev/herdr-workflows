@@ -6,8 +6,66 @@ inputs:
   focus:
     type: text
     default: ""
+on_failure:
+  herdr: notification.show
+  params:
+    title: handoff failed
+    body: "{{context.error.message}}"
+    sound: request
 steps:
-  - workflow: handoff-bg
-    inputs:
-      target: "{{inputs.target}}"
-      focus: "{{inputs.focus}}"
+  - id: brief
+    agent: |
+      Below the --- marker is a coding agent session transcript. Distil it into
+      a handoff prompt for a fresh agent session.
+
+      Keep (signal): architectural decisions with rationale; working solutions
+      adopted; configuration choices (versions, settings, flags, env vars);
+      files created/modified with paths and why; constraints discovered;
+      productive dead ends in one sentence each; open questions; anything the
+      next session would otherwise re-discover.
+
+      Drop (noise): corrections and retries, verbose tool output, permission
+      prompts, repeated attempts.
+
+      Use this shape, omitting empty sections:
+
+      Continue the work from the previous session. Here is the context you need:
+
+      **Project**: <path>
+      **Branch**: <branch, if known>
+
+      ## Background
+      ## What was done
+      ## Decisions in effect
+      ## Current state
+      ## Open questions
+      ## Your next steps
+      1. <directive>
+
+      Never invent decisions or context not present in the transcript; note
+      unclear items as open questions.
+
+      ---
+      {{context.transcript}}
+    target: "{{context.agent}}"
+    timeout: 15m
+
+  - herdr: notification.show
+    params:
+      title: handoff ready
+      body: "opening {{inputs.target}}"
+      sound: done
+
+  - agent: |
+      Focus: {{inputs.focus}}
+
+      {{steps.brief.response}}
+    using: "{{inputs.target}}"
+    background: true
+    pane:
+      open: tab
+
+  - herdr: tab.close
+    params:
+      tab_id: "{{context.tab}}"
+    continue_on_error: true

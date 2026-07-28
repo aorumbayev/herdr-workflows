@@ -4,62 +4,108 @@ Each card on this page copies a `hwf workflow import "<base64>"` command. Import
 
 All shipped examples use `version: v1alpha1`.
 
-## Review
-
-Capture `git diff HEAD`, then open a managed Claude pane when the diff is non-empty.
-
-```yaml
-version: v1alpha1
-title: Review
-description: Review the working tree diff, skipping the agent when it is clean
-steps:
-  - id: diff
-    run: [git, diff, HEAD]
-
-  - agent: |
-      Review this diff. List blocking issues only.
-
-      {{steps.diff.stdout}}
-    using: claude
-    when: "{{steps.diff.stdout}}"
-    timeout: 15m
-    pane:
-      open: beside
-```
-
-## Worktree
-
-Create and focus a git worktree through an explicit Herdr call.
-
-```yaml
-version: v1alpha1
-title: Worktree
-description: Create a worktree and focus it
-inputs:
-  branch: text
-  base:
-    type: choice
-    options: [main, develop]
-    default: main
-steps:
-  - herdr: worktree.create
-    params:
-      workspace_id: "{{context.workspace}}"
-      branch: "{{inputs.branch}}"
-      base: "{{inputs.base}}"
-      label: "{{inputs.branch}}"
-      focus: true
-```
-
 ## Handoff
 
-Entry workflow collects a profile and optional focus text, then runs a hidden child that distils `{{context.transcript}}` on the invoking agent (`target:`) and opens the destination profile in a new tab.
+Distils `{{context.transcript}}` on the invoking agent (`target:`), announces the result, opens the destination profile in a new background tab, then closes the originating tab.
 
 Transcript access is intentional reviewed YAML. Import flags that reference before you confirm.
 
+```yaml
+version: v1alpha1
+title: Handoff
+description: Distil this session and hand it to another agent
+inputs:
+  target: profile
+  focus:
+    type: text
+    default: ""
+on_failure:
+  herdr: notification.show
+  params:
+    title: handoff failed
+    body: "{{context.error.message}}"
+    sound: request
+steps:
+  - id: brief
+    agent: |
+      Distil the transcript below the --- marker into a handoff prompt for a
+      fresh agent session. Keep decisions, solutions, file paths, and open
+      questions; drop retries and verbose tool output.
+
+      ---
+      {{context.transcript}}
+    target: "{{context.agent}}"
+    timeout: 15m
+
+  - herdr: notification.show
+    params:
+      title: handoff ready
+      body: "opening {{inputs.target}}"
+      sound: done
+
+  - agent: |
+      Focus: {{inputs.focus}}
+
+      {{steps.brief.response}}
+    using: "{{inputs.target}}"
+    background: true
+    pane:
+      open: tab
+
+  - herdr: tab.close
+    params:
+      tab_id: "{{context.tab}}"
+    continue_on_error: true
+```
+
 ## Prompt enhance
 
-Entry workflow collects a profile and prompt text, then a hidden child rewrites the text in a managed pane, copies the managed `response` to the clipboard (`pbcopy` / `xclip` by platform), and notifies.
+Rewrites prompt text in a managed pane that closes on success, copies the managed `response` to the clipboard (`pbcopy` / `xclip` by platform), and notifies.
+
+```yaml
+version: v1alpha1
+title: Prompt enhance
+description: Refine a prompt in a managed pane, then copy the result to the clipboard
+inputs:
+  target: profile
+  text: text
+on_failure:
+  herdr: notification.show
+  params:
+    title: prompt-enhance failed
+    body: "{{context.error.message}}"
+    sound: request
+steps:
+  - id: refined
+    agent: |
+      Improve the supplied text; do not perform the task it describes. Return
+      only the rewritten text.
+
+      ---
+      {{inputs.text}}
+    using: "{{inputs.target}}"
+    timeout: 10m
+    pane:
+      open: beside
+      focus: false
+      close: success
+
+  - run: [sh, -c, 'printf %s "$TEXT" | pbcopy']
+    env:
+      TEXT: "{{steps.refined.response}}"
+    when: '{{context.platform}} == "macos"'
+
+  - run: [sh, -c, 'printf %s "$TEXT" | xclip -selection clipboard']
+    env:
+      TEXT: "{{steps.refined.response}}"
+    when: '{{context.platform}} != "macos"'
+
+  - herdr: notification.show
+    params:
+      title: prompt ready
+      body: refined prompt copied to clipboard
+      sound: done
+```
 
 ## Authoring tips
 
