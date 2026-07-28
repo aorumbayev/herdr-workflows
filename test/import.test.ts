@@ -29,6 +29,14 @@ describe("workflow bundle payloads", () => {
     expect(decodeBundle(encodeBundle(bundle))).toEqual(bundle);
   });
 
+  test("encodeBundle is platform-stable", () => {
+    const payload = encodeBundle({ v: 1, files: [{ name: "a", body: "x\n" }] });
+    expect(Buffer.from(payload, "base64")[9]).toBe(3);
+    expect(payload).toBe(
+      "H4sIAAAAAAAAA6tWKlOyMtRRSsvMSS1WsoquVspLzE1VslJKVNJRSspPqVSyUqqIyVOqja0FAIxVyMQrAAAA",
+    );
+  });
+
   test("survives the line wrapping a copy-paste can add", () => {
     const payload = encodeBundle(bundle);
     const wrapped = `${payload.slice(0, 10)}\n ${payload.slice(10)}`;

@@ -24,9 +24,13 @@ const bundleSchema = z
 
 export type WorkflowBundle = z.infer<typeof bundleSchema>;
 
+/** gzip OS byte forced to Unix so macOS/Linux encode to the same paste payload. */
+const GZIP_OS_UNIX = 3;
+
 /** gzip keeps a multi-file bundle short enough to paste as one shell argument. */
 export function encodeBundle(bundle: WorkflowBundle): string {
-  const gz = Bun.gzipSync(new TextEncoder().encode(JSON.stringify(bundle)));
+  const gz = new Uint8Array(Bun.gzipSync(new TextEncoder().encode(JSON.stringify(bundle))));
+  gz[9] = GZIP_OS_UNIX;
   return Buffer.from(gz).toString("base64");
 }
 
