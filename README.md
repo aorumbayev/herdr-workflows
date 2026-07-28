@@ -2,7 +2,7 @@
   herdr-workflows
 </h3>
 
-<p align="center">Automate stuff in herdr</p>
+<p align="center">Automate the boring and repetitive stuff in herdr</p>
 
 <p align="center">
   <a href="https://aorumbayev.github.io/herdr-workflows/guide">Guide</a> · <a href="https://aorumbayev.github.io/herdr-workflows/examples">Examples</a> · <a href="https://aorumbayev.github.io/herdr-workflows/reference">Reference</a>

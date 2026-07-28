@@ -28,6 +28,9 @@ const SHELL_READY_POLL_MS = 50;
 /** Socket agent.start returns at launch_pending; CLI waits for interactive_ready (default 30s). */
 const AGENT_INTERACTIVE_DEADLINE_MS = 30_000;
 const AGENT_INTERACTIVE_POLL_MS = 100;
+/** Match Herdr agent_prompt_stalled effect window: multi-line paste may swallow the encoded Enter. */
+const SUBMIT_ADVANCE_DEADLINE_MS = 5_000;
+const SUBMIT_ADVANCE_POLL_MS = 100;
 
 function processInfoRecord(result: Record<string, unknown>): Record<string, unknown> {
   const info = result.process_info;
@@ -264,8 +267,24 @@ async function managedResult(
   }
 }
 
+function submitAdvanced(status: string, before: string): boolean {
+  return status === "working" || status === "blocked" || status !== before;
+}
+
+/** agent.prompt + one Enter if status never advances (bracketed-paste stall). Not prompt wait. */
 async function submitPrompt(c: StepCtx, target: string, text: string): Promise<void> {
-  await c.opts.deps.herdrCall("agent.prompt", { target, text });
+  const deps = c.opts.deps;
+  const before = await deps.agentStatus(target);
+  await deps.herdrCall("agent.prompt", { target, text });
+  const deadline = deps.now() + SUBMIT_ADVANCE_DEADLINE_MS;
+  while (deps.now() < deadline) {
+    const status = await deps.agentStatus(target);
+    if (submitAdvanced(status, before)) return;
+    await deps.sleep(SUBMIT_ADVANCE_POLL_MS);
+  }
+  const status = await deps.agentStatus(target);
+  if (submitAdvanced(status, before)) return;
+  await deps.herdrCall("agent.send_keys", { target, keys: ["enter"] });
 }
 
 async function closePane(c: StepCtx, placed: PlacedPane): Promise<void> {

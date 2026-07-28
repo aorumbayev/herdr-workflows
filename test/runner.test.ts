@@ -576,8 +576,10 @@ steps:
     pane: { open: beside }
 `,
     });
+    let prompted = false;
     let polls = 0;
     const { deps, notes } = mockDeps();
+    const baseCall = deps.herdrCall;
     const result = await runWorkflow({
       name: "m",
       repoRoot: root,
@@ -586,7 +588,12 @@ steps:
       deps: {
         ...deps,
         ...fastClock(),
+        herdrCall: async (method, params = {}) => {
+          if (method === "agent.prompt") prompted = true;
+          return baseCall(method, params);
+        },
         agentStatus: async (target) => {
+          if (!prompted) return "idle";
           polls += 1;
           if (polls <= 2) return "blocked";
           return deps.agentStatus(target);
@@ -1008,6 +1015,154 @@ steps:
     expect(leftover).toEqual([]);
     const logText = await readFile(runLogPath(), "utf8");
     expect(logText).not.toContain("TRANSCRIPT");
+  });
+
+  test("stalled agent.prompt gets exactly one enter nudge then completes", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: |
+      line one
+      line two
+    using: claude
+    pane: { open: beside }
+`,
+    });
+    const { deps, calls, agents } = mockDeps({ writeManagedResponse: false });
+    const baseCall = deps.herdrCall;
+    let status = "idle";
+    let pendingPath: string | undefined;
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: {
+        ...deps,
+        ...fastClock(),
+        herdrCall: async (method, params = {}) => {
+          if (method === "agent.prompt") {
+            const text = String(params.text ?? "");
+            pendingPath = /absolute path ([^\s,]+)/.exec(text)?.[1];
+            const target = String(params.target);
+            const info = agents.get(target) ?? {
+              status: "idle",
+              pane_id: "w1:p3",
+              name: target,
+              interactive_ready: true,
+              launch_pending: false,
+            };
+            agents.set(target, { ...info, status: "idle" });
+            calls.push({ method, params });
+            return {
+              type: "agent_prompted",
+              agent: { name: target, pane_id: info.pane_id, agent_status: "idle" },
+            };
+          }
+          if (method === "agent.send_keys") {
+            calls.push({ method, params });
+            expect(params.keys).toEqual(["enter"]);
+            if (pendingPath) {
+              await mkdir(join(pendingPath, ".."), { recursive: true });
+              await writeFile(pendingPath, "nudged answer\n");
+            }
+            status = "done";
+            const target = String(params.target);
+            const info = agents.get(target);
+            if (info) {
+              info.status = "done";
+              agents.set(target, info);
+            }
+            return { type: "ok" };
+          }
+          return baseCall(method, params);
+        },
+        agentStatus: async () => status,
+      },
+    });
+    expect(result.ok).toBe(true);
+    const enters = calls.filter(
+      (c) =>
+        c.method === "agent.send_keys" &&
+        Array.isArray(c.params.keys) &&
+        c.params.keys[0] === "enter",
+    );
+    expect(enters).toHaveLength(1);
+  });
+
+  test("agent.prompt that starts working immediately gets no enter nudge", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: |
+      line one
+      line two
+    using: claude
+    pane: { open: beside }
+`,
+    });
+    const { deps, calls } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: { ...deps, ...fastClock() },
+    });
+    expect(result.ok).toBe(true);
+    expect(calls.filter((c) => c.method === "agent.send_keys")).toHaveLength(0);
+  });
+
+  test("submit enter nudge never fires twice", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: summarize
+    using: claude
+    pane: { open: beside }
+    timeout: 200ms
+`,
+    });
+    const { deps, calls } = mockDeps({ writeManagedResponse: false });
+    const baseCall = deps.herdrCall;
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: {
+        ...deps,
+        ...fastClock(),
+        herdrCall: async (method, params = {}) => {
+          if (method === "agent.prompt") {
+            calls.push({ method, params });
+            return {
+              type: "agent_prompted",
+              agent: { name: String(params.target), pane_id: "w1:p3", agent_status: "idle" },
+            };
+          }
+          if (method === "agent.send_keys") {
+            calls.push({ method, params });
+            return { type: "ok" };
+          }
+          return baseCall(method, params);
+        },
+        agentStatus: async () => "idle",
+      },
+    });
+    const err = failed(result);
+    expect(err.error).toMatch(/did not settle with a managed response within 0\.2s/);
+    expect(
+      calls.filter(
+        (c) =>
+          c.method === "agent.send_keys" &&
+          Array.isArray(c.params.keys) &&
+          c.params.keys[0] === "enter",
+      ),
+    ).toHaveLength(1);
   });
 
   test("templated herdr enum param fails at runtime on a bad resolved value", async () => {
