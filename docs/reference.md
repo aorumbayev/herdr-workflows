@@ -4,16 +4,16 @@ Contract for `version: v1alpha1`. Cross-field rules are enforced by the loader; 
 
 ## Document
 
-| Key           | Required | Notes                                          |
-| ------------- | -------- | ---------------------------------------------- |
-| `version`     | yes      | Must be `v1alpha1`                             |
-| `steps`       | yes      | Non-empty list                                 |
-| `title`       | no       | Picker label; defaults from humanized filename |
-| `description` | no       | Picker subtitle                                |
-| `hidden`      | no       | Hide from picker; `hwf run` still works        |
-| `inputs`      | no       | Entry workflow only prompts                    |
-| `returns`     | no       | Child export map or template                   |
-| `on_failure`  | no       | Entry-only recovery action                     |
+| Key           | Required | Notes                                                                      |
+| ------------- | -------- | -------------------------------------------------------------------------- |
+| `version`     | yes      | Must be `v1alpha1`                                                         |
+| `steps`       | yes      | Non-empty list                                                             |
+| `title`       | no       | Picker label; defaults from humanized filename; shown up to ~47 chars      |
+| `description` | no       | Picker subtitle; shown up to ~116 chars (2 lines); longer values truncated |
+| `hidden`      | no       | Hide from picker; `hwf run` still works                                    |
+| `inputs`      | no       | Entry workflow only prompts                                                |
+| `returns`     | no       | Child export map or template                                               |
+| `on_failure`  | no       | Entry-only recovery action                                                 |
 
 Unsupported format versions fail load with rewrite-or-upgrade guidance. Package stays semver `0.x`; a later incompatible alpha uses `v1alphaN`. Workflow YAML never declares a Herdr version.
 

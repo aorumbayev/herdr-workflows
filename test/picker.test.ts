@@ -6,7 +6,7 @@ import {
   entrySensitivity,
   filterChoiceOptions,
   filterWorkflowEntries,
-  formatDetailLine,
+  formatDetailLines,
   formatInputPrompt,
   formatListFooter,
   formatPickerRowName,
@@ -331,14 +331,55 @@ describe("formatListFooter", () => {
   });
 });
 
-describe("formatDetailLine", () => {
-  test("indents by two spaces and truncates to content width", () => {
-    expect(formatDetailLine("hello", 60)).toBe("  hello");
-    expect(formatDetailLine("hello", 60).startsWith("  ")).toBe(true);
-    const long = formatDetailLine("x".repeat(80), 20);
-    expect(long.length).toBe(20);
-    expect(long.startsWith("  ")).toBe(true);
-    expect(long).toContain("…");
+describe("formatDetailLines", () => {
+  test("short description stays on one indented line", () => {
+    expect(formatDetailLines("hello", 60)).toBe("  hello");
+  });
+
+  test("long description wraps at a word boundary", () => {
+    const wrapped = formatDetailLines("Distil this session transcript and hand it over", 30);
+    const lines = wrapped.split("\n");
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe("  Distil this session");
+    expect(lines[1]).toBe("  transcript and hand it over");
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(30);
+      expect(line.startsWith("  ")).toBe(true);
+    }
+  });
+
+  test("over-long description truncates with ellipsis on the second line", () => {
+    const desc =
+      "Distil this session's transcript and hand it to a fresh agent for review tomorrow";
+    const wrapped = formatDetailLines(desc, 40);
+    const lines = wrapped.split("\n");
+    expect(lines).toHaveLength(2);
+    expect(lines[0]!.endsWith("…")).toBe(false);
+    expect(lines[1]!.endsWith("…")).toBe(true);
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(40);
+      expect(line.startsWith("  ")).toBe(true);
+    }
+  });
+
+  test("single unbreakable word longer than a line still fits the width", () => {
+    const wrapped = formatDetailLines("x".repeat(80), 20);
+    const lines = wrapped.split("\n");
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe(`  ${"x".repeat(18)}`);
+    expect(lines[1]).toBe(`  ${"x".repeat(17)}…`);
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(20);
+    }
+  });
+
+  test("empty description produces empty string", () => {
+    expect(formatDetailLines("", 60)).toBe("");
+    expect(formatDetailLines("   \n\t  ", 60)).toBe("");
+  });
+
+  test("collapses whitespace before wrapping", () => {
+    expect(formatDetailLines("hello   world\n\nnext", 60)).toBe("  hello world next");
   });
 });
 
@@ -354,11 +395,9 @@ describe("formatRule", () => {
 
 describe("picker chrome ascii", () => {
   test("filter prompt, short row, rule, and warning marker are ASCII", () => {
-    expect(isAscii("/ ")).toBe(true);
     expect(isAscii(formatRule(60))).toBe(true);
     expect(isAscii(formatPickerRowName("Handoff", "global", true, 60))).toBe(true);
     expect(isAscii(formatPickerRowName("Handoff", "repo", false, 60))).toBe(true);
-    expect(isAscii("!")).toBe(true);
   });
 
   test("hints avoid arrow, triangle, and heavy-line glyphs", () => {

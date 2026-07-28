@@ -208,9 +208,23 @@ export function formatListFooter(
   return `${hint}${" ".repeat(pad)}${counter}`;
 }
 
-export function formatDetailLine(description: string, contentWidth: number): string {
-  if (!description) return "";
-  return `  ${truncate(description, Math.max(0, contentWidth - 2))}`;
+function takeWrappedLine(text: string, budget: number): string {
+  if (text.length <= budget) return text;
+  const window = text.slice(0, budget);
+  const space = window.lastIndexOf(" ");
+  if (space > 0) return text.slice(0, space);
+  return window;
+}
+
+export function formatDetailLines(description: string, contentWidth: number): string {
+  const text = description.replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  const budget = Math.max(0, contentWidth - 2);
+  const line1 = takeWrappedLine(text, budget);
+  const rest = text.slice(line1.length).trimStart();
+  if (!rest) return `  ${line1}`;
+  const line2 = rest.length <= budget ? rest : truncate(rest, budget);
+  return `  ${line1}\n  ${line2}`;
 }
 
 function updateDetail(state: PickerState): void {
@@ -220,7 +234,7 @@ function updateDetail(state: PickerState): void {
   }
   const option =
     state.list.options.length > 0 ? state.list.options[state.list.getSelectedIndex()] : undefined;
-  state.detail.content = formatDetailLine(option?.description ?? "", state.contentWidth);
+  state.detail.content = formatDetailLines(option?.description ?? "", state.contentWidth);
 }
 
 function updateListFooter(state: PickerState): void {
@@ -582,7 +596,7 @@ function submitInputText(state: PickerState, value: string): void {
 export function acceptWorkflow(state: PickerState, entry: WorkflowListEntry): void {
   if (entry.error) {
     const err = stripFilePrefix(entry.error, entry.file);
-    state.detail.content = formatDetailLine(err, state.contentWidth);
+    state.detail.content = formatDetailLines(err, state.contentWidth);
     updateListFooter(state);
     return;
   }
@@ -722,7 +736,7 @@ function buildPickerDetailStack(theme: HostTheme) {
       flexGrow: 1,
       ...theme.text,
     }),
-    Text({ id: "detail", content: "", attributes: TextAttributes.DIM, ...theme.text }),
+    Text({ id: "detail", content: "", height: 2, attributes: TextAttributes.DIM, ...theme.text }),
     Text({
       id: "rule",
       content: "",

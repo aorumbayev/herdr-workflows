@@ -106,7 +106,7 @@ Import (CLI or workbench `#import`) accepts that command or the raw encoded bund
 
 Every workflow declares `version: v1alpha1`. The package stays semver `0.x`; a later incompatible alpha increments `v1alphaN`. Workflow YAML never declares a Herdr version — the plugin manifest and CLI own that.
 
-Optional `title` and `description` appear in the picker (title defaults from the humanized filename). `hidden: true` hides a workflow from the picker but still allows `hwf run`.
+Optional `title` and `description` appear in the picker (title defaults from the humanized filename). The picker shows titles up to ~47 characters and descriptions up to ~116; longer values are truncated there. `hidden: true` hides a workflow from the picker but still allows `hwf run`.
 
 ## Four actions
 

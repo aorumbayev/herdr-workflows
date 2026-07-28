@@ -29,5 +29,5 @@ id = "picker"
 title = "Herdr Workflows"
 placement = "popup"
 width = 64
-height = 14
+height = 15
 command = ["./bin/herdr-workflows", "picker"]
