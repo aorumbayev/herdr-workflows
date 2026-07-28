@@ -62,16 +62,31 @@ export function isRuntimeScriptEntry(entry: string | undefined): boolean {
   }
 }
 
-export function selfRunArgv(
-  runArgs: string[],
+function selfCommandArgv(
+  command: string,
+  commandArgs: string[],
   opts?: { execPath?: string; argv1?: string },
 ): string[] {
   const execPath = opts?.execPath ?? process.execPath;
   const entry = opts?.argv1 ?? process.argv[1];
   if (entry !== undefined && isRuntimeScriptEntry(entry)) {
-    return [execPath, entry, "run", ...runArgs];
+    return [execPath, entry, command, ...commandArgs];
   }
-  return [execPath, "run", ...runArgs];
+  return [execPath, command, ...commandArgs];
+}
+
+export function selfRunArgv(
+  runArgs: string[],
+  opts?: { execPath?: string; argv1?: string },
+): string[] {
+  return selfCommandArgv("run", runArgs, opts);
+}
+
+export function selfWebArgv(
+  webArgs: string[],
+  opts?: { execPath?: string; argv1?: string },
+): string[] {
+  return selfCommandArgv("web", webArgs, opts);
 }
 
 /** Argv after `run` — workflow name + flag only; inputs/prompt travel on stdin. */

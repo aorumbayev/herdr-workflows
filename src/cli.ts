@@ -17,7 +17,8 @@ import { listWorkflows } from "./workflow/load";
 import { WorkflowLoadError } from "./workflow/types";
 import { runWorkflow } from "./run/runner";
 import { parseLaunchPayload } from "./tui/run-launch";
-import { startWebServer } from "./web/server";
+import { ensureWorkbench } from "./web/endpoint";
+import { appendRouteHash, parseWebRoute } from "./web/route";
 
 export function parseArgs(args: string[]): {
   flags: Record<string, string>;
@@ -229,14 +230,29 @@ function openBrowser(url: string): void {
 }
 
 async function cmdWeb(args: string[]): Promise<void> {
-  const { flags, bools } = parseArgs(args);
+  const { flags, bools, positional } = parseArgs(args);
   const port = flags.port !== undefined ? Number(flags.port) : undefined;
   if (port !== undefined && (!Number.isInteger(port) || port < 1 || port > 65535))
     die(`--port expects an integer between 1 and 65535, got '${flags.port}'`);
+  const routeRaw = positional[0];
+  const route = routeRaw === undefined ? undefined : parseWebRoute(routeRaw);
+  if (routeRaw !== undefined && !route) {
+    die(
+      `web route expects w=<repo|global>:<name>, share=<repo|global>:<name>, or import, got '${routeRaw}'`,
+    );
+  }
   const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot());
-  const { url } = await startWebServer({ repoRoot, port });
+  const workbench = await ensureWorkbench({ repoRoot, port });
+  const url = appendRouteHash(workbench.url, route);
   process.stdout.write(`herdr-workflows web · ${url}\n`);
   if (!bools.has("no-open")) openBrowser(url);
+  if (!workbench.owned) return;
+  const shutdown = () => {
+    workbench.stop();
+    process.exit(0);
+  };
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
 }
 
 // bun --compile re-extracts the embedded libopentui to a temp file per spawn (~200ms on the

@@ -54,8 +54,9 @@ describe("web server security", () => {
     const { base, token } = await serve(root);
     const res = await fetch(`${base}/api/state`, { headers: { "x-hwf-token": token } });
     expect(res.status).toBe(200);
-    const data = (await res.json()) as { profiles: string[] };
+    const data = (await res.json()) as { profiles: string[]; canonicalRepoRoot: string };
     expect(data.profiles).toContain("claude");
+    expect(data.canonicalRepoRoot).toBe(root);
   });
 
   test("workflow GET rejects path-traversal names", async () => {

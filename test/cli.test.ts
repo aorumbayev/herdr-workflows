@@ -172,3 +172,16 @@ describe("cli run", () => {
     });
   });
 });
+
+describe("cli web", () => {
+  test("rejects invalid workbench routes before starting a server", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-web-"));
+    dirs.push(root);
+    await mkdir(join(root, ".hwf", "workflows"), { recursive: true });
+    const result = await runCli(["web", "http://evil.example", "--no-open"], root, {
+      HERDR_WORKFLOWS_REPO_ROOT: root,
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("web route expects");
+  });
+});

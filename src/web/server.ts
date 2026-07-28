@@ -218,7 +218,12 @@ async function getState(repoRoot: string): Promise<Response> {
       };
     }),
   );
-  return json({ repoRoot: shortPath(repoRoot), profiles, entries: mapped });
+  return json({
+    repoRoot: shortPath(repoRoot),
+    canonicalRepoRoot: repoRoot,
+    profiles,
+    entries: mapped,
+  });
 }
 
 function handleParse(body: Record<string, unknown>): Response {

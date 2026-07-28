@@ -14,6 +14,7 @@ import {
   launchDetachedRun,
   parseLaunchPayload,
   selfRunArgv,
+  selfWebArgv,
   type DetachedRunHandle,
   type LaunchRunRequest,
 } from "../src/tui/run-launch";
@@ -119,6 +120,22 @@ describe("run argv", () => {
         argv1: entry,
       }),
     ).toEqual(["/opt/herdr-workflows", "run", "sleep", "--launch-payload"]);
+  });
+
+  test("selfWebArgv reuses the same self-exec rules for web routes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-self-web-"));
+    dirs.push(root);
+    const script = join(root, "cli.ts");
+    await writeFile(script, "export {};\n");
+    expect(
+      selfWebArgv(["w=repo:deploy", "--no-open"], { execPath: "/runtime/bun", argv1: script }),
+    ).toEqual(["/runtime/bun", script, "web", "w=repo:deploy", "--no-open"]);
+    expect(
+      selfWebArgv(["import"], {
+        execPath: "/opt/herdr-workflows",
+        argv1: "/$bunfs/root/herdr-workflows",
+      }),
+    ).toEqual(["/opt/herdr-workflows", "web", "import"]);
   });
 
   test("parseLaunchPayload round-trips inputs and prompt", () => {
