@@ -19,7 +19,28 @@ cd your-repo
 hwf init
 ```
 
-Writes `.hwf/config.yaml` with native Herdr profiles for agent kinds found on your PATH. No workflows yet — import ready-made ones from [Examples](/examples). Each card copies `hwf workflow import "<base64>"`; import prints the YAML, flags sensitive bits, asks before writing to this repo's `.hwf/workflows` or global `~/.hwf/workflows`.
+Writes `.hwf/config.yaml`, probing your PATH for the agent kinds it knows (`claude`, `codex`, `aider`, `cursor`, `opencode`) and writing one profile per kind found, with the first as `default_profile`. It also creates `.hwf/workflows/` and gitignores `.hwf/config.local.yaml`.
+
+### Profiles
+
+A profile is the name a workflow's `using:` refers to — not an agent binary. `kind` is the native Herdr agent kind; live `agent.start` decides whether it is supported. Optional `args` pin startup flags, so one kind can back several roles:
+
+```yaml
+# .hwf/config.yaml
+profiles:
+  claude:
+    kind: claude
+  deep-review:
+    kind: claude
+    args: ["--model", "opus"]
+default_profile: claude
+```
+
+`hwf init` gets you the plain one-profile-per-kind form; role names and `args` are yours to add. An `agent:` step with no `using:` and no `target:` uses `default_profile`.
+
+Config merges across three layers, each replacing whole entries by name: the global plugin config dir (`hwf` finds it through Herdr), committed `.hwf/config.yaml`, then gitignored `.hwf/config.local.yaml` for per-machine choices — point `deep-review` at a different kind locally without touching what the team shares.
+
+No workflows yet — import ready-made ones from [Examples](/examples). Each card copies `hwf workflow import "<base64>"`; import prints the YAML, flags sensitive bits, asks before writing to this repo's `.hwf/workflows` or global `~/.hwf/workflows`.
 
 Workflow YAML is reviewed executable code. Opening a repository never runs a workflow. There is no sandbox — a trusted `run:` can invoke the whole Herdr CLI or socket as your user.
 
@@ -76,18 +97,7 @@ Exactly one action key per step:
 
 Templates use `{{inputs.name}}`, `{{steps.id.field}}`, and `{{context.key}}` only. Results are automatic — there is no `out:` binding.
 
-Config is only `profiles` / `default_profile` / `transcripts`. Example:
-
-```yaml
-# .hwf/config.yaml
-profiles:
-  claude:
-    kind: claude
-  deep:
-    kind: claude
-    args: ["--model", "opus"]
-default_profile: claude
-```
+Config is only `profiles` / `default_profile` / `transcripts` — see [Profiles](#profiles) for the shape and [Reference](/reference#config) for transcript extractors.
 
 ## Agent skill
 

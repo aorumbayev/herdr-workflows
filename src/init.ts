@@ -16,6 +16,7 @@ const KNOWN_KINDS: { name: string; bin: string }[] = [
   { name: "codex", bin: "codex" },
   { name: "aider", bin: "aider" },
   { name: "cursor", bin: "cursor" },
+  { name: "opencode", bin: "opencode" },
 ];
 
 async function onPath(bin: string): Promise<boolean> {

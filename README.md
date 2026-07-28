@@ -51,6 +51,24 @@ cd your-repo
 hwf init            # writes .hwf/config.yaml (native profiles for kinds on PATH)
 ```
 
+`hwf init` probes your PATH for the kinds it knows (`claude`, `codex`, `aider`, `cursor`, `opencode`) and writes
+one profile per kind, with the first as `default_profile`. A profile is what a workflow's `using:` names, so add
+role-oriented ones with startup `args` when a single kind should back several roles:
+
+```yaml
+# .hwf/config.yaml
+profiles:
+  claude:
+    kind: claude
+  deep-review:
+    kind: claude
+    args: ["--model", "opus"]
+default_profile: claude
+```
+
+Config merges global (Herdr's plugin config dir) → committed `.hwf/config.yaml` → gitignored
+`.hwf/config.local.yaml`, replacing whole entries by name, so you can repoint a shared profile per machine.
+
 Ready-made workflows live in [`examples/`](examples) and on the
 [Examples page](https://aorumbayev.github.io/herdr-workflows/examples), where each card copies a
 `hwf workflow import "<base64>"` command — it prints the YAML (with sensitive flags), asks for review,
@@ -59,7 +77,7 @@ then asks for this repo's `.hwf/workflows` or your global `~/.hwf/workflows`.
 Press `prefix+k` to pick and run a workflow, or use the CLI:
 
 ```bash
-hwf run review      # run a workflow, live progress in the terminal
+hwf run review      # run the workflow above, live progress in the terminal
 hwf web             # browser workbench: build/edit/validate workflows, browse run log
 hwf                 # same as `hwf web`
 ```
