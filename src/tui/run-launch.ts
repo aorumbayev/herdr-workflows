@@ -12,7 +12,6 @@ export type DetachedRunHandle = {
 export type LaunchPayload = {
   name: string;
   inputs: Record<string, string>;
-  prompt: string;
 };
 
 export type LaunchRunRequest = {
@@ -20,7 +19,6 @@ export type LaunchRunRequest = {
   repoRoot: string;
   ctx: InvocationContext;
   inputs: Record<string, string>;
-  prompt: string;
   onProgressLine: (line: string) => void;
   env?: NodeJS.ProcessEnv;
   spawn?: typeof Bun.spawn;
@@ -62,29 +60,40 @@ export function isRuntimeScriptEntry(entry: string | undefined): boolean {
   }
 }
 
-export function selfRunArgv(
-  runArgs: string[],
+function selfCommandArgv(
+  command: string,
+  commandArgs: string[],
   opts?: { execPath?: string; argv1?: string },
 ): string[] {
   const execPath = opts?.execPath ?? process.execPath;
   const entry = opts?.argv1 ?? process.argv[1];
   if (entry !== undefined && isRuntimeScriptEntry(entry)) {
-    return [execPath, entry, "run", ...runArgs];
+    return [execPath, entry, command, ...commandArgs];
   }
-  return [execPath, "run", ...runArgs];
+  return [execPath, command, ...commandArgs];
 }
 
-/** Argv after `run` — workflow name + flag only; inputs/prompt travel on stdin. */
+export function selfRunArgv(
+  runArgs: string[],
+  opts?: { execPath?: string; argv1?: string },
+): string[] {
+  return selfCommandArgv("run", runArgs, opts);
+}
+
+export function selfWebArgv(
+  webArgs: string[],
+  opts?: { execPath?: string; argv1?: string },
+): string[] {
+  return selfCommandArgv("web", webArgs, opts);
+}
+
+/** Argv after `run` — workflow name + flag only; inputs travel on stdin. */
 export function buildRunArgs(name: string): string[] {
   return [name, "--launch-payload"];
 }
 
-export function buildLaunchPayload(
-  name: string,
-  inputs: Record<string, string>,
-  prompt: string,
-): LaunchPayload {
-  return { name, inputs, prompt };
+export function buildLaunchPayload(name: string, inputs: Record<string, string>): LaunchPayload {
+  return { name, inputs };
 }
 
 export function parseLaunchPayload(text: string): LaunchPayload {
@@ -113,11 +122,7 @@ export function parseLaunchPayload(text: string): LaunchPayload {
       inputs[key] = value;
     }
   }
-  const prompt = row.prompt === undefined ? "" : row.prompt;
-  if (typeof prompt !== "string") {
-    throw new Error("launch payload prompt must be a string");
-  }
-  return { name: row.name, inputs, prompt };
+  return { name: row.name, inputs };
 }
 
 function decodeLines(
@@ -153,7 +158,7 @@ function decodeLines(
 export function launchDetachedRun(req: LaunchRunRequest): DetachedRunHandle {
   const spawn = req.spawn ?? Bun.spawn.bind(Bun);
   const argv = selfRunArgv(buildRunArgs(req.name));
-  const payload = JSON.stringify(buildLaunchPayload(req.name, req.inputs, req.prompt));
+  const payload = JSON.stringify(buildLaunchPayload(req.name, req.inputs));
   const env = {
     ...process.env,
     ...req.env,
@@ -204,4 +209,40 @@ export function launchDetachedRun(req: LaunchRunRequest): DetachedRunHandle {
   })();
 
   return { result, detach };
+}
+
+export type LaunchWebRequest = {
+  route: string;
+  repoRoot: string;
+  env?: NodeJS.ProcessEnv;
+  spawn?: typeof Bun.spawn;
+};
+
+/** Env the detached `hwf web` child needs for the same repo workbench. */
+export function buildWebLaunchEnv(
+  repoRoot: string,
+  base: NodeJS.ProcessEnv = process.env,
+): Record<string, string | undefined> {
+  return {
+    ...base,
+    HERDR_WORKFLOWS_REPO_ROOT: repoRoot,
+  };
+}
+
+/**
+ * Fire-and-forget `hwf web <route>`. No stdout parsing, no retained handle —
+ * the web command owns endpoint reuse and browser open.
+ */
+export function launchDetachedWeb(req: LaunchWebRequest): void {
+  const spawn = req.spawn ?? Bun.spawn.bind(Bun);
+  const argv = selfWebArgv([req.route]);
+  const proc = spawn(argv, {
+    cwd: req.repoRoot,
+    env: buildWebLaunchEnv(req.repoRoot, { ...process.env, ...req.env }),
+    stdin: "ignore",
+    stdout: "ignore",
+    stderr: "ignore",
+    detached: true,
+  });
+  proc.unref();
 }

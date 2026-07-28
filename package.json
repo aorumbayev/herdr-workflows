@@ -39,7 +39,7 @@
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
-    "install:dev": "bun run build && herdr plugin unlink herdr-workflows >/dev/null 2>&1; herdr plugin link \"$PWD\" && node scripts/install-keybindings.mjs && node scripts/install-cli.mjs && herdr server reload-config",
+    "install:dev": "bun run build && (herdr plugin unlink herdr-workflows >/dev/null 2>&1 || true) && herdr plugin link \"$PWD\" && node scripts/install-keybindings.mjs && node scripts/install-cli.mjs && herdr server reload-config",
     "prepare": "git config core.hooksPath .githooks",
     "verify:lint": "verifyx lint",
     "verify:format": "verifyx format",
@@ -53,6 +53,7 @@
   },
   "dependencies": {
     "@opentui/core": "0.4.5",
+    "commander": "15.0.0",
     "zod": "4.1.8"
   },
   "devDependencies": {

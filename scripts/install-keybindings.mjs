@@ -36,7 +36,7 @@ function validates(candidate) {
     env: { ...process.env, HERDR_CONFIG_PATH: candidate },
     encoding: "utf8",
   });
-  if (check.error) return { ok: true, out: "" };
+  if (check.error) return { ok: false, out: check.error.message };
   const out = `${check.stdout ?? ""}${check.stderr ?? ""}`;
   return { ok: out.includes("config: ok"), out };
 }

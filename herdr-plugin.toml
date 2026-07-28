@@ -26,8 +26,8 @@ command = ["bin/herdr-workflows", "launch"]
 
 [[panes]]
 id = "picker"
-title = "Launch workflow"
+title = "Herdr Workflows"
 placement = "popup"
-width = 56
-height = 14
+width = 64
+height = 15
 command = ["./bin/herdr-workflows", "picker"]

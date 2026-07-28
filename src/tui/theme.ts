@@ -2,6 +2,7 @@ import { RGBA, type CliRenderer, type ColorInput, type TerminalColors } from "@o
 
 export type HostTheme = {
   text: { fg: ColorInput };
+  warn: ColorInput;
   input: {
     backgroundColor: ColorInput;
     textColor: ColorInput;
@@ -44,10 +45,12 @@ function selection(colors: TerminalColors | null): { bg: ColorInput; fg: ColorIn
 export function themeFromPalette(colors: TerminalColors | null): HostTheme {
   const fg = RGBA.defaultForeground(hexOrNull(colors?.defaultForeground) ?? undefined);
   const muted = RGBA.fromIndex(8, hexOrNull(colors?.palette?.[8] ?? null) ?? undefined);
+  const warn = RGBA.fromIndex(3, hexOrNull(colors?.palette?.[3] ?? null) ?? undefined);
   const sel = selection(colors);
 
   return {
     text: { fg },
+    warn,
     input: {
       backgroundColor: "transparent",
       textColor: fg,

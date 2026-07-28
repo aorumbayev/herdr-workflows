@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { listWorkflows, loadWorkflowEntry } from "../src/workflow/load";
 import type { PickerState } from "../src/tui/picker";
 import { acceptWorkflow, startRun } from "../src/tui/picker";
+import { themeFromPalette } from "../src/tui/theme";
 import type { LoadedWorkflow } from "../src/workflow/types";
 
 const dirs: string[] = [];
@@ -40,11 +41,22 @@ function pickerState(): PickerState {
     loadWorkflow: async () => {
       throw new Error("reload failed");
     },
+    contentWidth: 80,
+    theme: themeFromPalette(null),
     renderer: { destroy: () => undefined },
+    filterRow: { visible: true },
     filter: { visible: true },
-    list: { visible: true, flexGrow: 1 },
+    listBlock: { visible: true },
+    list: {
+      visible: true,
+      flexGrow: 0,
+      height: 6,
+      options: [],
+      getSelectedIndex: () => 0,
+    },
     status: { visible: false, flexGrow: 0, content: "" },
-    invalid: { visible: true },
+    detail: { visible: false, content: "" },
+    rule: { visible: false, content: "" },
     promptInput: { visible: false },
     footer: { content: "" },
   } as unknown as PickerState;
@@ -87,7 +99,7 @@ steps:
 
   test("picker renders loader errors as terminal failures", async () => {
     const state = pickerState();
-    await startRun(state, { name: "broken", source: "global", file: "/global/broken.yaml" }, "");
+    await startRun(state, { name: "broken", source: "global", file: "/global/broken.yaml" });
 
     expect(state.running).toBe(false);
     expect(String(state.status.content)).toContain("Failed · reload failed");
@@ -108,7 +120,6 @@ steps:
         inputs: [],
         repoOwned: entry.source === "repo",
         needsTranscript: false,
-        needsInvokingAgent: false,
       };
       return workflow;
     };

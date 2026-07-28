@@ -11,13 +11,7 @@ import {
 } from "../config";
 import { CaptureLimitError } from "../limits";
 import { spawnCapture } from "../run/steps/shell";
-import {
-  parseRaw,
-  workflowNeedsInvokingAgent,
-  workflowNeedsTranscript,
-  workflowTemplateRefs,
-  type RawWorkflow,
-} from "./parse";
+import { parseRaw, workflowNeedsTranscript, workflowTemplateRefs, type RawWorkflow } from "./parse";
 import {
   bail,
   WorkflowLoadError,
@@ -37,6 +31,7 @@ const DYNAMIC_CHOICE_TIMEOUT_MS = 10_000;
 const DYNAMIC_CHOICE_MAX = 1_000;
 const STDERR_TAIL = 500;
 const EMPTY_CONFIG: WorkflowsConfig = { profiles: {}, transcripts: {} };
+const WORKFLOW_NAME_RE = /^[a-z0-9][a-z0-9-_]*$/;
 
 function globalDir(): string {
   return join(process.env.HOME ?? homedir(), ".hwf", "workflows");
@@ -58,10 +53,13 @@ async function yamlNames(dir: string): Promise<string[]> {
 }
 
 export function workflowPath(scope: "repo" | "global", repoRoot: string, name: string): string {
+  if (!WORKFLOW_NAME_RE.test(name)) {
+    throw new WorkflowLoadError("workflow name must match [a-z0-9][a-z0-9-_]*");
+  }
   return join(scope === "repo" ? repoDir(repoRoot) : globalDir(), `${name}.yaml`);
 }
 
-async function resolveWorkflowFile(
+export async function resolveWorkflowFile(
   name: string,
   repoRoot: string,
 ): Promise<{ file: string; source: "repo" | "global" } | undefined> {
@@ -318,7 +316,6 @@ function loadFromRaw(
     onFailure: raw.onFailure,
     repoOwned: source === "repo",
     needsTranscript: workflowNeedsTranscript(raw.steps, raw.returns),
-    needsInvokingAgent: workflowNeedsInvokingAgent(raw.steps),
   };
 }
 

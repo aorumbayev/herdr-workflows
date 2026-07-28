@@ -2,30 +2,45 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { KeyEvent } from "@opentui/core";
 import type { InvocationContext } from "../src/config";
 import { runLogPath, type RunLogEntry } from "../src/runlog";
-import type { PickerState } from "../src/tui/picker";
-import { startRun } from "../src/tui/picker";
+import {
+  launchWorkbenchRoute,
+  LIST_HINT,
+  selectedListEntry,
+  startRun,
+  tryListWorkbenchShortcut,
+  type PickerState,
+} from "../src/tui/picker";
+import { themeFromPalette } from "../src/tui/theme";
 import {
   buildInvocationEnv,
   buildLaunchPayload,
   buildRunArgs,
+  buildWebLaunchEnv,
   isRuntimeScriptEntry,
   launchDetachedRun,
+  launchDetachedWeb,
   parseLaunchPayload,
   selfRunArgv,
+  selfWebArgv,
   type DetachedRunHandle,
   type LaunchRunRequest,
+  type LaunchWebRequest,
 } from "../src/tui/run-launch";
 import type { LoadedWorkflow } from "../src/workflow/types";
 
 const dirs: string[] = [];
 const prevState = process.env.HERDR_PLUGIN_STATE_DIR;
+const prevConfig = process.env.HERDR_PLUGIN_CONFIG_DIR;
 
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
   if (prevState === undefined) delete process.env.HERDR_PLUGIN_STATE_DIR;
   else process.env.HERDR_PLUGIN_STATE_DIR = prevState;
+  if (prevConfig === undefined) delete process.env.HERDR_PLUGIN_CONFIG_DIR;
+  else process.env.HERDR_PLUGIN_CONFIG_DIR = prevConfig;
 });
 
 function pickerState(overrides: Partial<PickerState> = {}): PickerState {
@@ -57,13 +72,23 @@ function pickerState(overrides: Partial<PickerState> = {}): PickerState {
         inputs: [],
         repoOwned: true,
         needsTranscript: false,
-        needsInvokingAgent: false,
       }) satisfies LoadedWorkflow,
+    contentWidth: 80,
+    theme: themeFromPalette(null),
     renderer: { destroy: () => undefined },
+    filterRow: { visible: true },
     filter: { visible: true },
-    list: { visible: true, flexGrow: 1 },
+    listBlock: { visible: true },
+    list: {
+      visible: true,
+      flexGrow: 0,
+      height: 6,
+      options: [],
+      getSelectedIndex: () => 0,
+    },
     status: { visible: false, flexGrow: 0, content: "" },
-    invalid: { visible: false },
+    detail: { visible: false, content: "" },
+    rule: { visible: false, content: "" },
     promptInput: { visible: false },
     footer: { content: "" },
     ...overrides,
@@ -121,8 +146,24 @@ describe("run argv", () => {
     ).toEqual(["/opt/herdr-workflows", "run", "sleep", "--launch-payload"]);
   });
 
-  test("parseLaunchPayload round-trips inputs and prompt", () => {
-    const payload = buildLaunchPayload("sleep", { focus: "x" }, "hi");
+  test("selfWebArgv reuses the same self-exec rules for web routes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-self-web-"));
+    dirs.push(root);
+    const script = join(root, "cli.ts");
+    await writeFile(script, "export {};\n");
+    expect(
+      selfWebArgv(["w=repo:deploy", "--no-open"], { execPath: "/runtime/bun", argv1: script }),
+    ).toEqual(["/runtime/bun", script, "web", "w=repo:deploy", "--no-open"]);
+    expect(
+      selfWebArgv(["import"], {
+        execPath: "/opt/herdr-workflows",
+        argv1: "/$bunfs/root/herdr-workflows",
+      }),
+    ).toEqual(["/opt/herdr-workflows", "web", "import"]);
+  });
+
+  test("parseLaunchPayload round-trips inputs", () => {
+    const payload = buildLaunchPayload("sleep", { focus: "x" });
     expect(parseLaunchPayload(JSON.stringify(payload))).toEqual(payload);
   });
 });
@@ -168,11 +209,11 @@ describe("picker detached run", () => {
     };
 
     const state = pickerState({ launchRun });
-    const running = startRun(
-      state,
-      { name: "sleepy", source: "repo", file: "/repo/.hwf/workflows/sleepy.yaml" },
-      "",
-    );
+    const running = startRun(state, {
+      name: "sleepy",
+      source: "repo",
+      file: "/repo/.hwf/workflows/sleepy.yaml",
+    });
     await Bun.sleep(10);
     expect(state.running).toBe(true);
     expect(String(state.footer.content)).toContain("dismiss");
@@ -212,11 +253,11 @@ describe("picker detached run", () => {
         workspaceId: "wOrig",
       },
     });
-    await startRun(
-      state,
-      { name: "quick", source: "repo", file: "/repo/.hwf/workflows/quick.yaml" },
-      "",
-    );
+    await startRun(state, {
+      name: "quick",
+      source: "repo",
+      file: "/repo/.hwf/workflows/quick.yaml",
+    });
     expect(seen?.ctx.paneId).toBe("wOrig:p9");
     expect(seen?.ctx.tabId).toBe("wOrig:t2");
     expect(seen?.ctx.workspaceId).toBe("wOrig");
@@ -241,11 +282,11 @@ describe("picker detached run", () => {
         },
       } as PickerState["renderer"],
     });
-    await startRun(
-      state,
-      { name: "quick", source: "repo", file: "/repo/.hwf/workflows/quick.yaml" },
-      "",
-    );
+    await startRun(state, {
+      name: "quick",
+      source: "repo",
+      file: "/repo/.hwf/workflows/quick.yaml",
+    });
     expect(state.progressLines.some((line) => line.includes("[1/1]"))).toBe(true);
     expect(state.exit?.code).toBe(0);
     expect(destroyed).toBe(true);
@@ -285,7 +326,6 @@ await Bun.write(${JSON.stringify(marker)}, "ok");
         workspaceId: "wLive",
       },
       inputs: {},
-      prompt: "",
       onProgressLine: () => undefined,
       spawn: ((_argv, opts) =>
         Bun.spawn([process.execPath, script], {
@@ -310,11 +350,10 @@ await Bun.write(${JSON.stringify(marker)}, "ok");
     expect(env.repo).toBe(root);
   });
 
-  test("detached spawn argv never contains input values or prompt text", async () => {
+  test("detached spawn argv never contains input values", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-detach-argv-"));
     dirs.push(root);
     const secretInput = "cred-value-9f3a";
-    const secretPrompt = "selection-secret-text";
     const payloadFile = join(root, "payload.json");
     const reader = join(root, "read-stdin.ts");
     await writeFile(
@@ -331,7 +370,6 @@ await Bun.write(${JSON.stringify(payloadFile)}, text);
       repoRoot: root,
       ctx: { selection: "", cwd: root },
       inputs: { token: secretInput },
-      prompt: secretPrompt,
       onProgressLine: () => undefined,
       spawn: ((argv, opts) => {
         seenArgv = [...argv];
@@ -349,11 +387,217 @@ await Bun.write(${JSON.stringify(payloadFile)}, text);
     const result = await handle.result;
     expect(result.ok).toBe(true);
     expect(seenArgv.join("\0")).not.toContain(secretInput);
-    expect(seenArgv.join("\0")).not.toContain(secretPrompt);
     expect(seenArgv.slice(-2)).toEqual(["safe", "--launch-payload"]);
     const payload = parseLaunchPayload(await readFile(payloadFile, "utf8"));
     expect(payload.inputs.token).toBe(secretInput);
-    expect(payload.prompt).toBe(secretPrompt);
     expect(payload.name).toBe("safe");
+  });
+});
+
+describe("launchDetachedWeb", () => {
+  test("pins repo root and does not attach to stdout", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-web-launch-"));
+    dirs.push(root);
+    const envFile = join(root, "env.json");
+    const script = join(root, "child.ts");
+    await writeFile(
+      script,
+      `
+const env = {
+  repo: process.env.HERDR_WORKFLOWS_REPO_ROOT,
+  state: process.env.HERDR_PLUGIN_STATE_DIR,
+  config: process.env.HERDR_PLUGIN_CONFIG_DIR,
+};
+await Bun.write(${JSON.stringify(envFile)}, JSON.stringify(env));
+`,
+    );
+    let seenArgv: string[] = [];
+    let seenStdout: unknown;
+    process.env.HERDR_PLUGIN_STATE_DIR = join(root, "state");
+    process.env.HERDR_PLUGIN_CONFIG_DIR = join(root, "config");
+
+    launchDetachedWeb({
+      route: "import",
+      repoRoot: root,
+      spawn: ((argv, opts) => {
+        seenArgv = [...argv];
+        seenStdout = opts?.stdout;
+        return Bun.spawn([process.execPath, script], {
+          cwd: typeof opts?.cwd === "string" ? opts.cwd : root,
+          env: opts?.env,
+          stdin: "ignore",
+          stdout: "ignore",
+          stderr: "ignore",
+          detached: true,
+        });
+      }) as typeof Bun.spawn,
+    });
+
+    await Bun.sleep(120);
+    expect(seenArgv.at(-2)).toBe("web");
+    expect(seenArgv.at(-1)).toBe("import");
+    expect(seenStdout).toBe("ignore");
+    const env = JSON.parse(await readFile(envFile, "utf8")) as Record<string, string>;
+    expect(env.repo).toBe(root);
+    expect(env.state).toBe(join(root, "state"));
+    expect(env.config).toBe(join(root, "config"));
+    expect(buildWebLaunchEnv(root).HERDR_WORKFLOWS_REPO_ROOT).toBe(root);
+  });
+});
+
+describe("picker workbench handoff", () => {
+  function key(name: string, ctrl: boolean): KeyEvent {
+    let prevented = false;
+    return {
+      name,
+      ctrl,
+      meta: false,
+      shift: false,
+      option: false,
+      sequence: "",
+      number: false,
+      raw: "",
+      eventType: "press",
+      source: "raw",
+      preventDefault() {
+        prevented = true;
+      },
+      stopPropagation() {},
+      get defaultPrevented() {
+        return prevented;
+      },
+      get propagationStopped() {
+        return false;
+      },
+    } as KeyEvent;
+  }
+
+  test("successful launch tears down picker after handoff", () => {
+    const launched: LaunchWebRequest[] = [];
+    let destroyed = false;
+    const state = pickerState({
+      launchWeb: (req) => launched.push(req),
+      renderer: {
+        destroy: () => {
+          destroyed = true;
+        },
+      } as PickerState["renderer"],
+      list: {
+        options: [
+          {
+            name: "Deploy · repo",
+            description: "",
+            value: { entry: { name: "deploy", source: "repo", file: "/r/deploy.yaml" } },
+          },
+        ],
+        getSelectedIndex: () => 0,
+      } as unknown as PickerState["list"],
+    });
+    expect(selectedListEntry(state)?.source).toBe("repo");
+    const k = key("e", true);
+    expect(tryListWorkbenchShortcut(state, k)).toBe(true);
+    expect(k.defaultPrevented).toBe(true);
+    expect(launched).toEqual([{ route: "w=repo:deploy", repoRoot: "/repo" }]);
+    expect(state.exit?.code).toBe(0);
+    expect(destroyed).toBe(true);
+  });
+
+  test("failed launch keeps picker open with concise status", () => {
+    let destroyed = false;
+    const state = pickerState({
+      launchWeb: () => {
+        throw new Error("spawn ENOENT");
+      },
+      renderer: {
+        destroy: () => {
+          destroyed = true;
+        },
+      } as PickerState["renderer"],
+      list: {
+        options: [
+          {
+            name: "Deploy · repo",
+            description: "",
+            value: { entry: { name: "deploy", source: "repo", file: "/r/deploy.yaml" } },
+          },
+        ],
+        getSelectedIndex: () => 0,
+        visible: true,
+        flexGrow: 1,
+      } as unknown as PickerState["list"],
+      filter: { visible: true } as PickerState["filter"],
+    });
+    launchWorkbenchRoute(state, "import");
+    expect(destroyed).toBe(false);
+    expect(state.exit).toBeUndefined();
+    expect(state.mode).toBe("list");
+    expect(state.status.visible).toBe(true);
+    expect(String(state.status.content)).toContain("workbench failed");
+    expect(String(state.status.content)).toContain("spawn ENOENT");
+    expect(String(state.footer.content).startsWith(LIST_HINT)).toBe(true);
+    expect(String(state.footer.content)).toMatch(/1\/1$/);
+    expect(String(state.footer.content)).toContain("enter run");
+    expect(String(state.footer.content)).not.toMatch(/enter\/esc close/);
+    expect(state.list.visible).toBe(true);
+    expect(state.filter.visible).toBe(true);
+    expect(selectedListEntry(state)?.name).toBe("deploy");
+  });
+
+  test("ctrl+e with empty list is a safe no-op; ctrl+o still imports", () => {
+    const launched: LaunchWebRequest[] = [];
+    let destroyed = false;
+    const state = pickerState({
+      launchWeb: (req) => launched.push(req),
+      renderer: {
+        destroy: () => {
+          destroyed = true;
+        },
+      } as PickerState["renderer"],
+      list: {
+        options: [],
+        getSelectedIndex: () => 0,
+      } as unknown as PickerState["list"],
+    });
+    const edit = key("e", true);
+    expect(tryListWorkbenchShortcut(state, edit)).toBe(true);
+    expect(edit.defaultPrevented).toBe(true);
+    expect(launched).toEqual([]);
+    expect(state.exit).toBeUndefined();
+    expect(destroyed).toBe(false);
+
+    const imp = key("o", true);
+    expect(tryListWorkbenchShortcut(state, imp)).toBe(true);
+    expect(launched).toEqual([{ route: "import", repoRoot: "/repo" }]);
+    expect(state.exit?.code).toBe(0);
+  });
+
+  test("shortcuts are list-mode only", () => {
+    const launched: LaunchWebRequest[] = [];
+    const state = pickerState({
+      mode: "input",
+      launchWeb: (req) => launched.push(req),
+      list: {
+        options: [
+          {
+            name: "Deploy · repo",
+            description: "",
+            value: { entry: { name: "deploy", source: "repo", file: "/r/deploy.yaml" } },
+          },
+        ],
+        getSelectedIndex: () => 0,
+      } as unknown as PickerState["list"],
+    });
+    const k = key("e", true);
+    expect(tryListWorkbenchShortcut(state, k)).toBe(false);
+    expect(k.defaultPrevented).toBe(false);
+    expect(launched).toEqual([]);
+  });
+
+  test("launchWorkbenchRoute refuses invalid routes", () => {
+    const launched: LaunchWebRequest[] = [];
+    const state = pickerState({ launchWeb: (req) => launched.push(req) });
+    launchWorkbenchRoute(state, "not-a-route");
+    expect(launched).toEqual([]);
+    expect(state.exit).toBeUndefined();
   });
 });

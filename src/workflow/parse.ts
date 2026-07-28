@@ -1031,12 +1031,3 @@ export function workflowTemplateRefs(
 export function workflowNeedsTranscript(steps: WorkflowStep[], returns?: ReturnsSpec): boolean {
   return workflowTemplateRefs(steps, returns).some(isSensitiveContextPath);
 }
-
-export function workflowNeedsInvokingAgent(steps: WorkflowStep[]): boolean {
-  return steps.some((s) => {
-    if (s.action.kind !== "agent" || !s.action.target) return false;
-    return textTemplates(s.action.target).some(
-      (p) => p.root === "context" && p.segments[0] === "agent" && p.segments.length === 1,
-    );
-  });
-}

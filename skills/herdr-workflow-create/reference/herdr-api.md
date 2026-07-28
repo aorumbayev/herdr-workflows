@@ -10,6 +10,17 @@ Use only:
 Dotted YAML keys are not actions. Params are never autofilled from UI focus — pass exact
 selectors (`pane_id`, `tab_id`, `workspace_id`, `target`, …).
 
+## Discover allowed methods
+
+Do not invent method names or param shapes from memory. Prefer, in order:
+
+1. `schemas/herdr-api.schema.json` — source of record for method params
+2. `src/herdr-methods.generated.ts` — committed allow/deny table used by the loader
+3. `src/herdr-policy.ts` — focus-policy / selector invariants
+4. This note — posture only
+
+If those files are missing in the checkout, fail closed and ask the user rather than guessing.
+
 ## Allowlist posture
 
 The loader denies server/plugin lifecycle, identity-authority, experimental graphics, and

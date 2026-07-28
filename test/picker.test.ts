@@ -1,14 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import type { WorkflowListEntry } from "../src/workflow/types";
 import {
+  buildInvalidOptions,
   buildPickerOptions,
   entrySensitivity,
   filterChoiceOptions,
   filterWorkflowEntries,
+  formatDetailLines,
   formatInputPrompt,
-  formatInvalidLines,
+  formatListFooter,
+  formatPickerRowName,
+  formatRule,
   formatRunProgress,
   hasVisibleEntries,
+  LIST_HINT,
+  resolveListWorkbenchRoute,
+  shouldDropStdinLeakSequence,
   truncate,
 } from "../src/tui/picker";
 import { humanizeWorkflowName, workflowDisplayTitle } from "../src/workflow/trust";
@@ -38,6 +45,9 @@ const entries: WorkflowListEntry[] = [
   },
 ];
 
+const isAscii = (s: string) => /^[\x20-\x7E]*$/.test(s);
+const hasAmbiguousChromeGlyph = (s: string) => /[↑↓←→▲▼◀▶━═]/.test(s);
+
 describe("filterWorkflowEntries", () => {
   test("splits valid and invalid", () => {
     const { valid, invalid } = filterWorkflowEntries(entries, "");
@@ -49,6 +59,33 @@ describe("filterWorkflowEntries", () => {
     const { valid, invalid } = filterWorkflowEntries(entries, "chat");
     expect(valid.map((e) => e.name)).toEqual(["chat-handoff"]);
     expect(invalid.map((e) => e.name)).toEqual(["chat-broken"]);
+  });
+
+  test("matches displayed title case-insensitively", () => {
+    const catalog: WorkflowListEntry[] = [
+      {
+        name: "pr-desc",
+        source: "repo",
+        file: "/r/pr-desc.yaml",
+        title: "Draft PR description",
+      },
+      { name: "handoff", source: "global", file: "/g/handoff.yaml", title: "Handoff" },
+    ];
+    expect(filterWorkflowEntries(catalog, "draft").valid.map((e) => e.name)).toEqual(["pr-desc"]);
+    expect(filterWorkflowEntries(catalog, "HANDOFF").valid.map((e) => e.name)).toEqual(["handoff"]);
+  });
+
+  test("matches name when title differs", () => {
+    const catalog: WorkflowListEntry[] = [
+      {
+        name: "pr-desc",
+        source: "repo",
+        file: "/r/pr-desc.yaml",
+        title: "Draft PR description",
+      },
+    ];
+    expect(filterWorkflowEntries(catalog, "pr-desc").valid.map((e) => e.name)).toEqual(["pr-desc"]);
+    expect(filterWorkflowEntries(catalog, "DRAFT").valid.map((e) => e.name)).toEqual(["pr-desc"]);
   });
 
   test("hidden workflows are kept out of the picker", () => {
@@ -87,21 +124,110 @@ describe("buildPickerOptions", () => {
       needsTranscript: true,
       sensitiveMethods: ["pane.close"],
     };
-    const options = buildPickerOptions([entry]);
-    expect(options[0]!.name).toBe(
-      "Handover · repo · inputs · commands · transcript · herdr:pane.close",
-    );
+    const options = buildPickerOptions([entry], 60);
+    expect(options[0]!.name).toBe(`  ${"Handover".padEnd(47)} ! ${"repo".padStart(7)}`);
+    expect(options[0]!.name).not.toContain("inputs");
+    expect(options[0]!.name).not.toContain("commands");
+    expect(options[0]!.name).not.toContain("transcript");
+    expect(options[0]!.name).not.toContain("herdr:pane.close");
     expect(options[0]!.description).toBe("Pick a profile");
   });
 
   test("humanized title default and provenance badges", () => {
     const { valid } = filterWorkflowEntries(entries, "");
-    const options = buildPickerOptions(valid);
-    expect(options[0]!.name).toContain("Chat handoff · repo");
-    expect(options[0]!.name).toContain("transcript");
+    const options = buildPickerOptions(valid, 60);
+    expect(options[0]!.name).toBe(`  ${"Chat handoff".padEnd(47)} ! ${"repo".padStart(7)}`);
     expect(options[0]!.description).toBe("Pass transcript to a reviewer");
-    expect(options[1]!.name).toBe("Deploy · global · commands");
+    expect(options[1]!.name).toBe(`  ${"Deploy".padEnd(47)} ! ${"global".padStart(7)}`);
     expect(options[1]!.description).toBe("deploy");
+  });
+
+  test("warning field is bang-space when flagged and two spaces otherwise", () => {
+    const warned = formatPickerRowName("Warned", "repo", true, 60);
+    const clean = formatPickerRowName("Clean", "repo", false, 60);
+    expect(warned.slice(49, 52)).toBe(" ! ");
+    expect(clean.slice(49, 52)).toBe("   ");
+    expect(warned.endsWith("   repo")).toBe(true);
+    expect(clean.endsWith("   repo")).toBe(true);
+  });
+
+  test("location is right-aligned in a 7-wide field", () => {
+    expect(formatPickerRowName("A", "global", false, 60).slice(-7)).toBe(" global");
+    expect(formatPickerRowName("A", "repo", false, 60).slice(-7)).toBe("   repo");
+    expect(formatPickerRowName("A", "invalid", false, 60).slice(-7)).toBe("invalid");
+  });
+
+  test("selected and unselected rows have identical length", () => {
+    const selected = formatPickerRowName("Handoff", "repo", true, 60, true);
+    const idle = formatPickerRowName("Handoff", "repo", true, 60, false);
+    expect(selected.length).toBe(idle.length);
+    expect(selected.startsWith("> ")).toBe(true);
+    expect(idle.startsWith("  ")).toBe(true);
+  });
+
+  test("unbounded sensitivity flags do not widen the row", () => {
+    const flagged: WorkflowListEntry = {
+      name: "risky",
+      source: "repo",
+      file: "/r/risky.yaml",
+      title: "Risky",
+      hasCommands: true,
+      needsTranscript: true,
+      sensitiveMethods: ["pane.close", "layout.apply", "agent.send_keys"],
+      unresolvedChildren: ["missing-child"],
+    };
+    const plain: WorkflowListEntry = {
+      name: "safe",
+      source: "repo",
+      file: "/r/safe.yaml",
+      title: "Safe",
+    };
+    const flaggedRow = buildPickerOptions([flagged], 60)[0]!.name;
+    const plainRow = buildPickerOptions([plain], 60)[0]!.name;
+    expect(flaggedRow.length).toBe(plainRow.length);
+    expect(flaggedRow).not.toContain("commands");
+    expect(flaggedRow).not.toContain("transcript");
+    expect(flaggedRow).not.toContain("herdr:pane.close");
+    expect(flaggedRow).not.toContain("herdr:layout.apply");
+    expect(flaggedRow).not.toContain("herdr:agent.send_keys");
+    expect(flaggedRow).not.toContain("unresolved");
+  });
+
+  test("overlong title keeps warning and location columns aligned", () => {
+    const short = formatPickerRowName("Short", "repo", true, 60);
+    const long = formatPickerRowName("A".repeat(80), "repo", true, 60);
+    expect(long.length).toBe(short.length);
+    expect(long.slice(-10)).toBe(short.slice(-10));
+    expect(long).toContain("…");
+  });
+
+  test("inputs are not advertised in the row", () => {
+    const withInputs: WorkflowListEntry = {
+      name: "ask",
+      source: "global",
+      file: "/g/ask.yaml",
+      title: "Ask",
+      inputs: [{ name: "target", type: "text" }],
+    };
+    const without: WorkflowListEntry = {
+      name: "ask",
+      source: "global",
+      file: "/g/ask.yaml",
+      title: "Ask",
+    };
+    expect(buildPickerOptions([withInputs], 60)[0]!.name).toBe(
+      buildPickerOptions([without], 60)[0]!.name,
+    );
+  });
+
+  test("invalid entries join the option list with stripped errors", () => {
+    const { invalid } = filterWorkflowEntries(entries, "");
+    const options = buildInvalidOptions(invalid, 60);
+    expect(options[0]!.name).toBe(`  ${"Broken".padEnd(47)}   ${"invalid"}`);
+    expect(options[0]!.description).toBe("step 2, agent: unknown agent 'x'");
+    expect(options[0]!.description).not.toContain("/r/broken.yaml");
+    expect(options[1]!.name).toBe(`  ${"Chat Broken".padEnd(47)}   ${"invalid"}`);
+    expect(options[1]!.description).toBe("cycle");
   });
 
   test("profile input options never expose args", () => {
@@ -137,14 +263,6 @@ describe("display titles", () => {
     expect(humanizeWorkflowName("chat-handoff")).toBe("Chat Handoff");
     expect(workflowDisplayTitle("chat-handoff")).toBe("Chat Handoff");
     expect(workflowDisplayTitle("chat-handoff", "Custom")).toBe("Custom");
-  });
-});
-
-describe("formatInvalidLines", () => {
-  test("truncates error and returns empty when none", () => {
-    expect(formatInvalidLines([])).toBe("");
-    const lines = formatInvalidLines([entries[2]!]);
-    expect(lines).toBe("broken — invalid: step 2, agent: unknown agent 'x'");
   });
 });
 
@@ -198,5 +316,160 @@ describe("truncate", () => {
   test("ellipsis at max", () => {
     expect(truncate("abcdefghij", 5)).toBe("abcd…");
     expect(truncate("abcd", 5)).toBe("abcd");
+  });
+});
+
+describe("formatListFooter", () => {
+  test("hint fits usable width and counter reads index/total", () => {
+    const footer = formatListFooter(60, 0, 2);
+    expect(footer).toContain(LIST_HINT);
+    expect(footer.endsWith("1/2")).toBe(true);
+    expect(footer.length).toBe(60);
+  });
+
+  test("position counter uses filtered match count", () => {
+    expect(formatListFooter(60, 0, 2).endsWith("1/2")).toBe(true);
+    expect(formatListFooter(60, 1, 2).endsWith("2/2")).toBe(true);
+  });
+
+  test("narrow width still does not exceed content width", () => {
+    const footer = formatListFooter(20, 0, 8);
+    expect(footer.length).toBeLessThanOrEqual(20);
+    expect(footer.endsWith("1/8")).toBe(true);
+  });
+});
+
+describe("formatDetailLines", () => {
+  test("short description stays on one indented line", () => {
+    expect(formatDetailLines("hello", 60)).toBe("   hello");
+  });
+
+  test("long description wraps at a word boundary", () => {
+    const wrapped = formatDetailLines("Distil this session transcript and hand it over", 31);
+    const lines = wrapped.split("\n");
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe("   Distil this session");
+    expect(lines[1]).toBe("   transcript and hand it over");
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(31);
+      expect(line.startsWith("   ")).toBe(true);
+    }
+  });
+
+  test("over-long description truncates with ellipsis on the second line", () => {
+    const desc =
+      "Distil this session's transcript and hand it to a fresh agent for review tomorrow";
+    const wrapped = formatDetailLines(desc, 40);
+    const lines = wrapped.split("\n");
+    expect(lines).toHaveLength(2);
+    expect(lines[0]!.endsWith("…")).toBe(false);
+    expect(lines[1]!.endsWith("…")).toBe(true);
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(40);
+      expect(line.startsWith("   ")).toBe(true);
+    }
+  });
+
+  test("single unbreakable word longer than a line still fits the width", () => {
+    const wrapped = formatDetailLines("x".repeat(80), 20);
+    const lines = wrapped.split("\n");
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe(`   ${"x".repeat(17)}`);
+    expect(lines[1]).toBe(`   ${"x".repeat(16)}…`);
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(20);
+    }
+  });
+
+  test("empty description produces empty string", () => {
+    expect(formatDetailLines("", 60)).toBe("");
+    expect(formatDetailLines("   \n\t  ", 60)).toBe("");
+  });
+
+  test("collapses whitespace before wrapping", () => {
+    expect(formatDetailLines("hello   world\n\nnext", 60)).toBe("   hello world next");
+  });
+});
+
+describe("formatRule", () => {
+  test("spans the row text field under titles through location", () => {
+    const rule = formatRule(60);
+    expect(rule.startsWith("   ")).toBe(true);
+    expect(rule).toBe(`   ${"-".repeat(57)}`);
+    expect(rule.length).toBe(60);
+    expect(formatRule(10)).toBe(`   ${"-".repeat(7)}`);
+  });
+
+  test("rule length equals the row text field width", () => {
+    const row = formatPickerRowName("Handoff", "repo", false, 60, false);
+    const fieldWidth = row.length - 2;
+    expect(formatRule(60).trimStart().length).toBe(fieldWidth);
+  });
+});
+
+describe("picker chrome ascii", () => {
+  test("filter prompt, short row, rule, and warning marker are ASCII", () => {
+    expect(isAscii(formatRule(60))).toBe(true);
+    expect(isAscii(formatPickerRowName("Handoff", "global", true, 60))).toBe(true);
+    expect(isAscii(formatPickerRowName("Handoff", "repo", false, 60))).toBe(true);
+    expect(isAscii(formatPickerRowName("Handoff", "repo", true, 60, true))).toBe(true);
+  });
+
+  test("hints avoid arrow, triangle, and heavy-line glyphs", () => {
+    expect(hasAmbiguousChromeGlyph(LIST_HINT)).toBe(false);
+  });
+});
+
+describe("list workbench shortcuts", () => {
+  test("footer identifies run edit share import dismiss", () => {
+    expect(LIST_HINT).toContain("enter run");
+    expect(LIST_HINT).toContain("^e edit");
+    expect(LIST_HINT).toContain("^y share");
+    expect(LIST_HINT).toContain("^o import");
+    expect(LIST_HINT).toContain("esc");
+  });
+
+  test("printable e y o are filter letters not workbench actions", () => {
+    const entry: WorkflowListEntry = { name: "deploy", source: "repo", file: "/r/d.yaml" };
+    expect(resolveListWorkbenchRoute({ name: "e", ctrl: false }, entry)).toBeUndefined();
+    expect(resolveListWorkbenchRoute({ name: "y", ctrl: false }, entry)).toBeUndefined();
+    expect(resolveListWorkbenchRoute({ name: "o", ctrl: false }, entry)).toBeUndefined();
+  });
+
+  test("ctrl+e and ctrl+y preserve selected repo/global provenance", () => {
+    expect(
+      resolveListWorkbenchRoute(
+        { name: "e", ctrl: true },
+        { name: "deploy", source: "repo", file: "/r/d.yaml" },
+      ),
+    ).toBe("w=repo:deploy");
+    expect(
+      resolveListWorkbenchRoute(
+        { name: "y", ctrl: true },
+        { name: "deploy", source: "global", file: "/g/d.yaml" },
+      ),
+    ).toBe("share=global:deploy");
+  });
+
+  test("edit/share noop without selection; import works with empty list", () => {
+    expect(resolveListWorkbenchRoute({ name: "e", ctrl: true }, undefined)).toBe("noop");
+    expect(resolveListWorkbenchRoute({ name: "y", ctrl: true }, undefined)).toBe("noop");
+    expect(resolveListWorkbenchRoute({ name: "o", ctrl: true }, undefined)).toBe("import");
+  });
+});
+
+describe("stdin leak prepend boundary", () => {
+  test("preserves Ctrl+E/O/Y C0 bytes while dropping unrelated prefix leaks", () => {
+    expect(shouldDropStdinLeakSequence(String.fromCharCode(0x05))).toBe(false); // Ctrl+E
+    expect(shouldDropStdinLeakSequence(String.fromCharCode(0x0f))).toBe(false); // Ctrl+O
+    expect(shouldDropStdinLeakSequence(String.fromCharCode(0x19))).toBe(false); // Ctrl+Y
+    expect(shouldDropStdinLeakSequence("\t")).toBe(false);
+    expect(shouldDropStdinLeakSequence("\n")).toBe(false);
+    expect(shouldDropStdinLeakSequence("\r")).toBe(false);
+    expect(shouldDropStdinLeakSequence("\x1b")).toBe(false);
+    expect(shouldDropStdinLeakSequence("e")).toBe(false);
+    expect(shouldDropStdinLeakSequence(String.fromCharCode(0x01))).toBe(true); // Ctrl+A
+    expect(shouldDropStdinLeakSequence(String.fromCharCode(0x18))).toBe(true); // Ctrl+X
+    expect(shouldDropStdinLeakSequence("ab")).toBe(false);
   });
 });

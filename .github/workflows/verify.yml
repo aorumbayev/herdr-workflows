@@ -21,4 +21,7 @@ jobs:
           node-version: "22"
       - run: bun install --frozen-lockfile
       - run: bun test ./test
+        env:
+          HERDR_BIN_PATH: /does-not-exist/herdr
+          HERDR_SOCKET_PATH: ""
       - run: npm run verify

@@ -92,7 +92,7 @@ async function resolveWorkflowFile(name: string, repoRoot: string): Promise<stri
   return undefined;
 }
 
-function mergeSensitivity(into: WorkflowSensitivity, from: WorkflowSensitivity): void {
+export function mergeSensitivity(into: WorkflowSensitivity, from: WorkflowSensitivity): void {
   into.hasCommands ||= from.hasCommands;
   into.hasTranscript ||= from.hasTranscript;
   for (const method of from.sensitiveMethods) {

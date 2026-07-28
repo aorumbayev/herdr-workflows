@@ -1,6 +1,6 @@
 ---
 name: herdr-workflow-create
-description: Interactive wizard that turns a described task into a valid herdr-workflows v1alpha1 YAML file at .hwf/workflows/<name>.yaml, then validates it against the real loader before writing. Covers agent/run/herdr/workflow actions, templates, panes, recovery, and trust. Use when the user wants to automate a task in herdr, asks to create/edit/debug an hwf workflow or .hwf YAML, mentions herdr-workflows, hwf run, the prefix+k picker, or hits a workflow load error.
+description: Creates or edits a herdr-workflows v1alpha1 YAML under .hwf/workflows/ and validates it through the real loader. Use when the user asks to create, edit, or debug an hwf / herdr-workflows workflow YAML or hits a workflow load error.
 ---
 
 # Create a herdr-workflows workflow
@@ -26,7 +26,7 @@ or edit in `hwf web`.
 ```
 - [ ] 1. Interview: goal, inputs, agent vs shell, placement, failure policy
 - [ ] 2. Survey: read profiles + existing workflows
-- [ ] 3. Open the workbench, hand the user the live canvas link
+- [ ] 3. Start the workbench in the background, hand the user the live canvas link
 - [ ] 4. Compose v1alpha1 YAML only
 - [ ] 5. Validate through the real loader (MUST be ok:true)
 - [ ] 6. Save, then keep iterating on the live canvas
@@ -34,7 +34,8 @@ or edit in `hwf web`.
 
 ### 1. Interview
 
-Ask with one batched `AskUserQuestion` round (skip answers already given):
+Ask once in a single turn (skip answers already given). Prefer the host's structured
+question UI when available; otherwise ask conversationally:
 
 - **Scope** — repo (`.hwf/workflows/`) or global (`~/.hwf/workflows/`)?
 - **Shape** — shell only / managed agent / agent + shell / explicit Herdr layout?
@@ -54,13 +55,25 @@ ls .hwf/workflows ~/.hwf/workflows 2>/dev/null
 `using:` values must be merged profile names. No config yet → `hwf init` first. Reuse work with
 `workflow:` + `inputs:` instead of duplicating steps.
 
-### 3. Open the live canvas
+For allowed `herdr:` methods and param shapes, read committed sources — do not invent from
+memory:
+
+- `schemas/herdr-api.schema.json`
+- `src/herdr-methods.generated.ts`
+- `src/herdr-policy.ts`
+- skill notes in **[reference/herdr-api.md](reference/herdr-api.md)**
+
+### 3. Open the live canvas (background)
+
+Start the workbench once and keep it running while you compose:
 
 ```bash
-hwf web --no-open        # prints: herdr-workflows web · http://127.0.0.1:7317/?token=…
+hwf web --no-open > /tmp/hwf-web.log 2>&1 &
+# wait until the log prints: herdr-workflows web · http://127.0.0.1:<port>/?token=…
 ```
 
-Send `<url>#w=repo:<name>` (or `#w=global:<name>`) and tell them to press **canvas**.
+Send `<url>#w=repo:<name>` (or `#w=global:<name>`) and tell them to press **canvas**. Do not
+block the interview/compose loop on the browser.
 
 ### 4. Compose
 
@@ -99,7 +112,8 @@ Recipes: **[reference/recipes.md](reference/recipes.md)**.
 sh skills/herdr-workflow-create/scripts/validate.sh /tmp/draft.yaml <name>
 ```
 
-Prints `{"ok":true}` or `{"ok":false,"error":…}`. Draft → validate → fix until pass.
+Prints `{"ok":true}` or `{"ok":false,"error":…}`. Exit `0` = valid, `1` = invalid YAML,
+`2` = cannot check (missing tools / web failed). Draft → validate → fix until pass.
 
 ### 6. Save and iterate
 
@@ -122,16 +136,11 @@ Optional IDE schema line:
 2. **Every declared input must be referenced** (templates or `$HWF_<name>` in shell text).
 3. **No `out:`, `wait:`, `in:`, `use:`, `with:`, `for:`/`as:`, `allow_fail`, `on_error`, dotted method keys, flat `{name}`.**
 4. **`retry`** only on blocking local `run:` or `herdr:`.
-5. **`target:`** requires idle/done; rejects pane/cwd/env.
-6. **`background: true`** needs a Herdr-owned pane or existing-agent `target:`.
-7. **`ready_when`** needs `timeout`; scrapes recent 80 rows; does not detect process exit.
+5. **`target:`** requires an existing idle/done agent; rejects pane/cwd/env. Warn the user if the invoking pane may still be busy.
+6. **`background: true`** needs a Herdr-owned pane or existing-agent `target:`. Mutually exclusive with `ready_when` on the same placed `run:`.
+7. **`ready_when`** needs `timeout`; scrapes recent 80 rows; does not detect process exit. Mutually exclusive with `background`.
 8. **`on_failure`** is entry-only, one action, once.
 9. **Transcript / identity context** unavailable → preflight failure.
 10. **Denied Herdr methods** fail at load — denylist is a misuse rail, not a sandbox.
 
 Out of scope: parallelism, loops, external engines. Windows via `{{context.platform}}` + `when:`. Needs herdr ≥ 0.7.5.
-
-## Keywords
-
-herdr workflow, herdr-workflows, hwf, v1alpha1, .hwf/workflows, hwf run, hwf web, prefix+k,
-managed agent, pane, transcript, workflow load error

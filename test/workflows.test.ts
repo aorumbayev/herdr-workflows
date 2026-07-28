@@ -57,6 +57,11 @@ function parse(body: string) {
 }
 
 describe("v1alpha1 grammar", () => {
+  test("workflow names cannot escape workflow directories", async () => {
+    const { root, config } = await repoWith({});
+    await expect(loadWorkflow("../../outside", root, config)).rejects.toThrow(/workflow name/);
+  });
+
   test("minimal alpha document", () => {
     const doc = parse(`version: v1alpha1\nsteps:\n  - run: bun test\n`);
     expect(doc.version).toBe("v1alpha1");

@@ -6,9 +6,12 @@ import { startWebServer, type WebServer } from "../src/web/server";
 
 const dirs: string[] = [];
 const servers: WebServer[] = [];
+const prevPluginDir = process.env.HERDR_PLUGIN_CONFIG_DIR;
 afterEach(async () => {
   for (const s of servers.splice(0)) s.stop();
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
+  if (prevPluginDir === undefined) delete process.env.HERDR_PLUGIN_CONFIG_DIR;
+  else process.env.HERDR_PLUGIN_CONFIG_DIR = prevPluginDir;
 });
 
 async function repo(): Promise<string> {
@@ -54,8 +57,9 @@ describe("web server security", () => {
     const { base, token } = await serve(root);
     const res = await fetch(`${base}/api/state`, { headers: { "x-hwf-token": token } });
     expect(res.status).toBe(200);
-    const data = (await res.json()) as { profiles: string[] };
+    const data = (await res.json()) as { profiles: string[]; canonicalRepoRoot: string };
     expect(data.profiles).toContain("claude");
+    expect(data.canonicalRepoRoot).toBe(root);
   });
 
   test("workflow GET rejects path-traversal names", async () => {
@@ -337,5 +341,152 @@ steps:
     } finally {
       process.env.HOME = prevHome;
     }
+  });
+});
+
+describe("web share and import APIs", () => {
+  test("share returns command and display provenance without encoding source", async () => {
+    const root = await repo();
+    await writeFile(
+      join(root, ".hwf", "workflows", "handoff.yaml"),
+      `${V1}steps:\n  - run: echo hi\n`,
+    );
+    const { base, token } = await serve(root);
+    const res = await fetch(`${base}/api/share?name=handoff&scope=repo`, {
+      headers: { "x-hwf-token": token },
+    });
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as {
+      ok: boolean;
+      command: string;
+      entries: { name: string; yaml: string }[];
+      provenance: { name: string; source: string }[];
+    };
+    expect(data.ok).toBe(true);
+    expect(data.command.startsWith('hwf workflow import "')).toBe(true);
+    expect(data.entries).toEqual([{ name: "handoff", yaml: `${V1}steps:\n  - run: echo hi\n` }]);
+    expect(data.provenance).toEqual([{ name: "handoff", source: "repo" }]);
+    expect(JSON.stringify(data.entries)).not.toContain('"source"');
+  });
+
+  test("import preview accepts command text and rejects old payloads", async () => {
+    const root = await repo();
+    const { base, token } = await serve(root);
+    const { encodePayload, formatImportCommand } = await import("../src/workflow/payload");
+    const payload = encodePayload([{ name: "demo", yaml: `${V1}steps:\n  - run: x\n` }]);
+    const ok = await fetch(`${base}/api/import/preview`, {
+      method: "POST",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({ text: formatImportCommand(payload) }),
+    });
+    expect(ok.status).toBe(200);
+    const preview = (await ok.json()) as {
+      ok: boolean;
+      entries: { name: string; yaml: string }[];
+      availability: { repo: { conflicts: unknown[] } };
+    };
+    expect(preview.ok).toBe(true);
+    expect(preview.entries[0]?.name).toBe("demo");
+
+    const old = Buffer.from(
+      Bun.gzipSync(
+        new TextEncoder().encode(
+          JSON.stringify({ v: 1, name: "demo", body: `${V1}steps:\n  - run: x\n` }),
+        ),
+      ),
+    ).toString("base64");
+    const rejected = await fetch(`${base}/api/import/preview`, {
+      method: "POST",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({ text: old }),
+    });
+    expect(rejected.status).toBe(400);
+    expect(((await rejected.json()) as { error: string }).error).toMatch(/removed single-workflow/);
+  });
+
+  test("import requires replace-all when any destination conflicts", async () => {
+    const root = await repo();
+    await writeFile(join(root, ".hwf", "workflows", "demo.yaml"), `${V1}steps:\n  - run: mine\n`);
+    const { base, token } = await serve(root);
+    const { encodePayload } = await import("../src/workflow/payload");
+    const text = encodePayload([{ name: "demo", yaml: `${V1}steps:\n  - run: new\n` }]);
+    const conflict = await fetch(`${base}/api/import`, {
+      method: "POST",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({ text, scope: "repo" }),
+    });
+    expect(conflict.status).toBe(409);
+    expect(await Bun.file(join(root, ".hwf", "workflows", "demo.yaml")).text()).toContain("mine");
+
+    const replaced = await fetch(`${base}/api/import`, {
+      method: "POST",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({ text, scope: "repo", replaceAll: true }),
+    });
+    expect(replaced.status).toBe(200);
+    expect(await Bun.file(join(root, ".hwf", "workflows", "demo.yaml")).text()).toContain("new");
+  });
+});
+
+describe("web page share and import routes", () => {
+  test("served page wires #share and #import views without a run action", async () => {
+    const root = await repo();
+    const { base, token } = await serve(root);
+    const res = await fetch(`${base}/?token=${encodeURIComponent(token)}`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('hash === "import"');
+    expect(html).toContain("^share=(repo|global):");
+    expect(html).toContain("/api/share?");
+    expect(html).toContain("/api/import/preview");
+    expect(html).toContain("copy import command");
+    expect(html).toContain("confirm import");
+    expect(html).toContain("replace existing workflows");
+    expect(html).toContain("no run");
+    expect(html).toContain("confirmLeave()");
+    expect(html).toContain('aria-label", "import command"');
+    expect(html).toContain("cmd.tabIndex = 0");
+    expect(html).toContain("aria-readonly");
+    expect(html).not.toMatch(/run imported|import and run|run this bundle/i);
+  });
+
+  test("served page clears share/import on empty hash and restores list layout", async () => {
+    const root = await repo();
+    const { base, token } = await serve(root);
+    const html = await (await fetch(`${base}/?token=${encodeURIComponent(token)}`)).text();
+    expect(html).toContain("function syncWorkflowLayout()");
+    expect(html).toMatch(/if \(!hash\) \{[\s\S]*?routeView = null/);
+    expect(html).toMatch(/if \(!hash\) \{[\s\S]*?confirmLeave\(\)/);
+    expect(html).toContain("syncWorkflowLayout()");
+    expect(html).toMatch(/openWorkflow[\s\S]*?syncWorkflowLayout\(\)/);
+  });
+
+  test("served page restores prior hash when dirty confirm cancels route changes", async () => {
+    const root = await repo();
+    const { base, token } = await serve(root);
+    const html = await (await fetch(`${base}/?token=${encodeURIComponent(token)}`)).text();
+    expect(html).toContain("function currentRouteHash()");
+    expect(html).toContain("function restoreRouteHash()");
+    expect(html).toMatch(
+      /function currentRouteHash\(\) \{\s*if \(tab !== "workflows"\) return "";/,
+    );
+    expect(html).toMatch(
+      /history\.replaceState\(null, "", location\.pathname \+ location\.search \+ want\)/,
+    );
+    expect(html).toMatch(/if \(!confirmLeave\(\)\) \{\s*restoreRouteHash\(\);\s*return;\s*\}/);
+    const cancelRestores = html.match(
+      /if \(!confirmLeave\(\)\) \{\s*restoreRouteHash\(\);\s*return;\s*\}/g,
+    );
+    expect(cancelRestores?.length).toBeGreaterThanOrEqual(4);
+    expect(html).toMatch(
+      /if \(\s*!routeView &&\s*current &&\s*current\.name === name &&\s*current\.scope === scope\s*\)\s*return;/,
+    );
+    expect(html).toMatch(
+      /if \(!confirmLeave\(\)\) \{\s*restoreRouteHash\(\);\s*return;\s*\}\s*routeView = null;/,
+    );
+    expect(html).toContain("configDirty");
+    expect(html).toContain("editorDirty");
+    expect(html).toContain("discard unsaved config changes?");
+    expect(html).toContain("discard unsaved workflow changes?");
   });
 });

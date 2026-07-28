@@ -10,13 +10,15 @@ import { runWorkflow } from "../src/run/runner";
 import { runLogPath, type RunLogEntry } from "../src/runlog";
 
 const dirs: string[] = [];
+const prevStateDir = process.env.HERDR_PLUGIN_STATE_DIR;
 beforeEach(async () => {
   const state = await mkdtemp(join(tmpdir(), "herdr-workflows-state-"));
   dirs.push(state);
   process.env.HERDR_PLUGIN_STATE_DIR = state;
 });
 afterEach(async () => {
-  delete process.env.HERDR_PLUGIN_STATE_DIR;
+  if (prevStateDir === undefined) delete process.env.HERDR_PLUGIN_STATE_DIR;
+  else process.env.HERDR_PLUGIN_STATE_DIR = prevStateDir;
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
 

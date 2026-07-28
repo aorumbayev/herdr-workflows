@@ -2,6 +2,8 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Command, InvalidArgumentError, Option } from "commander";
+import manifest from "../herdr-plugin.toml";
 import {
   die,
   ensureHerdrProtocol,
@@ -14,64 +16,32 @@ import { loadConfig, readInvocationContext, resolveRepoRoot } from "./config";
 import { EXAMPLES_URL, runInit } from "./init";
 import { IMPORT_DISCLAIMER, parseImportScope, runImport } from "./workflow/import";
 import { listWorkflows } from "./workflow/load";
-import { WorkflowLoadError } from "./workflow/types";
+import { WORKFLOW_FORMAT, WorkflowLoadError } from "./workflow/types";
+import { CaptureLimitError } from "./limits";
 import { runWorkflow } from "./run/runner";
 import { parseLaunchPayload } from "./tui/run-launch";
-import { startWebServer } from "./web/server";
+import { ensureWorkbench } from "./web/endpoint";
+import { appendRouteHash, parseWebRoute } from "./web/route";
 
-export function parseArgs(args: string[]): {
-  flags: Record<string, string>;
-  bools: Set<string>;
-  positional: string[];
-  multi: Record<string, string[]>;
-} {
-  const flags: Record<string, string> = {};
-  const bools = new Set<string>();
-  const positional: string[] = [];
-  const multi: Record<string, string[]> = {};
-  const setFlag = (key: string, value: string) => {
-    flags[key] = value;
-    (multi[key] ??= []).push(value);
-  };
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i]!;
-    if (a.startsWith("--") && a.includes("=")) {
-      const eq = a.indexOf("=");
-      setFlag(a.slice(2, eq), a.slice(eq + 1));
-    } else if (a.startsWith("--")) {
-      const key = a.slice(2);
-      const next = args[i + 1];
-      if (next !== undefined && !next.startsWith("--")) {
-        setFlag(key, next);
-        i += 1;
-      } else bools.add(key);
-    } else positional.push(a);
+function collectInput(value: string, previous: Record<string, string>): Record<string, string> {
+  const eq = value.indexOf("=");
+  if (eq <= 0) throw new InvalidArgumentError(`--input expects name=value, got '${value}'`);
+  return { ...previous, [value.slice(0, eq)]: value.slice(eq + 1) };
+}
+
+function parsePort(value: string): number {
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new InvalidArgumentError(`--port expects an integer between 1 and 65535, got '${value}'`);
   }
-  return { flags, bools, positional, multi };
+  return port;
 }
 
-function usage(): never {
-  die(
-    "usage: hwf|herdr-workflows [<run|init|workflow import|launch|picker|web>]  (no args: web UI)",
-  );
-}
-
-function parseInputFlags(values: string[]): Record<string, string> {
-  const inputs: Record<string, string> = {};
-  for (const kv of values) {
-    const eq = kv.indexOf("=");
-    if (eq <= 0) die(`--input expects name=value, got '${kv}'`);
-    inputs[kv.slice(0, eq)] = kv.slice(eq + 1);
-  }
-  return inputs;
-}
-
-async function cmdInit(args: string[]): Promise<void> {
-  const { bools } = parseArgs(args);
-  const global = bools.has("global");
+async function cmdInit(opts: { force?: boolean; global?: boolean }): Promise<void> {
+  const global = Boolean(opts.global);
   const repoRoot = await resolveRepoRoot();
   const result = await runInit(repoRoot, {
-    force: bools.has("force") || bools.has("yes"),
+    force: Boolean(opts.force),
     global,
     confirm: async () => {
       if (!process.stdin.isTTY) return false;
@@ -94,16 +64,13 @@ async function cmdInit(args: string[]): Promise<void> {
   );
 }
 
-async function cmdWorkflowImport(args: string[]): Promise<void> {
-  const { bools, flags, positional } = parseArgs(args);
-  const payload = positional[0];
-  if (!payload) {
-    die('usage: hwf workflow import "<base64>" [--to=repo|global] [--yes] [--force]');
-  }
-  const scope = flags.to ? parseImportScope(flags.to) : undefined;
-  if (flags.to && !scope) die(`--to expects repo or global, got '${flags.to}'`);
+async function cmdWorkflowImport(
+  payload: string,
+  opts: { to?: "repo" | "global"; yes?: boolean; force?: boolean },
+): Promise<void> {
+  const scope = opts.to;
   const tty = process.stdin.isTTY && process.stdout.isTTY;
-  const preapproved = bools.has("yes") || bools.has("y");
+  const preapproved = Boolean(opts.yes);
   if (!tty && !(preapproved && scope)) {
     die("not a tty: pass --yes and --to=repo|global to import without the review prompts");
   }
@@ -112,7 +79,7 @@ async function cmdWorkflowImport(args: string[]): Promise<void> {
     const outcome = await runImport(payload, {
       repoRoot,
       scope,
-      force: bools.has("force"),
+      force: Boolean(opts.force),
       prompts: preapproved
         ? undefined
         : {
@@ -135,13 +102,16 @@ async function cmdWorkflowImport(args: string[]): Promise<void> {
       return;
     }
     const r = outcome.result;
-    process.stdout.write(
-      r.status === "written"
-        ? `wrote ${r.path}\n`
-        : `kept existing ${r.path} (--force to replace)\n`,
-    );
+    if (r.status === "conflicts") {
+      const names = r.conflicts.map((c) => c.name).join(", ");
+      die(`existing workflows would be replaced (${names}); pass --force to replace all`);
+    }
+    for (const row of r.results) {
+      process.stdout.write(`wrote ${row.path}\n`);
+    }
   } catch (error) {
-    if (error instanceof WorkflowLoadError) die(error.message);
+    if (error instanceof WorkflowLoadError || error instanceof CaptureLimitError)
+      die(error.message);
     throw error;
   }
 }
@@ -165,18 +135,13 @@ async function cmdLaunch(): Promise<void> {
   }
 }
 
-async function cmdRun(args: string[]): Promise<void> {
+async function cmdRun(
+  name: string,
+  opts: { input?: Record<string, string>; launchPayload?: boolean },
+): Promise<void> {
   await ensureHerdrProtocol();
-  const { flags, bools, positional, multi } = parseArgs(args);
-  const name = positional[0];
-  if (!name) {
-    die(
-      "usage: hwf|herdr-workflows run <name> [--prompt …] [--input name=value …] [--launch-payload]",
-    );
-  }
   let inputs: Record<string, string> = {};
-  let prompt = flags.prompt;
-  if (bools.has("launch-payload")) {
+  if (opts.launchPayload) {
     let payload;
     try {
       payload = parseLaunchPayload(await Bun.stdin.text());
@@ -187,9 +152,8 @@ async function cmdRun(args: string[]): Promise<void> {
       die(`launch payload name '${payload.name}' does not match run name '${name}'`);
     }
     inputs = payload.inputs;
-    if (prompt === undefined) prompt = payload.prompt;
   }
-  inputs = { ...inputs, ...parseInputFlags(multi.input ?? []) };
+  inputs = { ...inputs, ...(opts.input ?? {}) };
   const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || resolveRepoRoot();
   const config = await loadConfig(repoRoot);
   const ctx = readInvocationContext();
@@ -200,7 +164,6 @@ async function cmdRun(args: string[]): Promise<void> {
       repoRoot,
       config,
       ctx,
-      prompt,
       inputs,
       onProgress: (i, n, label, outcome = "ok") => {
         if (outcome === "start") {
@@ -228,15 +191,29 @@ function openBrowser(url: string): void {
   }
 }
 
-async function cmdWeb(args: string[]): Promise<void> {
-  const { flags, bools } = parseArgs(args);
-  const port = flags.port !== undefined ? Number(flags.port) : undefined;
-  if (port !== undefined && (!Number.isInteger(port) || port < 1 || port > 65535))
-    die(`--port expects an integer between 1 and 65535, got '${flags.port}'`);
+async function cmdWeb(
+  routeRaw: string | undefined,
+  opts: { port?: number; open?: boolean },
+): Promise<void> {
+  const port = opts.port;
+  const route = routeRaw === undefined ? undefined : parseWebRoute(routeRaw);
+  if (routeRaw !== undefined && !route) {
+    die(
+      `web route expects w=<repo|global>:<name>, share=<repo|global>:<name>, or import, got '${routeRaw}'`,
+    );
+  }
   const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot());
-  const { url } = await startWebServer({ repoRoot, port });
+  const workbench = await ensureWorkbench({ repoRoot, port });
+  const url = appendRouteHash(workbench.url, route);
   process.stdout.write(`herdr-workflows web · ${url}\n`);
-  if (!bools.has("no-open")) openBrowser(url);
+  if (opts.open !== false) openBrowser(url);
+  if (!workbench.owned) return;
+  const shutdown = () => {
+    workbench.stop();
+    process.exit(0);
+  };
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
 }
 
 // bun --compile re-extracts the embedded libopentui to a temp file per spawn (~200ms on the
@@ -280,26 +257,87 @@ async function runPickerPopup(picker: typeof import("./tui/picker")): Promise<vo
   process.exit(code);
 }
 
+function buildProgram(): Command {
+  const program = new Command();
+  program
+    .name("hwf")
+    .description(manifest.description)
+    .version(manifest.version)
+    .addHelpText("after", `\nWorkflow format: ${WORKFLOW_FORMAT}`);
+
+  program
+    .command("run")
+    .description("Run a workflow by name")
+    .argument("<name>", "workflow name")
+    .option("--input <name=value>", "workflow input (repeatable)", collectInput, {})
+    .option("--launch-payload", "read launch payload JSON from stdin")
+    .action(
+      async (name: string, opts: { input?: Record<string, string>; launchPayload?: boolean }) => {
+        await cmdRun(name, opts);
+      },
+    );
+
+  program
+    .command("init")
+    .description("Write local or global plugin config")
+    .option("--force", "overwrite existing config without prompting")
+    .option("--global", "write global plugin config")
+    .action(async (opts: { force?: boolean; global?: boolean }) => {
+      await cmdInit(opts);
+    });
+
+  const workflow = program.command("workflow").description("Workflow maintenance commands");
+  workflow
+    .command("import")
+    .description("Import a shared workflow bundle")
+    .argument("<payload>", "base64 workflow bundle")
+    .addOption(new Option("--to <scope>", "repo or global destination").choices(["repo", "global"]))
+    .option("-y, --yes", "skip interactive confirmation")
+    .option("--force", "replace conflicting workflows")
+    .action(
+      async (payload: string, opts: { to?: "repo" | "global"; yes?: boolean; force?: boolean }) => {
+        await cmdWorkflowImport(payload, opts);
+      },
+    );
+
+  program
+    .command("launch")
+    .description("Open the workflow picker popup")
+    .action(async () => {
+      await cmdLaunch();
+    });
+
+  program
+    .command("picker")
+    .description("Run the picker TUI (plugin popup entrypoint)")
+    .action(async () => {
+      await ensureHerdrProtocol();
+      preferOnDiskOpentuiLib();
+      await runPickerPopup(await import("./tui/picker"));
+    });
+
+  program
+    .command("web")
+    .description("Start the browser workbench")
+    .argument("[route]", "optional w=|share=|import route")
+    .option("--port <integer>", "listen port", parsePort)
+    .option("--no-open", "do not open a browser")
+    .action(async (route: string | undefined, opts: { port?: number; open?: boolean }) => {
+      await cmdWeb(route, opts);
+    });
+
+  return program;
+}
+
 async function main(): Promise<void> {
-  const [command, ...rest] = process.argv.slice(2);
-  if (!command) {
-    if (process.stdin.isTTY && process.stdout.isTTY) return cmdWeb([]);
-    usage();
+  const program = buildProgram();
+  // Bare TTY → web. A root `.action()` disables implicit `help` and turns unknown
+  // tokens into excess-argument errors, so keep subcommand dispatch stock.
+  const args = process.argv.slice(2);
+  if (args.length === 0 && process.stdin.isTTY && process.stdout.isTTY) {
+    args.push("web");
   }
-  if (command === "launch") return cmdLaunch();
-  if (command === "picker") {
-    await ensureHerdrProtocol();
-    preferOnDiskOpentuiLib();
-    return runPickerPopup(await import("./tui/picker"));
-  }
-  if (command === "run") return cmdRun(rest);
-  if (command === "init") return cmdInit(rest);
-  if (command === "workflow") {
-    if (rest[0] !== "import") die('usage: hwf workflow import "<base64>"');
-    return cmdWorkflowImport(rest.slice(1));
-  }
-  if (command === "web") return cmdWeb(rest);
-  usage();
+  await program.parseAsync(args, { from: "user" });
 }
 
 main().catch((error) => die(error instanceof Error ? error.message : String(error)));

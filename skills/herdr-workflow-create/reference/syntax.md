@@ -51,7 +51,8 @@ Result: `{stdout, stderr, exit_code, failed}`.
   pane: { open: beside, size: 40, close: success }
 ```
 
-or `target: "{{context.agent}}"` for an existing idle/done agent (no pane/cwd/env).
+or `target: "{{context.agent}}"` for an existing **idle/done** agent (no pane/cwd/env). A busy
+target fails before the prompt is sent.
 
 Blocking result: `{response, agent, pane_id}`.
 
@@ -93,9 +94,22 @@ pane:
   size: 40 # new-pane percent; Herdr clamps ratio to 0.1–0.9
   focus: true
   close: success # agent-only
-background: true
-ready_when: "/ready/" # placed run:; requires timeout; recent 80 rows, ANSI stripped
 ```
+
+Placed `run:` takes **exactly one** of:
+
+```yaml
+background: true # fire-and-forget; needs Herdr-owned pane or existing-agent target
+```
+
+or
+
+```yaml
+ready_when: "/ready/" # requires timeout; recent 80 rows, ANSI stripped
+timeout: 30s
+```
+
+Do not set both on the same step.
 
 ## Control flow
 

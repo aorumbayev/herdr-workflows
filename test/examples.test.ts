@@ -90,9 +90,7 @@ describe("shipped examples", () => {
 
   test("docs/.vitepress/theme/examples.generated.ts matches buildExamples()", async () => {
     const expected = renderModule(await buildExamples(EXAMPLES_DIR));
-    const file = Bun.file(committedGallery);
-    expect(await file.exists()).toBe(true);
-    if ((await file.text()) !== expected) {
+    if ((await Bun.file(committedGallery).text()) !== expected) {
       throw new Error(
         "docs/.vitepress/theme/examples.generated.ts is stale — run `bun run examples`",
       );
