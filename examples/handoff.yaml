@@ -1,11 +1,15 @@
 version: v1alpha1
 title: Handoff
-description: Distil this session and hand it to another agent — launch it from an idle agent pane, it closes that tab
+description: Distil this session's transcript and hand it to a fresh agent
 inputs:
   target: profile
   focus:
     type: text
     default: ""
+  close_source:
+    type: choice
+    options: [keep, close]
+    default: keep
 on_failure:
   herdr: notification.show
   params:
@@ -47,8 +51,12 @@ steps:
 
       ---
       {{context.transcript}}
-    target: "{{context.agent}}"
+    using: "{{inputs.target}}"
     timeout: 15m
+    pane:
+      open: beside
+      focus: false
+      close: success
 
   - herdr: notification.show
     params:
@@ -68,4 +76,5 @@ steps:
   - herdr: tab.close
     params:
       tab_id: "{{context.tab}}"
+    when: '{{inputs.close_source}} == "close"'
     continue_on_error: true
