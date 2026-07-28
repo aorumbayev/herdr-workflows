@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { listWorkflows, loadWorkflowEntry } from "../src/workflow/load";
 import type { PickerState } from "../src/tui/picker";
 import { acceptWorkflow, startRun } from "../src/tui/picker";
+import { themeFromPalette } from "../src/tui/theme";
 import type { LoadedWorkflow } from "../src/workflow/types";
 
 const dirs: string[] = [];
@@ -41,6 +42,7 @@ function pickerState(): PickerState {
       throw new Error("reload failed");
     },
     contentWidth: 80,
+    theme: themeFromPalette(null),
     renderer: { destroy: () => undefined },
     filterRow: { visible: true },
     filter: { visible: true },

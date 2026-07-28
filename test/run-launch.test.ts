@@ -13,6 +13,7 @@ import {
   tryListWorkbenchShortcut,
   type PickerState,
 } from "../src/tui/picker";
+import { themeFromPalette } from "../src/tui/theme";
 import {
   buildInvocationEnv,
   buildLaunchPayload,
@@ -74,6 +75,7 @@ function pickerState(overrides: Partial<PickerState> = {}): PickerState {
         needsInvokingAgent: false,
       }) satisfies LoadedWorkflow,
     contentWidth: 80,
+    theme: themeFromPalette(null),
     renderer: { destroy: () => undefined },
     filterRow: { visible: true },
     filter: { visible: true },

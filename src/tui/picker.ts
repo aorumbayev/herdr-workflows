@@ -166,6 +166,7 @@ export type PickerState = {
   runHandle?: DetachedRunHandle;
   workflow?: LoadedWorkflow;
   contentWidth: number;
+  theme: HostTheme;
   renderer: CliRenderer;
   filterRow: BoxRenderable;
   filter: InputRenderable;
@@ -293,9 +294,15 @@ function hideListChrome(state: PickerState): void {
   state.rule.visible = false;
 }
 
-function showStatus(state: PickerState, content: string, flexGrow = 0): void {
+function showStatus(
+  state: PickerState,
+  content: string,
+  options: { flexGrow?: number; warn?: boolean } = {},
+): void {
   state.status.visible = true;
-  state.status.flexGrow = flexGrow;
+  state.status.flexGrow = options.flexGrow ?? 0;
+  state.status.fg = options.warn ? state.theme.warn : state.theme.text.fg;
+  state.status.attributes = TextAttributes.NONE;
   state.status.content = content;
 }
 
@@ -381,7 +388,7 @@ function setRunMode(state: PickerState, entry: WorkflowListEntry): void {
   state.progressLines = [];
   hideBrowserChrome(state);
   hideListChrome(state);
-  showStatus(state, formatRunProgress(entry.name, []), 1);
+  showStatus(state, formatRunProgress(entry.name, []), { flexGrow: 1 });
   state.footer.content = RUN_HINT;
 }
 
@@ -530,10 +537,14 @@ function stdinLeakHandlers(): {
 
 function showFailure(state: PickerState, entry: WorkflowListEntry, error: unknown): void {
   state.running = false;
-  state.status.content = formatRunProgress(entry.name, state.progressLines, {
-    ok: false,
-    detail: error instanceof Error ? error.message : String(error),
-  });
+  showStatus(
+    state,
+    formatRunProgress(entry.name, state.progressLines, {
+      ok: false,
+      detail: error instanceof Error ? error.message : String(error),
+    }),
+    { flexGrow: 1 },
+  );
   state.footer.content = FAIL_HINT;
 }
 
@@ -605,6 +616,7 @@ async function prepareWorkflow(state: PickerState, entry: WorkflowListEntry): Pr
       showStatus(
         state,
         `${workflowDisplayTitle(entry.name, entry.title)} · ${entry.source} · ${flags.join(" · ")}`,
+        { warn: true },
       );
     }
     advanceInput(state, entry);
@@ -641,7 +653,7 @@ export async function startRun(
       onProgressLine: (line) => {
         if (state.exit) return;
         state.progressLines.push(truncate(line, state.contentWidth));
-        state.status.content = formatRunProgress(entry.name, state.progressLines);
+        showStatus(state, formatRunProgress(entry.name, state.progressLines), { flexGrow: 1 });
       },
     });
     state.runHandle = handle;
@@ -649,10 +661,14 @@ export async function startRun(
     if (state.exit) return;
     state.runHandle = undefined;
     state.running = false;
-    state.status.content = formatRunProgress(entry.name, state.progressLines, {
-      ok: result.ok,
-      detail: result.ok ? "" : result.detail,
-    });
+    showStatus(
+      state,
+      formatRunProgress(entry.name, state.progressLines, {
+        ok: result.ok,
+        detail: result.ok ? "" : result.detail,
+      }),
+      { flexGrow: 1 },
+    );
     if (result.ok) {
       finish(state, 0);
       return;
@@ -662,6 +678,59 @@ export async function startRun(
     state.runHandle = undefined;
     showFailure(state, entry, error);
   }
+}
+
+function buildPickerBrowserChrome(theme: HostTheme) {
+  return [
+    Box(
+      { id: "filter-row", flexDirection: "row", width: "100%" },
+      Text({ content: "/ ", ...theme.text }),
+      Input({ id: "filter", flexGrow: 1, placeholder: "filter…", ...theme.input }),
+    ),
+    Box(
+      { id: "list-block", flexDirection: "column", flexGrow: 0 },
+      Text({ content: " " }),
+      Select({
+        id: "list",
+        flexGrow: 0,
+        height: 6,
+        options: [],
+        showDescription: false,
+        showScrollIndicator: false,
+        wrapSelection: true,
+        itemSpacing: 0,
+        ...theme.select,
+      }),
+      Text({ content: " " }),
+    ),
+  ] as const;
+}
+
+function buildPickerDetailStack(theme: HostTheme) {
+  return [
+    Text({
+      id: "status",
+      content: "",
+      visible: false,
+      flexGrow: 1,
+      ...theme.text,
+    }),
+    Text({ id: "detail", content: "", attributes: TextAttributes.DIM, ...theme.text }),
+    Text({
+      id: "rule",
+      content: "",
+      attributes: TextAttributes.DIM,
+      ...theme.text,
+    }),
+    Input({
+      id: "prompt-input",
+      visible: false,
+      width: "100%",
+      placeholder: "prompt…",
+      ...theme.input,
+    }),
+    Text({ id: "footer", content: LIST_HINT, attributes: TextAttributes.DIM, ...theme.text }),
+  ] as const;
 }
 
 function mountPickerUi(
@@ -685,6 +754,7 @@ function mountPickerUi(
   | "workflow"
   | "loadWorkflow"
   | "contentWidth"
+  | "theme"
 > {
   renderer.root.add(
     Box(
@@ -696,49 +766,8 @@ function mountPickerUi(
         height: "100%",
         gap: 0,
       },
-      Box(
-        { id: "filter-row", flexDirection: "row", width: "100%" },
-        Text({ content: "/ ", ...theme.text }),
-        Input({ id: "filter", flexGrow: 1, placeholder: "filter…", ...theme.input }),
-      ),
-      Box(
-        { id: "list-block", flexDirection: "column", flexGrow: 0 },
-        Text({ content: " " }),
-        Select({
-          id: "list",
-          flexGrow: 0,
-          height: 6,
-          options: [],
-          showDescription: false,
-          showScrollIndicator: false,
-          wrapSelection: true,
-          itemSpacing: 0,
-          ...theme.select,
-        }),
-        Text({ content: " " }),
-      ),
-      Text({
-        id: "status",
-        content: "",
-        visible: false,
-        flexGrow: 1,
-        ...theme.text,
-      }),
-      Text({ id: "detail", content: "", attributes: TextAttributes.DIM, ...theme.text }),
-      Text({
-        id: "rule",
-        content: "",
-        attributes: TextAttributes.DIM,
-        ...theme.text,
-      }),
-      Input({
-        id: "prompt-input",
-        visible: false,
-        width: "100%",
-        placeholder: "prompt…",
-        ...theme.input,
-      }),
-      Text({ id: "footer", content: LIST_HINT, attributes: TextAttributes.DIM, ...theme.text }),
+      ...buildPickerBrowserChrome(theme),
+      ...buildPickerDetailStack(theme),
     ),
   );
   return {
@@ -817,6 +846,7 @@ export async function runPickerSession(opts: PickerSessionOpts): Promise<number>
     ctx: opts.ctx,
     loadWorkflow: loadWorkflowEntry,
     contentWidth: pickerContentWidth(renderer.width),
+    theme,
     ...ui,
   };
 
