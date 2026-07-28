@@ -85,8 +85,10 @@ export function entrySensitivity(entry: WorkflowListEntry): string[] {
   });
 }
 
-// @opentui/core SelectRenderable: name text starts at contentX+1+indicatorWidth (1 pad + 2-col indicator).
-const SELECT_NAME_OFFSET = 3;
+// SelectRenderable draws name at contentX+1+indicatorWidth; indicator off → pad 1 only.
+const SELECT_NAME_OFFSET = 1;
+const CURSOR_PREFIX_WIDTH = 2;
+const ROW_TEXT_INDENT = SELECT_NAME_OFFSET + CURSOR_PREFIX_WIDTH;
 const LOCATION_WIDTH = 7;
 const WARNING_WIDTH = 2;
 
@@ -95,10 +97,15 @@ export function formatPickerRowName(
   location: "global" | "repo" | "invalid",
   warned: boolean,
   rowWidth: number,
+  selected = false,
 ): string {
-  const titleW = Math.max(0, rowWidth - SELECT_NAME_OFFSET - 1 - WARNING_WIDTH - LOCATION_WIDTH);
+  const titleW = Math.max(
+    0,
+    rowWidth - SELECT_NAME_OFFSET - CURSOR_PREFIX_WIDTH - 1 - WARNING_WIDTH - LOCATION_WIDTH,
+  );
+  const prefix = selected ? "> " : "  ";
   const warning = warned ? "! " : "  ";
-  return `${truncate(title, titleW).padEnd(titleW)} ${warning}${location.padStart(LOCATION_WIDTH)}`;
+  return `${prefix}${truncate(title, titleW).padEnd(titleW)} ${warning}${location.padStart(LOCATION_WIDTH)}`;
 }
 
 export function buildPickerOptions(valid: WorkflowListEntry[], rowWidth: number): SelectOption[] {
@@ -189,7 +196,8 @@ const RUN_HINT = "esc dismiss · run continues";
 const FAIL_HINT = "enter/esc close";
 
 export function formatRule(contentWidth: number): string {
-  return `  ${"-".repeat(Math.max(0, contentWidth - 4))}`;
+  const field = Math.max(0, contentWidth - ROW_TEXT_INDENT);
+  return `${" ".repeat(ROW_TEXT_INDENT)}${"-".repeat(field)}`;
 }
 
 export function formatListFooter(
@@ -219,12 +227,13 @@ function takeWrappedLine(text: string, budget: number): string {
 export function formatDetailLines(description: string, contentWidth: number): string {
   const text = description.replace(/\s+/g, " ").trim();
   if (!text) return "";
-  const budget = Math.max(0, contentWidth - 2);
+  const indent = " ".repeat(ROW_TEXT_INDENT);
+  const budget = Math.max(0, contentWidth - ROW_TEXT_INDENT);
   const line1 = takeWrappedLine(text, budget);
   const rest = text.slice(line1.length).trimStart();
-  if (!rest) return `  ${line1}`;
+  if (!rest) return `${indent}${line1}`;
   const line2 = rest.length <= budget ? rest : truncate(rest, budget);
-  return `  ${line1}\n  ${line2}`;
+  return `${indent}${line1}\n${indent}${line2}`;
 }
 
 function updateDetail(state: PickerState): void {
@@ -246,7 +255,28 @@ function updateListFooter(state: PickerState): void {
   );
 }
 
+function applyRowSelectionPrefixes(state: PickerState): void {
+  if (state.mode !== "list") return;
+  const selectedIndex = state.list.getSelectedIndex();
+  state.list.options = state.list.options.map((opt, i) => {
+    const value = opt.value as PickerRowValue | undefined;
+    if (!value?.entry) return opt;
+    const entry = value.entry;
+    return {
+      ...opt,
+      name: formatPickerRowName(
+        workflowDisplayTitle(entry.name, entry.title),
+        entry.error ? "invalid" : entry.source === "repo" ? "repo" : "global",
+        entrySensitivity(entry).length > 0,
+        state.contentWidth,
+        i === selectedIndex,
+      ),
+    };
+  });
+}
+
 function refreshListChrome(state: PickerState): void {
+  applyRowSelectionPrefixes(state);
   updateDetail(state);
   updateListFooter(state);
 }
@@ -718,6 +748,7 @@ function buildPickerBrowserChrome(theme: HostTheme) {
         options: [],
         showDescription: false,
         showScrollIndicator: false,
+        showSelectionIndicator: false,
         wrapSelection: true,
         itemSpacing: 0,
         ...theme.select,

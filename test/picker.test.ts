@@ -125,7 +125,7 @@ describe("buildPickerOptions", () => {
       sensitiveMethods: ["pane.close"],
     };
     const options = buildPickerOptions([entry], 60);
-    expect(options[0]!.name).toBe(`${"Handover".padEnd(47)} ! ${"repo".padStart(7)}`);
+    expect(options[0]!.name).toBe(`  ${"Handover".padEnd(47)} ! ${"repo".padStart(7)}`);
     expect(options[0]!.name).not.toContain("inputs");
     expect(options[0]!.name).not.toContain("commands");
     expect(options[0]!.name).not.toContain("transcript");
@@ -136,17 +136,17 @@ describe("buildPickerOptions", () => {
   test("humanized title default and provenance badges", () => {
     const { valid } = filterWorkflowEntries(entries, "");
     const options = buildPickerOptions(valid, 60);
-    expect(options[0]!.name).toBe(`${"Chat handoff".padEnd(47)} ! ${"repo".padStart(7)}`);
+    expect(options[0]!.name).toBe(`  ${"Chat handoff".padEnd(47)} ! ${"repo".padStart(7)}`);
     expect(options[0]!.description).toBe("Pass transcript to a reviewer");
-    expect(options[1]!.name).toBe(`${"Deploy".padEnd(47)} ! ${"global".padStart(7)}`);
+    expect(options[1]!.name).toBe(`  ${"Deploy".padEnd(47)} ! ${"global".padStart(7)}`);
     expect(options[1]!.description).toBe("deploy");
   });
 
   test("warning field is bang-space when flagged and two spaces otherwise", () => {
     const warned = formatPickerRowName("Warned", "repo", true, 60);
     const clean = formatPickerRowName("Clean", "repo", false, 60);
-    expect(warned.slice(47, 50)).toBe(" ! ");
-    expect(clean.slice(47, 50)).toBe("   ");
+    expect(warned.slice(49, 52)).toBe(" ! ");
+    expect(clean.slice(49, 52)).toBe("   ");
     expect(warned.endsWith("   repo")).toBe(true);
     expect(clean.endsWith("   repo")).toBe(true);
   });
@@ -155,6 +155,14 @@ describe("buildPickerOptions", () => {
     expect(formatPickerRowName("A", "global", false, 60).slice(-7)).toBe(" global");
     expect(formatPickerRowName("A", "repo", false, 60).slice(-7)).toBe("   repo");
     expect(formatPickerRowName("A", "invalid", false, 60).slice(-7)).toBe("invalid");
+  });
+
+  test("selected and unselected rows have identical length", () => {
+    const selected = formatPickerRowName("Handoff", "repo", true, 60, true);
+    const idle = formatPickerRowName("Handoff", "repo", true, 60, false);
+    expect(selected.length).toBe(idle.length);
+    expect(selected.startsWith("> ")).toBe(true);
+    expect(idle.startsWith("  ")).toBe(true);
   });
 
   test("unbounded sensitivity flags do not widen the row", () => {
@@ -215,10 +223,10 @@ describe("buildPickerOptions", () => {
   test("invalid entries join the option list with stripped errors", () => {
     const { invalid } = filterWorkflowEntries(entries, "");
     const options = buildInvalidOptions(invalid, 60);
-    expect(options[0]!.name).toBe(`${"Broken".padEnd(47)}   ${"invalid"}`);
+    expect(options[0]!.name).toBe(`  ${"Broken".padEnd(47)}   ${"invalid"}`);
     expect(options[0]!.description).toBe("step 2, agent: unknown agent 'x'");
     expect(options[0]!.description).not.toContain("/r/broken.yaml");
-    expect(options[1]!.name).toBe(`${"Chat Broken".padEnd(47)}   ${"invalid"}`);
+    expect(options[1]!.name).toBe(`  ${"Chat Broken".padEnd(47)}   ${"invalid"}`);
     expect(options[1]!.description).toBe("cycle");
   });
 
@@ -333,18 +341,18 @@ describe("formatListFooter", () => {
 
 describe("formatDetailLines", () => {
   test("short description stays on one indented line", () => {
-    expect(formatDetailLines("hello", 60)).toBe("  hello");
+    expect(formatDetailLines("hello", 60)).toBe("   hello");
   });
 
   test("long description wraps at a word boundary", () => {
-    const wrapped = formatDetailLines("Distil this session transcript and hand it over", 30);
+    const wrapped = formatDetailLines("Distil this session transcript and hand it over", 31);
     const lines = wrapped.split("\n");
     expect(lines).toHaveLength(2);
-    expect(lines[0]).toBe("  Distil this session");
-    expect(lines[1]).toBe("  transcript and hand it over");
+    expect(lines[0]).toBe("   Distil this session");
+    expect(lines[1]).toBe("   transcript and hand it over");
     for (const line of lines) {
-      expect(line.length).toBeLessThanOrEqual(30);
-      expect(line.startsWith("  ")).toBe(true);
+      expect(line.length).toBeLessThanOrEqual(31);
+      expect(line.startsWith("   ")).toBe(true);
     }
   });
 
@@ -358,7 +366,7 @@ describe("formatDetailLines", () => {
     expect(lines[1]!.endsWith("…")).toBe(true);
     for (const line of lines) {
       expect(line.length).toBeLessThanOrEqual(40);
-      expect(line.startsWith("  ")).toBe(true);
+      expect(line.startsWith("   ")).toBe(true);
     }
   });
 
@@ -366,8 +374,8 @@ describe("formatDetailLines", () => {
     const wrapped = formatDetailLines("x".repeat(80), 20);
     const lines = wrapped.split("\n");
     expect(lines).toHaveLength(2);
-    expect(lines[0]).toBe(`  ${"x".repeat(18)}`);
-    expect(lines[1]).toBe(`  ${"x".repeat(17)}…`);
+    expect(lines[0]).toBe(`   ${"x".repeat(17)}`);
+    expect(lines[1]).toBe(`   ${"x".repeat(16)}…`);
     for (const line of lines) {
       expect(line.length).toBeLessThanOrEqual(20);
     }
@@ -379,17 +387,23 @@ describe("formatDetailLines", () => {
   });
 
   test("collapses whitespace before wrapping", () => {
-    expect(formatDetailLines("hello   world\n\nnext", 60)).toBe("  hello world next");
+    expect(formatDetailLines("hello   world\n\nnext", 60)).toBe("   hello world next");
   });
 });
 
 describe("formatRule", () => {
-  test("insets from both sides and derives from content width", () => {
+  test("spans the row text field under titles through location", () => {
     const rule = formatRule(60);
-    expect(rule.startsWith("  ")).toBe(true);
-    expect(rule).toBe(`  ${"-".repeat(56)}`);
-    expect(rule.length).toBe(58);
-    expect(formatRule(10)).toBe(`  ${"-".repeat(6)}`);
+    expect(rule.startsWith("   ")).toBe(true);
+    expect(rule).toBe(`   ${"-".repeat(57)}`);
+    expect(rule.length).toBe(60);
+    expect(formatRule(10)).toBe(`   ${"-".repeat(7)}`);
+  });
+
+  test("rule length equals the row text field width", () => {
+    const row = formatPickerRowName("Handoff", "repo", false, 60, false);
+    const fieldWidth = row.length - 2;
+    expect(formatRule(60).trimStart().length).toBe(fieldWidth);
   });
 });
 
@@ -398,6 +412,7 @@ describe("picker chrome ascii", () => {
     expect(isAscii(formatRule(60))).toBe(true);
     expect(isAscii(formatPickerRowName("Handoff", "global", true, 60))).toBe(true);
     expect(isAscii(formatPickerRowName("Handoff", "repo", false, 60))).toBe(true);
+    expect(isAscii(formatPickerRowName("Handoff", "repo", true, 60, true))).toBe(true);
   });
 
   test("hints avoid arrow, triangle, and heavy-line glyphs", () => {
