@@ -10,6 +10,7 @@ import {
   generateAgentName,
   managedResponsePath,
   readManagedResponse,
+  type RunnerDeps,
   type StepCtx,
   type StepOutcome,
 } from "../context";
@@ -22,6 +23,77 @@ const POLL_MS = 1_000;
 const SETTLED = new Set(["idle", "done"]);
 /** New-agent only: consecutive settled+empty polls before missing-response failure. */
 const SETTLED_EMPTY_GRACE_POLLS = 2;
+const SHELL_READY_DEADLINE_MS = 5_000;
+const SHELL_READY_POLL_MS = 50;
+/** Socket agent.start returns at launch_pending; CLI waits for interactive_ready (default 30s). */
+const AGENT_INTERACTIVE_DEADLINE_MS = 30_000;
+const AGENT_INTERACTIVE_POLL_MS = 100;
+
+function processInfoRecord(result: Record<string, unknown>): Record<string, unknown> {
+  const info = result.process_info;
+  return typeof info === "object" && info !== null ? (info as Record<string, unknown>) : result;
+}
+
+/** shell_pid alone in its FG group — herdr available_pane_shell via pane.process_info. */
+function isAvailableShellProcessInfo(info: Record<string, unknown>): boolean {
+  const shellPid = info.shell_pid;
+  if (typeof shellPid !== "number") return false;
+  if (info.foreground_process_group_id !== shellPid) return false;
+  const procs = info.foreground_processes;
+  if (!Array.isArray(procs) || procs.length !== 1) return false;
+  const only = procs[0];
+  return typeof only === "object" && only !== null && (only as { pid?: unknown }).pid === shellPid;
+}
+
+async function startAgentWhenShellReady(
+  deps: RunnerDeps,
+  params: { name: string; kind: string; pane_id: string; args: string[] },
+): Promise<void> {
+  const deadline = deps.now() + SHELL_READY_DEADLINE_MS;
+  let lastBusy: HerdrError | undefined;
+  while (deps.now() < deadline) {
+    let shellReady = false;
+    try {
+      const result = await deps.herdrCall("pane.process_info", { pane_id: params.pane_id });
+      shellReady = isAvailableShellProcessInfo(processInfoRecord(result));
+    } catch {
+      shellReady = false;
+    }
+    if (shellReady) {
+      try {
+        await deps.herdrCall("agent.start", params);
+        return;
+      } catch (error) {
+        if (!(error instanceof HerdrError) || error.code !== "agent_pane_busy") throw error;
+        lastBusy = error;
+      }
+    }
+    await deps.sleep(SHELL_READY_POLL_MS);
+  }
+  if (lastBusy) throw lastBusy;
+  await deps.herdrCall("agent.start", params);
+}
+
+async function awaitAgentInteractiveReady(deps: RunnerDeps, name: string): Promise<void> {
+  const deadline = deps.now() + AGENT_INTERACTIVE_DEADLINE_MS;
+  for (;;) {
+    const agent = await deps.agentInfo(name);
+    if (agent.interactive_ready === true) return;
+    if (agent.launch_pending === false) {
+      throw new HerdrError(
+        "agent_start_failed",
+        "agent process exited before becoming interactive",
+      );
+    }
+    if (deps.now() >= deadline) {
+      throw new HerdrError(
+        "agent_start_timeout",
+        `agent '${name}' did not become interactive within ${AGENT_INTERACTIVE_DEADLINE_MS / 1000}s`,
+      );
+    }
+    await deps.sleep(AGENT_INTERACTIVE_POLL_MS);
+  }
+}
 
 type ProfileChoice =
   | { ok: true; name: string; profile: AgentProfile }
@@ -76,13 +148,18 @@ async function awaitManagedTurn(
   const deadline = deps.now() + timeoutMs;
   let notifiedBlocked = false;
   let sawBlocked = false;
+  let sawActive = false;
   let settledEmptyPolls = 0;
   for (;;) {
     const status = await deps.agentStatus(target);
     const hasText = await fileHasText(path);
     if (SETTLED.has(status) && hasText) return { settled: true, blocked: sawBlocked };
+    if (!SETTLED.has(status)) sawActive = true;
 
-    if (mode === "new-agent" && SETTLED.has(status) && !hasText) {
+    // Skip pre-work idle: agent.start leaves the agent idle until the prompt is taken.
+    const emptySettled =
+      mode === "new-agent" && SETTLED.has(status) && !hasText && (status === "done" || sawActive);
+    if (emptySettled) {
       settledEmptyPolls += 1;
       if (settledEmptyPolls > SETTLED_EMPTY_GRACE_POLLS) {
         return {
@@ -217,12 +294,13 @@ async function startNewAgent(
     invocation: c.opts.ctx,
   });
   const name = generateAgentName(c.step.id, c.stepIndex, c.opts.runId);
-  await c.opts.deps.herdrCall("agent.start", {
+  await startAgentWhenShellReady(c.opts.deps, {
     name,
     kind: profile.kind,
     pane_id: placed.pane_id,
     args: profile.args ?? [],
   });
+  await awaitAgentInteractiveReady(c.opts.deps, name);
   return { name, placed };
 }
 

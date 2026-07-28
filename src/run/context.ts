@@ -155,7 +155,7 @@ export function managedResponsePath(
 }
 
 export function appendResponseInstruction(prompt: string, path: string): string {
-  return `${prompt}\n\nWhen this task is complete, write your full answer as plain UTF-8 text to the absolute path ${path}, overwriting whatever is there. Write nothing else to that path and do not create other files for it.`;
+  return `${prompt}\n\nRequired: use your file-write tool to write your full answer as plain UTF-8 text to the absolute path ${path}, overwriting whatever is there. Do not finish until that file exists with your answer. Write nothing else to that path and do not create other files for it. Printing the answer in chat is not enough.`;
 }
 
 export async function readManagedResponse(path: string): Promise<string> {

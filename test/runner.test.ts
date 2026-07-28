@@ -55,7 +55,16 @@ function mockDeps(overrides: Partial<RunnerDeps> & { writeManagedResponse?: bool
   const { writeManagedResponse = true, ...depOverrides } = overrides;
   const notes: string[] = [];
   const calls: { method: string; params: Record<string, unknown> }[] = [];
-  const agents = new Map<string, { status: string; pane_id: string; name: string }>();
+  const agents = new Map<
+    string,
+    {
+      status: string;
+      pane_id: string;
+      name: string;
+      interactive_ready: boolean;
+      launch_pending: boolean;
+    }
+  >();
   const deps: RunnerDeps = {
     herdrCall: async (method, params = {}) => {
       calls.push({ method, params });
@@ -101,10 +110,23 @@ function mockDeps(overrides: Partial<RunnerDeps> & { writeManagedResponse?: bool
       if (method === "agent.start") {
         const name = String(params.name);
         const pane_id = String(params.pane_id);
-        agents.set(name, { status: "idle", pane_id, name });
+        agents.set(name, {
+          status: "idle",
+          pane_id,
+          name,
+          interactive_ready: true,
+          launch_pending: false,
+        });
         return {
           type: "agent_started",
-          agent: { name, pane_id, agent_status: "idle", agent: "claude" },
+          agent: {
+            name,
+            pane_id,
+            agent_status: "idle",
+            agent: "claude",
+            interactive_ready: true,
+            launch_pending: false,
+          },
           argv: ["claude"],
         };
       }
@@ -114,6 +136,8 @@ function mockDeps(overrides: Partial<RunnerDeps> & { writeManagedResponse?: bool
           status: "idle",
           pane_id: target,
           name: target,
+          interactive_ready: true,
+          launch_pending: false,
         };
         const text = String(params.text ?? "");
         const match = /absolute path ([^\s,]+)/.exec(text);
@@ -134,6 +158,8 @@ function mockDeps(overrides: Partial<RunnerDeps> & { writeManagedResponse?: bool
           status: "idle",
           pane_id: "w1:p1",
           name: "invoker",
+          interactive_ready: true,
+          launch_pending: false,
         };
         return {
           type: "agent_info",
@@ -142,6 +168,8 @@ function mockDeps(overrides: Partial<RunnerDeps> & { writeManagedResponse?: bool
             pane_id: info.pane_id,
             agent_status: info.status,
             agent: "claude",
+            interactive_ready: info.interactive_ready,
+            launch_pending: info.launch_pending,
           },
         };
       }
@@ -163,6 +191,28 @@ function mockDeps(overrides: Partial<RunnerDeps> & { writeManagedResponse?: bool
           pane: { pane_id: params.pane_id, tab_id: "w1:t1", workspace_id: "w1" },
         };
       }
+      if (method === "pane.process_info") {
+        const shellPid = 1001;
+        return {
+          type: "pane_process_info",
+          process_info: {
+            pane_id: params.pane_id,
+            shell_pid: shellPid,
+            foreground_process_group_id: shellPid,
+            foreground_processes: [
+              {
+                pid: shellPid,
+                name: "zsh",
+                argv: ["zsh"],
+                argv0: "zsh",
+                cmdline: "zsh",
+                cwd: "/",
+              },
+            ],
+            tty: "/dev/ttys001",
+          },
+        };
+      }
       return { type: "ok", ...params };
     },
     notificationShow: async (title, body) => {
@@ -170,12 +220,20 @@ function mockDeps(overrides: Partial<RunnerDeps> & { writeManagedResponse?: bool
     },
     agentStatus: async (target) => agents.get(target)?.status ?? "idle",
     agentInfo: async (target) => {
-      const info = agents.get(target) ?? { status: "idle", pane_id: "w1:p1", name: target };
+      const info = agents.get(target) ?? {
+        status: "idle",
+        pane_id: "w1:p1",
+        name: target,
+        interactive_ready: true,
+        launch_pending: false,
+      };
       return {
         name: info.name,
         pane_id: info.pane_id,
         agent_status: info.status,
         agent: "claude",
+        interactive_ready: info.interactive_ready,
+        launch_pending: info.launch_pending,
       };
     },
     paneClose: async () => undefined,
@@ -280,6 +338,89 @@ steps:
     });
   });
 
+  test("new-agent retries agent_pane_busy once without creating a second pane", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: summarize
+    using: claude
+    pane: { open: tab, workspace: w1 }
+`,
+    });
+    const { deps, calls } = mockDeps();
+    const baseCall = deps.herdrCall;
+    let startAttempts = 0;
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: {
+        ...deps,
+        ...fastClock(),
+        herdrCall: async (method, params = {}) => {
+          if (method === "agent.start") {
+            startAttempts += 1;
+            if (startAttempts === 1) {
+              calls.push({ method, params });
+              throw new HerdrError(
+                "agent_pane_busy",
+                `agent target pane ${String(params.pane_id)} is not an available shell`,
+              );
+            }
+          }
+          return baseCall(method, params);
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(startAttempts).toBe(2);
+    expect(calls.filter((c) => c.method === "agent.start")).toHaveLength(2);
+    expect(calls.filter((c) => c.method === "tab.create")).toHaveLength(1);
+    expect(calls.filter((c) => c.method === "pane.split")).toHaveLength(0);
+  });
+
+  test("target mode never calls agent.start so agent_pane_busy is not retried", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - agent: continue
+    target: worker
+`,
+    });
+    const { deps, calls } = mockDeps();
+    const baseCall = deps.herdrCall;
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, paneId: "w1:p1" },
+      deps: {
+        ...deps,
+        ...fastClock(),
+        agentStatus: async () => "idle",
+        agentInfo: async () => ({
+          name: "worker",
+          pane_id: "w1:p9",
+          agent_status: "idle",
+          agent: "claude",
+        }),
+        herdrCall: async (method, params = {}) => {
+          if (method === "agent.start") {
+            throw new HerdrError(
+              "agent_pane_busy",
+              "agent target pane w1:p9 is not an available shell",
+            );
+          }
+          return baseCall(method, params);
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(calls.filter((c) => c.method === "agent.start")).toHaveLength(0);
+  });
+
   test("new-agent fails fast when settled without managed response", async () => {
     const root = await repoWith({
       m: `version: v1alpha1
@@ -303,6 +444,48 @@ steps:
     expect(err.error).toMatch(/managed response file was not written/);
     expect(err.error).not.toMatch(/within \d+s/);
     expect(calls.some((c) => c.method === "agent.prompt")).toBe(true);
+  });
+
+  test("new-agent does not fail-fast on idle before the agent starts working", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: summarize
+    using: claude
+    pane: { open: beside }
+    timeout: 200ms
+`,
+    });
+    const { deps, agents } = mockDeps({ writeManagedResponse: false });
+    const baseCall = deps.herdrCall;
+    const clock = fastClock();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: {
+        ...deps,
+        ...clock,
+        herdrCall: async (method, params = {}) => {
+          const out = await baseCall(method, params);
+          if (method === "agent.prompt") {
+            const target = String(params.target);
+            const info = agents.get(target);
+            if (info) {
+              info.status = "idle";
+              agents.set(target, info);
+            }
+          }
+          return out;
+        },
+        agentStatus: async () => "idle",
+      },
+    });
+    const err = failed(result);
+    expect(err.error).toMatch(/did not settle with a managed response within 0\.2s/);
+    expect(err.error).not.toMatch(/managed response file was not written/);
   });
 
   test("target mode keeps waiting for managed response until timeout", async () => {
