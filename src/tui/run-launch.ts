@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import type { InvocationContext } from "../config";
 
 type DetachedRunResult = { ok: boolean; detail: string };
@@ -5,6 +6,13 @@ type DetachedRunResult = { ok: boolean; detail: string };
 export type DetachedRunHandle = {
   result: Promise<DetachedRunResult>;
   detach: () => void;
+};
+
+/** Secrets for a detached `hwf run` — sent on stdin, never on argv. */
+export type LaunchPayload = {
+  name: string;
+  inputs: Record<string, string>;
+  prompt: string;
 };
 
 export type LaunchRunRequest = {
@@ -42,25 +50,74 @@ export function buildInvocationEnv(
   return env;
 }
 
-export function selfRunArgv(runArgs: string[]): string[] {
-  const entry = process.argv[1];
-  if (typeof entry === "string" && /\.(ts|js|mjs|cjs)$/.test(entry)) {
-    return [process.execPath, entry, "run", ...runArgs];
+/** True when argv[1] is a real on-disk script the runtime must re-pass (dev `bun src/cli.ts`). */
+export function isRuntimeScriptEntry(entry: string | undefined): boolean {
+  if (typeof entry !== "string" || entry.length === 0) return false;
+  // Compiled bun binaries expose an embedded virtual path — not a host file to re-exec.
+  if (entry.startsWith("/$bunfs/")) return false;
+  try {
+    return statSync(entry).isFile();
+  } catch {
+    return false;
   }
-  return [process.execPath, "run", ...runArgs];
 }
 
-export function buildRunArgs(
+export function selfRunArgv(
+  runArgs: string[],
+  opts?: { execPath?: string; argv1?: string },
+): string[] {
+  const execPath = opts?.execPath ?? process.execPath;
+  const entry = opts?.argv1 ?? process.argv[1];
+  if (entry !== undefined && isRuntimeScriptEntry(entry)) {
+    return [execPath, entry, "run", ...runArgs];
+  }
+  return [execPath, "run", ...runArgs];
+}
+
+/** Argv after `run` — workflow name + flag only; inputs/prompt travel on stdin. */
+export function buildRunArgs(name: string): string[] {
+  return [name, "--launch-payload"];
+}
+
+export function buildLaunchPayload(
   name: string,
   inputs: Record<string, string>,
   prompt: string,
-): string[] {
-  const args = [name];
-  for (const [key, value] of Object.entries(inputs)) {
-    args.push("--input", `${key}=${value}`);
+): LaunchPayload {
+  return { name, inputs, prompt };
+}
+
+export function parseLaunchPayload(text: string): LaunchPayload {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("launch payload is not valid JSON");
   }
-  if (prompt) args.push("--prompt", prompt);
-  return args;
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("launch payload must be a JSON object");
+  }
+  const row = parsed as Record<string, unknown>;
+  if (typeof row.name !== "string" || !row.name) {
+    throw new Error("launch payload requires a string name");
+  }
+  const inputs: Record<string, string> = {};
+  if (row.inputs !== undefined) {
+    if (row.inputs === null || typeof row.inputs !== "object" || Array.isArray(row.inputs)) {
+      throw new Error("launch payload inputs must be an object");
+    }
+    for (const [key, value] of Object.entries(row.inputs as Record<string, unknown>)) {
+      if (typeof value !== "string") {
+        throw new Error(`launch payload inputs.${key} must be a string`);
+      }
+      inputs[key] = value;
+    }
+  }
+  const prompt = row.prompt === undefined ? "" : row.prompt;
+  if (typeof prompt !== "string") {
+    throw new Error("launch payload prompt must be a string");
+  }
+  return { name: row.name, inputs, prompt };
 }
 
 function decodeLines(
@@ -95,7 +152,8 @@ function decodeLines(
 /** Spawn `hwf run` in its own process group so the picker popup can exit freely. */
 export function launchDetachedRun(req: LaunchRunRequest): DetachedRunHandle {
   const spawn = req.spawn ?? Bun.spawn.bind(Bun);
-  const argv = selfRunArgv(buildRunArgs(req.name, req.inputs, req.prompt));
+  const argv = selfRunArgv(buildRunArgs(req.name));
+  const payload = JSON.stringify(buildLaunchPayload(req.name, req.inputs, req.prompt));
   const env = {
     ...process.env,
     ...req.env,
@@ -104,11 +162,15 @@ export function launchDetachedRun(req: LaunchRunRequest): DetachedRunHandle {
   const proc = spawn(argv, {
     cwd: req.repoRoot,
     env,
-    stdin: "ignore",
+    stdin: "pipe",
     stdout: "pipe",
     stderr: "pipe",
     detached: true,
   });
+
+  // Feed secrets once and close — never block the picker on the child's stdin.
+  proc.stdin.write(payload);
+  proc.stdin.end();
 
   let detached = false;
   const detach = () => {

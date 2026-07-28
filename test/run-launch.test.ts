@@ -8,8 +8,11 @@ import type { PickerState } from "../src/tui/picker";
 import { startRun } from "../src/tui/picker";
 import {
   buildInvocationEnv,
+  buildLaunchPayload,
   buildRunArgs,
+  isRuntimeScriptEntry,
   launchDetachedRun,
+  parseLaunchPayload,
   selfRunArgv,
   type DetachedRunHandle,
   type LaunchRunRequest,
@@ -92,17 +95,35 @@ describe("buildInvocationEnv", () => {
 });
 
 describe("run argv", () => {
-  test("selfRunArgv and buildRunArgs shape the detached child", () => {
-    expect(buildRunArgs("sleep", { focus: "x" }, "hi")).toEqual([
-      "sleep",
-      "--input",
-      "focus=x",
-      "--prompt",
-      "hi",
-    ]);
-    const argv = selfRunArgv(["sleep"]);
-    expect(argv.at(-2)).toBe("run");
-    expect(argv.at(-1)).toBe("sleep");
+  test("buildRunArgs keeps only the workflow name and launch-payload flag", () => {
+    expect(buildRunArgs("sleep")).toEqual(["sleep", "--launch-payload"]);
+  });
+
+  test("selfRunArgv re-passes a real on-disk script entry to the runtime", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-self-argv-"));
+    dirs.push(root);
+    const script = join(root, "cli.ts");
+    await writeFile(script, "export {};\n");
+    expect(isRuntimeScriptEntry(script)).toBe(true);
+    expect(
+      selfRunArgv(["sleep", "--launch-payload"], { execPath: "/runtime/bun", argv1: script }),
+    ).toEqual(["/runtime/bun", script, "run", "sleep", "--launch-payload"]);
+  });
+
+  test("selfRunArgv treats compiled /$bunfs/ argv1 as the binary itself", () => {
+    const entry = "/$bunfs/root/herdr-workflows";
+    expect(isRuntimeScriptEntry(entry)).toBe(false);
+    expect(
+      selfRunArgv(["sleep", "--launch-payload"], {
+        execPath: "/opt/herdr-workflows",
+        argv1: entry,
+      }),
+    ).toEqual(["/opt/herdr-workflows", "run", "sleep", "--launch-payload"]);
+  });
+
+  test("parseLaunchPayload round-trips inputs and prompt", () => {
+    const payload = buildLaunchPayload("sleep", { focus: "x" }, "hi");
+    expect(parseLaunchPayload(JSON.stringify(payload))).toEqual(payload);
   });
 });
 
@@ -270,7 +291,7 @@ await Bun.write(${JSON.stringify(marker)}, "ok");
         Bun.spawn([process.execPath, script], {
           cwd: typeof opts?.cwd === "string" ? opts.cwd : root,
           env: opts?.env,
-          stdin: "ignore",
+          stdin: "pipe",
           stdout: "pipe",
           stderr: "pipe",
           detached: true,
@@ -287,5 +308,52 @@ await Bun.write(${JSON.stringify(marker)}, "ok");
     expect(env.tab).toBe("wLive:t1");
     expect(env.workspace).toBe("wLive");
     expect(env.repo).toBe(root);
+  });
+
+  test("detached spawn argv never contains input values or prompt text", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-detach-argv-"));
+    dirs.push(root);
+    const secretInput = "cred-value-9f3a";
+    const secretPrompt = "selection-secret-text";
+    const payloadFile = join(root, "payload.json");
+    const reader = join(root, "read-stdin.ts");
+    await writeFile(
+      reader,
+      `
+const text = await Bun.stdin.text();
+await Bun.write(${JSON.stringify(payloadFile)}, text);
+`,
+    );
+    let seenArgv: string[] = [];
+
+    const handle = launchDetachedRun({
+      name: "safe",
+      repoRoot: root,
+      ctx: { selection: "", cwd: root },
+      inputs: { token: secretInput },
+      prompt: secretPrompt,
+      onProgressLine: () => undefined,
+      spawn: ((argv, opts) => {
+        seenArgv = [...argv];
+        return Bun.spawn([process.execPath, reader], {
+          cwd: typeof opts?.cwd === "string" ? opts.cwd : root,
+          env: opts?.env,
+          stdin: "pipe",
+          stdout: "pipe",
+          stderr: "pipe",
+          detached: true,
+        });
+      }) as typeof Bun.spawn,
+    });
+
+    const result = await handle.result;
+    expect(result.ok).toBe(true);
+    expect(seenArgv.join("\0")).not.toContain(secretInput);
+    expect(seenArgv.join("\0")).not.toContain(secretPrompt);
+    expect(seenArgv.slice(-2)).toEqual(["safe", "--launch-payload"]);
+    const payload = parseLaunchPayload(await readFile(payloadFile, "utf8"));
+    expect(payload.inputs.token).toBe(secretInput);
+    expect(payload.prompt).toBe(secretPrompt);
+    expect(payload.name).toBe("safe");
   });
 });
