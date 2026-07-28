@@ -45,6 +45,10 @@ export function truncate(text: string, max: number): string {
   return `${text.slice(0, max - 1)}…`;
 }
 
+export function pickerContentWidth(rendererWidth: number): number {
+  return Math.max(0, rendererWidth - 2);
+}
+
 type PickerRowValue = { entry: WorkflowListEntry };
 
 // `hidden: true` workflows are background halves — runnable via `hwf run`, kept out of the picker.
@@ -59,7 +63,13 @@ export function filterWorkflowEntries(
   filter: string,
 ): { valid: WorkflowListEntry[]; invalid: WorkflowListEntry[] } {
   const visible = entries.filter(isPickerVisible);
-  const matched = filter ? visible.filter((e) => e.name.includes(filter)) : visible;
+  const needle = filter.toLowerCase();
+  const matched = filter
+    ? visible.filter((e) => {
+        const title = workflowDisplayTitle(e.name, e.title).toLowerCase();
+        return title.includes(needle) || e.name.toLowerCase().includes(needle);
+      })
+    : visible;
   return {
     valid: matched.filter((e) => !e.error),
     invalid: matched.filter((e) => e.error),
@@ -89,10 +99,13 @@ export function buildPickerOptions(valid: WorkflowListEntry[]): SelectOption[] {
   });
 }
 
-export function formatInvalidLines(invalid: WorkflowListEntry[]): string {
+export function formatInvalidLines(invalid: WorkflowListEntry[], contentWidth: number): string {
   if (invalid.length === 0) return "";
   return invalid
-    .map((e) => `${e.name} — invalid: ${truncate(stripFilePrefix(e.error ?? "", e.file), 44)}`)
+    .map((e) => {
+      const prefix = `${e.name} — invalid: `;
+      return `${prefix}${truncate(stripFilePrefix(e.error ?? "", e.file), Math.max(0, contentWidth - prefix.length))}`;
+    })
     .join("\n");
 }
 
@@ -134,6 +147,7 @@ export type PickerState = {
   launchWeb?: (req: LaunchWebRequest) => void;
   runHandle?: DetachedRunHandle;
   workflow?: LoadedWorkflow;
+  contentWidth: number;
   renderer: CliRenderer;
   filter: InputRenderable;
   list: SelectRenderable;
@@ -161,7 +175,7 @@ function setListOptions(state: PickerState, options: SelectOption[]): void {
 function applyFilter(state: PickerState): void {
   const { valid, invalid } = filterWorkflowEntries(state.entries, state.filter.value);
   setListOptions(state, buildPickerOptions(valid));
-  const lines = formatInvalidLines(invalid);
+  const lines = formatInvalidLines(invalid, state.contentWidth);
   state.invalid.content = lines;
   state.invalid.visible = lines.length > 0;
 }
@@ -533,7 +547,7 @@ export async function startRun(
       prompt: sanitizeDisplay(prompt),
       onProgressLine: (line) => {
         if (state.exit) return;
-        state.progressLines.push(truncate(line, 48));
+        state.progressLines.push(truncate(line, state.contentWidth));
         state.status.content = formatRunProgress(entry.name, state.progressLines);
       },
     });
@@ -578,6 +592,7 @@ function mountPickerUi(
   | "ctx"
   | "workflow"
   | "loadWorkflow"
+  | "contentWidth"
 > {
   renderer.root.add(
     Box(
@@ -649,6 +664,9 @@ function bindPickerEvents(state: PickerState): void {
     state.mode === "input" ? submitInputText(state, value) : submitPrompt(state, value),
   );
   state.renderer.keyInput.on("keypress", (key) => handlePickerKey(state, key));
+  state.renderer.on("resize", (width: number) => {
+    state.contentWidth = pickerContentWidth(width);
+  });
 }
 
 export type PickerSessionOpts = {
@@ -682,6 +700,7 @@ export async function runPickerSession(opts: PickerSessionOpts): Promise<number>
     config: opts.config,
     ctx: opts.ctx,
     loadWorkflow: loadWorkflowEntry,
+    contentWidth: pickerContentWidth(renderer.width),
     ...ui,
   };
 

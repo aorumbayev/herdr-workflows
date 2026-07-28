@@ -73,6 +73,7 @@ function pickerState(overrides: Partial<PickerState> = {}): PickerState {
         needsTranscript: false,
         needsInvokingAgent: false,
       }) satisfies LoadedWorkflow,
+    contentWidth: 80,
     renderer: { destroy: () => undefined },
     filter: { visible: true },
     list: { visible: true, flexGrow: 1 },

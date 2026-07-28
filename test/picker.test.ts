@@ -145,9 +145,9 @@ describe("display titles", () => {
 
 describe("formatInvalidLines", () => {
   test("truncates error and returns empty when none", () => {
-    expect(formatInvalidLines([])).toBe("");
-    const lines = formatInvalidLines([entries[2]!]);
-    expect(lines).toBe("broken — invalid: step 2, agent: unknown agent 'x'");
+    expect(formatInvalidLines([], 44)).toBe("");
+    const lines = formatInvalidLines([entries[2]!], 44);
+    expect(lines).toBe("broken — invalid: step 2, agent: unknown ag…");
   });
 });
 

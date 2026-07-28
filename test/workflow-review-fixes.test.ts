@@ -40,6 +40,7 @@ function pickerState(): PickerState {
     loadWorkflow: async () => {
       throw new Error("reload failed");
     },
+    contentWidth: 80,
     renderer: { destroy: () => undefined },
     filter: { visible: true },
     list: { visible: true, flexGrow: 1 },
