@@ -90,7 +90,7 @@ const SELECT_NAME_OFFSET = 3;
 const LOCATION_WIDTH = 7;
 const WARNING_WIDTH = 2;
 
-function formatPickerRowName(
+export function formatPickerRowName(
   title: string,
   location: "global" | "repo" | "invalid",
   warned: boolean,
@@ -114,7 +114,10 @@ export function buildPickerOptions(valid: WorkflowListEntry[], rowWidth: number)
   }));
 }
 
-function buildInvalidOptions(invalid: WorkflowListEntry[], rowWidth: number): SelectOption[] {
+export function buildInvalidOptions(
+  invalid: WorkflowListEntry[],
+  rowWidth: number,
+): SelectOption[] {
   return invalid.map((entry) => ({
     name: formatPickerRowName(
       workflowDisplayTitle(entry.name, entry.title),
@@ -181,15 +184,19 @@ export type PickerState = {
 
 export const LIST_HINT = "enter run · ^e edit · ^y share · ^o import · esc";
 const PROMPT_HINT = "enter submit · esc back";
-const CHOICE_HINT = "type filter · ↑↓ move · enter select · esc back";
+const CHOICE_HINT = "type filter · up/down move · enter select · esc back";
 const RUN_HINT = "esc dismiss · run continues";
 const FAIL_HINT = "enter/esc close";
 
-function formatRule(contentWidth: number): string {
+export function formatRule(contentWidth: number): string {
   return `  ${"-".repeat(Math.max(0, contentWidth - 4))}`;
 }
 
-function formatListFooter(contentWidth: number, selectedIndex: number, total: number): string {
+export function formatListFooter(
+  contentWidth: number,
+  selectedIndex: number,
+  total: number,
+): string {
   if (total === 0) return truncate(LIST_HINT, contentWidth);
   const counter = `${selectedIndex + 1}/${total}`;
   if (LIST_HINT.length + 1 + counter.length <= contentWidth) {
@@ -201,7 +208,7 @@ function formatListFooter(contentWidth: number, selectedIndex: number, total: nu
   return `${hint}${" ".repeat(pad)}${counter}`;
 }
 
-function formatDetailLine(description: string, contentWidth: number): string {
+export function formatDetailLine(description: string, contentWidth: number): string {
   if (!description) return "";
   return `  ${truncate(description, Math.max(0, contentWidth - 2))}`;
 }
