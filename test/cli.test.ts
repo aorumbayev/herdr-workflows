@@ -3,7 +3,9 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import manifest from "../herdr-plugin.toml";
 import { HERDR_PROTOCOL, MIN_HERDR_VERSION } from "../src/herdr-methods";
+import { encodePayload } from "../src/workflow/payload";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -14,6 +16,7 @@ async function runCli(
   args: string[],
   cwd: string,
   extraEnv: Record<string, string> = {},
+  stdinText?: string,
 ): Promise<{ stdout: string; stderr: string; code: number }> {
   const home = await mkdtemp(join(tmpdir(), "hwf-cli-home-"));
   const state = await mkdtemp(join(tmpdir(), "hwf-cli-state-"));
@@ -36,10 +39,17 @@ async function runCli(
     {
       cwd,
       env,
+      stdin: stdinText === undefined ? "ignore" : "pipe",
       stdout: "pipe",
       stderr: "pipe",
     },
   );
+  if (stdinText !== undefined) {
+    const stdin = proc.stdin;
+    if (!stdin) throw new Error("expected piped stdin");
+    stdin.write(stdinText);
+    stdin.end();
+  }
   const [stdout, stderr, code] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
@@ -80,16 +90,112 @@ async function withPingSocket(
   }
 }
 
+async function writeWorkflow(root: string, name: string, body: string): Promise<void> {
+  await mkdir(join(root, ".hwf", "workflows"), { recursive: true });
+  await writeFile(join(root, ".hwf", "workflows", `${name}.yaml`), body);
+}
+
+describe("cli parse and dispatch", () => {
+  test("no-args without a TTY prints generated help as an error and exits nonzero", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-usage-"));
+    dirs.push(root);
+    const result = await runCli([], root);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("Usage:");
+    expect(result.stderr).toContain("run");
+    expect(result.stderr).toContain("web");
+    expect(result.stdout).toBe("");
+  });
+
+  test("hwf help prints generated root help", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-help-"));
+    dirs.push(root);
+    const result = await runCli(["help"], root);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("Usage:");
+    expect(result.stdout).toContain("Commands:");
+    expect(result.stdout).toMatch(/\brun\b/);
+    expect(result.stdout).toMatch(/\bweb\b/);
+    expect(result.stdout).toContain(manifest.description);
+    expect(result.stdout).toContain("Workflow format: v1alpha1");
+  });
+
+  test("hwf --version and -V print the plugin manifest version", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-version-"));
+    dirs.push(root);
+    for (const flag of ["--version", "-V"]) {
+      const result = await runCli([flag], root);
+      expect(result.code).toBe(0);
+      expect(result.stdout.trim()).toBe(manifest.version);
+      expect(result.stderr).toBe("");
+    }
+  });
+
+  test("hwf run --help and hwf help run print run usage", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-run-help-"));
+    dirs.push(root);
+    for (const args of [
+      ["run", "--help"],
+      ["help", "run"],
+    ]) {
+      const result = await runCli(args, root);
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("Usage:");
+      expect(result.stdout).toContain("--input");
+      expect(result.stdout).toContain("--launch-payload");
+    }
+  });
+
+  test("unknown command exits nonzero with native diagnostic and suggestion", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-unknown-"));
+    dirs.push(root);
+    const nope = await runCli(["nope"], root);
+    expect(nope.code).toBe(1);
+    expect(nope.stderr).toContain("unknown command");
+    expect(nope.stderr).toContain("nope");
+
+    const typo = await runCli(["inti"], root);
+    expect(typo.code).toBe(1);
+    expect(typo.stderr).toContain("unknown command");
+    expect(typo.stderr).toContain("inti");
+    expect(typo.stderr).toMatch(/Did you mean.*init/i);
+  });
+
+  test("unknown option exits nonzero with a native diagnostic", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-opt-"));
+    dirs.push(root);
+    await writeWorkflow(root, "hi", 'version: v1alpha1\nsteps:\n  - run: "printf ok"\n');
+    const result = await runCli(["run", "hi", "--not-a-real-flag"], root, {
+      HERDR_WORKFLOWS_REPO_ROOT: root,
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("unknown option");
+  });
+
+  test("run without a workflow name exits nonzero", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-missing-"));
+    dirs.push(root);
+    const result = await runCli(["run"], root);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toMatch(/missing required argument/i);
+  });
+
+  test("workflow without import prints generated workflow help as an error", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-wf-"));
+    dirs.push(root);
+    const result = await runCli(["workflow"], root);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("Usage:");
+    expect(result.stderr).toContain("import");
+  });
+});
+
 describe("cli run", () => {
   test("run resolves workflows via HERDR_WORKFLOWS_REPO_ROOT from a foreign cwd", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-cli-repo-"));
     const elsewhere = await mkdtemp(join(tmpdir(), "hwf-cli-elsewhere-"));
     dirs.push(root, elsewhere);
-    await mkdir(join(root, ".hwf", "workflows"), { recursive: true });
-    await writeFile(
-      join(root, ".hwf", "workflows", "hi.yaml"),
-      'version: v1alpha1\nsteps:\n  - run: "printf ok"\n',
-    );
+    await writeWorkflow(root, "hi", 'version: v1alpha1\nsteps:\n  - run: "printf ok"\n');
 
     const result = await runCli(["run", "hi"], elsewhere, {
       HERDR_WORKFLOWS_REPO_ROOT: root,
@@ -102,11 +208,7 @@ describe("cli run", () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-cli-repo-"));
     const elsewhere = await mkdtemp(join(tmpdir(), "hwf-cli-elsewhere-"));
     dirs.push(root, elsewhere);
-    await mkdir(join(root, ".hwf", "workflows"), { recursive: true });
-    await writeFile(
-      join(root, ".hwf", "workflows", "hi.yaml"),
-      'version: v1alpha1\nsteps:\n  - run: "printf ok"\n',
-    );
+    await writeWorkflow(root, "hi", 'version: v1alpha1\nsteps:\n  - run: "printf ok"\n');
 
     const result = await runCli(["run", "hi"], elsewhere);
     expect(result.code).toBe(1);
@@ -116,13 +218,84 @@ describe("cli run", () => {
   test("run treats an empty HERDR_WORKFLOWS_REPO_ROOT as unset", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-cli-repo-"));
     dirs.push(root);
-    await mkdir(join(root, ".hwf", "workflows"), { recursive: true });
-    await writeFile(
-      join(root, ".hwf", "workflows", "hi.yaml"),
-      'version: v1alpha1\nsteps:\n  - run: "printf ok"\n',
-    );
+    await writeWorkflow(root, "hi", 'version: v1alpha1\nsteps:\n  - run: "printf ok"\n');
 
     const result = await runCli(["run", "hi"], root, { HERDR_WORKFLOWS_REPO_ROOT: "" });
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("[1/1]");
+  });
+
+  test("run accepts repeated and equals-form --input flags", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-inputs-"));
+    dirs.push(root);
+    await writeWorkflow(
+      root,
+      "echo-inputs",
+      [
+        "version: v1alpha1",
+        "inputs:",
+        "  a: text",
+        "  b: text",
+        "steps:",
+        `  - run: ${JSON.stringify([
+          process.execPath,
+          "-e",
+          'process.exit(Bun.argv.slice(-2).join("-") === "one-two" ? 0 : 1)',
+          "{{inputs.a}}",
+          "{{inputs.b}}",
+        ])}`,
+        "",
+      ].join("\n"),
+    );
+
+    const result = await runCli(["run", "echo-inputs", "--input", "a=one", "--input=b=two"], root, {
+      HERDR_WORKFLOWS_REPO_ROOT: root,
+    });
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("[1/1]");
+  });
+
+  test("run rejects invalid --input values", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-bad-input-"));
+    dirs.push(root);
+    await writeWorkflow(root, "hi", 'version: v1alpha1\nsteps:\n  - run: "printf ok"\n');
+
+    const result = await runCli(["run", "hi", "--input", "novalue"], root, {
+      HERDR_WORKFLOWS_REPO_ROOT: root,
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("invalid");
+    expect(result.stderr).toContain("--input expects name=value");
+    expect(result.stderr).toContain("novalue");
+  });
+
+  test("launch-payload seeds inputs and --input overrides them", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-payload-"));
+    dirs.push(root);
+    await writeWorkflow(
+      root,
+      "demo",
+      [
+        "version: v1alpha1",
+        "inputs:",
+        "  a: text",
+        "steps:",
+        `  - run: ${JSON.stringify([
+          process.execPath,
+          "-e",
+          'process.exit(Bun.argv.at(-1) === "2" ? 0 : 1)',
+          "{{inputs.a}}",
+        ])}`,
+        "",
+      ].join("\n"),
+    );
+
+    const result = await runCli(
+      ["run", "demo", "--launch-payload", "--input", "a=2"],
+      root,
+      { HERDR_WORKFLOWS_REPO_ROOT: root },
+      JSON.stringify({ name: "demo", inputs: { a: "1" } }),
+    );
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("[1/1]");
   });
@@ -130,9 +303,9 @@ describe("cli run", () => {
   test("run rejects herdr protocol before missing-input failure", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-cli-repo-"));
     dirs.push(root);
-    await mkdir(join(root, ".hwf", "workflows"), { recursive: true });
-    await writeFile(
-      join(root, ".hwf", "workflows", "needs.yaml"),
+    await writeWorkflow(
+      root,
+      "needs",
       [
         "version: v1alpha1",
         "inputs:",
@@ -161,11 +334,7 @@ describe("cli run", () => {
   test("run rejects herdr version below manifest minimum before execution", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-cli-repo-"));
     dirs.push(root);
-    await mkdir(join(root, ".hwf", "workflows"), { recursive: true });
-    await writeFile(
-      join(root, ".hwf", "workflows", "hi.yaml"),
-      'version: v1alpha1\nsteps:\n  - run: "printf ok"\n',
-    );
+    await writeWorkflow(root, "hi", 'version: v1alpha1\nsteps:\n  - run: "printf ok"\n');
 
     await withPingSocket({ protocol: HERDR_PROTOCOL, version: "0.7.4" }, async (socketPath) => {
       const result = await runCli(["run", "hi"], root, {
@@ -181,6 +350,29 @@ describe("cli run", () => {
   });
 });
 
+describe("cli workflow import", () => {
+  test("rejects invalid --to choices", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-to-bad-"));
+    dirs.push(root);
+    const result = await runCli(["workflow", "import", "x", "--to", "home", "--yes"], root);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toMatch(/invalid|choices/i);
+    expect(result.stderr).toContain("home");
+  });
+
+  test("accepts --to=repo with non-TTY preapproval flags", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-to-ok-"));
+    dirs.push(root);
+    const yaml = 'version: v1alpha1\nsteps:\n  - run: "printf ok"\n';
+    const payload = encodePayload([{ name: "imported", yaml }]);
+    const result = await runCli(["workflow", "import", payload, "--yes", "--to=repo"], root, {
+      HERDR_WORKFLOWS_REPO_ROOT: root,
+    });
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("wrote");
+  });
+});
+
 describe("cli web", () => {
   test("rejects invalid workbench routes before starting a server", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-cli-web-"));
@@ -191,5 +383,28 @@ describe("cli web", () => {
     });
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("web route expects");
+  });
+
+  test("rejects an invalid --port before starting a server", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-port-"));
+    dirs.push(root);
+    await mkdir(join(root, ".hwf", "workflows"), { recursive: true });
+    const result = await runCli(["web", "--port", "0", "--no-open"], root, {
+      HERDR_WORKFLOWS_REPO_ROOT: root,
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("invalid");
+    expect(result.stderr).toContain("--port expects an integer between 1 and 65535");
+  });
+
+  test("validates equals-form --port", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-web-eq-"));
+    dirs.push(root);
+    await mkdir(join(root, ".hwf", "workflows"), { recursive: true });
+    const result = await runCli(["web", "--port=0", "--no-open"], root, {
+      HERDR_WORKFLOWS_REPO_ROOT: root,
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("--port expects an integer between 1 and 65535");
   });
 });

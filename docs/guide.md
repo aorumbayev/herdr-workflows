@@ -10,7 +10,7 @@ You need [herdr](https://herdr.dev) version 0.7.5 or newer.
 herdr plugin install aorumbayev/herdr-workflows
 ```
 
-The install compiles the plugin. It then tries to link `hwf` and `herdr-workflows` into `~/.local/bin` (or `$XDG_BIN_HOME`). It also tries to add a validated `prefix+k` picker binding. Both steps are optional. A skipped step prints a note and the install continues. If a command is missing, run `command -v hwf` and `herdr config check`. Add the bin directory to PATH if the install warns that it is missing.
+The install compiles the plugin. It then tries to link `hwf` and `herdr-workflows` into `~/.local/bin` (or `$XDG_BIN_HOME`). It also tries to add a validated `prefix+k` picker binding. Both steps are optional. A skipped step prints a note and the install continues. If a command is missing, run `command -v hwf`, `hwf --version`, and `herdr config check`. Add the bin directory to PATH if the install warns that it is missing.
 
 ## Set up profiles
 
@@ -87,8 +87,12 @@ steps:
 | `prefix+k` (picker)       | Run. List mode: `Ctrl+E` edits, `Ctrl+Y` shares, `Ctrl+O` imports |
 | `hwf run <name>`          | Run from a script or terminal, with `--input k=v`                 |
 | `hwf web` (or bare `hwf`) | Edit, share, review imports, browse the run log. Never executes   |
+| `hwf help [command]`      | Show generated command and option help                            |
+| `hwf --version`           | Show the installed plugin version                                 |
 
 Runs always go through the picker or `hwf run`. The workbench builds, shares, and imports workflows. It never executes them. Picker shortcuts and `hwf web` reuse one live authenticated workbench per repository, as long as the recorded endpoint still answers.
+
+Root help labels `v1alpha1` as the workflow format. It is independent of the plugin version.
 
 ### Picker workbench shortcuts
 

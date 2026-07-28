@@ -44,7 +44,7 @@ You need [herdr](https://herdr.dev) **0.7.5** or newer.
 herdr plugin install aorumbayev/herdr-workflows
 ```
 
-The install compiles the plugin, then tries to link `herdr-workflows` / `hwf` into `~/.local/bin` (or `$XDG_BIN_HOME`) and append a validated `prefix+k` picker binding. Both steps are nonfatal. Skips print a note and continue. If needed: `command -v hwf`, `herdr config check`, and add the bin dir to PATH when the install warns it is missing.
+The install compiles the plugin, then tries to link `herdr-workflows` / `hwf` into `~/.local/bin` (or `$XDG_BIN_HOME`) and append a validated `prefix+k` picker binding. Both steps are nonfatal. Skips print a note and continue. If needed, run `command -v hwf`, `hwf --version`, and `herdr config check`. Add the bin dir to PATH when the install warns it is missing.
 
 Then set up profiles:
 
@@ -83,7 +83,11 @@ Press `prefix+k` to pick and run a workflow. In list mode, `Ctrl+E` edits, `Ctrl
 hwf run review      # run the workflow above, live progress in the terminal
 hwf web             # browser workbench: build/edit/validate/share/import — never runs
 hwf                 # same as `hwf web`
+hwf help run        # generated help for one command
+hwf --version       # installed plugin version
 ```
+
+Root help labels `v1alpha1` as the workflow format. It is independent of the plugin version.
 
 Runs always go through the picker or `hwf run`. They need real herdr panes. The web workbench builds, shares, and imports. It never runs. Picker shortcuts reuse one live workbench per repository when that workbench is still reachable.
 
