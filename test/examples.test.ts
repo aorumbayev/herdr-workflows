@@ -94,7 +94,9 @@ describe("shipped examples", () => {
   });
 
   test("docs home lists only shipped example names", async () => {
-    const home = await Bun.file(join(import.meta.dir, "..", "docs", "index.md")).text();
+    const home = await Bun.file(
+      join(import.meta.dir, "..", "docs", ".vitepress", "theme", "HomePage.vue"),
+    ).text();
     const cards = await buildExamples(EXAMPLES_DIR);
     for (const card of cards) {
       expect(home).toContain(card.name);

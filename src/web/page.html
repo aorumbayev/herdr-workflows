@@ -4,29 +4,37 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap"
+    />
     <title>herdr-workflows</title>
     <style>
       :root {
         color-scheme: dark;
-        --bg: rgb(44 50 60);
-        --bg-elevated: rgb(52 58 70);
-        --ink: rgb(236 239 244);
-        --ink-soft: rgb(216 222 233);
-        --muted: rgb(154 163 181);
-        --line: rgb(61 68 82);
+        --bg: rgb(46 52 64);
+        --bg-elevated: rgb(52 59 73);
+        --ink: rgb(255 255 255);
+        --ink-soft: rgb(236 239 244);
+        --muted: rgb(135 146 168);
+        --muted-2: rgb(95 106 128);
+        --line: rgb(67 76 94);
         --line-strong: rgb(76 86 106);
-        --accent: rgb(233 226 118);
-        --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+        --accent: rgb(136 192 208);
+        --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
         --green: rgb(163 190 140);
-        --red: rgb(201 131 138);
-        --term-bg: rgb(35 40 49);
-        --term-border: rgb(59 66 82);
-        --term-text: rgb(216 222 233);
+        --yellow: rgb(235 203 139);
+        --red: rgb(191 97 106);
+        --term-bg: rgb(59 66 82);
+        --term-border: rgb(67 76 94);
+        --term-text: rgb(236 239 244);
         --fill: var(--accent);
-        --fill-ink: rgb(38 41 42);
-        --canvas-bg: rgb(38 43 52);
-        --canvas-dot: rgb(64 72 88);
-        --edge: rgb(104 114 134);
+        --fill-ink: rgb(46 52 64);
+        --canvas-bg: rgb(46 52 64);
+        --canvas-dot: rgb(76 86 106);
+        --edge: rgb(95 106 128);
         --scrim: rgb(24 27 33 / 72%);
         --n-trigger: rgb(180 142 173);
         --n-run: rgb(163 190 140);
@@ -34,7 +42,7 @@
         --n-use: rgb(235 203 139);
         --n-prim: rgb(143 188 187);
         --tok-key: var(--n-agent);
-        --tok-verb: var(--accent);
+        --tok-verb: var(--yellow);
         --tok-str: var(--green);
         --tok-num: var(--n-use);
         --tok-com: var(--muted);
@@ -48,7 +56,7 @@
         --num-bg: var(--line-strong);
         --radius: 4px;
         --radius-sm: 2px;
-        --mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       }
       * {
         box-sizing: border-box;
@@ -67,7 +75,7 @@
         min-height: 100vh;
       }
       ::selection {
-        background: color-mix(in srgb, var(--accent) 25%, transparent);
+        background: var(--accent-soft);
       }
       ::-webkit-scrollbar {
         width: 10px;
@@ -92,12 +100,16 @@
         align-items: center;
         padding: 0.7rem 1.1rem;
         border-bottom: 1px solid var(--line);
-        background: var(--bg-elevated);
+        background: color-mix(in srgb, var(--bg) 92%, transparent);
+        backdrop-filter: blur(12px);
+        position: sticky;
+        top: 0;
+        z-index: 10;
       }
       header h1 {
         font-size: 14px;
         font-weight: 700;
-        letter-spacing: -0.01em;
+        letter-spacing: -0.04em;
       }
       header h1 span {
         color: var(--muted);
@@ -147,13 +159,15 @@
         cursor: default;
       }
       button.primary {
-        background: var(--accent);
-        border-color: var(--accent);
-        color: var(--fill-ink);
+        background: var(--ink);
+        border-color: transparent;
+        color: var(--bg);
         font-weight: 600;
       }
-      button.primary:hover {
-        background: var(--fill);
+      button.primary:hover:not(:disabled) {
+        background: var(--accent);
+        border-color: transparent;
+        color: var(--ink);
       }
       input {
         min-width: 9rem;
@@ -279,8 +293,9 @@
       .bar .cap {
         font-size: 11px;
         color: var(--muted);
-        text-transform: uppercase;
+        text-transform: lowercase;
         letter-spacing: 0.06em;
+        font-weight: 600;
       }
       textarea {
         flex: 1;

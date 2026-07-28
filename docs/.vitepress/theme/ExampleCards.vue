@@ -58,23 +58,26 @@ function toggle(name) {
   margin: 1.5rem 0;
 }
 .hwf-card {
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 10px;
+  border: 1px solid var(--line, var(--vp-c-divider));
+  border-radius: var(--radius-md, 4px);
   padding: 1rem;
-  background: var(--vp-c-bg-soft);
+  background: var(--bg-elevated, var(--vp-c-bg-soft));
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
 }
 .hwf-card h3 {
   margin: 0;
-  font-size: 1.05rem;
+  font-family: var(--mono, var(--vp-font-family-mono));
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 .hwf-card header p {
   margin: 0.25rem 0 0;
   font-size: 0.85rem;
-  color: var(--vp-c-text-2);
-  line-height: 1.4;
+  color: var(--muted, var(--vp-c-text-3));
+  line-height: 1.45;
 }
 .hwf-files {
   margin: 0;
@@ -92,32 +95,50 @@ function toggle(name) {
   flex-wrap: wrap;
 }
 .hwf-actions button {
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 6px;
-  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--line-strong, var(--vp-c-border));
+  border-radius: var(--radius-md, 4px);
+  padding: 0.4rem 0.7rem;
+  font-family: var(--mono, var(--vp-font-family-mono));
   font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink-soft, var(--vp-c-text-2));
+  background: transparent;
   cursor: pointer;
-  transition: border-color 0.2s;
+  transition:
+    color 0.12s ease,
+    border-color 0.12s ease,
+    background 0.12s ease;
 }
 .hwf-actions button:hover {
-  border-color: var(--vp-c-brand-1);
+  border-color: var(--accent, var(--vp-c-brand-1));
+  color: var(--accent, var(--vp-c-brand-1));
+  background: var(--accent-soft, var(--vp-c-brand-soft));
 }
 .hwf-copy {
-  background: var(--vp-c-brand-soft);
+  background: var(--ink, #fff);
+  color: var(--bg, #2e3440);
+  border-color: transparent;
+}
+.hwf-copy:hover {
+  background: var(--accent, var(--vp-c-brand-1));
+  color: #fff;
+  border-color: transparent;
 }
 .hwf-yaml {
   overflow-x: auto;
 }
 .hwf-filename {
   margin: 0.5rem 0 0.2rem;
+  font-family: var(--mono, var(--vp-font-family-mono));
   font-size: 0.72rem;
-  color: var(--vp-c-text-2);
+  color: var(--muted, var(--vp-c-text-3));
 }
 .hwf-yaml pre {
   margin: 0;
   padding: 0.6rem;
-  border-radius: 6px;
-  background: var(--vp-c-bg);
+  border: 1px solid var(--line, var(--vp-c-divider));
+  border-radius: var(--radius-md, 4px);
+  background: color-mix(in srgb, var(--bg, var(--vp-c-bg)) 80%, #000);
   font-size: 0.72rem;
   line-height: 1.4;
   overflow-x: auto;

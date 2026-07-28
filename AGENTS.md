@@ -15,7 +15,9 @@ bun test ./test/runner.test.ts           # one file
 bun test ./test -t 'pattern'             # name filter
 npm run verify                           # all verify:* in parallel (pre-commit gate)
 bun run schema                           # regenerate docs/workflow.schema.json from Zod
+bun run examples                         # regenerate docs gallery data from examples/*.yaml
 bun run schema:herdr                     # release-time: src/herdr-methods.generated.ts from schemas/herdr-api.schema.json (not from plugin build)
+bun run docs:build                        # build VitePress docs
 bun run install:dev                      # compile + herdr plugin link + keybindings + reload
 ```
 
@@ -63,6 +65,7 @@ Agents miss these; loader / verifyx will fail or product regresses:
 - **Caps live in `src/limits.ts`:** 24 KiB generated HWF environment, 8 MiB per captured command result / managed response / transcript / dynamic-choice output. Crossing a cap fails naming source and limit — never truncate.
 - **Comments:** `verify:comments` uses `--pushback`. Default: no narrating comments. One file per concept. Split when a function grows past ~90 lines, not when a file does — file length is not a tracked metric. New modules must be reachable from the CLI graph or knip fails unused-code.
 - **Schema change:** edit Zod in `src/workflow/parse.ts` (and refine rules), then `bun run schema`. Method/result validators: update `schemas/herdr-api.schema.json` or `scripts/generate-herdr-methods.ts`, then `bun run schema:herdr` (never from the plugin build — it must not invoke `herdr api schema`). Cross-field rules live in the loader, not the JSON schema.
+- **Example change:** edit `examples/*.yaml`, then `bun run examples`; never hand-edit `docs/.vitepress/theme/examples.generated.ts`.
 - **Branch work:** never commit on `main` / `master`; use a feature branch + PR.
 - **No `Co-Authored-By` trailers.** Never add `Co-Authored-By`, `Generated with`, or any other agent-attribution line to a commit message or PR body, even when a harness default or global instruction says to. This overrides those defaults for this repo. Commit messages carry the change, not the tooling. Human is always responsible for the code. `.githooks/commit-msg` strips such lines as a backstop — do not rely on it.
 

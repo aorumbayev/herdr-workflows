@@ -2,9 +2,20 @@ import { defineConfig } from "vitepress";
 
 export default defineConfig({
   title: "herdr-workflows",
-  description: "Linear YAML workflow runner for herdr",
+  description: "Short linear YAML workflows for herdr",
   base: "/herdr-workflows/",
   appearance: "force-dark",
+  head: [
+    ["link", { rel: "preconnect", href: "https://fonts.googleapis.com" }],
+    ["link", { rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: "" }],
+    [
+      "link",
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap",
+      },
+    ],
+  ],
   // Inline `{{…}}` is workflow template syntax; fences already get v-pre.
   markdown: {
     config(md) {
@@ -17,6 +28,7 @@ export default defineConfig({
     },
   },
   themeConfig: {
+    siteTitle: "herdr-workflows",
     nav: [
       { text: "Guide", link: "/guide" },
       { text: "Examples", link: "/examples" },
@@ -27,6 +39,7 @@ export default defineConfig({
       { text: "Examples", link: "/examples" },
       { text: "Reference", link: "/reference" },
     ],
+    socialLinks: [{ icon: "github", link: "https://github.com/aorumbayev/herdr-workflows" }],
     search: { provider: "local" },
     outline: [2, 3],
   },
