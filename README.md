@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/workbench.png" alt="herdr-workflows web workbench — visual step editor" width="900" />
+  <img src="docs/assets/workbench.svg" alt="herdr-workflows in five chapters — the commands you retype, the YAML that replaces them, the picker, the run, the handoff" width="900" />
 </p>
 
 ---

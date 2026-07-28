@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from "vue";
 import { withBase } from "vitepress";
-import workbench from "../../assets/workbench.png";
+import workbench from "../../assets/workbench.svg";
 
 const copied = ref("");
 
@@ -33,13 +33,15 @@ const initCmd = "hwf init";
         </div>
         <p class="note">Needs herdr ≥ 0.7.5 · no Electron, no account · MIT</p>
       </div>
+      <!-- object, not img: the chapter buttons inside the SVG only work when its script runs -->
       <div class="hero-shot">
-        <img
-          :src="workbench"
-          alt="herdr-workflows web workbench — visual step editor"
-          width="1400"
-          height="840"
-        />
+        <object
+          type="image/svg+xml"
+          :data="workbench"
+          aria-label="herdr-workflows in five chapters — animated walkthrough"
+        >
+          <img :src="workbench" alt="herdr-workflows in five chapters" />
+        </object>
       </div>
     </section>
 
@@ -120,11 +122,10 @@ steps:
   padding: 1.5rem 1.25rem 4rem;
 }
 
+/* the walkthrough carries 12px terminal type — it needs the full column to stay readable */
 .hero {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
   gap: 2rem;
-  align-items: center;
   padding: 1.5rem 0 2.75rem;
 }
 
@@ -239,9 +240,11 @@ steps:
   box-shadow: 0 18px 50px color-mix(in srgb, #000 28%, transparent);
 }
 
+.hero-shot object,
 .hero-shot img {
   display: block;
   width: 100%;
+  aspect-ratio: 1200 / 720;
   height: auto;
 }
 
@@ -393,16 +396,11 @@ steps:
 
 @media (max-width: 900px) {
   .hero {
-    grid-template-columns: 1fr;
     padding-top: 0.75rem;
   }
 
   .hero h1 {
     max-width: none;
-  }
-
-  .hero-shot {
-    order: -1;
   }
 
   .surface-grid {
