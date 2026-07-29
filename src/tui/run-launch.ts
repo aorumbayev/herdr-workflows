@@ -269,6 +269,8 @@ export function buildWebLaunchEnv(
 /**
  * Fire-and-forget `hwf web <route>`. No stdout parsing, no retained handle —
  * the web command owns endpoint reuse and browser open.
+ * Stdio stays ignored: the picker dismisses and Herdr tears down the popup PTY;
+ * inheriting it raises EPIPE in `hwf web` before it can open the browser.
  */
 export function launchDetachedWeb(req: LaunchWebRequest): void {
   const spawn = req.spawn ?? Bun.spawn.bind(Bun);
@@ -277,8 +279,8 @@ export function launchDetachedWeb(req: LaunchWebRequest): void {
     cwd: req.repoRoot,
     env: buildWebLaunchEnv(req.repoRoot, { ...process.env, ...req.env }),
     stdin: "ignore",
-    stdout: "inherit",
-    stderr: "inherit",
+    stdout: "ignore",
+    stderr: "ignore",
     detached: true,
   });
   proc.unref();

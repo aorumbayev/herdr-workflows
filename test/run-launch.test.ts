@@ -502,7 +502,7 @@ await Bun.write(${JSON.stringify(payloadFile)}, text);
 });
 
 describe("launchDetachedWeb", () => {
-  test("pins repo root and inherits stdout so the workbench URL reaches the caller", async () => {
+  test("pins repo root and ignores stdio so a dying picker PTY cannot EPIPE the child", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-web-launch-"));
     dirs.push(root);
     const envFile = join(root, "env.json");
@@ -520,6 +520,7 @@ await Bun.write(${JSON.stringify(envFile)}, JSON.stringify(env));
     );
     let seenArgv: string[] = [];
     let seenStdout: unknown;
+    let seenStderr: unknown;
     process.env.HERDR_PLUGIN_STATE_DIR = join(root, "state");
     process.env.HERDR_PLUGIN_CONFIG_DIR = join(root, "config");
 
@@ -529,11 +530,12 @@ await Bun.write(${JSON.stringify(envFile)}, JSON.stringify(env));
       spawn: ((argv, opts) => {
         seenArgv = [...argv];
         seenStdout = opts?.stdout;
+        seenStderr = opts?.stderr;
         return Bun.spawn([process.execPath, script], {
           cwd: typeof opts?.cwd === "string" ? opts.cwd : root,
           env: opts?.env,
           stdin: "ignore",
-          stdout: "inherit",
+          stdout: "ignore",
           stderr: "ignore",
           detached: true,
         });
@@ -543,7 +545,8 @@ await Bun.write(${JSON.stringify(envFile)}, JSON.stringify(env));
     await Bun.sleep(120);
     expect(seenArgv.at(-2)).toBe("web");
     expect(seenArgv.at(-1)).toBe("import");
-    expect(seenStdout).toBe("inherit");
+    expect(seenStdout).toBe("ignore");
+    expect(seenStderr).toBe("ignore");
     const env = JSON.parse(await readFile(envFile, "utf8")) as Record<string, string>;
     expect(env.repo).toBe(root);
     expect(env.state).toBe(join(root, "state"));

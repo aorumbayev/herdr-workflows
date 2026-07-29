@@ -284,12 +284,23 @@ async function cmdRun(
 
 function openBrowser(url: string): void {
   try {
-    Bun.spawn(process.platform === "darwin" ? ["open", url] : ["xdg-open", url], {
+    const proc = Bun.spawn(process.platform === "darwin" ? ["open", url] : ["xdg-open", url], {
       stdout: "ignore",
       stderr: "ignore",
+      stdin: "ignore",
+      detached: true,
     });
+    proc.unref();
   } catch {
     /* opener absence is nonfatal — the printed URL still reaches the caller */
+  }
+}
+
+function printWorkbenchUrl(url: string): void {
+  try {
+    process.stdout.write(`herdr-workflows web · ${url}\n`);
+  } catch {
+    /* EPIPE when a detached launcher's inherited PTY is already gone */
   }
 }
 
@@ -312,8 +323,10 @@ async function cmdWeb(
   const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot());
   const workbench = await ensureWorkbench({ repoRoot, port });
   const url = appendRouteHash(workbench.url, route);
-  process.stdout.write(`herdr-workflows web · ${url}\n`);
+  // Open before printing: a detached picker handoff can already have a dead
+  // stdout, and SIGPIPE on write must not skip the browser.
   if (opts.open !== false) openBrowser(url);
+  printWorkbenchUrl(url);
   if (!workbench.owned) return;
   registerOwnedWorkbenchShutdown(() => {
     workbench.stop();

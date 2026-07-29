@@ -108,8 +108,12 @@ Commander MUST validate argv before command handlers run. After successful parsi
 - **THEN** the CLI invokes an opener available on that platform and the workbench reaches the browser
 
 #### Scenario: Opener absence does not hide the URL
-- **WHEN** no browser opener can be launched
+- **WHEN** no browser opener can be launched from an interactive `hwf web` invocation
 - **THEN** the printed URL still reaches the user through a stream the caller observes
+
+#### Scenario: Detached picker handoff ignores launcher stdio
+- **WHEN** the picker launches a detached `hwf web <route>` child
+- **THEN** the child does not inherit the picker's stdout or stderr, so tearing down the picker popup cannot abort the child before it opens the browser
 
 ### Requirement: Picker stays lazily loaded
 The `picker` command MUST dynamically import the TUI module only when that command is selected. Program construction and other commands MUST NOT load `@opentui/core` through the picker module.
