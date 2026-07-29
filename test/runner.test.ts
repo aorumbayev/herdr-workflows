@@ -798,6 +798,32 @@ steps:
     expect(calls.some((c) => c.method === "notification.show")).toBe(false);
   });
 
+  test("continue_on_error cannot tolerate command timeout", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+on_failure:
+  herdr: notification.show
+  params: { title: recovered }
+steps:
+  - run: [sh, -c, "sleep 1"]
+    timeout: 50ms
+    continue_on_error: true
+  - run: [sh, -c, "touch should-not-run"]
+`,
+    });
+    const { deps, calls } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    expect(result.ok).toBe(false);
+    expect(await Bun.file(join(root, "should-not-run")).exists()).toBe(false);
+    expect(calls.some((c) => c.method === "notification.show")).toBe(true);
+  });
+
   test("retry counts total attempts including the first", async () => {
     const root = await repoWith({
       m: `version: v1alpha1
@@ -1665,6 +1691,76 @@ steps:
     });
     const err = failed(result);
     expect(err.error).toMatch(/HWF environment/);
+  });
+
+  test("child HWF environment cap fails before child step 1", async () => {
+    const half = "x".repeat(Math.floor(HWF_ENV_BYTE_LIMIT / 2));
+    const root = await repoWith({
+      child: `version: v1alpha1
+inputs:
+  a: text
+  b: text
+steps:
+  - run: [echo, "{{inputs.a}}", "{{inputs.b}}"]
+`,
+      parent: `version: v1alpha1
+inputs:
+  a: text
+steps:
+  - workflow: child
+    inputs:
+      a: "{{inputs.a}}"
+      b: "{{inputs.a}}"
+`,
+    });
+    const { deps } = mockDeps();
+    const result = await runWorkflow({
+      name: "parent",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      inputs: { a: half },
+      deps,
+    });
+    const err = failed(result);
+    expect(err.error).toMatch(/HWF environment/);
+  });
+
+  test("detached resolveDynamic false requires domain snapshots", async () => {
+    const root = await repoWith({
+      dyn: `version: v1alpha1
+inputs:
+  branch:
+    type: choice
+    options:
+      run: [printf, main]
+steps:
+  - run: [echo, "{{inputs.branch}}"]
+`,
+    });
+    const { deps } = mockDeps();
+    const missing = await runWorkflow({
+      name: "dyn",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      inputs: { branch: "main" },
+      resolveDynamic: false,
+      deps,
+    });
+    expect(failed(missing).error).toMatch(/missing launch payload domain snapshot/);
+
+    const ok = await runWorkflow({
+      name: "dyn",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      inputs: { branch: "main" },
+      domains: { branch: ["main"] },
+      resolveDynamic: false,
+      deps,
+    });
+    expect(ok.ok).toBe(true);
   });
 
   test("command capture cap terminates and fails", async () => {

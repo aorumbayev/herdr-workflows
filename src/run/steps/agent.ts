@@ -27,6 +27,7 @@ import {
   type StepOutcome,
 } from "../context";
 import { placeEmptyPane, type PlacedPane } from "./pane";
+import { resolvePaneOpen } from "./shell";
 
 type AgentAction = Extract<StepAction, { kind: "agent" }>;
 
@@ -378,7 +379,7 @@ async function placeNewAgentPane(
   const pane = action.pane ?? { open: "tab" as const };
   const sub = (text?: string) => (text === undefined ? undefined : substituteText(text, c.values));
   const placed = await placeEmptyPane({
-    open: pane.open,
+    open: resolvePaneOpen(pane.open, c.values),
     target: sub(pane.target),
     workspace: sub(pane.workspace),
     size: pane.size,

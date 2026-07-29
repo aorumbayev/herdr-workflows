@@ -70,4 +70,31 @@ describe("dumpWorkflow round-trips through parseRaw", () => {
     expect(doc.inputs?.target).toMatchObject({ description: "pick: one" });
     expect(doc.inputs?.plain).toMatchObject({ default: "true" });
   });
+
+  test("adaptive input fields survive workbench formatting", () => {
+    const doc = roundTrip({
+      ...base,
+      inputs: {
+        mode: ["create", "delete"],
+        branch: {
+          type: "choice",
+          options: ["main"],
+          when: '{{inputs.mode}} == "create"',
+          allow_custom: true,
+          min_length: 1,
+        },
+      },
+      steps: [
+        {
+          run: ["echo", "{{inputs.branch}}"],
+          when: '{{inputs.mode}} == "create"',
+        },
+      ],
+    });
+    expect(doc.inputs?.branch).toMatchObject({
+      allow_custom: true,
+      min_length: 1,
+      when: '{{inputs.mode}} == "create"',
+    });
+  });
 });

@@ -106,6 +106,7 @@ steps:
 | ------------------------- | ----------------------------------------------------------------- |
 | `prefix+k` (picker)       | Run. List mode: `Ctrl+E` edits, `Ctrl+Y` shares, `Ctrl+O` imports |
 | `hwf run <name>`          | Run from a script or terminal, with `--input k=v`                 |
+| `hwf workflow inspect`    | Print input metadata. Optional `--resolve` for active dynamics    |
 | `hwf web` (or bare `hwf`) | Edit, share, review imports, browse the run log. Never executes   |
 | `hwf help [command]`      | Show generated command and option help                            |
 | `hwf --version`           | Show the installed plugin version                                 |

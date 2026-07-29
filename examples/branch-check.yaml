@@ -1,0 +1,59 @@
+version: v1alpha1
+title: Branch check
+description: Check unstaged changes or whether an existing or new branch name is available
+inputs:
+  mode:
+    type: choice
+    options: [status, branch]
+    default: status
+  branch:
+    type: choice
+    options: [main]
+    allow_custom: true
+    min_length: 1
+    when: '{{inputs.mode}} == "branch"'
+steps:
+  - id: changes
+    run: [git, diff, --quiet]
+    success_codes: [0, 1]
+
+  - herdr: notification.show
+    params:
+      title: working tree clean
+      body: git diff found no changes
+      sound: done
+    when:
+      - '{{inputs.mode}} == "status"'
+      - '{{steps.changes.exit_code}} == "0"'
+
+  - herdr: notification.show
+    params:
+      title: working tree changed
+      body: git diff found changes
+      sound: request
+    when:
+      - '{{inputs.mode}} == "status"'
+      - '{{steps.changes.exit_code}} != "0"'
+
+  - id: branch_exists
+    run: [git, show-ref, --verify, --quiet, "refs/heads/{{inputs.branch}}"]
+    success_codes: [0, 1]
+    when: '{{inputs.mode}} == "branch"'
+
+  - herdr: notification.show
+    params:
+      title: branch exists
+      body: "{{inputs.branch}} already exists"
+      sound: request
+    when:
+      - '{{inputs.mode}} == "branch"'
+      - '{{steps.branch_exists.exit_code}} == "0"'
+
+  - herdr: notification.show
+    params:
+      title: branch available
+      body: "{{inputs.branch}} does not exist"
+      sound: done
+    when:
+      - '{{inputs.mode}} == "branch"'
+      - '{{steps.branch_exists.exit_code}} != "0"'

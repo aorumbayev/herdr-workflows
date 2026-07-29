@@ -15,8 +15,14 @@ import {
 import { loadConfig, readInvocationContext, resolveRepoRoot } from "./config";
 import { EXAMPLES_URL, runInit } from "./init";
 import { IMPORT_DISCLAIMER, parseImportScope, runImport } from "./workflow/import";
-import { listWorkflows } from "./workflow/load";
-import { WORKFLOW_FORMAT, WorkflowLoadError } from "./workflow/types";
+import { listWorkflows, loadWorkflow, resolveDynamicChoices } from "./workflow/load";
+import { evaluateWhen } from "./workflow/conditions";
+import {
+  WORKFLOW_FORMAT,
+  WorkflowLoadError,
+  type InputSpec,
+  type WhenSpec,
+} from "./workflow/types";
 import { CaptureLimitError } from "./limits";
 import { runWorkflow } from "./run/runner";
 import { parseLaunchPayload } from "./tui/run-launch";
@@ -118,6 +124,94 @@ async function cmdWorkflowImport(
   }
 }
 
+function formatWhenClause(clause: WhenSpec): string {
+  if (clause.kind === "truthy") return `{{${clause.path}}}`;
+  return `{{${clause.path}}} ${clause.negate ? "!=" : "=="} ${JSON.stringify(clause.value)}`;
+}
+
+function formatInputInspect(spec: InputSpec, resolved?: string[]): string[] {
+  const lines = [`${spec.name}:`];
+  lines.push(`  type: ${spec.type}`);
+  if (spec.description) lines.push(`  description: ${spec.description}`);
+  if (spec.when && spec.when.length > 0) {
+    const text =
+      spec.when.length === 1
+        ? formatWhenClause(spec.when[0]!)
+        : `[${spec.when.map(formatWhenClause).join(", ")}]`;
+    lines.push(`  when: ${text}`);
+  }
+  if (spec.default !== undefined) lines.push(`  default: ${spec.default}`);
+  if (spec.minLength !== undefined) lines.push(`  min_length: ${spec.minLength}`);
+  if (spec.allowCustom === true) lines.push(`  allow_custom: true`);
+  if (spec.dynamicOptions) {
+    lines.push(
+      `  options.run: [${spec.dynamicOptions.run.map((el) => JSON.stringify(el)).join(", ")}]`,
+    );
+    if (resolved) {
+      lines.push(`  options: [${resolved.map((el) => JSON.stringify(el)).join(", ")}]`);
+    }
+  } else if (spec.options) {
+    lines.push(`  options: [${spec.options.map((el) => JSON.stringify(el)).join(", ")}]`);
+  }
+  return lines;
+}
+
+async function cmdWorkflowInspect(
+  name: string,
+  opts: { input?: Record<string, string>; resolve?: boolean },
+): Promise<void> {
+  const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot());
+  const config = await loadConfig(repoRoot);
+  let workflow;
+  try {
+    workflow = await loadWorkflow(name, repoRoot, config);
+  } catch (error) {
+    if (error instanceof WorkflowLoadError) die(error.message);
+    throw error;
+  }
+  const provided = opts.input ?? {};
+  for (const key of Object.keys(provided)) {
+    if (!workflow.inputs.some((input) => input.name === key)) {
+      die(`unknown input '${key}'`);
+    }
+  }
+  const domains: Record<string, string[]> = {};
+  const values: Record<string, string> = { ...provided };
+  if (opts.resolve) {
+    for (const spec of workflow.inputs) {
+      if (!evaluateWhen(spec.when, { inputs: values, steps: {}, context: {} })) continue;
+      if (spec.default !== undefined && !Object.hasOwn(values, spec.name)) {
+        values[spec.name] = spec.default;
+      }
+      if (spec.dynamicOptions) {
+        try {
+          domains[spec.name] = await resolveDynamicChoices(
+            workflow.file,
+            spec.name,
+            spec.dynamicOptions,
+            repoRoot,
+          );
+        } catch (error) {
+          die(error instanceof Error ? error.message : String(error));
+        }
+      }
+    }
+  }
+  const lines: string[] = [`workflow: ${workflow.name}`, `inputs:`];
+  if (workflow.inputs.length === 0) {
+    lines.push("  (none)");
+  } else {
+    for (const spec of workflow.inputs) {
+      lines.push(
+        ...formatInputInspect(spec, opts.resolve ? domains[spec.name] : undefined).map(
+          (line) => `  ${line}`,
+        ),
+      );
+    }
+  }
+  process.stdout.write(`${lines.join("\n")}\n`);
+}
+
 async function cmdLaunch(): Promise<void> {
   await ensureHerdrProtocol();
   // Picker popup is rooted at the plugin dir; forward the invoking repo and context.
@@ -143,6 +237,7 @@ async function cmdRun(
 ): Promise<void> {
   await ensureHerdrProtocol();
   let inputs: Record<string, string> = {};
+  let domains: Record<string, string[]> | undefined;
   if (opts.launchPayload) {
     let payload;
     try {
@@ -154,6 +249,7 @@ async function cmdRun(
       die(`launch payload name '${payload.name}' does not match run name '${name}'`);
     }
     inputs = payload.inputs;
+    domains = payload.domains;
   }
   inputs = { ...inputs, ...opts.input };
   const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || resolveRepoRoot();
@@ -167,6 +263,8 @@ async function cmdRun(
       config,
       ctx,
       inputs,
+      ...(domains !== undefined ? { domains } : {}),
+      ...(opts.launchPayload ? { resolveDynamic: false } : {}),
       onProgress: (i, n, label, outcome = "ok") => {
         if (outcome === "start") {
           process.stdout.write(`[${i}/${n}] ${label}…\n`);
@@ -310,6 +408,15 @@ function buildProgram(): Command {
         await cmdWorkflowImport(payload, opts);
       },
     );
+  workflow
+    .command("inspect")
+    .description("Print workflow input metadata")
+    .argument("<name>", "workflow name")
+    .option("--input <name=value>", "select guarded input path (repeatable)", collectInput, {})
+    .option("--resolve", "resolve active dynamic choices")
+    .action(async (name: string, opts: { input?: Record<string, string>; resolve?: boolean }) => {
+      await cmdWorkflowInspect(name, opts);
+    });
 
   program
     .command("launch")

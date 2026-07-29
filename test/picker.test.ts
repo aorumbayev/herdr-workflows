@@ -3,6 +3,7 @@ import type { WorkflowListEntry } from "../src/workflow/types";
 import {
   buildInvalidOptions,
   buildPickerOptions,
+  commitResolvedOptions,
   entrySensitivity,
   filterChoiceOptions,
   filterWorkflowEntries,
@@ -13,9 +14,11 @@ import {
   formatRule,
   formatRunProgress,
   hasVisibleEntries,
+  isCustomChoiceValue,
   LIST_HINT,
   resolveListWorkbenchRoute,
   shouldDropStdinLeakSequence,
+  shouldRestoreCustomChoiceText,
   truncate,
 } from "../src/tui/picker";
 import { humanizeWorkflowName, workflowDisplayTitle } from "../src/workflow/trust";
@@ -471,5 +474,29 @@ describe("stdin leak prepend boundary", () => {
     expect(shouldDropStdinLeakSequence(String.fromCharCode(0x01))).toBe(true); // Ctrl+A
     expect(shouldDropStdinLeakSequence(String.fromCharCode(0x18))).toBe(true); // Ctrl+X
     expect(shouldDropStdinLeakSequence("ab")).toBe(false);
+  });
+});
+
+describe("adaptive picker helpers", () => {
+  test("custom choice uses tagged option data, not a colliding sentinel string", () => {
+    expect(isCustomChoiceValue({ kind: "custom" })).toBe(true);
+    expect(isCustomChoiceValue("__hwf_custom__")).toBe(false);
+    expect(isCustomChoiceValue("custom…")).toBe(false);
+  });
+
+  test("restores empty and out-of-domain custom answers on backtrack", () => {
+    expect(shouldRestoreCustomChoiceText(true, "", ["main"], true)).toBe(true);
+    expect(shouldRestoreCustomChoiceText(true, "feature/x", ["main"], true)).toBe(true);
+    expect(shouldRestoreCustomChoiceText(true, "main", ["main"], true)).toBe(false);
+    expect(shouldRestoreCustomChoiceText(false, undefined, ["main"], true)).toBe(false);
+    expect(shouldRestoreCustomChoiceText(true, "feature/x", ["main"], false)).toBe(false);
+  });
+
+  test("stale async option completion is ignored after generation bump", () => {
+    const state = { resolveGeneration: 1, inputDomains: {} as Record<string, string[]> };
+    expect(commitResolvedOptions(state, 0, "branch", ["stale"])).toBe(false);
+    expect(state.inputDomains).toEqual({});
+    expect(commitResolvedOptions(state, 1, "branch", ["fresh"])).toBe(true);
+    expect(state.inputDomains).toEqual({ branch: ["fresh"] });
   });
 });

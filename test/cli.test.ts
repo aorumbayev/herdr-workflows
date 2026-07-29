@@ -300,6 +300,77 @@ describe("cli run", () => {
     expect(result.stdout).toContain("[1/1]");
   });
 
+  test("detached launch-payload rejects missing dynamic domain snapshots", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-missing-domain-"));
+    dirs.push(root);
+    const script = join(root, "discover.sh");
+    await writeFile(script, "#!/bin/sh\necho main\n");
+    await Bun.spawn(["chmod", "+x", script]).exited;
+    await writeWorkflow(
+      root,
+      "dyn",
+      [
+        "version: v1alpha1",
+        "inputs:",
+        "  branch:",
+        "    type: choice",
+        "    options:",
+        `      run: [${JSON.stringify(script)}]`,
+        "steps:",
+        '  - run: [echo, "{{inputs.branch}}"]',
+        "",
+      ].join("\n"),
+    );
+
+    const result = await runCli(
+      ["run", "dyn", "--launch-payload"],
+      root,
+      { HERDR_WORKFLOWS_REPO_ROOT: root },
+      JSON.stringify({ name: "dyn", inputs: { branch: "main" } }),
+    );
+    expect(result.code).toBe(1);
+    expect(result.stderr).toMatch(/missing launch payload domain snapshot/);
+  });
+
+  test("workflow inspect help and protocol independence", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-inspect-"));
+    dirs.push(root);
+    await writeWorkflow(
+      root,
+      "inspect-me",
+      [
+        "version: v1alpha1",
+        "inputs:",
+        "  mode: [create, delete]",
+        "  branch: { type: text, when: '{{inputs.mode}} == \"create\"' }",
+        "steps:",
+        '  - run: [echo, "{{inputs.mode}}"]',
+        '  - run: [echo, "{{inputs.branch}}"]',
+        "    when: '{{inputs.mode}} == \"create\"'",
+        "",
+      ].join("\n"),
+    );
+
+    const help = await runCli(["workflow", "inspect", "--help"], root, {
+      HERDR_WORKFLOWS_REPO_ROOT: root,
+    });
+    expect(help.code).toBe(0);
+    expect(help.stdout).toContain("--input");
+    expect(help.stdout).toContain("--resolve");
+
+    const inspected = await runCli(
+      ["workflow", "inspect", "inspect-me", "--input", "mode=create"],
+      root,
+      {
+        HERDR_WORKFLOWS_REPO_ROOT: root,
+        HERDR_SOCKET_PATH: "/tmp/hwf-missing-herdr.sock",
+      },
+    );
+    expect(inspected.code).toBe(0);
+    expect(inspected.stdout).toContain('when: {{inputs.mode}} == "create"');
+    expect(inspected.stdout).toContain("branch:");
+  });
+
   test("run rejects herdr protocol before missing-input failure", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-cli-repo-"));
     dirs.push(root);

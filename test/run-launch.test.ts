@@ -8,6 +8,7 @@ import { runLogPath, type RunLogEntry } from "../src/runlog";
 import {
   launchWorkbenchRoute,
   LIST_HINT,
+  pickerEscapeExitCode,
   selectedListEntry,
   startRun,
   tryListWorkbenchShortcut,
@@ -167,6 +168,13 @@ describe("run argv", () => {
     const payload = buildLaunchPayload("sleep", { focus: "x" });
     expect(parseLaunchPayload(JSON.stringify(payload))).toEqual(payload);
   });
+
+  test("launch payload forwards domains and round-trips snapshots", () => {
+    const payload = buildLaunchPayload("dyn", { branch: "one" }, { branch: ["one", "two"] });
+    expect(payload.domains).toEqual({ branch: ["one", "two"] });
+    expect(JSON.stringify(payload)).not.toContain("argv");
+    expect(parseLaunchPayload(JSON.stringify(payload))).toEqual(payload);
+  });
 });
 
 describe("picker detached run", () => {
@@ -291,6 +299,30 @@ describe("picker detached run", () => {
     expect(state.progressLines.some((line) => line.includes("[1/1]"))).toBe(true);
     expect(state.exit?.code).toBe(0);
     expect(destroyed).toBe(true);
+  });
+
+  test("failed run Escape dismisses nonzero and forwards domains on launch", async () => {
+    let seen: LaunchRunRequest | undefined;
+    const state = pickerState({
+      inputDomains: { branch: ["one", "two"] },
+      inputValues: { branch: "one" },
+      launchRun: (req) => {
+        seen = req;
+        return {
+          result: Promise.resolve({ ok: false, detail: "boom" }),
+          detach: () => undefined,
+        };
+      },
+    });
+    await startRun(state, {
+      name: "dyn",
+      source: "repo",
+      file: "/repo/.hwf/workflows/dyn.yaml",
+    });
+    expect(seen?.domains).toEqual({ branch: ["one", "two"] });
+    expect(state.running).toBe(false);
+    expect(state.exit).toBeUndefined();
+    expect(pickerEscapeExitCode(state.mode, state.running)).toBe(1);
   });
 });
 

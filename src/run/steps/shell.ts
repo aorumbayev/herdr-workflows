@@ -1,10 +1,19 @@
 import { CaptureLimitError, CAPTURE_BYTE_LIMIT } from "../../limits";
-import { renderScalar, substituteText } from "../../workflow/parse";
-import type { ShellName, StepAction, TemplateNamespace } from "../../workflow/types";
+import { renderScalar, substituteText, substituteValue } from "../../workflow/parse";
+import type { PaneOpen, ShellName, StepAction, TemplateNamespace } from "../../workflow/types";
 import { dispatchFailure, errorText, type StepCtx, type StepOutcome } from "../context";
 import { placeCommandPane } from "./pane";
 
 type RunAction = Extract<StepAction, { kind: "run" }>;
+
+export function resolvePaneOpen(open: string, ns: TemplateNamespace): PaneOpen {
+  if (open === "tab" || open === "beside" || open === "below") return open;
+  const resolved = substituteValue(open, ns);
+  if (resolved === "tab" || resolved === "beside" || resolved === "below") return resolved;
+  throw new Error(
+    `pane.open resolved to '${renderScalar(resolved)}' (expected tab, beside, or below)`,
+  );
+}
 
 type CaptureBudget = {
   source: string;
@@ -148,11 +157,12 @@ type CommandOutcome = {
   failed: boolean;
 };
 
-function captureResult(r: CaptureResult): CommandOutcome {
-  const failed = r.timedOut || r.exitCode !== 0;
+function captureResult(r: CaptureResult, successCodes: number[] = [0]): CommandOutcome {
+  const accepted = !r.timedOut && successCodes.includes(r.exitCode);
+  const failed = !accepted;
   const stderr = r.timedOut && !r.stderr ? `timed out after ${r.timeoutMs / 1000}s` : r.stderr;
   return {
-    ok: !failed,
+    ok: accepted,
     stdout: r.stdout,
     stderr,
     exitCode: r.exitCode,
@@ -171,6 +181,7 @@ export async function runShellStep(
     env?: NodeJS.ProcessEnv;
     timeoutMs?: number;
     shell?: ShellName;
+    successCodes?: number[];
   },
 ): Promise<CommandOutcome> {
   return captureResult(
@@ -181,6 +192,7 @@ export async function runShellStep(
       timeoutMs: opts.timeoutMs,
       maxCaptureBytes: { source: COMMAND_CAPTURE_SOURCE },
     }),
+    opts.successCodes,
   );
 }
 
@@ -190,6 +202,7 @@ export async function runArgvStep(
     cwd: string;
     env?: NodeJS.ProcessEnv;
     timeoutMs?: number;
+    successCodes?: number[];
   },
 ): Promise<CommandOutcome> {
   return captureResult(
@@ -199,6 +212,7 @@ export async function runArgvStep(
       timeoutMs: opts.timeoutMs,
       maxCaptureBytes: { source: COMMAND_CAPTURE_SOURCE },
     }),
+    opts.successCodes,
   );
 }
 
@@ -248,7 +262,7 @@ function bindCommandResult(c: StepCtx, outcome: CommandOutcome): void {
   };
 }
 
-function commandFailure(outcome: CommandOutcome): StepOutcome {
+function commandFailure(outcome: CommandOutcome): Extract<StepOutcome, { ok: false }> {
   const detail = outcome.stderr.trim() || outcome.stdout.trim().slice(-500);
   return {
     ok: false,
@@ -268,6 +282,7 @@ async function localRun(
   env: NodeJS.ProcessEnv,
 ): Promise<StepOutcome> {
   const payload = action.payload;
+  const successCodes = action.successCodes ?? [0];
   let outcome: CommandOutcome;
   try {
     outcome =
@@ -276,18 +291,23 @@ async function localRun(
             cwd,
             env,
             timeoutMs: action.timeoutMs,
+            successCodes,
           })
         : await runShellStep(payload.command, {
             cwd,
             env,
             timeoutMs: action.timeoutMs,
             shell: payload.shell,
+            successCodes,
           });
   } catch (error) {
-    if (error instanceof CaptureLimitError) return { ok: false, error: error.message };
-    return { ok: false, error: `run: ${errorText(error)}` };
+    if (error instanceof CaptureLimitError) {
+      return { ok: false, error: error.message, hardFailure: true };
+    }
+    return { ok: false, error: `run: ${errorText(error)}`, hardFailure: true };
   }
   if (outcome.stderr) c.opts.onStderr?.(outcome.stderr);
+  if (outcome.timedOut) return { ...commandFailure(outcome), hardFailure: true };
   bindCommandResult(c, outcome);
   return outcome.failed ? commandFailure(outcome) : { ok: true };
 }
@@ -303,8 +323,14 @@ async function placedRun(
   const pane = action.pane;
   if (!pane) return { ok: false, error: "run: background and ready_when require pane:" };
   const sub = (text?: string) => (text === undefined ? undefined : substituteText(text, c.values));
+  let open: PaneOpen;
+  try {
+    open = resolvePaneOpen(pane.open, c.values);
+  } catch (error) {
+    return { ok: false, error: errorText(error) };
+  }
   const placed = await placeCommandPane({
-    open: pane.open,
+    open,
     target: sub(pane.target),
     workspace: sub(pane.workspace),
     size: pane.size,

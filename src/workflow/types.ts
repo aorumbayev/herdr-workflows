@@ -38,7 +38,7 @@ type PaneClose = "success" | "always";
 export type PlatformName = "macos" | "linux" | "windows";
 
 export type PaneSpec = {
-  open: PaneOpen;
+  open: PaneOpen | string;
   target?: string;
   workspace?: string;
   size?: number;
@@ -81,6 +81,7 @@ type RunAction = {
   readyWhen?: string;
   timeoutMs?: number;
   retry?: RetrySpec;
+  successCodes?: number[];
 };
 
 type HerdrAction = {
@@ -100,7 +101,7 @@ export type StepAction = AgentAction | RunAction | HerdrAction | WorkflowAction;
 
 export type WorkflowStep = {
   id?: string;
-  when?: WhenSpec;
+  when?: WhenSpec[];
   continueOnError?: boolean;
   action: StepAction;
 };
@@ -122,6 +123,9 @@ export type InputSpec = {
   default?: string;
   options?: string[];
   dynamicOptions?: DynamicChoice;
+  when?: WhenSpec[];
+  allowCustom?: boolean;
+  minLength?: number;
 };
 
 export type RawInputValue =
@@ -133,6 +137,9 @@ export type RawInputValue =
       description?: string;
       default?: string;
       options?: string[] | DynamicChoice;
+      when?: string | string[];
+      allow_custom?: boolean;
+      min_length?: number;
     };
 
 export type ReturnsSpec =

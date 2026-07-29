@@ -66,9 +66,17 @@ const readyWhenSchema = z.string().superRefine((value, ctx) => {
   }
 });
 
+const PANE_OPENS = ["tab", "beside", "below"] as const;
+const paneOpenSchema = z.union([
+  z.enum(PANE_OPENS),
+  z
+    .string()
+    .regex(WHOLE_TEMPLATE_RE, "pane.open must be tab, beside, below, or a whole-value template"),
+]);
+
 const paneSchema = z
   .object({
-    open: z.enum(["tab", "beside", "below"]),
+    open: paneOpenSchema,
     target: z.string().min(1).optional(),
     workspace: z.string().min(1).optional(),
     size: z.number().int().min(1).max(99).optional(),
@@ -77,6 +85,9 @@ const paneSchema = z
   })
   .strict()
   .superRefine((pane, ctx) => {
+    if (typeof pane.open === "string" && !(PANE_OPENS as readonly string[]).includes(pane.open)) {
+      return;
+    }
     if (pane.open === "tab") {
       if (pane.target !== undefined) {
         ctx.addIssue({
@@ -127,12 +138,18 @@ const dynamicChoiceSchema = z
     }
   });
 
+const whenClauseSchema = z.string().min(1);
+const whenSchema = z.union([whenClauseSchema, z.array(whenClauseSchema).min(1)]);
+
 const rawInputMapSchema = z
   .object({
     type: z.enum(["text", "choice", "profile"]).optional(),
     description: z.string().optional(),
     default: z.string().optional(),
     options: z.union([z.array(z.string().min(1)).min(1), dynamicChoiceSchema]).optional(),
+    when: whenSchema.optional(),
+    allow_custom: z.boolean().optional(),
+    min_length: z.number().int().min(0).optional(),
   })
   .strict()
   .superRefine((map, ctx) => {
@@ -149,6 +166,13 @@ const rawInputMapSchema = z
         code: "custom",
         message: `${type} input rejects options`,
         path: ["options"],
+      });
+    }
+    if (map.allow_custom !== undefined && type !== "choice") {
+      ctx.addIssue({
+        code: "custom",
+        message: "allow_custom is only valid on choice inputs",
+        path: ["allow_custom"],
       });
     }
   });
@@ -361,6 +385,48 @@ function refineRunLifecycle(step: Record<string, unknown>, ctx: RefineCtx): void
       path: ["background"],
     });
   }
+  if (step.success_codes !== undefined) {
+    if (step.pane !== undefined || step.background === true || step.ready_when !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "success_codes: applies only to blocking local run:",
+        path: ["success_codes"],
+      });
+    }
+  }
+}
+
+function refineSuccessCodes(step: Record<string, unknown>, ctx: RefineCtx): void {
+  const codes = step.success_codes;
+  if (codes === undefined) return;
+  if (!Array.isArray(codes) || codes.length === 0) {
+    ctx.addIssue({
+      code: "custom",
+      message: "success_codes: must be a non-empty list of integers",
+      path: ["success_codes"],
+    });
+    return;
+  }
+  const seen = new Set<number>();
+  for (let i = 0; i < codes.length; i++) {
+    const code = codes[i];
+    if (typeof code !== "number" || !Number.isInteger(code)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "success_codes: must be a non-empty list of integers",
+        path: ["success_codes", i],
+      });
+      continue;
+    }
+    if (seen.has(code)) {
+      ctx.addIssue({
+        code: "custom",
+        message: `success_codes: duplicate exit code ${code}`,
+        path: ["success_codes", i],
+      });
+    }
+    seen.add(code);
+  }
 }
 
 function refineRunStep(step: Record<string, unknown>, ctx: RefineCtx): void {
@@ -379,11 +445,13 @@ function refineRunStep(step: Record<string, unknown>, ctx: RefineCtx): void {
       "ready_when",
       "timeout",
       "retry",
+      "success_codes",
     ],
     ctx,
   );
   refineRunPayload(step, ctx);
   refineRunLifecycle(step, ctx);
+  refineSuccessCodes(step, ctx);
 }
 
 function refineHerdrStep(step: Record<string, unknown>, ctx: RefineCtx): void {
@@ -442,12 +510,13 @@ const sharedActionFields = {
   pane: paneSchema.optional(),
   ready_when: readyWhenSchema.optional(),
   timeout: durationSchema.optional(),
+  success_codes: z.array(z.number().int()).min(1).optional(),
 };
 
 const rawStepSchema = z
   .object({
     id: identSchema.optional(),
-    when: z.string().min(1).optional(),
+    when: whenSchema.optional(),
     continue_on_error: z.boolean().optional(),
     ...sharedActionFields,
     background: z.boolean().optional(),
@@ -572,6 +641,11 @@ function formatIssue(file: string, issue: z.core.$ZodIssue): string {
     if (path.length >= 3) key = String(path[2]);
   } else if (path[0] === "on_failure") {
     key = path.length >= 2 ? `on_failure.${String(path[1])}` : "on_failure";
+  } else if (path[0] === "inputs" && typeof path[1] === "string") {
+    key =
+      path.length >= 3
+        ? `inputs.${path[1]}.${path.slice(2).map(String).join(".")}`
+        : `inputs.${path[1]}`;
   } else if (path.length > 0) {
     key = String(path[0]);
   }
@@ -724,9 +798,14 @@ export function substituteParams(
   return walkParams(params, (text) => substituteValue(text, ns)) as Record<string, unknown>;
 }
 
-function parseWhen(file: string, stepIndex: number, value: string): WhenSpec {
+export function parseWhenClause(
+  file: string,
+  stepIndex: number | undefined,
+  key: string,
+  value: string,
+): WhenSpec {
   if (ANY_MUSTACHE_RE.test(value)) {
-    assertValidTemplates(file, stepIndex, "when", value);
+    assertValidTemplates(file, stepIndex, key, value);
   }
   const eq = WHEN_EQ_RE.exec(value);
   if (eq) {
@@ -744,8 +823,20 @@ function parseWhen(file: string, stepIndex: number, value: string): WhenSpec {
   bail(
     file,
     stepIndex,
-    "when",
+    key,
     "when: must be a whole-value template or '{{path}} == \"value\"' / '!=' comparison",
+  );
+}
+
+function parseWhenClauses(
+  file: string,
+  stepIndex: number | undefined,
+  key: string,
+  value: string | string[],
+): WhenSpec[] {
+  const clauses = Array.isArray(value) ? value : [value];
+  return clauses.map((clause, i) =>
+    parseWhenClause(file, stepIndex, Array.isArray(value) ? `${key}[${i}]` : key, clause),
   );
 }
 
@@ -833,6 +924,9 @@ function assertActionTemplates(
   if (step.pane?.workspace !== undefined) {
     assertValidTemplates(file, stepIndex, key("pane.workspace"), step.pane.workspace);
   }
+  if (typeof step.pane?.open === "string" && step.pane.open.includes("{{")) {
+    assertValidTemplates(file, stepIndex, key("pane.open"), step.pane.open);
+  }
   if (step.params !== undefined)
     assertTemplatesInValue(file, stepIndex, key("params"), step.params);
   if (step.inputs !== undefined)
@@ -866,6 +960,7 @@ function toAction(
       ...(step.ready_when !== undefined ? { readyWhen: step.ready_when.slice(1, -1) } : {}),
       ...(step.timeout !== undefined ? { timeoutMs: parseDurationMs(step.timeout) } : {}),
       ...(step.retry !== undefined ? { retry: parseRetry(step.retry) } : {}),
+      ...(step.success_codes !== undefined ? { successCodes: step.success_codes } : {}),
     };
   }
   if (step.herdr !== undefined) {
@@ -894,7 +989,9 @@ function toAction(
 function toStep(file: string, stepIndex: number, step: RawStep): WorkflowStep {
   return {
     ...(step.id !== undefined ? { id: step.id } : {}),
-    ...(step.when !== undefined ? { when: parseWhen(file, stepIndex, step.when) } : {}),
+    ...(step.when !== undefined
+      ? { when: parseWhenClauses(file, stepIndex, "when", step.when) }
+      : {}),
     ...(step.continue_on_error === true ? { continueOnError: true } : {}),
     action: toAction(file, stepIndex, step),
   };
@@ -979,12 +1076,8 @@ function collectTemplatesFromValue(value: unknown, out: TemplatePath[]): void {
 
 function stepTemplates(step: WorkflowStep): TemplatePath[] {
   const out: TemplatePath[] = [];
-  if (step.when?.kind === "truthy") {
-    const p = parseTemplatePath(step.when.path);
-    if (p) out.push(p);
-  }
-  if (step.when?.kind === "eq") {
-    const p = parseTemplatePath(step.when.path);
+  for (const clause of step.when ?? []) {
+    const p = parseTemplatePath(clause.path);
     if (p) out.push(p);
   }
   const a = step.action;

@@ -21,6 +21,7 @@ export type StepOutcome =
       error: string;
       details?: Record<string, unknown>;
       coordinationLost?: boolean;
+      hardFailure?: boolean;
       failure?: StepFailure;
       blocked?: boolean;
     };

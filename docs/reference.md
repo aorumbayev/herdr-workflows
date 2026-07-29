@@ -107,9 +107,20 @@ Use only `{{inputs.name}}`, `{{steps.id.field}}`, and `{{context.key}}`. A whole
 
 ## Inputs
 
-A name matches `[a-z][a-z0-9_]{0,31}`. The types are `text`, `choice` (a static list or `{run: argv}`), and `profile` (merged profile names, never args). A `choice` or `profile` default must exist among the available values. Only the entry workflow prompts, in declaration order.
+A name matches `[a-z][a-z0-9_]{0,31}`. The types are `text`, `choice` (a static list or `{run: argv}`), and `profile` (merged profile names, never args). A closed `choice` or `profile` default must exist among the available values. Mapped inputs may declare ordered `when:` guards that reference earlier inputs. Inactive inputs do not prompt, resolve, or export `HWF_` values. Supplying an inactive value fails collection. A choice may set `allow_custom: true` so listed options are suggestions and other text is accepted. `min_length` is an opt-in non-negative character floor for active values. Only the entry workflow prompts, in declaration order, for inputs that are active under earlier answers.
 
-A dynamic choice runs its argv from the repo root, with a 10-second timeout, a limit of 1,000 options, and an 8 MiB capture cap.
+Migration: scripted `hwf run` callers must omit `--input` flags for inactive inputs. Placeholder values such as `--input branch=` now fail when an earlier answer makes `branch` inactive.
+
+A dynamic choice runs its argv from the repo root, with a 10-second timeout, a limit of 1,000 options, and an 8 MiB capture cap. Discovery argv must stay template-free and must not depend on earlier answers. Loading and listing validate declarations without executing discovery. Entry collection executes only active dynamic choices, at most once. Picker launches carry the resolved domains on the stdin payload so the detached run does not re-execute them. Treat discovery commands as read-only.
+
+Inspect declarations without running steps:
+
+```bash
+hwf workflow inspect <name>
+hwf workflow inspect <name> --input mode=delete --resolve
+```
+
+Without `--resolve`, dynamic argv is printed and not executed. With `--resolve`, only active dynamic choices run under the ordinary limits.
 
 ## Config
 
@@ -128,13 +139,17 @@ The layers are the global plugin config directory, then `.hwf/config.yaml`, then
 
 ## Control flow
 
-| Construct           | Behavior                                                       |
-| ------------------- | -------------------------------------------------------------- |
-| `when:`             | Scalar truthiness or `==` / `!=`. False skips (no recovery).   |
-| `continue_on_error` | Tolerate failure. Suppress recovery. Run exits nonzero.        |
-| `retry`             | Total attempts including first. Local `run:` / `herdr:` only.  |
-| `on_failure`        | Entry-only, once, after first non-tolerated failure            |
-| Transport loss      | Stop, keep panes, skip recovery, report uncertain coordination |
+| Construct           | Behavior                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------- |
+| `when:`             | One clause or a non-empty ordered list. Short-circuit AND. Truthiness or `==` / `!=`. False skips |
+| Guarded results     | Conditional inputs and step results need matching consumer `when:` clauses (structural equality)  |
+| `success_codes`     | Blocking local `run:` only. Listed exit codes succeed. Default `[0]`. Placed/background reject it |
+| `continue_on_error` | Tolerate failure. Suppress recovery. Run exits nonzero.                                           |
+| `retry`             | Total attempts including first. Local `run:` / `herdr:` only.                                     |
+| `on_failure`        | Entry-only, once, after first non-tolerated failure                                               |
+| Transport loss      | Stop, keep panes, skip recovery, report uncertain coordination                                    |
+
+`pane.open` may be a whole-value `{{inputs.place}}` reference when `place` is an unconditional closed static choice whose every option is `tab`, `beside`, or `below`.
 
 ## Caps
 

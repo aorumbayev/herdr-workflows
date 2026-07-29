@@ -1,17 +1,15 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import {
-  globalConfigPath,
-  loadConfig,
-  noProfilesConfiguredMessage,
-  profileNames,
-  repoConfigPath,
-  resolveProfile,
-  type WorkflowsConfig,
-} from "../config";
+import { loadConfig, profileNames, type WorkflowsConfig } from "../config";
 import { CaptureLimitError } from "../limits";
 import { spawnCapture } from "../run/steps/shell";
-import { parseRaw, workflowNeedsTranscript, workflowTemplateRefs, type RawWorkflow } from "./parse";
+import {
+  parseRaw,
+  parseWhenClause,
+  workflowNeedsTranscript,
+  workflowTemplateRefs,
+  type RawWorkflow,
+} from "./parse";
 import {
   bail,
   WorkflowLoadError,
@@ -25,7 +23,12 @@ import {
   type WorkflowStep,
 } from "./types";
 import { analyzeResolvedSensitivity } from "./trust";
-import { assertChildInputContract, assertWorkflowReferences, workflowChildNames } from "./validate";
+import {
+  assertChildInputContract,
+  assertWorkflowReferences,
+  shellUsesInput,
+  workflowChildNames,
+} from "./validate";
 
 const DYNAMIC_CHOICE_TIMEOUT_MS = 10_000;
 const DYNAMIC_CHOICE_MAX = 1_000;
@@ -81,27 +84,21 @@ async function collectWorkflowEntries(repoRoot: string): Promise<WorkflowListEnt
   return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function shellUsesInput(command: string, name: string): boolean {
-  const prefix = `HWF_${name}`;
-  let from = 0;
-  while (from <= command.length) {
-    const i = command.indexOf(prefix, from);
-    if (i === -1) break;
-    const after = command[i + prefix.length];
-    if (after === undefined || !/[A-Za-z0-9_]/.test(after)) return true;
-    from = i + prefix.length;
-  }
-  return false;
-}
-
 function inputIsUsed(
   name: string,
   steps: WorkflowStep[],
   returns?: ReturnsSpec,
   onFailure?: RecoveryAction,
+  inputs: InputSpec[] = [],
 ): boolean {
   const refs = workflowTemplateRefs(steps, returns, onFailure);
   if (refs.some((p) => p.root === "inputs" && p.segments[0] === name)) return true;
+  for (const input of inputs) {
+    for (const clause of input.when ?? []) {
+      const parts = clause.path.split(".");
+      if (parts[0] === "inputs" && parts[1] === name) return true;
+    }
+  }
   for (const step of steps) {
     if (step.action.kind === "run" && step.action.payload.form === "shell") {
       if (shellUsesInput(step.action.payload.command, name)) return true;
@@ -183,33 +180,39 @@ function resolveInput(file: string, name: string, raw: RawInputValue): InputSpec
   if (raw === "profile") return { name, type: "profile" };
   if (Array.isArray(raw)) return { name, type: "choice", options: raw };
   const type = raw.type ?? (raw.options !== undefined ? "choice" : "text");
+  const whenClauses =
+    raw.when === undefined
+      ? undefined
+      : (Array.isArray(raw.when) ? raw.when : [raw.when]).map((clause, i) =>
+          parseWhenClause(
+            file,
+            undefined,
+            Array.isArray(raw.when) ? `inputs.${name}.when[${i}]` : `inputs.${name}.when`,
+            clause,
+          ),
+        );
+  const extras = {
+    ...(raw.description !== undefined ? { description: raw.description } : {}),
+    ...(raw.default !== undefined ? { default: raw.default } : {}),
+    ...(whenClauses !== undefined ? { when: whenClauses } : {}),
+    ...(raw.allow_custom === true ? { allowCustom: true } : {}),
+    ...(raw.min_length !== undefined ? { minLength: raw.min_length } : {}),
+  };
   if (type === "choice") {
     if (!raw.options) {
       bail(file, undefined, `inputs.${name}`, "choice input requires options");
     }
     if (Array.isArray(raw.options)) {
-      return {
-        name,
-        type: "choice",
-        description: raw.description,
-        default: raw.default,
-        options: raw.options,
-      };
+      return { name, type: "choice", options: raw.options, ...extras };
     }
     return {
       name,
       type: "choice",
-      description: raw.description,
-      default: raw.default,
       dynamicOptions: raw.options as DynamicChoice,
+      ...extras,
     };
   }
-  return {
-    name,
-    type,
-    description: raw.description,
-    default: raw.default,
-  };
+  return { name, type, ...extras };
 }
 
 function inputsOf(file: string, raw: RawWorkflow): InputSpec[] {
@@ -218,7 +221,15 @@ function inputsOf(file: string, raw: RawWorkflow): InputSpec[] {
 
 function assertInputsUsed(file: string, workflow: LoadedWorkflow): void {
   for (const input of workflow.inputs) {
-    if (!inputIsUsed(input.name, workflow.steps, workflow.returns, workflow.onFailure)) {
+    if (
+      !inputIsUsed(
+        input.name,
+        workflow.steps,
+        workflow.returns,
+        workflow.onFailure,
+        workflow.inputs,
+      )
+    ) {
       bail(file, undefined, `inputs.${input.name}`, "unused input");
     }
   }
@@ -226,6 +237,7 @@ function assertInputsUsed(file: string, workflow: LoadedWorkflow): void {
 
 function assertDefaultInOptions(file: string, input: InputSpec): void {
   if (input.default === undefined || input.options === undefined) return;
+  if (input.allowCustom) return;
   if (!input.options.includes(input.default)) {
     bail(
       file,
@@ -236,64 +248,16 @@ function assertDefaultInOptions(file: string, input: InputSpec): void {
   }
 }
 
-async function finalizeInputs(
-  file: string,
-  inputs: InputSpec[],
-  config: WorkflowsConfig,
-  repoRoot: string,
-  resolveDynamic: boolean,
-): Promise<InputSpec[]> {
-  const profiles = profileNames(config);
-  const out: InputSpec[] = [];
+function finalizeInputs(file: string, inputs: InputSpec[]): InputSpec[] {
   for (const input of inputs) {
-    if (input.type === "profile") {
-      if (profiles.length === 0) {
-        bail(
-          file,
-          undefined,
-          `inputs.${input.name}`,
-          noProfilesConfiguredMessage(await globalConfigPath(), repoConfigPath(repoRoot)),
-        );
-      }
-      const next: InputSpec = { ...input, options: profiles };
-      if (next.default !== undefined && !resolveProfile(config, next.default)) {
-        bail(
-          file,
-          undefined,
-          `inputs.${input.name}.default`,
-          `default '${next.default}' is not in available values`,
-        );
-      }
-      assertDefaultInOptions(file, next);
-      out.push(next);
-      continue;
-    }
-    if (input.type === "choice" && input.dynamicOptions) {
-      if (!resolveDynamic) {
-        out.push(input);
-        continue;
-      }
-      const options = await resolveDynamicChoices(file, input.name, input.dynamicOptions, repoRoot);
-      const next: InputSpec = {
-        name: input.name,
-        type: "choice",
-        description: input.description,
-        default: input.default,
-        options,
-      };
-      assertDefaultInOptions(file, next);
-      out.push(next);
-      continue;
-    }
     if (input.type === "choice") {
       if (input.options !== undefined && input.options.length === 0) {
         bail(file, undefined, `inputs.${input.name}`, "choice produced no options");
       }
       assertDefaultInOptions(file, input);
     }
-    out.push(input);
   }
-  return out;
+  return inputs;
 }
 
 function loadFromRaw(
@@ -322,7 +286,6 @@ function loadFromRaw(
 type LoadScope = {
   repoRoot: string;
   config: WorkflowsConfig;
-  resolveDynamic: boolean;
   stack: string[];
   cache: Map<string, LoadedWorkflow>;
 };
@@ -344,7 +307,6 @@ async function loadChild(name: string, scope: LoadScope): Promise<LoadedWorkflow
   const loaded = await finalizeWorkflow(workflow, {
     ...scope,
     stack: [...scope.stack, name],
-    resolveDynamic: false,
   });
   scope.cache.set(name, loaded);
   return loaded;
@@ -355,13 +317,7 @@ async function finalizeWorkflow(
   scope: LoadScope,
 ): Promise<LoadedWorkflow> {
   assertInputsUsed(workflow.file, workflow);
-  const inputs = await finalizeInputs(
-    workflow.file,
-    workflow.inputs,
-    scope.config,
-    scope.repoRoot,
-    scope.resolveDynamic,
-  );
+  const inputs = finalizeInputs(workflow.file, workflow.inputs);
   const withInputs = { ...workflow, inputs };
 
   const childReturnsById = new Map<string, ReturnsSpec | undefined>();
@@ -378,7 +334,7 @@ async function finalizeWorkflow(
     childReturnsById.set(step.id, child.returns);
   }
 
-  const parentInputNames = new Set(withInputs.inputs.map((input) => input.name));
+  const parentInputs = withInputs.inputs;
   const profiles = new Set(profileNames(scope.config));
   const producers = assertWorkflowReferences(
     withInputs.file,
@@ -397,8 +353,9 @@ async function finalizeWorkflow(
       step.action.inputs,
       child,
       producers,
-      parentInputNames,
+      parentInputs,
       profiles,
+      step.when ?? [],
     );
   }
   if (withInputs.onFailure?.kind === "workflow") {
@@ -409,7 +366,7 @@ async function finalizeWorkflow(
       withInputs.onFailure.inputs,
       child,
       producers,
-      parentInputNames,
+      parentInputs,
       profiles,
     );
   }
@@ -423,13 +380,11 @@ export async function parseWorkflowText(
   config: WorkflowsConfig = EMPTY_CONFIG,
   repoRoot: string = process.cwd(),
   file = `${name}.yaml`,
-  resolveDynamic = true,
 ): Promise<LoadedWorkflow> {
   const workflow = loadFromRaw(name, file, "repo", parseRaw(file, yaml));
   return finalizeWorkflow(workflow, {
     repoRoot,
     config,
-    resolveDynamic,
     stack: [name],
     cache: new Map(),
   });
@@ -442,14 +397,13 @@ export async function loadWorkflow(
 ): Promise<LoadedWorkflow> {
   const resolved = await resolveWorkflowFile(name, repoRoot);
   if (!resolved) throw new WorkflowLoadError(`workflow '${name}' not found`);
-  return loadWorkflowEntry({ name, ...resolved }, repoRoot, config, true);
+  return loadWorkflowEntry({ name, ...resolved }, repoRoot, config);
 }
 
 export async function loadWorkflowEntry(
   entry: WorkflowListEntry,
   repoRoot: string,
   config?: WorkflowsConfig,
-  resolveDynamic = true,
 ): Promise<LoadedWorkflow> {
   if (!(await Bun.file(entry.file).exists())) {
     bail(entry.file, undefined, undefined, "file not found");
@@ -460,7 +414,6 @@ export async function loadWorkflowEntry(
   return finalizeWorkflow(workflow, {
     repoRoot,
     config: cfg,
-    resolveDynamic,
     stack: [entry.name],
     cache: new Map(),
   });
@@ -474,7 +427,7 @@ export async function listWorkflows(
   const entries = await collectWorkflowEntries(repoRoot);
   for (const entry of entries) {
     try {
-      const workflow = await loadWorkflowEntry(entry, repoRoot, cfg, false);
+      const workflow = await loadWorkflowEntry(entry, repoRoot, cfg);
       entry.hidden = workflow.hidden;
       entry.title = workflow.title;
       entry.description = workflow.description;

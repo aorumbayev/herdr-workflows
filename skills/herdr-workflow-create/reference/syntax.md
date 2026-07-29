@@ -30,6 +30,8 @@ inputs:
 ```
 
 Types: `text`, `choice` (static or `{run: argv}`), `profile`. Only the entry workflow prompts.
+Dynamic-choice argv is template-free, receives no partially collected `HWF_*` inputs, and should only
+perform read-only discovery.
 
 ## Actions
 
@@ -90,7 +92,7 @@ Context keys: `workspace`, `tab`, `pane`, `worktree`, `agent`, `selection`, `pla
 
 ```yaml
 pane:
-  open: tab | beside | below
+  open: tab | beside | below # or "{{inputs.place}}" for closed static choice of those literals
   size: 40 # new-pane percent; Herdr clamps ratio to 0.1–0.9
   focus: true
   close: success # agent-only
@@ -113,11 +115,15 @@ Do not set both on the same step.
 
 ## Control flow
 
-- `when:` scalar truthiness or `==` / `!=`
+- `when:` one clause or ordered list (AND): scalar truthiness or `==` / `!=`
+- Mapped inputs may declare `when:` (earlier inputs only); inactive inputs are skipped
+- Conditional input refs (templates or shell `$HWF_<name>`) need matching step `when:` guards
+- `allow_custom: true` on choices only; `min_length` on mapped inputs; `success_codes` on blocking local `run:`
+- `pane.open` may be `{{inputs.place}}` when `place` is an unconditional closed static choice of `tab`/`beside`/`below`
 - `continue_on_error: true`
 - `retry: { attempts: 2, delay: 1s }` — local `run:` / `herdr:` only
 - entry `on_failure:` once
 
 ## Caps
 
-24 KiB `HWF_*` env; 8 MiB per capture; 1,000 dynamic choices / 10s; 30s transcript extractors.
+24 KiB `HWF_*` env (entry and child); 8 MiB per capture; 1,000 dynamic choices / 10s; 30s transcript extractors.

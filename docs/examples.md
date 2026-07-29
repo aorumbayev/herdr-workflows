@@ -13,6 +13,7 @@ All shipped examples use `version: v1alpha1`. The source of truth is [`examples/
 ## Authoring tips
 
 - Prefer the argv form `run: [cmd, arg]` for values that must be arguments.
+- Start with `branch-check` for guarded inputs, custom choices, ordered `when:` guards, and `success_codes`.
 - Use `{{steps.id.response}}` or `{{steps.id.stdout}}`. Results attach automatically.
 - Background work needs a herdr-owned `pane:` (or an existing-agent `target:`).
 - Keep recovery on the entry workflow's `on_failure:` only.
