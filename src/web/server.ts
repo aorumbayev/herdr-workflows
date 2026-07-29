@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { globalConfigPath, loadConfig, parseConfigText, repoConfigPath } from "../config";
+import { workflowSchemaUrl } from "../setup/paths";
 import { HERDR_METHOD_BY_NAME } from "../herdr-methods.generated";
 import { readRunLog, recentRuns } from "../runlog";
 import { exportWorkflowBundle } from "../workflow/export";
@@ -63,8 +64,40 @@ function scopeOf(v: unknown): Scope | undefined {
   return v === "repo" || v === "global" ? v : undefined;
 }
 
-async function configOf(repoRoot: string) {
-  return loadConfig(repoRoot);
+const SCHEMA_POINTER_RE = /^#\s*yaml-language-server:\s*\$schema=\S+\s*$/;
+
+function schemaPointer(): string {
+  return `# yaml-language-server: $schema=${workflowSchemaUrl()}`;
+}
+
+/**
+ * Give workflow text a schema pointer for the contract this build implements. Any pointer already
+ * present is replaced wherever it sits, so a file authored against another version cannot end up
+ * carrying two contradictory pointers. Text already pinned is returned byte-identical.
+ */
+function withPinnedSchemaPointer(text: string): string {
+  const pointer = schemaPointer();
+  if (text.length === 0) return `${pointer}\n`;
+  const lines = text.split("\n");
+  const kept = lines.filter((line) => !SCHEMA_POINTER_RE.test(line));
+  if (kept.length === lines.length - 1 && lines[0] === pointer) return text;
+  return [pointer, ...kept].join("\n");
+}
+
+/**
+ * Identity of the bytes an editor loaded. A save carries the token it was handed and may only
+ * overwrite content that still hashes to it, so a writer the editor never saw — a second tab,
+ * an import, a checkout — is never silently discarded.
+ */
+function contentToken(text: string): string {
+  return new Bun.CryptoHasher("sha256").update(text).digest("hex").slice(0, 16);
+}
+
+async function diskToken(file: string): Promise<string | undefined> {
+  const text = await Bun.file(file)
+    .text()
+    .catch(() => undefined);
+  return text === undefined ? undefined : contentToken(text);
 }
 
 function scalar(v: string): string {
@@ -177,6 +210,7 @@ function dumpInputs(lines: string[], inputs: NonNullable<RawWorkflowDoc["inputs"
 
 export function dumpWorkflow(doc: RawWorkflowDoc): string {
   const lines: string[] = [];
+  lines.push(schemaPointer());
   lines.push(`version: ${scalar(doc.version)}`);
   if (doc.title) {
     field(lines, "", "title", doc.title);
@@ -233,7 +267,7 @@ function hostAllowed(value: string | null, port: number): boolean {
 }
 
 async function getState(repoRoot: string): Promise<Response> {
-  const config = await configOf(repoRoot);
+  const config = await loadConfig(repoRoot);
   const profiles = Object.keys(config.profiles).sort();
   const entries = await listWorkflows(repoRoot, config);
   const mapped = await Promise.all(
@@ -263,6 +297,7 @@ async function getState(repoRoot: string): Promise<Response> {
     canonicalRepoRoot: repoRoot,
     profiles,
     entries: mapped,
+    workflowSchemaUrl: workflowSchemaUrl(),
   });
 }
 
@@ -313,7 +348,7 @@ async function handleValidate(repoRoot: string, body: Record<string, unknown>): 
     await parseWorkflowText(
       name,
       String(body.text ?? ""),
-      await configOf(repoRoot),
+      await loadConfig(repoRoot),
       repoRoot,
       `${name}.yaml`,
     );
@@ -372,10 +407,11 @@ export async function dropSource(
 
 /**
  * Persist a workflow. `previous` is the path the editor loaded this buffer from: the same
- * path means an in-place edit (overwrite), a different path — or no previous at all — means
- * the destination is being claimed, so it must be free. A move claims the destination and
- * drops the source in one request; a source that will not go away undoes the claim, so the
- * call either moves the workflow or changes nothing.
+ * path means an in-place edit, a different path — or no previous at all — means the destination
+ * is being claimed, so it must be free. An in-place edit may only replace the content the buffer
+ * was derived from, identified by `base`. A move claims the destination and drops the source in
+ * one request; a source that will not go away undoes the claim, so the call either moves the
+ * workflow or changes nothing.
  */
 async function writeWorkflow(
   repoRoot: string,
@@ -383,23 +419,39 @@ async function writeWorkflow(
   scope: Scope,
   text: string,
   previous?: { name: string; scope: Scope },
+  base?: string,
 ): Promise<Response> {
   if (!WORKFLOW_NAME_RE.test(name)) return json({ ok: false, error: "invalid workflow name" }, 400);
+  const normalized = withPinnedSchemaPointer(text);
   try {
-    await parseWorkflowText(name, text, await configOf(repoRoot), repoRoot, `${name}.yaml`);
+    await parseWorkflowText(name, normalized, await loadConfig(repoRoot), repoRoot, `${name}.yaml`);
   } catch (error) {
     return json({ ok: false, error: errText(error) }, 400);
   }
   const file = workflowPath(scope, repoRoot, name);
   const prev = previous ? workflowPath(previous.scope, repoRoot, previous.name) : undefined;
   if (prev === file) {
+    const onDisk = await diskToken(file);
+    if (onDisk !== base) {
+      return json(
+        {
+          ok: false,
+          stale: true,
+          error:
+            onDisk === undefined
+              ? `'${name}' no longer exists in ${scope}; it changed since this buffer was loaded`
+              : `'${name}' changed in ${scope} since this buffer was loaded — reload to see the current file before saving`,
+        },
+        409,
+      );
+    }
     await mkdir(dirname(file), { recursive: true });
-    await Bun.write(file, text);
-    return json({ ok: true });
+    await Bun.write(file, normalized);
+    return json({ ok: true, base: contentToken(normalized) });
   }
-  const claimed = await claimFile(file, text, `'${name}' already exists in ${scope}`);
+  const claimed = await claimFile(file, normalized, `'${name}' already exists in ${scope}`);
   if (claimed) return claimed;
-  if (!previous) return json({ ok: true });
+  if (!previous) return json({ ok: true, base: contentToken(normalized) });
   return dropSource(workflowPath(previous.scope, repoRoot, previous.name), file, previous.name);
 }
 
@@ -420,7 +472,7 @@ async function handleWorkflow(
     let error: string | undefined;
     if (text) {
       try {
-        await parseWorkflowText(name, text, await configOf(repoRoot), repoRoot, `${name}.yaml`);
+        await parseWorkflowText(name, text, await loadConfig(repoRoot), repoRoot, `${name}.yaml`);
       } catch (e) {
         valid = false;
         error = errText(e);
@@ -434,7 +486,7 @@ async function handleWorkflow(
         flags = [];
       }
     }
-    return json({ text, valid, error, flags });
+    return json({ text, valid, error, flags, base: text ? contentToken(text) : undefined });
   }
   if (req.method === "PUT") {
     const scope = scopeOf(body.scope);
@@ -453,6 +505,7 @@ async function handleWorkflow(
       scope,
       String(body.text ?? ""),
       previous,
+      typeof body.base === "string" && body.base ? body.base : undefined,
     );
   }
   if (req.method === "DELETE") {

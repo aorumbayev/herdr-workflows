@@ -1,29 +1,6 @@
+import { HERDR_FOCUS_POLICY } from "./herdr-methods.generated";
+
 type Params = Record<string, unknown>;
-
-const REQUIRED_TARGET: Record<string, string> = {
-  "tab.create": "workspace_id",
-  "pane.current": "caller_pane_id",
-  "pane.layout": "pane_id",
-  "pane.process_info": "pane_id",
-  "pane.neighbor": "pane_id",
-  "pane.edges": "pane_id",
-  "pane.focus_direction": "pane_id",
-  "pane.resize": "pane_id",
-  "pane.zoom": "pane_id",
-  "pane.split": "target_pane_id",
-};
-
-const EXACTLY_ONE: Record<string, [string, string]> = {
-  "layout.apply": ["workspace_id", "tab_id"],
-  "layout.set_split_ratio": ["tab_id", "pane_id"],
-  "worktree.list": ["workspace_id", "cwd"],
-  "worktree.create": ["workspace_id", "cwd"],
-  "worktree.open": ["workspace_id", "cwd"],
-};
-
-const AT_LEAST_ONE: Record<string, [string, string]> = {
-  "layout.export": ["pane_id", "tab_id"],
-};
 
 function present(params: Params, key: string): boolean {
   const value = params[key];
@@ -59,25 +36,42 @@ function movePolicy(method: string, params: Params): string | undefined {
   return undefined;
 }
 
-/** Pinned herdr 0.7.5 explicit-target policy: omitted selectors must never reach live UI focus. */
+/**
+ * Explicit-target policy: omitted selectors must never reach live UI focus.
+ * Classification comes from the generated schema; an unclassified method is rejected.
+ */
 export function assertFocusPolicy(method: string, params: Params | undefined): string | undefined {
   const obj = params ?? {};
-  const required = REQUIRED_TARGET[method];
-  if (required !== undefined && !present(obj, required)) {
-    return explicit(method, `params.${required} is required`);
+  const policy = HERDR_FOCUS_POLICY.get(method);
+  if (policy === undefined) {
+    return explicit(method, "needs an explicit target selector (unclassified method)");
   }
-  const one = EXACTLY_ONE[method];
-  if (one) {
-    const set = one.filter((key) => present(obj, key));
-    if (set.length !== 1) return explicit(method, `needs exactly one of ${one.join(" or ")}`);
+  switch (policy.kind) {
+    case "none":
+    case "filter":
+      return undefined;
+    case "require":
+      if (!present(obj, policy.field)) {
+        return explicit(method, `params.${policy.field} is required`);
+      }
+      return undefined;
+    case "exactlyOne": {
+      const set = policy.fields.filter((key) => present(obj, key));
+      if (set.length !== 1) {
+        return explicit(method, `needs exactly one of ${policy.fields.join(" or ")}`);
+      }
+      return undefined;
+    }
+    case "atLeastOne":
+      if (!policy.fields.some((key) => present(obj, key))) {
+        return explicit(method, `needs one of ${policy.fields.join(" or ")}`);
+      }
+      return undefined;
+    case "swap":
+      return swapPolicy(method, obj);
+    case "move":
+      return movePolicy(method, obj);
   }
-  const any = AT_LEAST_ONE[method];
-  if (any && !any.some((key) => present(obj, key))) {
-    return explicit(method, `needs one of ${any.join(" or ")}`);
-  }
-  if (method === "pane.swap") return swapPolicy(method, obj);
-  if (method === "pane.move") return movePolicy(method, obj);
-  return undefined;
 }
 
 /** Load-time alias: selector presence is key-based; template values do not waive it. */

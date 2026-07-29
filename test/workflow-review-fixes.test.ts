@@ -103,7 +103,7 @@ steps:
     await startRun(state, { name: "broken", source: "global", file: "/global/broken.yaml" });
 
     expect(state.running).toBe(false);
-    expect(String(state.status.content)).toContain("Failed · reload failed");
+    expect(String(state.status.content)).toContain("Failed | reload failed");
     expect(String(state.footer.content)).toBe("enter/esc close");
   });
 

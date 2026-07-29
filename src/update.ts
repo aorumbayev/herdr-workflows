@@ -152,7 +152,6 @@ export function parsePluginListSource(jsonText: string): PluginSourceInfo {
     const repo = str((source as { repo?: unknown }).repo);
     return { kind: "github", owner, repo };
   }
-  if (kind === "local" || kind === undefined) return { kind: "local" };
   return { kind: "local" };
 }
 

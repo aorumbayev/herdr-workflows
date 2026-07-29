@@ -1184,7 +1184,9 @@ steps:
     expect(result.ok).toBe(true);
     const finals = (await readRunLog()).filter((e) => e.workflow === "m" && e.step === undefined);
     expect(finals[0]?.returns).toMatchObject({ note: "hello" });
-    expect(typeof (finals[0]?.returns as { platform?: string }).platform).toBe("string");
+    expect(typeof (finals[0]?.returns as { platform?: string } | undefined)?.platform).toBe(
+      "string",
+    );
   });
 
   test("progress reports one outcome line per step including skip", async () => {

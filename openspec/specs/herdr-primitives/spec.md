@@ -48,24 +48,9 @@ The loader MUST generate method existence, params, protocol number, and success-
 ### Requirement: Explicit raw method targets
 Authors MUST supply every required or behavior-selecting target under `params:`, using the method's exact schema field. Authors MUST use canonical context explicitly when they want it. The loader MUST validate mutually exclusive selectors through generated or cross-field rules. It MUST never let an omitted raw target fall through to mutable Herdr UI focus.
 
-For pinned Herdr 0.7.5, the explicit-focus policy MUST require these fields:
+The loader MUST reject any allowed `herdr:` call that omits a schema parameter Herdr would otherwise resolve from live UI state. That required-selector set MUST be derived from the generated schema so a regenerated method is rejected until policy classifies it; an unclassified allowed method MUST NOT load. Genuine list/filter scopes MAY omit their scope selectors when policy explicitly opts them out.
 
-- `tab.create.workspace_id`
-- `pane.current.caller_pane_id`
-- `pane.layout.pane_id`
-- `pane.process_info.pane_id`
-- `pane.neighbor.pane_id`
-- `pane.edges.pane_id`
-- `pane.focus_direction.pane_id`
-- `pane.resize.pane_id`
-- `pane.zoom.pane_id`
-- `pane.split.target_pane_id`
-- `pane.swap.pane_id` for its direction form, or both source/target IDs for its pair form
-- `pane.move.destination.target_pane_id` for a tab split, and destination workspace for new-tab placement
-- one of `layout.apply.workspace_id` or `layout.apply.tab_id`
-- one of `layout.export.pane_id` or `layout.export.tab_id`
-
-Optional list/filter scopes such as `pane.list.workspace_id` and `tab.list.workspace_id` MUST stay optional. Each of `worktree.list`, `worktree.create`, and `worktree.open` MUST require exactly one of `workspace_id` or `cwd`. `layout.set_split_ratio` MUST require exactly one of `tab_id` or `pane_id`. Updating the pinned Herdr schema MUST require reviewing and updating this policy table.
+Non-normative illustration for pinned Herdr 0.7.5 (derived output, not the completeness guarantee): `tab.create` requires `workspace_id`; `pane.split` requires `target_pane_id`; `pane.swap` requires its direction+`pane_id` form or both source/target IDs; `layout.apply` and `layout.set_split_ratio` require exactly one of their paired selectors; `worktree.list` / `create` / `open` require exactly one of `workspace_id` or `cwd`; `pane.list` and `tab.list` keep optional filter scopes.
 
 #### Scenario: Invocation tab rename
 - **WHEN** a workflow intends to rename its invocation tab

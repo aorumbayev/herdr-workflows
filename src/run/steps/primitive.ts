@@ -3,8 +3,6 @@ import { validateMethodParams } from "../../herdr-methods";
 import { substituteParams } from "../../workflow/parse";
 import { dispatchFailure, type StepCtx, type StepOutcome } from "../context";
 
-export { assertFocusPolicy } from "../../herdr-policy";
-
 export async function herdrStep(c: StepCtx): Promise<StepOutcome> {
   const action = c.step.action;
   if (action.kind !== "herdr") return { ok: false, error: "internal: not a herdr step" };

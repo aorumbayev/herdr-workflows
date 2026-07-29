@@ -10,7 +10,7 @@ import {
   sizeToFirstRatio,
 } from "../src/run/context";
 import { resolveInputValues } from "../src/run/runner";
-import { assertFocusPolicy } from "../src/run/steps/primitive";
+import { assertFocusPolicy } from "../src/herdr-policy";
 import { buildHwfEnv, mergeStepEnv, runArgvStep, runShellStep } from "../src/run/steps/shell";
 import type { InputSpec } from "../src/workflow/types";
 
@@ -133,6 +133,13 @@ describe("assertFocusPolicy", () => {
 
   test("unconstrained methods pass", () => {
     expect(assertFocusPolicy("notification.show", { title: "hi" })).toBeUndefined();
+  });
+
+  test("filter scopes stay optional while unclassified methods are refused", () => {
+    expect(assertFocusPolicy("pane.list", {})).toBeUndefined();
+    expect(assertFocusPolicy("tab.list", {})).toBeUndefined();
+    expect(assertFocusPolicy("pane.rotate", {})).toContain("unclassified method");
+    expect(assertFocusPolicy("pane.edges", {})).toContain("pane_id");
   });
 
   test("templated unrelated params do not waive selector presence", () => {

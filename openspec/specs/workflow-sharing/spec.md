@@ -62,7 +62,7 @@ Before writing a bundle, the workbench MUST display every workflow name, every c
 - **THEN** every exact bundled YAML body is written to `.hwf/workflows/<name>.yaml`
 
 ### Requirement: Existing workflow replacement is separately confirmed
-Import MUST validate and preflight the complete bundle before writing any destination, and it MUST preserve the complete existing set by default. If the chosen scope already contains any bundled name, the workbench MUST identify all conflicts and require one separate explicit replace-all confirmation before writing the bundle. The workbench MUST stage and atomically replace each individual destination.
+Import MUST validate and preflight the complete bundle before writing any destination, and it MUST preserve the complete existing set by default. If the chosen scope already contains any bundled name, the workbench MUST identify all conflicts and require one separate explicit replace-all confirmation before writing the bundle. An import MUST leave the destination scope either wholly as the reviewed bundle or wholly as it was before, including across process death.
 
 #### Scenario: Existing destination kept
 - **WHEN** any bundled workflow name already exists and the user does not confirm replacement

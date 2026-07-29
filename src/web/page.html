@@ -1626,7 +1626,14 @@
           pane.appendChild(p);
           return;
         }
-        renderEditor(name, scope, r.data.text || "", r.data.error || "", r.data.flags || []);
+        renderEditor(
+          name,
+          scope,
+          r.data.text || "",
+          r.data.error || "",
+          r.data.flags || [],
+          r.data.base,
+        );
       }
 
       function newWorkflow() {
@@ -1637,7 +1644,16 @@
         if (narrowViewport()) listCollapsed = true;
         syncWorkflowLayout();
         renderWorkflows();
-        renderEditor("", "repo", "version: v1alpha1\nsteps:\n  - run: [echo, hello]\n", "", []);
+        const pointer = state.workflowSchemaUrl
+          ? "# yaml-language-server: $schema=" + state.workflowSchemaUrl + "\n"
+          : "";
+        renderEditor(
+          "",
+          "repo",
+          pointer + "version: v1alpha1\nsteps:\n  - run: [echo, hello]\n",
+          "",
+          [],
+        );
       }
 
       // Readable step blocks appended at the end of the step list (the right slot for a linear runner).
@@ -3702,7 +3718,7 @@
         return at;
       }
 
-      function renderEditor(name, scope, text, loadError, flags) {
+      function renderEditor(name, scope, text, loadError, flags, base) {
         const pane = $("pane");
         pane.innerHTML = "";
         document.body.classList.remove("canvas-expanded");
@@ -3713,6 +3729,7 @@
         let savedText = text;
         let sourceName = name;
         let sourceScope = scope;
+        let sourceBase = base;
         let canvasPending = false;
         let mode = "text";
         let extras = { version: "v1alpha1" }; // metadata carried through canvas mode untouched
@@ -3974,6 +3991,7 @@
           if (sourceName) {
             putBody.previousName = sourceName;
             putBody.previousScope = sourceScope;
+            if (sourceBase) putBody.base = sourceBase;
           }
           const r = await api("/api/workflow", {
             method: "PUT",
@@ -3992,6 +4010,7 @@
           savedText = ta.value;
           sourceName = newName;
           sourceScope = newScope;
+          sourceBase = r.data.base || sourceBase;
           canvasPending = false;
           refreshDirty();
           toast("saved " + newName, true);
@@ -4749,7 +4768,7 @@
           if (r.status !== 200 || editorDirty) return;
           const text = r.data.text || "";
           if (text === editorFileText) return;
-          renderEditor(current.name, current.scope, text, r.data.error || "");
+          renderEditor(current.name, current.scope, text, r.data.error || "", [], r.data.base);
         } finally {
           liveBusy = false;
         }
@@ -4767,15 +4786,11 @@
         return null;
       }
 
-      function themeLabel(mode) {
-        return mode || "system";
-      }
-
       function syncThemeControl() {
         const btn = $("theme-btn");
         if (!btn) return;
         const mode = themeMode();
-        const label = themeLabel(mode);
+        const label = mode || "system";
         btn.textContent = label;
         btn.setAttribute("aria-label", "Theme: " + label);
         btn.setAttribute("aria-pressed", mode ? "true" : "false");

@@ -41,9 +41,9 @@ hwf init            # team / repo-local: .hwf/config.yaml
 hwf init --global   # personal: herdr plugin config dir (for ~/.hwf/workflows)
 ```
 
-Both commands scan PATH for known agent kinds (`claude`, `codex`, `aider`, `cursor`, `opencode`). Each found kind becomes one profile. The first kind becomes `default_profile`.
+Both commands scan PATH for known agent kinds (`claude`, `codex`, `aider`, `cursor`, `opencode`). Each found kind becomes one profile. The alphabetically first detected kind becomes `default_profile`.
 
-Repo init also creates `.hwf/workflows/` and adds `.hwf/config.local.yaml` to `.gitignore`. Use repo init when your team shares profiles in git. Use `--global` when you keep workflows in `~/.hwf/workflows` and want profiles without a checkout change.
+Repo init also creates `.hwf/workflows/` and writes `.hwf/.gitignore` with `config.local.yaml` and `tmp/`. Use repo init when your team shares profiles in git. Use `--global` when you keep workflows in `~/.hwf/workflows` and want profiles without a checkout change.
 
 ### Profiles
 
@@ -72,7 +72,7 @@ Config merges across three layers. Each layer replaces whole entries by name.
 
 You can point `deep-review` at a different kind locally. This does not change what the team shares.
 
-If you have no workflows yet, import ready-made ones from [Examples](/examples). Each card copies the command `hwf workflow import "<bundle>"`. Import reviews every bundled YAML file. It flags sensitive content. It asks for one repo or global destination. It confirms before it writes. Each surface handles name conflicts on its own. See [Share and import](#share-and-import).
+If you have no workflows yet, import ready-made ones from [Examples](/examples). Each card copies the command `hwf workflow import "<bundle>"`. Import reviews every bundled YAML file. It flags sensitive content. The CLI confirms the reviewed preview first, then asks for one repo or global destination. The workbench asks for destination scope, then confirms. Each surface handles name conflicts on its own. See [Share and import](#share-and-import).
 
 Treat workflow YAML as reviewed executable code. Opening a repository never runs a workflow. There is no sandbox. A trusted `run:` step can call the full herdr CLI or socket as your user.
 
@@ -112,7 +112,7 @@ steps:
 | `hwf --version`           | Show the installed plugin version                                 |
 | `hwf update`              | Install the latest published GitHub Release via Herdr             |
 
-Runs always go through the picker or `hwf run`. The workbench builds, shares, and imports workflows. It never executes them. Picker shortcuts and `hwf web` reuse one live authenticated workbench per repository, as long as the recorded endpoint still answers.
+Runs always go through the picker or `hwf run`. The workbench builds, shares, and imports workflows. It never executes them. Picker shortcuts and `hwf web` reuse one live authenticated workbench per repository, as long as the recorded endpoint still answers. An owned workbench also retires when the code it was built from changes.
 
 Root help labels `v1alpha1` as the workflow format. It is independent of the plugin version.
 
@@ -136,7 +136,7 @@ hwf workflow import "<bundle>"
 
 The bundle is a gzip-compressed, base64-encoded `{name, yaml}[]` array. It is never empty. It holds the exact selected source plus every `workflow:` child it references, transitively. Resolution checks the repo first, then the global scope, the same order runtime uses. Local provenance is display-only. The bundle does not encode it. A cycle or a missing child fails the export. The old single-workflow `{v, name, body}` payload no longer works. Re-export the workflow instead.
 
-Import, whether from the CLI or the workbench `#import` view, accepts that command or the raw encoded bundle. It rejects other shell text. It shows every YAML body and the aggregate sensitivity warnings. It requires one `repo` or `global` destination for the whole set, then confirmation.
+Import, whether from the CLI or the workbench `#import` view, accepts that command or the raw encoded bundle. It rejects other shell text. It shows every YAML body and the aggregate sensitivity warnings. The CLI confirms the reviewed preview first, then asks for one `repo` or `global` destination. The workbench asks for destination scope, then confirms.
 
 If a bundled name already exists in that scope, import writes nothing. The workbench asks for an explicit replace-all confirmation. The CLI reports the conflicts and requires a rerun with `--force`. Share and import never run workflows.
 

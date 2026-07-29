@@ -16,7 +16,7 @@
 
 herdr-workflows is a [herdr](https://herdr.dev) plugin. It runs short linear YAML workflows with `run:`, `agent:`, `herdr:`, and `workflow:` steps.
 
-Start a run from the picker (`prefix+k`), the `hwf` CLI, or a local web workbench. herdr owns panes and UI. This plugin only loads and sequences steps. The format is `version: v1alpha1`.
+Start a run from the picker (`prefix+k`) or the `hwf` CLI. herdr owns panes and UI. This plugin only loads and sequences steps. The format is `version: v1alpha1`.
 
 ```yaml
 # .hwf/workflows/review.yaml
@@ -56,7 +56,7 @@ hwf init            # team / repo-local: writes .hwf/config.yaml
 hwf init --global   # personal: writes herdr plugin config dir (for ~/.hwf/workflows)
 ```
 
-Both commands probe PATH for known kinds (`claude`, `codex`, `aider`, `cursor`, `opencode`). Each found kind becomes one profile. The first kind is `default_profile`.
+Both commands probe PATH for known kinds (`claude`, `codex`, `aider`, `cursor`, `opencode`). Each found kind becomes one profile. The alphabetically first detected kind is `default_profile`.
 
 Use repo init for shared team config. Use `--global` when you run workflows from `~/.hwf/workflows` without a per-repo `.hwf`.
 
@@ -77,7 +77,7 @@ Config merges in this order: global herdr plugin config, committed `.hwf/config.
 
 Ready-made workflows live in [`examples/`](examples) and on the [Examples page](https://aorumbayev.github.io/herdr-workflows/examples). Each card copies a `hwf workflow import "<bundle>"` command.
 
-Import reviews every bundled YAML and flags sensitive parts. It asks for one repo or global destination, then confirms before it writes. On name conflicts, the workbench asks for replace-all. The CLI needs `--force` on a rerun. Old single-workflow payloads are unsupported.
+Import reviews every bundled YAML and flags sensitive parts. The CLI confirms the reviewed preview first, then asks for one repo or global destination before it writes. The workbench asks for destination scope, then confirms. On name conflicts, the workbench asks for replace-all. The CLI needs `--force` on a rerun. Old single-workflow payloads are unsupported.
 
 Press `prefix+k` to pick and run a workflow. In list mode, `Ctrl+E` edits, `Ctrl+Y` shares, and `Ctrl+O` opens import. Or use the CLI:
 
@@ -92,7 +92,7 @@ hwf --version       # installed plugin version
 
 Root help labels `v1alpha1` as the workflow format. It is independent of the plugin version.
 
-Runs always go through the picker or `hwf run`. They need real herdr panes. The web workbench builds, shares, and imports. It never runs. Picker shortcuts reuse one live workbench per repository when that workbench is still reachable.
+Runs always go through the picker or `hwf run`. They need real herdr panes. The web workbench builds, shares, and imports. It never runs. Picker shortcuts reuse one live workbench per repository when that workbench is still reachable. An owned workbench also retires when the code it was built from changes.
 
 ## Agent skill
 

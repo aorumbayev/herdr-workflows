@@ -72,18 +72,48 @@ export function commitResolvedOptions(
   return true;
 }
 
-const CUSTOM_CHOICE_LABEL = "custom…";
+const CUSTOM_CHOICE_LABEL = "custom...";
 const CUSTOM_CHOICE_VALUE: CustomChoiceValue = { kind: "custom" };
+const ELLIPSIS = "...";
+const CHROME_SEP = " | ";
+
+const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+function columns(text: string): number {
+  return Bun.stringWidth(text);
+}
+
+function padColumns(text: string, width: number): string {
+  const used = columns(text);
+  if (used >= width) return text;
+  return `${text}${" ".repeat(width - used)}`;
+}
+
+function takeColumns(text: string, max: number): string {
+  if (max <= 0) return "";
+  if (columns(text) <= max) return text;
+  let out = "";
+  let used = 0;
+  for (const { segment } of segmenter.segment(text)) {
+    const w = columns(segment);
+    if (used + w > max) break;
+    out += segment;
+    used += w;
+  }
+  return out;
+}
 
 function stripFilePrefix(error: string, file: string): string {
   return error.startsWith(file) ? error.slice(file.length).replace(/^[,:]\s*/, "") : error;
 }
 
+/** Truncate to `max` terminal columns at a grapheme boundary. */
 export function truncate(text: string, max: number): string {
-  if (text.length <= max) return text;
+  if (columns(text) <= max) return text;
   if (max <= 0) return "";
-  if (max === 1) return "…";
-  return `${text.slice(0, max - 1)}…`;
+  const ellipsisCols = columns(ELLIPSIS);
+  if (max < ellipsisCols) return takeColumns(ELLIPSIS, max);
+  return `${takeColumns(text, max - ellipsisCols)}${ELLIPSIS}`;
 }
 
 export function pickerContentWidth(rendererWidth: number): number {
@@ -146,7 +176,7 @@ export function formatPickerRowName(
   );
   const prefix = selected ? "> " : "  ";
   const warning = warned ? "! " : "  ";
-  return `${prefix}${truncate(title, titleW).padEnd(titleW)} ${warning}${location.padStart(LOCATION_WIDTH)}`;
+  return `${prefix}${padColumns(truncate(title, titleW), titleW)} ${warning}${location.padStart(LOCATION_WIDTH)}`;
 }
 
 export function buildPickerOptions(valid: WorkflowListEntry[], rowWidth: number): SelectOption[] {
@@ -183,9 +213,9 @@ export function formatRunProgress(
   lines: string[],
   terminal?: { ok: boolean; detail: string },
 ): string {
-  const body = lines.length > 0 ? lines.join("\n") : "…";
+  const body = lines.length > 0 ? lines.join("\n") : ELLIPSIS;
   if (!terminal) return `${name}\n${body}`;
-  const status = terminal.ok ? "Done." : `Failed · ${terminal.detail}`;
+  const status = terminal.ok ? "Done." : `Failed${CHROME_SEP}${terminal.detail}`;
   return `${name}\n${body}\n\n${status}`;
 }
 
@@ -237,11 +267,28 @@ export type PickerState = {
   newerReleaseVersion?: string;
 };
 
-export const LIST_HINT = "enter run · ^e edit · ^y share · ^o import · esc";
-const CHOICE_HINT = "type filter · up/down move · enter select · esc back";
-const CUSTOM_CHOICE_HINT = "type filter · up/down · enter select/custom · esc back";
-const RUN_HINT = "esc dismiss · run continues";
+export const LIST_HINT = `enter run${CHROME_SEP}^e edit${CHROME_SEP}^y share${CHROME_SEP}^o import${CHROME_SEP}esc`;
+const CHOICE_HINT = `type filter${CHROME_SEP}up/down move${CHROME_SEP}enter select${CHROME_SEP}esc back`;
+const CUSTOM_CHOICE_HINT = `type filter${CHROME_SEP}up/down${CHROME_SEP}enter select/custom${CHROME_SEP}esc back`;
+const RUN_HINT = `esc dismiss${CHROME_SEP}run continues`;
 const FAIL_HINT = "enter/esc close";
+
+/** Every chrome fragment the picker draws; each glyph must be unambiguous single-column. */
+export const PICKER_CHROME_STRINGS: readonly string[] = [
+  LIST_HINT,
+  CHOICE_HINT,
+  CUSTOM_CHOICE_HINT,
+  RUN_HINT,
+  FAIL_HINT,
+  CUSTOM_CHOICE_LABEL,
+  ELLIPSIS,
+  CHROME_SEP,
+  "> ",
+  "! ",
+  "filter...",
+  "prompt...",
+  `enter submit${CHROME_SEP}esc back`,
+];
 
 export function formatRule(contentWidth: number): string {
   const field = Math.max(0, contentWidth - ROW_TEXT_INDENT);
@@ -255,20 +302,22 @@ export function formatListFooter(
 ): string {
   if (total === 0) return truncate(LIST_HINT, contentWidth);
   const counter = `${selectedIndex + 1}/${total}`;
-  if (LIST_HINT.length + 1 + counter.length <= contentWidth) {
-    const pad = contentWidth - LIST_HINT.length - counter.length;
+  const hintCols = columns(LIST_HINT);
+  const counterCols = columns(counter);
+  if (hintCols + 1 + counterCols <= contentWidth) {
+    const pad = contentWidth - hintCols - counterCols;
     return `${LIST_HINT}${" ".repeat(pad)}${counter}`;
   }
-  const hint = truncate(LIST_HINT, Math.max(0, contentWidth - counter.length - 1));
-  const pad = Math.max(0, contentWidth - hint.length - counter.length);
+  const hint = truncate(LIST_HINT, Math.max(0, contentWidth - counterCols - 1));
+  const pad = Math.max(0, contentWidth - columns(hint) - counterCols);
   return `${hint}${" ".repeat(pad)}${counter}`;
 }
 
 function takeWrappedLine(text: string, budget: number): string {
-  if (text.length <= budget) return text;
-  const window = text.slice(0, budget);
+  if (columns(text) <= budget) return text;
+  const window = takeColumns(text, budget);
   const space = window.lastIndexOf(" ");
-  if (space > 0) return text.slice(0, space);
+  if (space > 0) return window.slice(0, space);
   return window;
 }
 
@@ -280,7 +329,7 @@ export function formatDetailLines(description: string, contentWidth: number): st
   const line1 = takeWrappedLine(text, budget);
   const rest = text.slice(line1.length).trimStart();
   if (!rest) return `${indent}${line1}`;
-  const line2 = rest.length <= budget ? rest : truncate(rest, budget);
+  const line2 = columns(rest) <= budget ? rest : truncate(rest, budget);
   return `${indent}${line1}\n${indent}${line2}`;
 }
 
@@ -379,7 +428,7 @@ function showBrowserChrome(state: PickerState): void {
   state.promptInput.visible = false;
   state.filterRow.visible = true;
   state.filter.visible = true;
-  state.filter.placeholder = "filter…";
+  state.filter.placeholder = "filter...";
   state.filter.value = "";
   state.listBlock.visible = true;
   state.list.visible = true;
@@ -435,7 +484,7 @@ function focusTextField(state: PickerState, placeholder: string, value: string):
   state.promptInput.visible = true;
   state.promptInput.placeholder = placeholder;
   state.promptInput.value = value;
-  state.footer.content = "enter submit · esc back";
+  state.footer.content = `enter submit${CHROME_SEP}esc back`;
   state.promptInput.focus();
 }
 
@@ -480,7 +529,7 @@ export function formatInputPrompt(spec: InputSpec): string {
   if (spec.minLength !== undefined && spec.minLength > 0) {
     hints.push(`min ${spec.minLength} char${spec.minLength === 1 ? "" : "s"}`);
   }
-  return `${label} · ${hints.join(" · ")}`;
+  return `${label}${CHROME_SEP}${hints.join(CHROME_SEP)}`;
 }
 
 /** Answers already collected, so a filtered domain is not a mystery. */
@@ -493,7 +542,7 @@ export function formatInputAnswers(
     .filter((spec) => Object.hasOwn(values, spec.name))
     .map((spec) => `${spec.name}=${values[spec.name]}`);
   if (answered.length === 0) return "";
-  return truncate(`chosen: ${answered.join(" · ")}`, contentWidth);
+  return truncate(`chosen: ${answered.join(CHROME_SEP)}`, contentWidth);
 }
 
 function inputStatusLine(
@@ -503,7 +552,7 @@ function inputStatusLine(
   answers: string,
 ): string {
   const title = workflowDisplayTitle(entry.name, entry.title);
-  const head = `${title} · ${entry.source} · input ${ordinal}`;
+  const head = `${title}${CHROME_SEP}${entry.source}${CHROME_SEP}input ${ordinal}`;
   const lines = [head, formatInputPrompt(spec)];
   if (answers) lines.push(answers);
   return lines.join("\n");
@@ -570,7 +619,7 @@ function showCustomChoiceText(state: PickerState, spec: InputSpec, value: string
   state.listBlock.visible = false;
   state.list.visible = false;
   state.list.flexGrow = 0;
-  focusTextField(state, `${spec.name}…`, value);
+  focusTextField(state, `${spec.name}...`, value);
 }
 
 function setRunMode(state: PickerState, entry: WorkflowListEntry): void {
@@ -670,7 +719,7 @@ export function launchWorkbenchRoute(state: PickerState, route: string): void {
     launch({ route: parsed.hash, repoRoot: state.repoRoot });
   } catch (error) {
     const detail = truncate(error instanceof Error ? error.message : String(error), 60);
-    showStatus(state, `workbench failed · ${detail}`);
+    showStatus(state, `workbench failed${CHROME_SEP}${detail}`);
     updateListFooter(state);
     return;
   }
@@ -896,7 +945,7 @@ async function prepareWorkflow(state: PickerState, entry: WorkflowListEntry): Pr
     if (flags.length > 0) {
       showStatus(
         state,
-        `${workflowDisplayTitle(entry.name, entry.title)} · ${entry.source} · ${flags.join(" · ")}`,
+        `${workflowDisplayTitle(entry.name, entry.title)}${CHROME_SEP}${entry.source}${CHROME_SEP}${flags.join(CHROME_SEP)}`,
         { warn: true },
       );
     }
@@ -956,7 +1005,7 @@ function buildPickerBrowserChrome(theme: HostTheme) {
     Box(
       { id: "filter-row", flexDirection: "row", width: "100%" },
       Text({ content: "/ ", ...theme.text }),
-      Input({ id: "filter", flexGrow: 1, placeholder: "filter…", ...theme.input }),
+      Input({ id: "filter", flexGrow: 1, placeholder: "filter...", ...theme.input }),
       Text({
         id: "update-hint",
         content: "",
@@ -1005,39 +1054,14 @@ function buildPickerDetailStack(theme: HostTheme) {
       id: "prompt-input",
       visible: false,
       width: "100%",
-      placeholder: "prompt…",
+      placeholder: "prompt...",
       ...theme.input,
     }),
     Text({ id: "footer", content: LIST_HINT, attributes: TextAttributes.DIM, ...theme.text }),
   ] as const;
 }
 
-function mountPickerUi(
-  renderer: CliRenderer,
-  theme: HostTheme,
-): Omit<
-  PickerState,
-  | "mode"
-  | "entries"
-  | "pending"
-  | "inputQueue"
-  | "inputIndex"
-  | "inputValues"
-  | "inputDomains"
-  | "resolveGeneration"
-  | "choiceOptions"
-  | "customChoice"
-  | "exit"
-  | "running"
-  | "progressLines"
-  | "repoRoot"
-  | "config"
-  | "ctx"
-  | "workflow"
-  | "loadWorkflow"
-  | "contentWidth"
-  | "theme"
-> {
+function mountPickerUi(renderer: CliRenderer, theme: HostTheme) {
   renderer.root.add(
     Box(
       {

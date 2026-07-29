@@ -115,6 +115,29 @@ Commander MUST validate argv before command handlers run. After successful parsi
 - **WHEN** the picker launches a detached `hwf web <route>` child
 - **THEN** the child does not inherit the picker's stdout, so tearing down the picker popup cannot abort the child before it opens the browser, and the child's stderr is retained in plugin state when that path is writable (otherwise ignored without blocking the handoff)
 
+### Requirement: A workbench never serves a build its client did not ask for
+A client MUST NOT adopt a live workbench built from code other than the client's own, however healthy that workbench's endpoint is. A workbench whose build has a stable identity MUST record that identity, and a client MUST treat a recorded identity that differs from its own, or is absent when the client has one, as unadoptable and start its own server instead. Where the served code has no stable identity, because those sources change in place beneath a fixed runtime, the owner MUST instead stop when a source file it serves changes. Stopping MUST use the same shutdown path as termination signals, so the endpoint record is released. Neither an unavailable identity nor an unwatchable source tree MUST fail the command or prevent signal shutdown.
+
+#### Scenario: Plugin upgrade replaces the build
+- **WHEN** a workbench action runs from a build whose identity differs from the one recorded by a live owned workbench, including an upgrade that relocated the whole managed checkout rather than rewriting a file in place
+- **THEN** the live workbench is not adopted and the action serves the current build from its own server
+
+#### Scenario: Unchanged build is reused
+- **WHEN** a workbench action runs from the same build as a live owned workbench for that repository
+- **THEN** that workbench is adopted rather than replaced
+
+#### Scenario: Record predates build identity
+- **WHEN** a live endpoint record carries no build identity and the acting client has one
+- **THEN** the record is not adopted and the action starts its own server
+
+#### Scenario: Development source change
+- **WHEN** an owned workbench was started from an on-disk script entry and a served source file under that entry's tree changes
+- **THEN** that workbench stops and releases its endpoint record
+
+#### Scenario: Unwatchable source tree
+- **WHEN** a script entry's source tree cannot be watched
+- **THEN** the workbench keeps serving and still stops on termination signals
+
 ### Requirement: Picker stays lazily loaded
 The `picker` command MUST dynamically import the TUI module only when that command is selected. Program construction and other commands MUST NOT load `@opentui/core` through the picker module.
 

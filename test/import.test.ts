@@ -8,18 +8,20 @@ import {
   readdir,
   rename,
   rm,
-  unlink,
+  stat,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../src/limits";
 import { exportWorkflowBundle } from "../src/workflow/export";
 import {
   checkPayload,
+  importJournalPath,
   parseImportScope,
   previewBundle,
   publishStaged,
+  recoverInterruptedImport,
   runImport,
 } from "../src/workflow/import";
 import {
@@ -46,6 +48,15 @@ async function scratch(): Promise<{ root: string; home: string }> {
   const home = await mkdtemp(join(tmpdir(), "herdr-workflows-home-"));
   dirs.push(root, home);
   return { root, home };
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 describe("shared workflow payloads", () => {
@@ -303,65 +314,13 @@ describe("hwf workflow import", () => {
     expect(await readFile(join(root, ".hwf", "workflows", "race.yaml"), "utf8")).toBe(exactBody);
   });
 
-  test("rollback leaves a successor replacement that changed inode identity", async () => {
-    const { root, home } = await scratch();
-    const dir = join(root, ".hwf", "workflows");
-    await mkdir(dir, { recursive: true });
-    const first = "version: v1alpha1\nsteps:\n  - run: first\n";
-    const successor = "version: v1alpha1\nsteps:\n  - run: successor\n";
-    const bundle = [
-      { name: "keep", yaml: first },
-      { name: "blocked", yaml: first },
-    ];
-    const outcome = await runImport(encodePayload(bundle), {
-      repoRoot: root,
-      home,
-      scope: "repo",
-      afterPublish: async ({ name, path }) => {
-        if (name !== "keep") return;
-        const tmp = join(dir, `.successor.${Date.now()}.tmp`);
-        await writeFile(tmp, successor);
-        await rename(tmp, path);
-        await writeFile(join(dir, "blocked.yaml"), first);
-      },
-    });
-    if ("aborted" in outcome) throw new Error("unreachable");
-    expect(outcome.result.status).toBe("conflicts");
-    expect(await readFile(join(dir, "keep.yaml"), "utf8")).toBe(successor);
-    expect(await Bun.file(join(dir, "blocked.yaml")).exists()).toBe(true);
-  });
-
-  test("replace-all mid-failure restores an overwritten destination", async () => {
+  test("staging failure leaves the scope wholly pre-import with no litter", async () => {
     const { root, home } = await scratch();
     const dir = join(root, ".hwf", "workflows");
     await mkdir(dir, { recursive: true });
     const oldA = "version: v1alpha1\nsteps:\n  - run: old-a\n";
-    await writeFile(join(dir, "a.yaml"), oldA);
-    const bundle = [
-      { name: "a", yaml: exactBody },
-      { name: "b", yaml: exactBody },
-    ];
-    await expect(
-      runImport(encodePayload(bundle), {
-        repoRoot: root,
-        home,
-        scope: "repo",
-        force: true,
-        afterPublish: async ({ name }) => {
-          if (name === "a") throw new Error("injected replace failure");
-        },
-      }),
-    ).rejects.toThrow(/injected replace failure/);
-    expect(await readFile(join(dir, "a.yaml"), "utf8")).toBe(oldA);
-    expect(await Bun.file(join(dir, "b.yaml")).exists()).toBe(false);
-    expect((await readdir(dir)).filter((n) => n.startsWith("."))).toEqual([]);
-  });
-
-  test("replace-all mid-failure removes a newly created destination", async () => {
-    const { root, home } = await scratch();
-    const dir = join(root, ".hwf", "workflows");
-    await mkdir(dir, { recursive: true });
     const oldB = "version: v1alpha1\nsteps:\n  - run: old-b\n";
+    await writeFile(join(dir, "a.yaml"), oldA);
     await writeFile(join(dir, "b.yaml"), oldB);
     const bundle = [
       { name: "a", yaml: exactBody },
@@ -374,52 +333,107 @@ describe("hwf workflow import", () => {
         scope: "repo",
         force: true,
         afterPublish: async ({ name }) => {
-          if (name === "a") throw new Error("injected new-dest failure");
+          if (name === "a") throw new Error("injected staging failure");
         },
       }),
-    ).rejects.toThrow(/injected new-dest failure/);
-    expect(await Bun.file(join(dir, "a.yaml")).exists()).toBe(false);
+    ).rejects.toThrow(/injected staging failure/);
+    expect(await readFile(join(dir, "a.yaml"), "utf8")).toBe(oldA);
     expect(await readFile(join(dir, "b.yaml"), "utf8")).toBe(oldB);
-    expect((await readdir(dir)).filter((n) => n.startsWith("."))).toEqual([]);
+    expect(
+      (await readdir(dirname(dir))).filter((n) => n.includes("staging") || n.includes("prev")),
+    ).toEqual([]);
+    expect(await Bun.file(importJournalPath(dir)).exists()).toBe(false);
   });
 
-  test("replace-all preserves backup when rollback restore rename fails", async () => {
+  test("interrupted mid-swap recovers to a wholly new scope with no litter", async () => {
     const { root, home } = await scratch();
     const dir = join(root, ".hwf", "workflows");
     await mkdir(dir, { recursive: true });
     const oldA = "version: v1alpha1\nsteps:\n  - run: old-a\n";
+    const oldB = "version: v1alpha1\nsteps:\n  - run: old-b\n";
     await writeFile(join(dir, "a.yaml"), oldA);
-    const bundle = [
-      { name: "a", yaml: exactBody },
-      { name: "b", yaml: exactBody },
-    ];
-    let err: unknown;
-    try {
-      await runImport(encodePayload(bundle), {
-        repoRoot: root,
-        home,
-        scope: "repo",
-        force: true,
-        afterPublish: async ({ name, path }) => {
-          if (name !== "a") return;
-          await unlink(path);
-          await mkdir(path);
-          await writeFile(join(path, "blocker"), "x");
-          throw new Error("injected restore-block failure");
-        },
-      });
-    } catch (e) {
-      err = e;
+    await writeFile(join(dir, "b.yaml"), oldB);
+    await writeFile(join(dir, "keep.yaml"), "version: v1alpha1\nsteps:\n  - run: keep\n");
+
+    const staging = `${dir}.test.staging`;
+    const previous = `${dir}.test.prev`;
+    await mkdir(staging, { recursive: true });
+    await writeFile(join(staging, "a.yaml"), exactBody);
+    await writeFile(join(staging, "b.yaml"), exactBody);
+    await writeFile(join(staging, "keep.yaml"), "version: v1alpha1\nsteps:\n  - run: keep\n");
+    await writeFile(importJournalPath(dir), JSON.stringify({ dest: dir, staging, previous }));
+    await rename(dir, previous);
+
+    expect(await Bun.file(join(dir, "a.yaml")).exists()).toBe(false);
+    await recoverInterruptedImport(dir);
+
+    expect(await readFile(join(dir, "a.yaml"), "utf8")).toBe(exactBody);
+    expect(await readFile(join(dir, "b.yaml"), "utf8")).toBe(exactBody);
+    expect(await readFile(join(dir, "keep.yaml"), "utf8")).toContain("run: keep");
+    expect(await pathExists(previous)).toBe(false);
+    expect(await pathExists(staging)).toBe(false);
+    expect(await Bun.file(importJournalPath(dir)).exists()).toBe(false);
+    void home;
+  });
+
+  test("SIGKILL after first staged entry leaves wholly old or wholly new", async () => {
+    const { root, home } = await scratch();
+    const dir = join(root, ".hwf", "workflows");
+    await mkdir(dir, { recursive: true });
+    const oldA = "version: v1alpha1\nsteps:\n  - run: old-a\n";
+    const oldB = "version: v1alpha1\nsteps:\n  - run: old-b\n";
+    await writeFile(join(dir, "a.yaml"), oldA);
+    await writeFile(join(dir, "b.yaml"), oldB);
+
+    const marker = join(root, "staged-a");
+    const child = Bun.spawn({
+      cmd: [
+        process.execPath,
+        "-e",
+        `
+        import { runImport } from ${JSON.stringify(join(import.meta.dir, "../src/workflow/import.ts"))};
+        import { encodePayload } from ${JSON.stringify(join(import.meta.dir, "../src/workflow/payload.ts"))};
+        import { writeFile } from "node:fs/promises";
+        const exactBody = ${JSON.stringify(exactBody)};
+        await runImport(encodePayload([
+          { name: "a", yaml: exactBody },
+          { name: "b", yaml: exactBody },
+        ]), {
+          repoRoot: ${JSON.stringify(root)},
+          home: ${JSON.stringify(home)},
+          scope: "repo",
+          force: true,
+          afterPublish: async ({ name }) => {
+            if (name === "a") await writeFile(${JSON.stringify(marker)}, "1");
+          },
+          beforeSwap: async () => {
+            for (;;) await Bun.sleep(1000);
+          },
+        });
+        `,
+      ],
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+
+    const deadline = Date.now() + 5000;
+    while (!(await Bun.file(marker).exists()) && Date.now() < deadline) {
+      await Bun.sleep(20);
     }
-    expect(err).toBeInstanceOf(Error);
-    expect((err as Error).message).toMatch(/injected restore-block failure/);
-    expect((err as Error).message).toMatch(/original backup preserved at /);
-    const backupPath = /original backup preserved at (.+)$/.exec((err as Error).message)?.[1];
-    expect(backupPath).toBeTruthy();
-    expect(await readFile(backupPath!, "utf8")).toBe(oldA);
-    expect(await Bun.file(join(dir, "b.yaml")).exists()).toBe(false);
-    const dots = (await readdir(dir)).filter((n) => n.startsWith("."));
-    expect(dots).toEqual([backupPath!.slice(dir.length + 1)]);
+    expect(await Bun.file(marker).exists()).toBe(true);
+    child.kill("SIGKILL");
+    await child.exited;
+
+    await recoverInterruptedImport(dir, { force: true });
+
+    const a = await readFile(join(dir, "a.yaml"), "utf8");
+    const b = await readFile(join(dir, "b.yaml"), "utf8");
+    const whollyOld = a === oldA && b === oldB;
+    const whollyNew = a === exactBody && b === exactBody;
+    expect(whollyOld || whollyNew).toBe(true);
+    const parent = await readdir(dirname(dir));
+    expect(parent.filter((n) => n.includes(".staging") || n.includes(".prev"))).toEqual([]);
+    expect(await Bun.file(importJournalPath(dir)).exists()).toBe(false);
   });
 
   test("no scope and no prompt is an error, not a silent default", async () => {

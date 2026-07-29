@@ -1,5 +1,7 @@
 {
+  "plugins": ["import"],
   "rules": {
+    "import/no-cycle": "error",
     "eslint/max-lines-per-function": [
       "error",
       { "max": 90, "skipBlankLines": true, "skipComments": true }

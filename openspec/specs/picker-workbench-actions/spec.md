@@ -53,7 +53,7 @@ Workbench actions for the same canonical repository root MUST reuse a live authe
 - **THEN** the action does not use that endpoint for the current repository
 
 ### Requirement: Endpoint credentials remain private runtime state
-The picker MUST store workbench endpoint records as disposable plugin runtime state that no other unprivileged local account can read, using user-only permission bits. The plugin MUST verify that the resolved state directory grants no broader access before writing a credential into it, because the state directory location is environment-controlled. The same protection MUST cover every file carrying the bearer token, including the endpoint lock file. A record MUST be trusted only after an authenticated probe confirms its canonical repository root.
+The picker MUST store workbench endpoint records as disposable plugin runtime state that no principal other than the current user can read or write. Before writing a bearer token, the plugin MUST verify that the resolved location grants no read or write access to any other principal, and MUST refuse naming that location when it cannot. The same protection MUST cover every file carrying the bearer token, including the endpoint lock file. A record MUST be trusted only after an authenticated probe confirms its canonical repository root.
 
 #### Scenario: Endpoint record written
 - **WHEN** a web command starts and publishes a workbench endpoint

@@ -1,5 +1,5 @@
-import { closeSync, mkdirSync, openSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { closeSync, mkdirSync, openSync, statSync, watch, type FSWatcher } from "node:fs";
+import { dirname, join } from "node:path";
 import { pluginStateDir, type InvocationContext } from "../config";
 
 type DetachedRunResult = { ok: boolean; detail: string };
@@ -62,6 +62,67 @@ export function isRuntimeScriptEntry(entry: string | undefined): boolean {
   } catch {
     return false;
   }
+}
+
+/** Source files a workbench serves, so a dev edit to one of them makes the running server stale. */
+const SERVED_SOURCE_RE = /\.(ts|html)$/;
+
+export type CodeWatchTarget = { path: string; recursive: boolean };
+
+/**
+ * Identity of the build this process runs, recorded on an owned workbench's endpoint so an
+ * adopting client can refuse a workbench built from other code. A script entry has no stable
+ * identity — `execPath` is then the runtime, unchanged by edits — so dev relies on the watch
+ * instead.
+ */
+export function buildIdentity(
+  entry: string | undefined = Bun.main,
+  execPath: string = process.execPath,
+): string | undefined {
+  if (entry !== undefined && isRuntimeScriptEntry(entry)) return undefined;
+  try {
+    const stat = statSync(execPath);
+    return `${stat.ino}:${stat.mtimeMs}:${stat.size}`;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * What an owned workbench watches to learn its own code changed, or undefined when there is
+ * nothing worth watching. Only a script entry watches: its sources change in place, under a
+ * directory that stays put. A compiled install is covered by build identity at adoption instead —
+ * an upgrade renames the whole managed checkout, and a filesystem watch cannot see a rename of an
+ * ancestor on Linux, where watches are bound to inodes rather than paths.
+ */
+export function codeWatchTarget(entry: string | undefined = Bun.main): CodeWatchTarget | undefined {
+  if (entry !== undefined && isRuntimeScriptEntry(entry)) {
+    return { path: dirname(entry), recursive: true };
+  }
+  return undefined;
+}
+
+/**
+ * A workbench must not outlive the code it was built from: a stale server keeps answering
+ * authenticated probes, so picker actions adopt it and serve the previous build. Returns a
+ * disposer; an unwatchable target is not fatal, since termination signals still stop the process.
+ */
+export function retireOnCodeChange(
+  onRetire: () => void,
+  target: CodeWatchTarget | undefined = codeWatchTarget(),
+): () => void {
+  if (!target) return () => undefined;
+  let watcher: FSWatcher;
+  try {
+    watcher = watch(target.path, { recursive: target.recursive }, (_event, file) => {
+      if (target.recursive && !SERVED_SOURCE_RE.test(String(file ?? ""))) return;
+      onRetire();
+    });
+  } catch {
+    return () => undefined;
+  }
+  watcher.unref();
+  return () => watcher.close();
 }
 
 function selfCommandArgv(

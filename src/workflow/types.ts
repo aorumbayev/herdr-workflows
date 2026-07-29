@@ -159,29 +159,6 @@ export type TemplateNamespace = {
   context: Record<string, unknown>;
 };
 
-type ContextError = {
-  message: string;
-  workflow: string;
-  action: "agent" | "run" | "herdr" | "workflow";
-  step_number: number;
-  workflow_path: string[];
-  step_id?: string;
-  details: Record<string, unknown>;
-};
-
-type InvocationContextValues = {
-  workspace: string;
-  tab: string;
-  pane: string;
-  worktree: string;
-  agent: string;
-  selection: string;
-  platform: PlatformName;
-  transcript?: string;
-  transcript_file?: string;
-  error?: ContextError;
-};
-
 export type LoadedWorkflow = {
   name: string;
   file: string;

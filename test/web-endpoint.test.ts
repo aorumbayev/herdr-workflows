@@ -144,6 +144,66 @@ describe("endpoint lifecycle", () => {
     expect(starts).toBe(1);
   });
 
+  // The invariant, tested at the point it matters: whatever a live workbench was built from, a
+  // client running other code must not end up served by it.
+  test("a live workbench built from other code is not adopted", async () => {
+    const stateDir = await tempState();
+    const root = await tempRepo();
+    let starts = 0;
+    const start = async (opts: { repoRoot: string; port?: number }) => {
+      starts += 1;
+      const s = await startWebServer(opts);
+      servers.push(s);
+      return s;
+    };
+
+    const owned = await ensureWorkbench({ repoRoot: root, build: "ino:1:10" }, { stateDir, start });
+    stops.push(owned.stop);
+    expect(starts).toBe(1);
+
+    const sameBuild = await ensureWorkbench(
+      { repoRoot: root, build: "ino:1:10" },
+      { stateDir, start },
+    );
+    expect(sameBuild.owned).toBe(false);
+    expect(sameBuild.url).toBe(owned.url);
+    expect(starts).toBe(1);
+
+    const upgraded = await ensureWorkbench(
+      { repoRoot: root, build: "ino:2:11" },
+      { stateDir, start },
+    );
+    stops.push(upgraded.stop);
+    expect(upgraded.owned).toBe(true);
+    expect(upgraded.url).not.toBe(owned.url);
+    expect(starts).toBe(2);
+    expect((await readEndpointRecord(root, stateDir))?.build).toBe("ino:2:11");
+  });
+
+  test("a record predating build identity is not adopted by a build that has one", async () => {
+    const stateDir = await tempState();
+    const root = await tempRepo();
+    let starts = 0;
+    const start = async (opts: { repoRoot: string; port?: number }) => {
+      starts += 1;
+      const s = await startWebServer(opts);
+      servers.push(s);
+      return s;
+    };
+
+    const legacy = await ensureWorkbench({ repoRoot: root }, { stateDir, start });
+    stops.push(legacy.stop);
+    expect((await readEndpointRecord(root, stateDir))?.build).toBeUndefined();
+
+    const identified = await ensureWorkbench(
+      { repoRoot: root, build: "ino:3:12" },
+      { stateDir, start },
+    );
+    stops.push(identified.stop);
+    expect(identified.owned).toBe(true);
+    expect(starts).toBe(2);
+  });
+
   test("an explicit port is honored instead of reusing an endpoint on another port", async () => {
     const stateDir = await tempState();
     const root = await tempRepo();

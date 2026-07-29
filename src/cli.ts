@@ -25,7 +25,7 @@ import {
 } from "./workflow/types";
 import { CaptureLimitError } from "./limits";
 import { runWorkflow } from "./run/runner";
-import { parseLaunchPayload } from "./tui/run-launch";
+import { buildIdentity, parseLaunchPayload, retireOnCodeChange } from "./tui/run-launch";
 import { ensureWorkbench } from "./web/endpoint";
 import { appendRouteHash, parseWebRoute } from "./web/route";
 import { runSetup } from "./setup/run";
@@ -321,17 +321,21 @@ async function cmdWeb(
     );
   }
   const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot());
-  const workbench = await ensureWorkbench({ repoRoot, port });
+  const workbench = await ensureWorkbench({ repoRoot, port, build: buildIdentity() });
   const url = appendRouteHash(workbench.url, route);
   // Open before printing: a detached picker handoff can already have a dead
   // stdout, and SIGPIPE on write must not skip the browser.
   if (opts.open !== false) openBrowser(url);
   printWorkbenchUrl(url);
   if (!workbench.owned) return;
-  registerOwnedWorkbenchShutdown(() => {
+  const shutdown = () => {
     workbench.stop();
     process.exit(0);
-  });
+  };
+  registerOwnedWorkbenchShutdown(shutdown);
+  // Only a dev script entry watches: a compiled build is refused at adoption by identity, so
+  // stopping here frees the port rather than upholding the invariant.
+  retireOnCodeChange(shutdown);
 }
 
 // bun --compile re-extracts the embedded libopentui to a temp file per spawn (~200ms on the
@@ -468,7 +472,7 @@ function buildProgram(): Command {
     .command("setup", { hidden: true })
     .description("Install PATH commands and picker keybindings")
     .action(() => {
-      runSetup({});
+      runSetup();
     });
 
   return program;

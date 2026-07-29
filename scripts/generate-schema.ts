@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { z } from "zod";
+import { workflowSchemaUrl } from "../src/setup/paths";
 import { rawWorkflowSchema } from "../src/workflow/parse";
 
 const OUT = join(import.meta.dir, "..", "docs", "workflow.schema.json");
@@ -10,7 +11,7 @@ export function buildSchema(): unknown {
   const schema = z.toJSONSchema(rawWorkflowSchema) as Record<string, unknown>;
   return {
     ...schema,
-    $id: "https://raw.githubusercontent.com/aorumbayev/herdr-workflows/main/docs/workflow.schema.json",
+    $id: workflowSchemaUrl(),
     title: "herdr-workflows workflow",
     description:
       "Linear YAML workflow for the herdr-workflows herdr plugin (format v1alpha1). Cross-field rules are enforced by the parser and loader, not this schema.",

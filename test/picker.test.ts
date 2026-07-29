@@ -17,6 +17,7 @@ import {
   hasVisibleEntries,
   isCustomChoiceValue,
   LIST_HINT,
+  PICKER_CHROME_STRINGS,
   resolveListWorkbenchRoute,
   shouldDropStdinLeakSequence,
   shouldRestoreCustomChoiceText,
@@ -50,7 +51,6 @@ const entries: WorkflowListEntry[] = [
 ];
 
 const isAscii = (s: string) => /^[\x20-\x7E]*$/.test(s);
-const hasAmbiguousChromeGlyph = (s: string) => /[↑↓←→▲▼◀▶━═]/.test(s);
 
 describe("filterWorkflowEntries", () => {
   test("splits valid and invalid", () => {
@@ -202,7 +202,7 @@ describe("buildPickerOptions", () => {
     const long = formatPickerRowName("A".repeat(80), "repo", true, 60);
     expect(long.length).toBe(short.length);
     expect(long.slice(-10)).toBe(short.slice(-10));
-    expect(long).toContain("…");
+    expect(long).toContain("...");
   });
 
   test("inputs are not advertised in the row", () => {
@@ -272,13 +272,13 @@ describe("display titles", () => {
 
 describe("formatRunProgress", () => {
   test("pending shows ellipsis; terminal appends status", () => {
-    expect(formatRunProgress("handoff", [])).toBe("handoff\n…");
+    expect(formatRunProgress("handoff", [])).toBe("handoff\n...");
     expect(formatRunProgress("handoff", ["[1/2] shell"])).toBe("handoff\n[1/2] shell");
     expect(formatRunProgress("handoff", ["[1/1] shell"], { ok: true, detail: "" })).toBe(
       "handoff\n[1/1] shell\n\nDone.",
     );
     expect(formatRunProgress("handoff", ["[1/1] shell"], { ok: false, detail: "boom" })).toBe(
-      "handoff\n[1/1] shell\n\nFailed · boom",
+      "handoff\n[1/1] shell\n\nFailed | boom",
     );
   });
 });
@@ -294,15 +294,15 @@ describe("filterChoiceOptions", () => {
 
 describe("formatInputPrompt", () => {
   test("names the input, description, and line role", () => {
-    expect(formatInputPrompt({ name: "target", type: "profile" })).toBe("target · pick one");
+    expect(formatInputPrompt({ name: "target", type: "profile" })).toBe("target | pick one");
     expect(
       formatInputPrompt({
         name: "target",
         type: "profile",
         description: "Agent to hand off to",
       }),
-    ).toBe("target — Agent to hand off to · pick one");
-    expect(formatInputPrompt({ name: "focus", type: "text" })).toBe("focus · type free text");
+    ).toBe("target — Agent to hand off to | pick one");
+    expect(formatInputPrompt({ name: "focus", type: "text" })).toBe("focus | type free text");
     expect(
       formatInputPrompt({
         name: "branch",
@@ -310,13 +310,13 @@ describe("formatInputPrompt", () => {
         options: ["main"],
         description: "Which branch",
       }),
-    ).toBe("branch — Which branch · pick one of 1");
+    ).toBe("branch — Which branch | pick one of 1");
   });
 
   test("states the domain size, custom entry, default, and minimum length", () => {
     expect(
       formatInputPrompt({ name: "ref", type: "choice", options: ["main", "dev", "next"] }),
-    ).toBe("ref · pick one of 3");
+    ).toBe("ref | pick one of 3");
     expect(
       formatInputPrompt({
         name: "branch",
@@ -325,12 +325,12 @@ describe("formatInputPrompt", () => {
         allowCustom: true,
         minLength: 1,
       }),
-    ).toBe("branch · pick one of 1 · or type your own · min 1 char");
+    ).toBe("branch | pick one of 1 | or type your own | min 1 char");
     expect(formatInputPrompt({ name: "focus", type: "text", default: "all" })).toBe(
-      "focus · type free text · default all",
+      "focus | type free text | default all",
     );
     expect(formatInputPrompt({ name: "note", type: "text", minLength: 4 })).toBe(
-      "note · type free text · min 4 chars",
+      "note | type free text | min 4 chars",
     );
   });
 
@@ -341,7 +341,7 @@ describe("formatInputPrompt", () => {
         type: "choice",
         dynamicOptions: { run: ["git", "branch"] },
       }),
-    ).toBe("ref · pick one");
+    ).toBe("ref | pick one");
   });
 });
 
@@ -353,7 +353,7 @@ describe("formatInputAnswers", () => {
 
   test("lists collected answers in declaration order", () => {
     expect(formatInputAnswers(queue, { mode: "delete", scope: "both" }, 60)).toBe(
-      "chosen: mode=delete · scope=both",
+      "chosen: mode=delete | scope=both",
     );
   });
 
@@ -363,14 +363,14 @@ describe("formatInputAnswers", () => {
 
   test("truncates to the content width", () => {
     expect(formatInputAnswers(queue, { mode: "delete", scope: "both" }, 20)).toBe(
-      "chosen: mode=delete…",
+      "chosen: mode=dele...",
     );
   });
 });
 
 describe("truncate", () => {
   test("ellipsis at max", () => {
-    expect(truncate("abcdefghij", 5)).toBe("abcd…");
+    expect(truncate("abcdefghij", 5)).toBe("ab...");
     expect(truncate("abcd", 5)).toBe("abcd");
   });
 });
@@ -390,7 +390,7 @@ describe("formatListFooter", () => {
 
   test("narrow width still does not exceed content width", () => {
     const footer = formatListFooter(20, 0, 8);
-    expect(footer.length).toBeLessThanOrEqual(20);
+    expect(Bun.stringWidth(footer)).toBeLessThanOrEqual(20);
     expect(footer.endsWith("1/8")).toBe(true);
   });
 });
@@ -418,8 +418,8 @@ describe("formatDetailLines", () => {
     const wrapped = formatDetailLines(desc, 40);
     const lines = wrapped.split("\n");
     expect(lines).toHaveLength(2);
-    expect(lines[0]!.endsWith("…")).toBe(false);
-    expect(lines[1]!.endsWith("…")).toBe(true);
+    expect(lines[0]!.endsWith("...")).toBe(false);
+    expect(lines[1]!.endsWith("...")).toBe(true);
     for (const line of lines) {
       expect(line.length).toBeLessThanOrEqual(40);
       expect(line.startsWith("   ")).toBe(true);
@@ -431,9 +431,9 @@ describe("formatDetailLines", () => {
     const lines = wrapped.split("\n");
     expect(lines).toHaveLength(2);
     expect(lines[0]).toBe(`   ${"x".repeat(17)}`);
-    expect(lines[1]).toBe(`   ${"x".repeat(16)}…`);
+    expect(lines[1]).toBe(`   ${"x".repeat(14)}...`);
     for (const line of lines) {
-      expect(line.length).toBeLessThanOrEqual(20);
+      expect(Bun.stringWidth(line)).toBeLessThanOrEqual(20);
     }
   });
 
@@ -463,16 +463,22 @@ describe("formatRule", () => {
   });
 });
 
-describe("picker chrome ascii", () => {
-  test("filter prompt, short row, rule, and warning marker are ASCII", () => {
-    expect(isAscii(formatRule(60))).toBe(true);
-    expect(isAscii(formatPickerRowName("Handoff", "global", true, 60))).toBe(true);
-    expect(isAscii(formatPickerRowName("Handoff", "repo", false, 60))).toBe(true);
-    expect(isAscii(formatPickerRowName("Handoff", "repo", true, 60, true))).toBe(true);
-  });
-
-  test("hints avoid arrow, triangle, and heavy-line glyphs", () => {
-    expect(hasAmbiguousChromeGlyph(LIST_HINT)).toBe(false);
+describe("picker column layout", () => {
+  test("chrome glyphs are unambiguous single-column and wide titles stay aligned", () => {
+    for (const chrome of PICKER_CHROME_STRINGS) {
+      expect(Bun.stringWidth(chrome)).toBe([...chrome].length);
+      expect(isAscii(chrome)).toBe(true);
+    }
+    const width = 60;
+    const cjk = formatPickerRowName("中".repeat(59), "repo", true, width);
+    const emoji = formatPickerRowName("😀".repeat(40), "repo", true, width);
+    const ascii = formatPickerRowName("Short", "repo", true, width);
+    expect(Bun.stringWidth(cjk)).toBe(Bun.stringWidth(ascii));
+    expect(Bun.stringWidth(emoji)).toBe(Bun.stringWidth(ascii));
+    expect(cjk.slice(-10)).toBe(ascii.slice(-10));
+    expect(emoji.slice(-10)).toBe(ascii.slice(-10));
+    expect(Bun.stringWidth(cjk)).toBeLessThanOrEqual(width);
+    expect(Bun.stringWidth(formatListFooter(width, 0, 2))).toBeLessThanOrEqual(width);
   });
 });
 
@@ -534,7 +540,7 @@ describe("adaptive picker helpers", () => {
   test("custom choice uses tagged option data, not a colliding sentinel string", () => {
     expect(isCustomChoiceValue({ kind: "custom" })).toBe(true);
     expect(isCustomChoiceValue("__hwf_custom__")).toBe(false);
-    expect(isCustomChoiceValue("custom…")).toBe(false);
+    expect(isCustomChoiceValue("custom...")).toBe(false);
   });
 
   test("restores empty and out-of-domain custom answers on backtrack", () => {

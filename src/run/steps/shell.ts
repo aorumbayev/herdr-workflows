@@ -49,8 +49,6 @@ async function readStreamAgainstBudget(
   return Buffer.concat(chunks).toString("utf8");
 }
 
-export type { ShellName };
-
 export function defaultShell(): ShellName {
   return "sh";
 }

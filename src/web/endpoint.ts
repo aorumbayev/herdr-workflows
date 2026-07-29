@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
-  chmodSync,
   mkdirSync,
   readFileSync,
   renameSync,
@@ -9,12 +8,13 @@ import {
   writeFileSync,
   type Stats,
 } from "node:fs";
-import { chmod, mkdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pluginStateDir } from "../config";
 import {
   assertCredentialStoreSafe,
-  CredentialStoreError,
+  assertPrivateCredentialFile,
+  assertPrivateCredentialFileSync,
   tightenPrivateDir,
 } from "./credential-store";
 import { startWebServer, type WebServer } from "./server";
@@ -22,6 +22,12 @@ import { startWebServer, type WebServer } from "./server";
 export type EndpointRecord = {
   repoRoot: string;
   url: string;
+  /**
+   * Identity of the build serving this endpoint, absent when the owner had none to claim. An
+   * adopting client compares it against its own, so a workbench never serves a build its caller
+   * did not ask for. This is what keeps the invariant, not the owner noticing its own code change.
+   */
+  build?: string;
 };
 
 export type EnsuredWorkbench = {
@@ -92,13 +98,14 @@ async function ensurePrivateDir(stateDir: string): Promise<void> {
 async function writePrivateFile(path: string, body: string): Promise<void> {
   const tmp = `${path}.${process.pid}.${Date.now()}.tmp`;
   await writeFile(tmp, body, { mode: 0o600 });
-  await chmod(tmp, 0o600);
-  await rename(tmp, path);
-  await chmod(path, 0o600);
-  const mode = (await stat(path)).mode & 0o777;
-  if ((mode & 0o077) !== 0) {
-    await rm(path, { force: true });
-    throw new CredentialStoreError(`refusing credential file with group/world access: ${path}`);
+  try {
+    await assertPrivateCredentialFile(tmp);
+    await rename(tmp, path);
+    await assertPrivateCredentialFile(path);
+  } catch (error) {
+    await rm(tmp, { force: true }).catch(() => undefined);
+    await rm(path, { force: true }).catch(() => undefined);
+    throw error;
   }
 }
 
@@ -114,7 +121,8 @@ export async function readEndpointRecord(
     const row = parsed as Record<string, unknown>;
     if (typeof row.repoRoot !== "string" || typeof row.url !== "string") return undefined;
     if (!row.repoRoot || !row.url) return undefined;
-    return { repoRoot: row.repoRoot, url: row.url };
+    const build = typeof row.build === "string" && row.build ? row.build : undefined;
+    return { repoRoot: row.repoRoot, url: row.url, ...(build ? { build } : {}) };
   } catch {
     return undefined;
   }
@@ -126,10 +134,6 @@ export async function writeEndpointRecord(
 ): Promise<void> {
   await ensurePrivateDir(stateDir);
   await writePrivateFile(endpointRecordPath(record.repoRoot, stateDir), JSON.stringify(record));
-}
-
-async function removeEndpointRecord(repoRoot: string, stateDir: string): Promise<void> {
-  await rm(endpointRecordPath(repoRoot, stateDir), { force: true });
 }
 
 /** Drop the record only when it still names this owner's URL. Caller must hold the endpoint lock. */
@@ -304,15 +308,18 @@ export function acquireEndpointLockSync(
   const tryClaim = (): boolean => {
     try {
       writeFileSync(base, token, { flag: "wx", mode: 0o600 });
-      try {
-        chmodSync(base, 0o600);
-      } catch {
-        /* best-effort */
-      }
+      assertPrivateCredentialFileSync(base);
       return true;
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
-      if (code !== "EEXIST") throw error;
+      if (code !== "EEXIST") {
+        try {
+          rmSync(base, { force: true });
+        } catch {
+          /* best-effort */
+        }
+        throw error;
+      }
       return false;
     }
   };
@@ -346,15 +353,20 @@ function clearOwnedRecordUnderLock(
   }
 }
 
-/** Read-only liveness check — never deletes records. */
+/**
+ * Read-only liveness check — never deletes records. A record whose build differs from the caller's
+ * is not adoptable however healthy it is: adopting it would serve code the caller did not ask for.
+ */
 async function probeLiveRecord(
   repoRoot: string,
   stateDir: string,
   fetchImpl: typeof globalThis.fetch,
+  build: string | undefined,
 ): Promise<EndpointRecord | undefined> {
   const record = await readEndpointRecord(repoRoot, stateDir);
   if (!record) return undefined;
   if (record.repoRoot !== repoRoot) return undefined;
+  if (record.build !== build) return undefined;
   if (!(await probeEndpoint(record.url, repoRoot, fetchImpl))) return undefined;
   return record;
 }
@@ -368,7 +380,7 @@ async function discardUnusableRecord(
   const record = await readEndpointRecord(repoRoot, stateDir);
   if (!record) return;
   if (record.repoRoot !== repoRoot) {
-    await removeEndpointRecord(repoRoot, stateDir);
+    await rm(endpointRecordPath(repoRoot, stateDir), { force: true });
     return;
   }
   if (await probeEndpoint(record.url, repoRoot, fetchImpl)) return;
@@ -386,7 +398,7 @@ function servesPort(url: string, port: number | undefined): boolean {
 }
 
 export async function ensureWorkbench(
-  opts: { repoRoot: string; port?: number },
+  opts: { repoRoot: string; port?: number; build?: string },
   deps: EnsureWorkbenchDeps = {},
 ): Promise<EnsuredWorkbench> {
   const repoRoot = await canonicalRepoRoot(opts.repoRoot);
@@ -404,7 +416,7 @@ export async function ensureWorkbench(
   await ensurePrivateDir(stateDir);
 
   for (let attempt = 0; attempt < lockAttempts; attempt++) {
-    const existing = await probeLiveRecord(repoRoot, stateDir, fetchImpl);
+    const existing = await probeLiveRecord(repoRoot, stateDir, fetchImpl, opts.build);
     if (existing && servesPort(existing.url, opts.port)) {
       return { url: existing.url, owned: false, stop: () => undefined };
     }
@@ -416,7 +428,7 @@ export async function ensureWorkbench(
     }
 
     try {
-      const again = await probeLiveRecord(repoRoot, stateDir, fetchImpl);
+      const again = await probeLiveRecord(repoRoot, stateDir, fetchImpl, opts.build);
       if (again && servesPort(again.url, opts.port)) {
         return { url: again.url, owned: false, stop: () => undefined };
       }
@@ -424,7 +436,11 @@ export async function ensureWorkbench(
       if (!again) await discardUnusableRecord(repoRoot, stateDir, fetchImpl);
 
       const server = await start({ repoRoot, port: opts.port });
-      const record: EndpointRecord = { repoRoot, url: server.url };
+      const record: EndpointRecord = {
+        repoRoot,
+        url: server.url,
+        ...(opts.build ? { build: opts.build } : {}),
+      };
       try {
         await writeRecord(record, stateDir);
       } catch (error) {
