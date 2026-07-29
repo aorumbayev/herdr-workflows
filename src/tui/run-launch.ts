@@ -1,5 +1,6 @@
-import { statSync } from "node:fs";
-import type { InvocationContext } from "../config";
+import { closeSync, mkdirSync, openSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { pluginStateDir, type InvocationContext } from "../config";
 
 type DetachedRunResult = { ok: boolean; detail: string };
 
@@ -266,22 +267,36 @@ export function buildWebLaunchEnv(
   };
 }
 
+/** Append-only log for detached `hwf web` stderr (picker dismisses before the child settles). */
+export function webLaunchStderrPath(stateDir: string = pluginStateDir()): string {
+  return join(stateDir, "web-launch.stderr.log");
+}
+
 /**
  * Fire-and-forget `hwf web <route>`. No stdout parsing, no retained handle —
  * the web command owns endpoint reuse and browser open.
- * Stdio stays ignored: the picker dismisses and Herdr tears down the popup PTY;
+ * Stdout stays ignored: the picker dismisses and Herdr tears down the popup PTY;
  * inheriting it raises EPIPE in `hwf web` before it can open the browser.
+ * Stderr appends to plugin state so post-spawn failures remain diagnosable.
  */
 export function launchDetachedWeb(req: LaunchWebRequest): void {
   const spawn = req.spawn ?? Bun.spawn.bind(Bun);
   const argv = selfWebArgv([req.route]);
-  const proc = spawn(argv, {
-    cwd: req.repoRoot,
-    env: buildWebLaunchEnv(req.repoRoot, { ...process.env, ...req.env }),
-    stdin: "ignore",
-    stdout: "ignore",
-    stderr: "ignore",
-    detached: true,
-  });
-  proc.unref();
+  const env = buildWebLaunchEnv(req.repoRoot, { ...process.env, ...req.env });
+  const stateDir = pluginStateDir(env);
+  mkdirSync(stateDir, { recursive: true });
+  const stderrFd = openSync(webLaunchStderrPath(stateDir), "a");
+  try {
+    const proc = spawn(argv, {
+      cwd: req.repoRoot,
+      env,
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: stderrFd,
+      detached: true,
+    });
+    proc.unref();
+  } finally {
+    closeSync(stderrFd);
+  }
 }
