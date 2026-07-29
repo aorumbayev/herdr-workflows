@@ -115,6 +115,21 @@ Commander MUST validate argv before command handlers run. After successful parsi
 - **WHEN** the picker launches a detached `hwf web <route>` child
 - **THEN** the child does not inherit the picker's stdout, so tearing down the picker popup cannot abort the child before it opens the browser, and the child's stderr is retained in plugin state when that path is writable (otherwise ignored without blocking the handoff)
 
+### Requirement: Owned workbench retires on code change
+An owned workbench process MUST stop when the code it was built from changes, in addition to stopping on termination signals. A compiled install MUST watch its own executable, because a plugin upgrade replaces or relocates the managed checkout that holds it. A run from an on-disk script entry MUST watch that entry's source tree instead, because the executable is then the runtime rather than the plugin build, and MUST react only to source files the workbench serves. Retirement MUST use the same shutdown path as termination signals, so the endpoint record is released. An unwatchable target MUST NOT fail the command or prevent signal shutdown.
+
+#### Scenario: Plugin upgrade replaces the executable
+- **WHEN** the executable of an owned compiled workbench is replaced or its containing checkout is moved
+- **THEN** that workbench stops and releases its endpoint record, so the next workbench action starts a server from the new build
+
+#### Scenario: Development source change
+- **WHEN** an owned workbench was started from an on-disk script entry and a served source file under that entry's tree changes
+- **THEN** that workbench stops and releases its endpoint record
+
+#### Scenario: Unwatchable target
+- **WHEN** the resolved watch target cannot be watched
+- **THEN** the workbench keeps serving and still stops on termination signals
+
 ### Requirement: Picker stays lazily loaded
 The `picker` command MUST dynamically import the TUI module only when that command is selected. Program construction and other commands MUST NOT load `@opentui/core` through the picker module.
 
