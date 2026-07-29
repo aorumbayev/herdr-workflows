@@ -97,4 +97,32 @@ describe("dumpWorkflow round-trips through parseRaw", () => {
       when: '{{inputs.mode}} == "create"',
     });
   });
+
+  test("on_failure herdr with nested params round-trips", () => {
+    const text = dumpWorkflow({
+      ...base,
+      steps: [{ run: "echo hi" }],
+      on_failure: {
+        herdr: "notification.show",
+        params: {
+          title: "handoff failed",
+          body: "{{context.error.message}}",
+          sound: "request",
+        },
+      },
+    });
+    expect(text).toMatch(/\non_failure:\n {2}herdr:/);
+    expect(text).toMatch(/\n {2}params:/);
+    expect(text).not.toMatch(/\non_failure:\n {2}- /);
+    const doc = parseRaw("buf.yaml", text);
+    expect(doc.onFailure).toMatchObject({
+      kind: "herdr",
+      method: "notification.show",
+      params: {
+        title: "handoff failed",
+        body: "{{context.error.message}}",
+        sound: "request",
+      },
+    });
+  });
 });

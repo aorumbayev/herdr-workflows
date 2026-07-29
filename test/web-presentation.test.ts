@@ -208,4 +208,86 @@ describe("web workbench presentation", () => {
     check(dark, "dark");
     check(light, "light");
   });
+
+  test("canvas hierarchy tokens distinguish node surface, border, port, and edge", async () => {
+    const page = await servedPage();
+    const dark = parseTokens(extractBlock(page, /:root\s*\{/));
+    const light = new Map([
+      ...dark,
+      ...parseTokens(extractBlock(page, /:root\[data-theme=["']light["']\]\s*\{/)),
+    ]);
+
+    for (const name of [
+      "node-surface",
+      "node-border",
+      "node-shadow",
+      "port",
+      "edge",
+      "canvas-bg",
+    ]) {
+      expect(dark.has(name), `dark missing --${name}`).toBe(true);
+      expect(light.has(name), `light missing --${name}`).toBe(true);
+    }
+
+    const style = page.slice(page.indexOf("<style>"), page.indexOf("</style>"));
+    expect(style).toMatch(/\.node\s*\{[^}]*background:\s*var\(--node-surface\)/);
+    expect(style).toMatch(/\.node\s*\{[^}]*border:[^;]*var\(--node-border\)/);
+    expect(style).toMatch(/\.node\s*\{[^}]*box-shadow:\s*var\(--node-shadow\)/);
+    expect(style).toMatch(/\.node\s*\.port\s*\{[^}]*background:\s*var\(--port\)/);
+    expect(style).toMatch(/\.canvas\s*\.edges\s*path\s*\{[^}]*stroke:\s*var\(--edge\)/);
+
+    for (const [tokens, label] of [
+      [dark, "dark"],
+      [light, "light"],
+    ] as const) {
+      const canvas = resolveColor(tokens, "canvas-bg");
+      const surface = resolveColor(tokens, "node-surface");
+      const border = resolveColor(tokens, "node-border");
+      const edge = resolveColor(tokens, "edge");
+      const port = resolveColor(tokens, "port");
+      expect(
+        surface.join(",") !== canvas.join(","),
+        `${label} node-surface must differ from canvas-bg`,
+      ).toBe(true);
+      expect(
+        border.join(",") !== canvas.join(","),
+        `${label} node-border must differ from canvas-bg`,
+      ).toBe(true);
+      expect(contrast(edge, canvas), `${label} --edge vs --canvas-bg`).toBeGreaterThanOrEqual(1.4);
+      expect(contrast(port, canvas), `${label} --port vs --canvas-bg`).toBeGreaterThanOrEqual(1.4);
+    }
+  });
+
+  test("editor exposes accessible dirty state, history, and expanded canvas controls", async () => {
+    const page = await servedPage();
+
+    expect(page).toContain('unsaved.textContent = "unsaved changes"');
+    expect(page).toContain("function refreshDirty()");
+    expect(page).toContain("savedName");
+    expect(page).toContain("savedScope");
+    expect(page).toContain("savedText");
+    expect(page).toContain("previousName");
+    expect(page).toContain("previousScope");
+    expect(page).toContain("sourceName");
+    expect(page).toContain("sourceScope");
+    // Moves are one server-side request: no client-side write-then-delete sequence.
+    expect(page).not.toMatch(/method:\s*"DELETE",\s*\n\s*body: JSON.stringify\(\{ name: prev/);
+    expect(page).toContain('"not saved — "');
+    expect(page).toContain('"not deleted — "');
+    expect(page).toContain('setAttribute("aria-label", "Undo")');
+    expect(page).toContain('setAttribute("aria-label", "Redo")');
+    expect(page).toContain('setAttribute("aria-label", "Save")');
+    expect(page).toContain('name: "Fit canvas"');
+    expect(page).toContain('name: "Expand canvas"');
+    expect(page).toContain("Exit expanded canvas");
+    expect(page).toContain("canvas-expanded");
+    expect(page).toContain(".canvas.expanded");
+    expect(page).toContain("document.execCommand(kind)");
+    expect(page).toContain("canRedo()");
+    expect(page).toContain("redos");
+    expect(page).not.toContain("move to ");
+    expect(page).not.toMatch(/mkBtn\(""|\/\* Move/);
+    expect(page).toMatch(/\.zoombar\s*button\s*\{[^}]*min-height:\s*32px/);
+    expect(page).toMatch(/\.bar\s*button\s*\{[^}]*min-height:\s*32px/);
+  });
 });

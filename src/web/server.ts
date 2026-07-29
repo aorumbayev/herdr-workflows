@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { globalConfigPath, loadConfig, parseConfigText, repoConfigPath } from "../config";
@@ -31,6 +31,27 @@ function json(body: unknown, status = 200): Response {
 
 function errText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function errCode(error: unknown): string {
+  return error && typeof error === "object" && "code" in error
+    ? String((error as { code: unknown }).code)
+    : "";
+}
+
+/**
+ * Claim `file` for `text` only if nothing is there yet. `wx` makes the guard and the
+ * write one filesystem operation, so two concurrent claims cannot both win.
+ * Returns the failure response, or `undefined` once the file is ours.
+ */
+async function claimFile(file: string, text: string, taken: string): Promise<Response | undefined> {
+  await mkdir(dirname(file), { recursive: true });
+  try {
+    await writeFile(file, text, { flag: "wx" });
+  } catch (error) {
+    if (errCode(error) === "EEXIST") return json({ ok: false, error: taken }, 409);
+    return json({ ok: false, error: errText(error) }, 500);
+  }
 }
 
 function scopeOf(v: unknown): Scope | undefined {
@@ -177,8 +198,9 @@ export function dumpWorkflow(doc: RawWorkflowDoc): string {
   if (doc.on_failure) {
     lines.push("");
     lines.push("on_failure:");
+    // dumpStep emits a list item; on_failure is a mapping — drop the marker and one indent level.
     const recovery = dumpStep(doc.on_failure as RawStep).map((ln) =>
-      ln.startsWith(`${IND}- `) ? `${IND}${ln.slice(IND.length + 2)}` : ln,
+      ln.startsWith(`${IND}- `) ? `${IND}${ln.slice(IND.length + 2)}` : ln.slice(IND.length),
     );
     lines.push(...recovery);
   }
@@ -308,11 +330,50 @@ function requireNameScope(
   return { ok: true, scope };
 }
 
+/**
+ * Finish a move: remove the source now that `claimed` holds the workflow. A source that will
+ * not go away undoes the claim so nothing changed. If that undo also fails the caller is told
+ * which copy was left behind, because it is what makes later saves collide.
+ */
+export async function dropSource(
+  source: string,
+  claimed: string,
+  label: string,
+): Promise<Response> {
+  try {
+    await Bun.file(source).delete();
+  } catch (error) {
+    if (errCode(error) === "ENOENT") return json({ ok: true });
+    const kept = `'${label}' could not be removed — ${errText(error)}`;
+    try {
+      await rm(claimed, { force: true });
+    } catch (rollbackError) {
+      return json(
+        {
+          ok: false,
+          error: `${kept}; the copy at ${shortPath(claimed)} could not be undone — ${errText(rollbackError)}`,
+        },
+        500,
+      );
+    }
+    return json({ ok: false, error: kept }, 500);
+  }
+  return json({ ok: true });
+}
+
+/**
+ * Persist a workflow. `previous` is the path the editor loaded this buffer from: the same
+ * path means an in-place edit (overwrite), a different path — or no previous at all — means
+ * the destination is being claimed, so it must be free. A move claims the destination and
+ * drops the source in one request; a source that will not go away undoes the claim, so the
+ * call either moves the workflow or changes nothing.
+ */
 async function writeWorkflow(
   repoRoot: string,
   name: string,
   scope: Scope,
   text: string,
+  previous?: { name: string; scope: Scope },
 ): Promise<Response> {
   if (!WORKFLOW_NAME_RE.test(name)) return json({ ok: false, error: "invalid workflow name" }, 400);
   try {
@@ -321,9 +382,16 @@ async function writeWorkflow(
     return json({ ok: false, error: errText(error) }, 400);
   }
   const file = workflowPath(scope, repoRoot, name);
-  await mkdir(dirname(file), { recursive: true });
-  await Bun.write(file, text);
-  return json({ ok: true });
+  const prev = previous ? workflowPath(previous.scope, repoRoot, previous.name) : undefined;
+  if (prev === file) {
+    await mkdir(dirname(file), { recursive: true });
+    await Bun.write(file, text);
+    return json({ ok: true });
+  }
+  const claimed = await claimFile(file, text, `'${name}' already exists in ${scope}`);
+  if (claimed) return claimed;
+  if (!previous) return json({ ok: true });
+  return dropSource(workflowPath(previous.scope, repoRoot, previous.name), file, previous.name);
 }
 
 async function handleWorkflow(
@@ -362,15 +430,31 @@ async function handleWorkflow(
   if (req.method === "PUT") {
     const scope = scopeOf(body.scope);
     if (!scope) return json({ ok: false, error: "scope required" }, 400);
-    return writeWorkflow(repoRoot, String(body.name ?? ""), scope, String(body.text ?? ""));
+    const prevName = String(body.previousName ?? "");
+    const prevScope = scopeOf(body.previousScope);
+    let previous: { name: string; scope: Scope } | undefined;
+    if (prevName !== "" || body.previousScope != null) {
+      if (!WORKFLOW_NAME_RE.test(prevName) || !prevScope)
+        return json({ ok: false, error: "previousName and previousScope required" }, 400);
+      previous = { name: prevName, scope: prevScope };
+    }
+    return writeWorkflow(
+      repoRoot,
+      String(body.name ?? ""),
+      scope,
+      String(body.text ?? ""),
+      previous,
+    );
   }
   if (req.method === "DELETE") {
     const name = String(body.name ?? "");
     const checked = requireNameScope(name, scopeOf(body.scope));
     if (!checked.ok) return checked.response;
-    await Bun.file(workflowPath(checked.scope, repoRoot, name))
-      .delete()
-      .catch(() => {});
+    try {
+      await Bun.file(workflowPath(checked.scope, repoRoot, name)).delete();
+    } catch (error) {
+      if (errCode(error) !== "ENOENT") return json({ ok: false, error: errText(error) }, 500);
+    }
     return json({ ok: true });
   }
   return new Response("method not allowed", { status: 405 });
@@ -385,10 +469,17 @@ async function handlePromote(repoRoot: string, body: Record<string, unknown>): P
   const src = Bun.file(workflowPath(fromChecked.scope, repoRoot, name));
   if (!(await src.exists())) return json({ ok: false, error: "source not found" }, 404);
   const dstPath = workflowPath(toChecked.scope, repoRoot, name);
-  if (body.force !== true && (await Bun.file(dstPath).exists()))
-    return json({ ok: false, error: `'${name}' already exists in ${toChecked.scope}` }, 409);
+  const text = await src.text();
+  if (body.force !== true) {
+    const claimed = await claimFile(
+      dstPath,
+      text,
+      `'${name}' already exists in ${toChecked.scope}`,
+    );
+    return claimed ?? json({ ok: true });
+  }
   await mkdir(dirname(dstPath), { recursive: true });
-  await Bun.write(dstPath, await src.text());
+  await Bun.write(dstPath, text);
   return json({ ok: true });
 }
 

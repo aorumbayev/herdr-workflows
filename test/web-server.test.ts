@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { startWebServer, type WebServer } from "../src/web/server";
+import { dropSource, startWebServer, type WebServer } from "../src/web/server";
 
 const dirs: string[] = [];
 const servers: WebServer[] = [];
@@ -154,6 +154,52 @@ describe("web visual round-trip", () => {
     });
     expect(((await res.json()) as { ok: boolean }).ok).toBe(false);
   });
+
+  test("format round-trips on_failure herdr with nested params", async () => {
+    const root = await repo();
+    const { base, token } = await serve(root);
+    const doc = {
+      version: "v1alpha1",
+      steps: [{ run: "echo hi" }],
+      on_failure: {
+        herdr: "notification.show",
+        params: {
+          title: "handoff failed",
+          body: "{{context.error.message}}",
+          sound: "request",
+        },
+      },
+    };
+    const formatted = (await (
+      await fetch(`${base}/api/format`, {
+        method: "POST",
+        headers: { "x-hwf-token": token, "content-type": "application/json" },
+        body: JSON.stringify({ doc }),
+      })
+    ).json()) as { ok: boolean; text?: string; error?: string };
+    expect(formatted.ok).toBe(true);
+    expect(formatted.text).toMatch(/\non_failure:\n {2}herdr:/);
+    expect(formatted.text).toMatch(/\n {2}params:/);
+    expect(formatted.text).not.toMatch(/\non_failure:\n {2}- /);
+    const reparsed = (await (
+      await fetch(`${base}/api/parse`, {
+        method: "POST",
+        headers: { "x-hwf-token": token, "content-type": "application/json" },
+        body: JSON.stringify({ text: formatted.text }),
+      })
+    ).json()) as {
+      ok: boolean;
+      doc?: { on_failure?: { herdr?: string; params?: Record<string, string> } };
+      error?: string;
+    };
+    expect(reparsed.ok).toBe(true);
+    expect(reparsed.doc?.on_failure?.herdr).toBe("notification.show");
+    expect(reparsed.doc?.on_failure?.params).toMatchObject({
+      title: "handoff failed",
+      body: "{{context.error.message}}",
+      sound: "request",
+    });
+  });
 });
 
 describe("web provenance and sensitivity", () => {
@@ -304,6 +350,197 @@ steps:
     });
     expect(((await res.json()) as { ok: boolean }).ok).toBe(true);
     expect(await Bun.file(join(root, ".hwf", "workflows", "good.yaml")).exists()).toBe(true);
+  });
+
+  test("same-path PUT overwrites the workflow the buffer was loaded from", async () => {
+    const root = await repo();
+    const file = join(root, ".hwf", "workflows", "edit.yaml");
+    await writeFile(file, `${V1}steps:\n  - run: echo old\n`);
+    const { base, token } = await serve(root);
+    const res = await fetch(`${base}/api/workflow`, {
+      method: "PUT",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "edit",
+        scope: "repo",
+        previousName: "edit",
+        previousScope: "repo",
+        text: `${V1}steps:\n  - run: echo new\n`,
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { ok: boolean }).ok).toBe(true);
+    expect(await Bun.file(file).text()).toContain("echo new");
+  });
+
+  test("PUT without a previous path refuses to clobber an existing workflow", async () => {
+    const root = await repo();
+    const file = join(root, ".hwf", "workflows", "mine.yaml");
+    await writeFile(file, `${V1}steps:\n  - run: echo mine\n`);
+    const { base, token } = await serve(root);
+    const res = await fetch(`${base}/api/workflow`, {
+      method: "PUT",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "mine",
+        scope: "repo",
+        text: `${V1}steps:\n  - run: echo theirs\n`,
+      }),
+    });
+    expect(res.status).toBe(409);
+    expect(await Bun.file(file).text()).toContain("echo mine");
+  });
+
+  test("rename PUT refuses occupied destination and leaves it unchanged", async () => {
+    const root = await repo();
+    const wdir = join(root, ".hwf", "workflows");
+    await writeFile(join(wdir, "src.yaml"), `${V1}steps:\n  - run: echo src\n`);
+    await writeFile(join(wdir, "taken.yaml"), `${V1}steps:\n  - run: echo taken\n`);
+    const { base, token } = await serve(root);
+    const res = await fetch(`${base}/api/workflow`, {
+      method: "PUT",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "taken",
+        scope: "repo",
+        previousName: "src",
+        previousScope: "repo",
+        text: `${V1}steps:\n  - run: echo moved\n`,
+      }),
+    });
+    expect(res.status).toBe(409);
+    const data = (await res.json()) as { ok: boolean; error?: string };
+    expect(data.ok).toBe(false);
+    expect(data.error).toMatch(/already exists in repo/);
+    expect(await Bun.file(join(wdir, "taken.yaml")).text()).toContain("echo taken");
+    expect(await Bun.file(join(wdir, "src.yaml")).text()).toContain("echo src");
+  });
+
+  test("rename PUT moves the workflow in one request", async () => {
+    const root = await repo();
+    const wdir = join(root, ".hwf", "workflows");
+    await writeFile(join(wdir, "old.yaml"), `${V1}steps:\n  - run: echo old\n`);
+    const { base, token } = await serve(root);
+    const put = await fetch(`${base}/api/workflow`, {
+      method: "PUT",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "fresh",
+        scope: "repo",
+        previousName: "old",
+        previousScope: "repo",
+        text: `${V1}steps:\n  - run: echo fresh\n`,
+      }),
+    });
+    expect(put.status).toBe(200);
+    expect(((await put.json()) as { ok: boolean }).ok).toBe(true);
+    expect(await Bun.file(join(wdir, "fresh.yaml")).text()).toContain("echo fresh");
+    expect(await Bun.file(join(wdir, "old.yaml")).exists()).toBe(false);
+  });
+
+  test("concurrent renames into one destination let exactly one win", async () => {
+    const root = await repo();
+    const wdir = join(root, ".hwf", "workflows");
+    await writeFile(join(wdir, "a.yaml"), `${V1}steps:\n  - run: echo a\n`);
+    await writeFile(join(wdir, "b.yaml"), `${V1}steps:\n  - run: echo b\n`);
+    const { base, token } = await serve(root);
+    const move = (from: string) =>
+      fetch(`${base}/api/workflow`, {
+        method: "PUT",
+        headers: { "x-hwf-token": token, "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "shared",
+          scope: "repo",
+          previousName: from,
+          previousScope: "repo",
+          text: `${V1}steps:\n  - run: echo ${from}\n`,
+        }),
+      });
+    const results = await Promise.all([move("a"), move("b")]);
+    const codes = results.map((r) => r.status).sort();
+    expect(codes).toEqual([200, 409]);
+    const dest = await Bun.file(join(wdir, "shared.yaml")).text();
+    const winner = dest.includes("echo a") ? "a" : "b";
+    const loser = winner === "a" ? "b" : "a";
+    expect(await Bun.file(join(wdir, `${winner}.yaml`)).exists()).toBe(false);
+    expect(await Bun.file(join(wdir, `${loser}.yaml`)).text()).toContain(`echo ${loser}`);
+  });
+
+  test("rename PUT undoes its destination when the source cannot be removed", async () => {
+    const root = await repo();
+    const wdir = join(root, ".hwf", "workflows");
+    // A directory in the source's place makes the removal fail while the destination write
+    // in the same directory still succeeds.
+    await mkdir(join(wdir, "stuck.yaml"), { recursive: true });
+    await writeFile(join(wdir, "stuck.yaml", "child"), "x");
+    const { base, token } = await serve(root);
+    const res = await fetch(`${base}/api/workflow`, {
+      method: "PUT",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "moved",
+        scope: "repo",
+        previousName: "stuck",
+        previousScope: "repo",
+        text: `${V1}steps:\n  - run: echo moved\n`,
+      }),
+    });
+    expect(res.status).toBe(500);
+    const data = (await res.json()) as { ok: boolean; error?: string };
+    expect(data.ok).toBe(false);
+    expect(data.error).toMatch(/could not be removed/);
+    expect(await Bun.file(join(wdir, "moved.yaml")).exists()).toBe(false);
+    expect(await Bun.file(join(wdir, "stuck.yaml", "child")).exists()).toBe(true);
+  });
+
+  test("a move that can neither remove its source nor undo its claim reports both", async () => {
+    const root = await repo();
+    const wdir = join(root, ".hwf", "workflows");
+    // Both paths refuse removal, so the source delete and the rollback each fail.
+    await mkdir(join(wdir, "src.yaml", "child"), { recursive: true });
+    await mkdir(join(wdir, "dest.yaml", "child"), { recursive: true });
+    const res = await dropSource(join(wdir, "src.yaml"), join(wdir, "dest.yaml"), "src");
+    expect(res.status).toBe(500);
+    const data = (await res.json()) as { ok: boolean; error?: string };
+    expect(data.ok).toBe(false);
+    expect(data.error).toMatch(/'src' could not be removed/);
+    expect(data.error).toMatch(/could not be undone/);
+    expect(data.error).toContain("dest.yaml");
+  });
+
+  test("DELETE missing file is idempotent ok", async () => {
+    const root = await repo();
+    const { base, token } = await serve(root);
+    const res = await fetch(`${base}/api/workflow`, {
+      method: "DELETE",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({ name: "ghost", scope: "repo" }),
+    });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { ok: boolean }).ok).toBe(true);
+  });
+
+  test("DELETE reports real filesystem failure", async () => {
+    const root = await repo();
+    const wdir = join(root, ".hwf", "workflows");
+    await writeFile(join(wdir, "stuck.yaml"), `${V1}steps:\n  - run: echo stuck\n`);
+    const { chmod } = await import("node:fs/promises");
+    await chmod(wdir, 0o555);
+    try {
+      const { base, token } = await serve(root);
+      const res = await fetch(`${base}/api/workflow`, {
+        method: "DELETE",
+        headers: { "x-hwf-token": token, "content-type": "application/json" },
+        body: JSON.stringify({ name: "stuck", scope: "repo" }),
+      });
+      expect(res.status).toBe(500);
+      const data = (await res.json()) as { ok: boolean; error?: string };
+      expect(data.ok).toBe(false);
+      expect(data.error).toMatch(/EACCES|permission denied/i);
+      expect(await Bun.file(join(wdir, "stuck.yaml")).exists()).toBe(true);
+    } finally {
+      await chmod(wdir, 0o755);
+    }
   });
 
   test("promote refuses clobber without force, overwrites with force", async () => {
@@ -488,5 +725,8 @@ describe("web page share and import routes", () => {
     expect(html).toContain("editorDirty");
     expect(html).toContain("discard unsaved config changes?");
     expect(html).toContain("discard unsaved workflow changes?");
+    expect(html).toContain("function refreshDirty()");
+    expect(html).toContain("unsaved changes");
+    expect(html).not.toContain("moved to ");
   });
 });
