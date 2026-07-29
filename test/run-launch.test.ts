@@ -23,9 +23,11 @@ import {
   isRuntimeScriptEntry,
   launchDetachedRun,
   launchDetachedWeb,
+  openWebLaunchStderr,
   parseLaunchPayload,
   selfRunArgv,
   selfWebArgv,
+  webLaunchStderrPath,
   type DetachedRunHandle,
   type LaunchRunRequest,
   type LaunchWebRequest,
@@ -502,7 +504,7 @@ await Bun.write(${JSON.stringify(payloadFile)}, text);
 });
 
 describe("launchDetachedWeb", () => {
-  test("pins repo root and inherits stdout so the workbench URL reaches the caller", async () => {
+  test("pins repo root, ignores stdout, and appends stderr to plugin state", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-web-launch-"));
     dirs.push(root);
     const envFile = join(root, "env.json");
@@ -520,7 +522,9 @@ await Bun.write(${JSON.stringify(envFile)}, JSON.stringify(env));
     );
     let seenArgv: string[] = [];
     let seenStdout: unknown;
-    process.env.HERDR_PLUGIN_STATE_DIR = join(root, "state");
+    let seenStderr: unknown;
+    const stateDir = join(root, "state");
+    process.env.HERDR_PLUGIN_STATE_DIR = stateDir;
     process.env.HERDR_PLUGIN_CONFIG_DIR = join(root, "config");
 
     launchDetachedWeb({
@@ -529,11 +533,12 @@ await Bun.write(${JSON.stringify(envFile)}, JSON.stringify(env));
       spawn: ((argv, opts) => {
         seenArgv = [...argv];
         seenStdout = opts?.stdout;
+        seenStderr = opts?.stderr;
         return Bun.spawn([process.execPath, script], {
           cwd: typeof opts?.cwd === "string" ? opts.cwd : root,
           env: opts?.env,
           stdin: "ignore",
-          stdout: "inherit",
+          stdout: "ignore",
           stderr: "ignore",
           detached: true,
         });
@@ -543,12 +548,39 @@ await Bun.write(${JSON.stringify(envFile)}, JSON.stringify(env));
     await Bun.sleep(120);
     expect(seenArgv.at(-2)).toBe("web");
     expect(seenArgv.at(-1)).toBe("import");
-    expect(seenStdout).toBe("inherit");
+    expect(seenStdout).toBe("ignore");
+    expect(typeof seenStderr).toBe("number");
+    expect(webLaunchStderrPath(stateDir)).toBe(join(stateDir, "web-launch.stderr.log"));
     const env = JSON.parse(await readFile(envFile, "utf8")) as Record<string, string>;
     expect(env.repo).toBe(root);
-    expect(env.state).toBe(join(root, "state"));
+    expect(env.state).toBe(stateDir);
     expect(env.config).toBe(join(root, "config"));
     expect(buildWebLaunchEnv(root).HERDR_WORKFLOWS_REPO_ROOT).toBe(root);
+  });
+
+  test("unusable plugin state still launches with stderr ignored", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-web-bad-state-"));
+    dirs.push(root);
+    const blocker = join(root, "not-a-dir");
+    await writeFile(blocker, "file");
+    expect(openWebLaunchStderr(join(blocker, "nested"))).toBe("ignore");
+
+    let spawned = false;
+    let seenStderr: unknown;
+    process.env.HERDR_PLUGIN_STATE_DIR = join(blocker, "nested");
+    launchDetachedWeb({
+      route: "import",
+      repoRoot: root,
+      spawn: ((_argv, opts) => {
+        spawned = true;
+        seenStderr = opts?.stderr;
+        return {
+          unref() {},
+        } as unknown as ReturnType<typeof Bun.spawn>;
+      }) as typeof Bun.spawn,
+    });
+    expect(spawned).toBe(true);
+    expect(seenStderr).toBe("ignore");
   });
 });
 
