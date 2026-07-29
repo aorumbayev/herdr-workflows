@@ -1,8 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { copyFile, link, mkdir, rename, stat, unlink, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  link,
+  mkdir,
+  readdir,
+  rename,
+  rm,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { decodePayload, type WorkflowBundle } from "./payload";
 import { parseRaw } from "./parse";
 import {
@@ -122,24 +132,6 @@ export async function preflightConflicts(
   return conflicts;
 }
 
-async function cleanupTemps(paths: string[]): Promise<void> {
-  await Promise.all(paths.map((path) => unlink(path).catch(() => undefined)));
-}
-
-type PublishedLink = { path: string; dev: number; ino: number };
-
-/** Unlink only if the path still names the inode this attempt published. */
-async function rollbackPublished(published: PublishedLink[]): Promise<void> {
-  for (const row of published) {
-    try {
-      const st = await stat(row.path);
-      if (st.dev === row.dev && st.ino === row.ino) await unlink(row.path);
-    } catch {
-      // missing or replaced — leave successor alone
-    }
-  }
-}
-
 /** Filesystems that reject hard links entirely (exFAT, some network and container mounts). */
 const LINK_UNSUPPORTED = new Set(["EOPNOTSUPP", "ENOTSUP", "ENOSYS", "EPERM", "EXDEV", "EMLINK"]);
 
@@ -168,121 +160,197 @@ export async function publishStaged(
   await unlink(tmp);
 }
 
-async function backupExisting(dest: string, backup: string): Promise<void> {
+async function linkOrCopy(src: string, dest: string): Promise<void> {
   try {
-    await link(dest, backup);
+    await link(src, dest);
   } catch (error) {
     if (!linkUnsupported(error)) throw error;
-    await copyFile(dest, backup);
+    await copyFile(src, dest);
   }
 }
 
-type ReplaceSlot = {
+type ImportJournal = {
   dest: string;
-  backup: string | null;
-  published: boolean;
+  staging: string;
+  previous: string;
 };
 
-/** Returns backup paths kept because restore rename failed. */
-async function rollbackReplaceAll(slots: ReplaceSlot[]): Promise<string[]> {
-  const preserved: string[] = [];
-  for (const row of slots) {
-    if (!row.published) continue;
-    try {
-      if (row.backup) {
-        await rename(row.backup, row.dest);
-        row.backup = null;
-      } else {
-        await unlink(row.dest);
-      }
-    } catch {
-      if (row.backup) preserved.push(row.backup);
-    }
-  }
-  return preserved;
+export function importJournalPath(dir: string): string {
+  return `${dir}.import-journal`;
 }
 
-async function writeBundleStaged(
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function readJournal(dir: string): Promise<ImportJournal | undefined> {
+  try {
+    const raw = await Bun.file(importJournalPath(dir)).text();
+    const parsed = JSON.parse(raw) as ImportJournal;
+    if (
+      typeof parsed?.dest !== "string" ||
+      typeof parsed?.staging !== "string" ||
+      typeof parsed?.previous !== "string"
+    ) {
+      return undefined;
+    }
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+const JOURNAL_STALE_MS = 10_000;
+
+async function journalIsStale(journalPath: string): Promise<boolean> {
+  try {
+    const st = await stat(journalPath);
+    return Date.now() - st.mtimeMs >= JOURNAL_STALE_MS;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Finish or reverse an interrupted scope swap so the destination is wholly old or wholly new.
+ * Chosen approach: stage the full post-import tree and rename the scope directory once —
+ * per-file publish cannot compose into bundle atomicity across process death.
+ *
+ * A live import (dest intact, staging present, previous absent) is left alone unless `force`
+ * or the journal is older than JOURNAL_STALE_MS — peers must not delete each other's staging.
+ */
+export async function recoverInterruptedImport(
+  dir: string,
+  opts: { force?: boolean } = {},
+): Promise<void> {
+  const journalPath = importJournalPath(dir);
+  const journal = await readJournal(dir);
+  if (!journal) {
+    await rm(journalPath, { force: true }).catch(() => undefined);
+    return;
+  }
+
+  const destExists = await pathExists(journal.dest);
+  const stagingExists = await pathExists(journal.staging);
+  const previousExists = await pathExists(journal.previous);
+
+  if (destExists && stagingExists && !previousExists) {
+    if (!opts.force && !(await journalIsStale(journalPath))) return;
+    await rm(journal.staging, { recursive: true, force: true });
+    await unlink(journalPath).catch(() => undefined);
+    return;
+  }
+
+  if (!destExists && previousExists && stagingExists) {
+    await rename(journal.staging, journal.dest);
+    await rm(journal.previous, { recursive: true, force: true });
+  } else if (destExists && previousExists) {
+    await rm(journal.previous, { recursive: true, force: true });
+    if (stagingExists) await rm(journal.staging, { recursive: true, force: true });
+  } else if (!destExists && previousExists && !stagingExists) {
+    await rename(journal.previous, journal.dest);
+  } else {
+    if (stagingExists) await rm(journal.staging, { recursive: true, force: true });
+    if (previousExists && destExists) {
+      await rm(journal.previous, { recursive: true, force: true });
+    }
+  }
+  await unlink(journalPath).catch(() => undefined);
+}
+
+async function claimJournal(journal: ImportJournal): Promise<boolean> {
+  try {
+    await writeFile(importJournalPath(journal.dest), JSON.stringify(journal), {
+      flag: "wx",
+      encoding: "utf8",
+    });
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw error;
+  }
+}
+
+async function writeBundleAtomic(
   bundle: WorkflowBundle,
   dir: string,
   replaceAll: boolean,
-  afterPublish?: (info: { name: string; path: string }) => void | Promise<void>,
+  hooks?: {
+    afterPublish?: (info: { name: string; path: string }) => void | Promise<void>;
+    beforeSwap?: () => void | Promise<void>;
+  },
 ): Promise<ImportWriteResult> {
-  await mkdir(dir, { recursive: true });
+  await mkdir(dirname(dir), { recursive: true });
+  await recoverInterruptedImport(dir);
+
   const conflicts = await preflightConflicts(bundle, dir);
   if (conflicts.length > 0 && !replaceAll) {
     return { status: "conflicts", conflicts };
   }
 
-  const staged: { tmp: string; dest: string; name: string }[] = [];
-  const published: PublishedLink[] = [];
-  const replaceSlots: ReplaceSlot[] = [];
+  const id = randomUUID();
+  const staging = `${dir}.${id}.staging`;
+  const previous = `${dir}.${id}.prev`;
+  const journal: ImportJournal = { dest: dir, staging, previous };
+
+  if (!(await claimJournal(journal))) {
+    for (let i = 0; i < 100; i++) {
+      await Bun.sleep(10);
+      await recoverInterruptedImport(dir);
+      if (!(await Bun.file(importJournalPath(dir)).exists())) break;
+    }
+    const again = await preflightConflicts(bundle, dir);
+    if (again.length > 0 && !replaceAll) return { status: "conflicts", conflicts: again };
+    if (!(await claimJournal(journal))) {
+      throw new WorkflowLoadError(`import already in progress for ${dir}`);
+    }
+  }
+
   try {
-    for (const entry of bundle) {
-      const dest = join(dir, `${entry.name}.yaml`);
-      const tmp = join(dir, `.${entry.name}.yaml.${randomUUID()}.tmp`);
-      await writeFile(tmp, entry.yaml, "utf8");
-      staged.push({ tmp, dest, name: entry.name });
+    await mkdir(staging, { recursive: true });
+    const bundleFiles = new Set(bundle.map((entry) => `${entry.name}.yaml`));
+
+    if (await pathExists(dir)) {
+      for (const name of await readdir(dir)) {
+        if (name.startsWith(".")) continue;
+        if (bundleFiles.has(name)) continue;
+        await linkOrCopy(join(dir, name), join(staging, name));
+      }
     }
 
     const results: { name: string; path: string }[] = [];
-    if (replaceAll) {
-      for (const row of staged) {
-        if (await Bun.file(row.dest).exists()) {
-          const backup = join(dir, `.${row.name}.yaml.${randomUUID()}.bak`);
-          await backupExisting(row.dest, backup);
-          replaceSlots.push({ dest: row.dest, backup, published: false });
-        } else {
-          replaceSlots.push({ dest: row.dest, backup: null, published: false });
-        }
+    for (const entry of bundle) {
+      const stagedPath = join(staging, `${entry.name}.yaml`);
+      const finalPath = join(dir, `${entry.name}.yaml`);
+      await writeFile(stagedPath, entry.yaml, "utf8");
+      results.push({ name: entry.name, path: finalPath });
+      if (hooks?.afterPublish) {
+        await hooks.afterPublish({ name: entry.name, path: stagedPath });
       }
-
-      for (let i = 0; i < staged.length; i++) {
-        const row = staged[i]!;
-        const slot = replaceSlots[i]!;
-        await rename(row.tmp, row.dest);
-        slot.published = true;
-        results.push({ name: row.name, path: row.dest });
-        if (afterPublish) await afterPublish({ name: row.name, path: row.dest });
-      }
-      await cleanupTemps(replaceSlots.map((s) => s.backup).filter((b): b is string => !!b));
-      return { status: "written", results };
     }
 
-    for (const row of staged) {
-      try {
-        await publishStaged(row.tmp, row.dest);
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code === "EEXIST") {
-          await rollbackPublished(published);
-          await cleanupTemps(staged.map((s) => s.tmp));
-          return { status: "conflicts", conflicts: [{ name: row.name, path: row.dest }] };
-        }
-        throw error;
-      }
-      const st = await stat(row.dest);
-      published.push({ path: row.dest, dev: st.dev, ino: st.ino });
-      results.push({ name: row.name, path: row.dest });
-      if (afterPublish) await afterPublish({ name: row.name, path: row.dest });
+    if (hooks?.beforeSwap) await hooks.beforeSwap();
+
+    if (await pathExists(dir)) {
+      await rename(dir, previous);
     }
+    await rename(staging, dir);
+    if (await pathExists(previous)) {
+      await rm(previous, { recursive: true, force: true });
+    }
+    await unlink(importJournalPath(dir)).catch(() => undefined);
     return { status: "written", results };
   } catch (error) {
-    const preservedBackups = await rollbackReplaceAll(replaceSlots);
-    await rollbackPublished(published);
-    const preserved = new Set(preservedBackups);
-    await cleanupTemps([
-      ...staged.map((s) => s.tmp),
-      ...replaceSlots.map((s) => s.backup).filter((b): b is string => !!b && !preserved.has(b)),
-    ]);
-    if (preservedBackups.length > 0) {
-      const note = `original backup preserved at ${preservedBackups.join(", ")}`;
-      if (error instanceof Error) {
-        error.message = `${error.message}; ${note}`;
-        throw error;
-      }
-      throw new Error(`${String(error)}; ${note}`);
+    await recoverInterruptedImport(dir, { force: true }).catch(() => undefined);
+    if (await pathExists(staging)) {
+      await rm(staging, { recursive: true, force: true }).catch(() => undefined);
     }
+    await unlink(importJournalPath(dir)).catch(() => undefined);
     throw error;
   }
 }
@@ -306,6 +374,7 @@ export async function runImport(
     force?: boolean;
     prompts?: ImportPrompts;
     afterPublish?: (info: { name: string; path: string }) => void | Promise<void>;
+    beforeSwap?: () => void | Promise<void>;
   },
 ): Promise<{ bundle: WorkflowBundle; result: ImportWriteResult; dir: string } | { aborted: true }> {
   const bundle = checkPayload(payload);
@@ -330,7 +399,10 @@ export async function runImport(
 
   return {
     bundle,
-    result: await writeBundleStaged(bundle, dir, replaceAll, opts.afterPublish),
+    result: await writeBundleAtomic(bundle, dir, replaceAll, {
+      afterPublish: opts.afterPublish,
+      beforeSwap: opts.beforeSwap,
+    }),
     dir,
   };
 }

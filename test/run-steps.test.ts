@@ -135,6 +135,13 @@ describe("assertFocusPolicy", () => {
     expect(assertFocusPolicy("notification.show", { title: "hi" })).toBeUndefined();
   });
 
+  test("filter scopes stay optional while unclassified methods are refused", () => {
+    expect(assertFocusPolicy("pane.list", {})).toBeUndefined();
+    expect(assertFocusPolicy("tab.list", {})).toBeUndefined();
+    expect(assertFocusPolicy("pane.rotate", {})).toContain("unclassified method");
+    expect(assertFocusPolicy("pane.edges", {})).toContain("pane_id");
+  });
+
   test("templated unrelated params do not waive selector presence", () => {
     expect(assertFocusPolicy("worktree.create", { branch: "{{inputs.branch}}" })).toContain(
       "exactly one",

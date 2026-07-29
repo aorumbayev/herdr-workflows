@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
-  chmodSync,
   mkdirSync,
   readFileSync,
   renameSync,
@@ -9,12 +8,13 @@ import {
   writeFileSync,
   type Stats,
 } from "node:fs";
-import { chmod, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pluginStateDir } from "../config";
 import {
   assertCredentialStoreSafe,
-  CredentialStoreError,
+  assertPrivateCredentialFile,
+  assertPrivateCredentialFileSync,
   tightenPrivateDir,
 } from "./credential-store";
 import { startWebServer, type WebServer } from "./server";
@@ -98,13 +98,14 @@ async function ensurePrivateDir(stateDir: string): Promise<void> {
 async function writePrivateFile(path: string, body: string): Promise<void> {
   const tmp = `${path}.${process.pid}.${Date.now()}.tmp`;
   await writeFile(tmp, body, { mode: 0o600 });
-  await chmod(tmp, 0o600);
-  await rename(tmp, path);
-  await chmod(path, 0o600);
-  const mode = (await stat(path)).mode & 0o777;
-  if ((mode & 0o077) !== 0) {
-    await rm(path, { force: true });
-    throw new CredentialStoreError(`refusing credential file with group/world access: ${path}`);
+  try {
+    await assertPrivateCredentialFile(tmp);
+    await rename(tmp, path);
+    await assertPrivateCredentialFile(path);
+  } catch (error) {
+    await rm(tmp, { force: true }).catch(() => undefined);
+    await rm(path, { force: true }).catch(() => undefined);
+    throw error;
   }
 }
 
@@ -307,15 +308,18 @@ export function acquireEndpointLockSync(
   const tryClaim = (): boolean => {
     try {
       writeFileSync(base, token, { flag: "wx", mode: 0o600 });
-      try {
-        chmodSync(base, 0o600);
-      } catch {
-        /* best-effort */
-      }
+      assertPrivateCredentialFileSync(base);
       return true;
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
-      if (code !== "EEXIST") throw error;
+      if (code !== "EEXIST") {
+        try {
+          rmSync(base, { force: true });
+        } catch {
+          /* best-effort */
+        }
+        throw error;
+      }
       return false;
     }
   };

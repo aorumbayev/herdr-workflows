@@ -121,7 +121,7 @@ Filtering MUST match case-insensitively against both the workflow's displayed ti
 - **THEN** a workflow titled `Handoff` matches
 
 ### Requirement: Truncation derives from the rendered width
-All picker text truncation — row titles, the detail row, and run progress lines — MUST be computed from the renderer's current width, rather than from fixed character limits, and MUST follow a width change.
+Every rendered picker line MUST fit the current renderer width measured in terminal columns, truncated at a grapheme boundary when it would otherwise overflow, and MUST be recomputed when that width changes.
 
 #### Scenario: Narrow host pane
 - **WHEN** the popup is narrower than its requested width
@@ -132,7 +132,7 @@ All picker text truncation — row titles, the detail row, and run progress line
 - **THEN** truncation widths are recomputed for subsequent rendering
 
 ### Requirement: Picker chrome uses width-stable ASCII glyphs
-Every glyph the picker draws as chrome — filter prompt, cursor marker, warning marker, and separator — MUST be a printable ASCII character, so no chrome glyph has ambiguous display width.
+Every glyph the picker renders MUST have unambiguous single-column width in every locale, and layout arithmetic MUST measure terminal columns rather than characters.
 
 #### Scenario: CJK locale
 - **WHEN** the picker renders in a terminal using an East-Asian locale
