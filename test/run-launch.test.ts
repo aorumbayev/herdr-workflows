@@ -20,11 +20,13 @@ import {
   buildLaunchPayload,
   buildRunArgs,
   buildWebLaunchEnv,
+  codeWatchTarget,
   isRuntimeScriptEntry,
   launchDetachedRun,
   launchDetachedWeb,
   openWebLaunchStderr,
   parseLaunchPayload,
+  retireOnCodeChange,
   selfRunArgv,
   selfWebArgv,
   webLaunchStderrPath,
@@ -738,5 +740,70 @@ describe("picker workbench handoff", () => {
     launchWorkbenchRoute(state, "not-a-route");
     expect(launched).toEqual([]);
     expect(state.exit).toBeUndefined();
+  });
+});
+
+async function waitFor(predicate: () => boolean, timeoutMs = 3000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return true;
+    await Bun.sleep(20);
+  }
+  return predicate();
+}
+
+describe("code-change retirement", () => {
+  test("codeWatchTarget watches the executable for a compiled entry", () => {
+    expect(codeWatchTarget("/$bunfs/root/cli", "/opt/herdr-workflows")).toEqual({
+      path: "/opt/herdr-workflows",
+      recursive: false,
+    });
+  });
+
+  test("codeWatchTarget watches the source tree for a script entry", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-watch-target-"));
+    dirs.push(root);
+    const entry = join(root, "cli.ts");
+    await writeFile(entry, "export {};\n");
+    expect(codeWatchTarget(entry, "/runtime/bun")).toEqual({ path: root, recursive: true });
+  });
+
+  test("replacing the watched executable retires the workbench", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-retire-bin-"));
+    dirs.push(root);
+    const binary = join(root, "herdr-workflows");
+    await writeFile(binary, "build-1");
+    let retired = 0;
+    const stop = retireOnCodeChange(() => retired++, { path: binary, recursive: false });
+    await writeFile(binary, "build-2");
+    expect(await waitFor(() => retired > 0)).toBe(true);
+    stop();
+  });
+
+  test("a watched source tree retires on served sources only", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-retire-src-"));
+    dirs.push(root);
+    await mkdir(join(root, "workflow"), { recursive: true });
+    await writeFile(join(root, "cli.ts"), "export {};\n");
+    let retired = 0;
+    const stop = retireOnCodeChange(() => retired++, { path: root, recursive: true });
+    await writeFile(join(root, "notes.md"), "not served\n");
+    await Bun.sleep(200);
+    expect(retired).toBe(0);
+    await writeFile(join(root, "workflow", "parse.ts"), "export const parsed = 1;\n");
+    expect(await waitFor(() => retired > 0)).toBe(true);
+    stop();
+  });
+
+  test("an unwatchable target leaves signal shutdown as the only path", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-retire-missing-"));
+    dirs.push(root);
+    let retired = 0;
+    const stop = retireOnCodeChange(() => retired++, {
+      path: join(root, "absent", "herdr-workflows"),
+      recursive: false,
+    });
+    expect(retired).toBe(0);
+    expect(() => stop()).not.toThrow();
   });
 });

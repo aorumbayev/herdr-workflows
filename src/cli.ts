@@ -25,7 +25,7 @@ import {
 } from "./workflow/types";
 import { CaptureLimitError } from "./limits";
 import { runWorkflow } from "./run/runner";
-import { parseLaunchPayload } from "./tui/run-launch";
+import { parseLaunchPayload, retireOnCodeChange } from "./tui/run-launch";
 import { ensureWorkbench } from "./web/endpoint";
 import { appendRouteHash, parseWebRoute } from "./web/route";
 import { runSetup } from "./setup/run";
@@ -328,10 +328,14 @@ async function cmdWeb(
   if (opts.open !== false) openBrowser(url);
   printWorkbenchUrl(url);
   if (!workbench.owned) return;
-  registerOwnedWorkbenchShutdown(() => {
+  const shutdown = () => {
     workbench.stop();
     process.exit(0);
-  });
+  };
+  registerOwnedWorkbenchShutdown(shutdown);
+  // Adoption trusts any endpoint that answers a probe, so a workbench outliving its own build
+  // would keep serving the previous one to every picker action.
+  retireOnCodeChange(shutdown);
 }
 
 // bun --compile re-extracts the embedded libopentui to a temp file per spawn (~200ms on the

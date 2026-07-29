@@ -1,5 +1,5 @@
-import { closeSync, mkdirSync, openSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { closeSync, mkdirSync, openSync, statSync, watch, type FSWatcher } from "node:fs";
+import { dirname, join } from "node:path";
 import { pluginStateDir, type InvocationContext } from "../config";
 
 type DetachedRunResult = { ok: boolean; detail: string };
@@ -62,6 +62,48 @@ export function isRuntimeScriptEntry(entry: string | undefined): boolean {
   } catch {
     return false;
   }
+}
+
+/** Source files a workbench serves, so a dev edit to one of them makes the running server stale. */
+const SERVED_SOURCE_RE = /\.(ts|html)$/;
+
+export type CodeWatchTarget = { path: string; recursive: boolean };
+
+/**
+ * What an owned workbench watches to learn its own code changed. A compiled install watches its
+ * executable — a plugin upgrade renames the managed checkout out from under it. A script entry
+ * means the executable is only the runtime, so the entry's source tree is the build instead.
+ */
+export function codeWatchTarget(
+  entry: string | undefined = Bun.main,
+  execPath: string = process.execPath,
+): CodeWatchTarget {
+  if (entry !== undefined && isRuntimeScriptEntry(entry)) {
+    return { path: dirname(entry), recursive: true };
+  }
+  return { path: execPath, recursive: false };
+}
+
+/**
+ * A workbench must not outlive the code it was built from: a stale server keeps answering
+ * authenticated probes, so picker actions adopt it and serve the previous build. Returns a
+ * disposer; an unwatchable target is not fatal, since termination signals still stop the process.
+ */
+export function retireOnCodeChange(
+  onRetire: () => void,
+  target: CodeWatchTarget = codeWatchTarget(),
+): () => void {
+  let watcher: FSWatcher;
+  try {
+    watcher = watch(target.path, { recursive: target.recursive }, (_event, file) => {
+      if (target.recursive && !SERVED_SOURCE_RE.test(String(file ?? ""))) return;
+      onRetire();
+    });
+  } catch {
+    return () => undefined;
+  }
+  watcher.unref();
+  return () => watcher.close();
 }
 
 function selfCommandArgv(
