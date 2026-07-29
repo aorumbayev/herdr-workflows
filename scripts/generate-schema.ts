@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { spawnSync } from "node:child_process";
 import { z } from "zod";
 import { rawWorkflowSchema } from "../src/workflow/parse";
 
@@ -19,4 +20,6 @@ export function buildSchema(): unknown {
 if (import.meta.main) {
   await mkdir(dirname(OUT), { recursive: true });
   await writeFile(OUT, `${JSON.stringify(buildSchema(), null, 2)}\n`);
+  const fmt = spawnSync("bunx", ["oxfmt", OUT], { stdio: "inherit" });
+  if ((fmt.status ?? 1) !== 0) process.exit(fmt.status ?? 1);
 }

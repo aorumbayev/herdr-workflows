@@ -9,6 +9,7 @@ import {
   slug,
   transcriptText,
 } from "../src/session";
+import { bunAllocStdoutArgv } from "./host-executable";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -72,9 +73,9 @@ describe("transcript extractors", () => {
       {
         claude: {
           command: [
-            "sh",
-            "-c",
-            'printf \'pane=%s kind=%s cwd=%s sk=%s sv=%s\' "$HWF_TRANSCRIPT_PANE_ID" "$HWF_TRANSCRIPT_AGENT_KIND" "$HWF_TRANSCRIPT_CWD" "$HWF_TRANSCRIPT_SESSION_KIND" "$HWF_TRANSCRIPT_SESSION_VALUE"',
+            "bun",
+            "-e",
+            "process.stdout.write(['pane='+process.env.HWF_TRANSCRIPT_PANE_ID,'kind='+process.env.HWF_TRANSCRIPT_AGENT_KIND,'cwd='+process.env.HWF_TRANSCRIPT_CWD,'sk='+process.env.HWF_TRANSCRIPT_SESSION_KIND,'sv='+process.env.HWF_TRANSCRIPT_SESSION_VALUE].join(' '))",
           ],
         },
       },
@@ -98,7 +99,7 @@ describe("transcript extractors", () => {
       "pane-2",
       {
         codex: {
-          command: ["sh", "-c", "printf '%s' \"$HWF_TRANSCRIPT_CWD\""],
+          command: ["bun", "-e", "process.stdout.write(process.env.HWF_TRANSCRIPT_CWD ?? '')"],
         },
       },
       {
@@ -113,7 +114,7 @@ describe("transcript extractors", () => {
     await expect(
       transcriptText(
         "p",
-        { codex: { command: ["sh", "-c", "echo boom >&2; exit 2"] } },
+        { codex: { command: ["bun", "-e", "process.stderr.write('boom'); process.exit(2)"] } },
         {
           invocationCwd: process.cwd(),
           getInfo: async () => ({ agent: "codex", sessionId: "s", cwd: process.cwd() }),
@@ -126,7 +127,7 @@ describe("transcript extractors", () => {
     await expect(
       transcriptText(
         "p",
-        { codex: { command: ["sh", "-c", "true"] } },
+        { codex: { command: ["bun", "-e", "void 0"] } },
         {
           invocationCwd: process.cwd(),
           getInfo: async () => ({ agent: "codex", sessionId: "s", cwd: process.cwd() }),
@@ -174,16 +175,10 @@ describe("transcript extractors", () => {
   test("extractor output obeys shared capture cap", async () => {
     const root = await mkdtemp(join(tmpdir(), "herdr-workflows-tcap-"));
     dirs.push(root);
-    const script = join(root, "big.sh");
-    await writeFile(
-      script,
-      `#!/bin/sh\ndd if=/dev/zero bs=${CAPTURE_BYTE_LIMIT + 1} count=1 2>/dev/null\n`,
-    );
-    await Bun.spawn(["chmod", "+x", script]).exited;
     await expect(
       transcriptText(
         "p",
-        { claude: { command: [script] } },
+        { claude: { command: bunAllocStdoutArgv(CAPTURE_BYTE_LIMIT + 1) } },
         {
           invocationCwd: root,
           getInfo: async () => ({ agent: "claude", sessionId: "s", cwd: root }),

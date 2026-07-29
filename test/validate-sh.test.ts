@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { accessSync, constants } from "node:fs";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
+import { writeHostExecutable } from "./host-executable";
 
 const SCRIPT = join(
   import.meta.dir,
@@ -13,6 +15,21 @@ const SCRIPT = join(
 );
 const CLI = join(import.meta.dir, "..", "src", "cli.ts");
 
+function discoverPosixShell(): string | undefined {
+  for (const candidate of ["/bin/sh", "sh"]) {
+    try {
+      accessSync(candidate, constants.X_OK);
+      return candidate;
+    } catch {
+      /* try next */
+    }
+  }
+  return undefined;
+}
+
+const posixShell = discoverPosixShell();
+const describeValidate = posixShell ? describe : describe.skip;
+
 const dirs: string[] = [];
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
@@ -23,14 +40,10 @@ async function withHwfPath(): Promise<{ root: string; bin: string; env: NodeJS.P
   dirs.push(root);
   const bin = join(root, "bin");
   await mkdir(bin, { recursive: true });
-  const hwf = join(bin, "hwf");
-  await writeFile(
-    hwf,
-    `#!/bin/sh
-exec ${JSON.stringify(process.execPath)} ${JSON.stringify(CLI)} "$@"
-`,
+  await writeHostExecutable(
+    join(bin, "hwf"),
+    `exec ${JSON.stringify(process.execPath)} ${JSON.stringify(CLI)} "$@"`,
   );
-  await chmod(hwf, 0o755);
   const plugin = join(root, "plugin-config");
   const state = join(root, "plugin-state");
   await mkdir(plugin, { recursive: true });
@@ -59,7 +72,7 @@ async function runValidate(
   file: string,
   name?: string,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
-  const proc = Bun.spawn(["/bin/sh", SCRIPT, file, ...(name ? [name] : [])], {
+  const proc = Bun.spawn([posixShell!, SCRIPT, file, ...(name ? [name] : [])], {
     env,
     cwd: env.HERDR_WORKFLOWS_REPO_ROOT,
     stdout: "pipe",
@@ -73,7 +86,7 @@ async function runValidate(
   return { code, stdout, stderr };
 }
 
-describe("validate.sh", () => {
+describeValidate("validate.sh", () => {
   test("exit 0 for loader-valid YAML", async () => {
     const { root, env } = await withHwfPath();
     const file = join(root, "ok.yaml");
@@ -115,3 +128,9 @@ describe("validate.sh", () => {
     expect(result.stderr).toContain("hwf");
   });
 });
+
+if (!posixShell) {
+  test("validate.sh skipped: POSIX shell not available", () => {
+    expect(discoverPosixShell()).toBeUndefined();
+  });
+}

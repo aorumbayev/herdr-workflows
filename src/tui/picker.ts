@@ -33,6 +33,13 @@ import {
   type LaunchWebRequest,
 } from "./run-launch";
 import { resolveHostTheme, type HostTheme } from "./theme";
+import {
+  defaultPickerReleaseCheck,
+  embeddedPluginVersion,
+  formatFilterUpdateHint,
+  leaveManagedCheckout,
+  startPickerUpdateCheck,
+} from "./update-indicator";
 
 function stripFilePrefix(error: string, file: string): string {
   return error.startsWith(file) ? error.slice(file.length).replace(/^[,:]\s*/, "") : error;
@@ -180,6 +187,7 @@ export type PickerState = {
   renderer: CliRenderer;
   filterRow: BoxRenderable;
   filter: InputRenderable;
+  updateHint: TextRenderable;
   listBlock: BoxRenderable;
   list: SelectRenderable;
   status: TextRenderable;
@@ -187,6 +195,8 @@ export type PickerState = {
   rule: TextRenderable;
   promptInput: InputRenderable;
   footer: TextRenderable;
+  /** Set when a newer published release is known; drives list-mode filter-row hint. */
+  newerReleaseVersion?: string;
 };
 
 export const LIST_HINT = "enter run · ^e edit · ^y share · ^o import · esc";
@@ -318,6 +328,7 @@ function hideBrowserChrome(state: PickerState): void {
   state.detail.visible = false;
   state.rule.visible = false;
   state.promptInput.visible = false;
+  hideUpdateHint(state);
 }
 
 function showBrowserChrome(state: PickerState): void {
@@ -330,6 +341,26 @@ function showBrowserChrome(state: PickerState): void {
   state.list.visible = true;
   state.list.flexGrow = 0;
   state.list.height = 6;
+  refreshUpdateHint(state);
+}
+
+function hideUpdateHint(state: PickerState): void {
+  state.updateHint.visible = false;
+  state.updateHint.content = "";
+}
+
+function refreshUpdateHint(state: PickerState): void {
+  if (state.mode !== "list" || !state.newerReleaseVersion) {
+    hideUpdateHint(state);
+    return;
+  }
+  const hint = formatFilterUpdateHint(state.contentWidth);
+  if (!hint) {
+    hideUpdateHint(state);
+    return;
+  }
+  state.updateHint.content = ` ${hint}`;
+  state.updateHint.visible = true;
 }
 
 function showListChrome(state: PickerState): void {
@@ -724,6 +755,13 @@ function buildPickerBrowserChrome(theme: HostTheme) {
       { id: "filter-row", flexDirection: "row", width: "100%" },
       Text({ content: "/ ", ...theme.text }),
       Input({ id: "filter", flexGrow: 1, placeholder: "filter…", ...theme.input }),
+      Text({
+        id: "update-hint",
+        content: "",
+        visible: false,
+        attributes: TextAttributes.DIM,
+        ...theme.text,
+      }),
     ),
     Box(
       { id: "list-block", flexDirection: "column", flexGrow: 0 },
@@ -813,6 +851,7 @@ function mountPickerUi(
     renderer,
     filterRow: renderer.root.findDescendantById("filter-row") as BoxRenderable,
     filter: renderer.root.findDescendantById("filter") as InputRenderable,
+    updateHint: renderer.root.findDescendantById("update-hint") as TextRenderable,
     listBlock: renderer.root.findDescendantById("list-block") as BoxRenderable,
     list: renderer.root.findDescendantById("list") as SelectRenderable,
     status: renderer.root.findDescendantById("status") as TextRenderable,
@@ -847,7 +886,10 @@ function bindPickerEvents(state: PickerState): void {
   state.renderer.on("resize", (width: number) => {
     state.contentWidth = pickerContentWidth(width);
     state.rule.content = formatRule(state.contentWidth);
-    if (state.mode === "list") applyFilter(state);
+    if (state.mode === "list") {
+      applyFilter(state);
+      refreshUpdateHint(state);
+    }
   });
 }
 
@@ -856,11 +898,29 @@ export type PickerSessionOpts = {
   repoRoot: string;
   config: WorkflowsConfig;
   ctx: InvocationContext;
+  /** Override for tests — defaults to GitHub latest-release fetch. */
+  checkLatestRelease?: () => Promise<{ version: string } | null>;
+  embeddedVersion?: string;
+  chdir?: (path: string) => void;
 };
 
 export async function runPickerSession(opts: PickerSessionOpts): Promise<number> {
+  leaveManagedCheckout(opts.repoRoot, opts.chdir);
+
   const leak = stdinLeakHandlers();
   leak.drain();
+
+  // Start before mount; never await — buffer if the check wins the race.
+  let pendingNewer: string | undefined;
+  let applyNewer: ((version: string) => void) | undefined;
+  startPickerUpdateCheck({
+    check: opts.checkLatestRelease ?? defaultPickerReleaseCheck,
+    embeddedVersion: opts.embeddedVersion ?? embeddedPluginVersion(),
+    onNewer: (version) => {
+      if (applyNewer) applyNewer(version);
+      else pendingNewer = version;
+    },
+  });
 
   const renderer = await createCliRenderer({
     exitOnCtrlC: true,
@@ -886,6 +946,12 @@ export async function runPickerSession(opts: PickerSessionOpts): Promise<number>
     theme,
     ...ui,
   };
+
+  applyNewer = (version) => {
+    state.newerReleaseVersion = version;
+    refreshUpdateHint(state);
+  };
+  if (pendingNewer) applyNewer(pendingNewer);
 
   bindPickerEvents(state);
   setListMode(state);

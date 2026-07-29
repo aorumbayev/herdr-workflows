@@ -21,8 +21,7 @@ const KNOWN_KINDS: { name: string; bin: string }[] = [
 ];
 
 async function onPath(bin: string): Promise<boolean> {
-  const check = Bun.spawn(["which", bin], { stdout: "pipe", stderr: "ignore" });
-  return (await check.exited) === 0;
+  return Bun.which(bin) !== null;
 }
 
 export async function detectProfiles(): Promise<Record<string, AgentProfile>> {

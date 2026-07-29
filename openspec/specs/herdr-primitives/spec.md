@@ -23,7 +23,7 @@ Strings inside `params:` MUST support v1alpha1 templates recursively. A whole-va
 - **THEN** the exact identifier is sent as the string param
 
 ### Requirement: Generated request and result validation
-The loader MUST generate method existence, params, protocol number, and success-result checks from the vendored Herdr API schema. Loading MUST reject unknown params, wrong types, and missing required params. Before input collection or execution, startup MUST reject a live Herdr version below the plugin manifest minimum or a protocol mismatch. The rejection MUST name the installed and required versions and both protocols. Workflow YAML MUST NOT duplicate a Herdr version requirement. A successful action MUST keep the complete structured result as its natural step result.
+The loader MUST generate method existence, params, protocol number, and success-result checks from the vendored Herdr API schema. Loading MUST reject unknown params, wrong types, and missing required params. Before input collection or execution, startup MUST reject a live Herdr version below the plugin manifest minimum or a protocol mismatch. The rejection MUST name the installed and required versions and both protocols. Socket calls MUST address the Unix domain socket Herdr serves at `HERDR_SOCKET_PATH`. A transport failure MUST name the unreachable Herdr and the resolved address, and MUST be distinguishable from a version rejection, a protocol rejection, and a workflow authoring error. Workflow YAML MUST NOT duplicate a Herdr version requirement. A successful action MUST keep the complete structured result as its natural step result.
 
 #### Scenario: Wrong param type
 - **WHEN** `pane.split` receives text for numeric `ratio`
@@ -36,6 +36,14 @@ The loader MUST generate method existence, params, protocol number, and success-
 #### Scenario: Variant-specific result path
 - **WHEN** a referenced path exists in at least one generated success variant but not the result received
 - **THEN** the action fails at runtime and names the actual result variant and missing path
+
+#### Scenario: Preflight reaches Herdr on every supported platform
+- **WHEN** a live compatible Herdr is listening and a workflow starts on macOS or Linux
+- **THEN** preflight succeeds and execution proceeds to the first step
+
+#### Scenario: Transport failure is named as such
+- **WHEN** the configured socket address cannot be reached
+- **THEN** the failure identifies an unreachable Herdr and the resolved address rather than a version mismatch or a workflow error
 
 ### Requirement: Explicit raw method targets
 Authors MUST supply every required or behavior-selecting target under `params:`, using the method's exact schema field. Authors MUST use canonical context explicitly when they want it. The loader MUST validate mutually exclusive selectors through generated or cross-field rules. It MUST never let an omitted raw target fall through to mutable Herdr UI focus.

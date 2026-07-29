@@ -22,6 +22,7 @@ import {
   resolveDynamicChoices,
 } from "../src/workflow/load";
 import { workflowNeedsTranscript } from "../src/workflow/parse";
+import { bunAllocStdoutArgv, bunWriteStdoutArgv, writeHostExecutable } from "./host-executable";
 
 const dirs: string[] = [];
 const prevPluginDir = process.env.HERDR_PLUGIN_CONFIG_DIR;
@@ -169,12 +170,15 @@ describe("plugin config directory", () => {
     const plugin = await mkdtemp(join(tmpdir(), "herdr-workflows-discovered-"));
     dirs.push(plugin);
     delete process.env.HERDR_PLUGIN_CONFIG_DIR;
-    const fakeBin = join(plugin, "fake-herdr");
-    await writeFile(
-      fakeBin,
-      `#!/bin/sh\nif [ "$1" = plugin ] && [ "$2" = config-dir ] && [ "$3" = herdr-workflows ]; then\n  printf '%s\\n' "${plugin}"\n  exit 0\nfi\nexit 1\n`,
+    const fakeBin = await writeHostExecutable(
+      join(plugin, "fake-herdr"),
+      `if [ "$1" = plugin ] && [ "$2" = config-dir ] && [ "$3" = herdr-workflows ]; then
+  printf '%s\\n' ${JSON.stringify(plugin)}
+  exit 0
+fi
+exit 1
+`,
     );
-    await Bun.spawn(["chmod", "+x", fakeBin]).exited;
     expect(
       await resolvePluginConfigDir({
         ...process.env,
@@ -268,26 +272,25 @@ describe("inputs and profile choices", () => {
     ).rejects.toThrow(/rejects templates/);
 
     await expect(
-      resolveDynamicChoices("f.yaml", "branch", { run: ["false"] }, root),
+      resolveDynamicChoices("f.yaml", "branch", { run: ["bun", "-e", "process.exit(1)"] }, root),
     ).rejects.toThrow(/dynamic choice failed/);
 
     const many = Array.from({ length: 1001 }, (_, i) => `c${i}`).join("\n");
     await expect(
-      resolveDynamicChoices("f.yaml", "branch", { run: ["printf", `%s`, many] }, root),
+      resolveDynamicChoices("f.yaml", "branch", { run: bunWriteStdoutArgv(many) }, root),
     ).rejects.toThrow(/limit 1000/);
   });
 
   test("dynamic choice stdout respects shared capture cap", async () => {
     const root = await mkdtemp(join(tmpdir(), "herdr-workflows-cap-"));
     dirs.push(root);
-    const script = join(root, "big.sh");
-    await writeFile(
-      script,
-      `#!/bin/sh\ndd if=/dev/zero bs=${CAPTURE_BYTE_LIMIT + 1} count=1 2>/dev/null\n`,
-    );
-    await Bun.spawn(["chmod", "+x", script]).exited;
     await expect(
-      resolveDynamicChoices("f.yaml", "branch", { run: [script] }, root),
+      resolveDynamicChoices(
+        "f.yaml",
+        "branch",
+        { run: bunAllocStdoutArgv(CAPTURE_BYTE_LIMIT + 1) },
+        root,
+      ),
     ).rejects.toThrow(new RegExp(`exceeded ${CAPTURE_BYTE_LIMIT} byte limit`));
   });
 

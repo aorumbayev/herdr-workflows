@@ -22,10 +22,18 @@ function bin(): string {
   return process.env.HERDR_BIN_PATH ?? "herdr";
 }
 
+/** Local address for `HERDR_SOCKET_PATH`. Exported for unit tests. */
+export function resolveHerdrSocketAddress(raw: string | undefined): string {
+  if (!raw) throw new HerdrError("no_socket", "HERDR_SOCKET_PATH is not set");
+  return raw;
+}
+
 function socketPath(): string {
-  const path = process.env.HERDR_SOCKET_PATH;
-  if (!path) throw new HerdrError("no_socket", "HERDR_SOCKET_PATH is not set");
-  return path;
+  return resolveHerdrSocketAddress(process.env.HERDR_SOCKET_PATH);
+}
+
+function transportFailure(method: string, address: string, reason: string): HerdrError {
+  return new HerdrError("unreachable", `unreachable herdr at ${address}: ${method}: ${reason}`);
 }
 
 const RPC_TIMEOUT_MS = 10_000;
@@ -38,8 +46,9 @@ export function herdrRequest(
 ): Promise<HerdrResponse> {
   const id = `herdr-workflows:${randomUUID().slice(0, 8)}`;
   const payload = `${JSON.stringify({ id, method, params })}\n`;
+  const address = socketPath();
   return new Promise((resolve, reject) => {
-    const sock = connect(socketPath());
+    const sock = connect(address);
     let buf = "";
     let settled = false;
     const settle = (fn: () => void) => {
@@ -51,7 +60,7 @@ export function herdrRequest(
     const timer = setTimeout(() => {
       sock.destroy();
       settle(() =>
-        reject(new HerdrError("timeout", `${method} timed out after ${RPC_TIMEOUT_MS}ms`)),
+        reject(transportFailure(method, address, `timed out after ${RPC_TIMEOUT_MS}ms`)),
       );
     }, RPC_TIMEOUT_MS);
     sock.on("connect", () => sock.write(payload));
@@ -68,9 +77,11 @@ export function herdrRequest(
       }
     });
     sock.on("close", () => {
-      settle(() => reject(new HerdrError("closed", `${method}: socket closed before response`)));
+      settle(() => reject(transportFailure(method, address, "socket closed before response")));
     });
-    sock.on("error", (error) => settle(() => reject(error)));
+    sock.on("error", (error) =>
+      settle(() => reject(transportFailure(method, address, error.message))),
+    );
   });
 }
 

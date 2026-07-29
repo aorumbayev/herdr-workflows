@@ -81,8 +81,8 @@ export type RunSteps = (
   values: TemplateNamespace,
 ) => Promise<StepsResult>;
 
-const COORDINATION_CODES = new Set(["closed", "no_socket"]);
-const COORDINATION_PATTERNS = [/socket closed/i, /ECONNRESET/, /EPIPE/];
+const COORDINATION_CODES = new Set(["closed", "no_socket", "unreachable"]);
+const COORDINATION_PATTERNS = [/socket closed/i, /unreachable herdr/i, /ECONNRESET/, /EPIPE/];
 
 export class CoordinationError extends Error {
   constructor(action: string, detail: string) {

@@ -178,13 +178,20 @@ export function launchDetachedRun(req: LaunchRunRequest): DetachedRunHandle {
   proc.stdin.end();
 
   let detached = false;
+  let settle: ((value: DetachedRunResult) => void) | undefined;
+  const result = new Promise<DetachedRunResult>((resolve) => {
+    settle = resolve;
+  });
+
   const detach = () => {
     if (detached) return;
     detached = true;
+    settle?.({ ok: true, detail: "detached" });
+    settle = undefined;
     proc.unref();
   };
 
-  const result = (async (): Promise<DetachedRunResult> => {
+  void (async () => {
     let lastProgress = "";
     const onLine = (line: string) => {
       const trimmed = line.trimEnd();
@@ -199,13 +206,19 @@ export function launchDetachedRun(req: LaunchRunRequest): DetachedRunHandle {
       decodeLines(proc.stderr, () => undefined),
       proc.exited,
     ]);
-    if (code === 0) return { ok: true, detail: "" };
+    if (detached) return;
+    if (code === 0) {
+      settle?.({ ok: true, detail: "" });
+      settle = undefined;
+      return;
+    }
     const detail =
       stderrText.trim().split("\n").at(-1)?.trim() ||
       stdoutText.trim().split("\n").at(-1)?.trim() ||
       lastProgress ||
       `run exited ${code}`;
-    return { ok: false, detail };
+    settle?.({ ok: false, detail });
+    settle = undefined;
   })();
 
   return { result, detach };
@@ -240,8 +253,8 @@ export function launchDetachedWeb(req: LaunchWebRequest): void {
     cwd: req.repoRoot,
     env: buildWebLaunchEnv(req.repoRoot, { ...process.env, ...req.env }),
     stdin: "ignore",
-    stdout: "ignore",
-    stderr: "ignore",
+    stdout: "inherit",
+    stderr: "inherit",
     detached: true,
   });
   proc.unref();

@@ -20,8 +20,11 @@ import { WORKFLOW_FORMAT, WorkflowLoadError } from "./workflow/types";
 import { CaptureLimitError } from "./limits";
 import { runWorkflow } from "./run/runner";
 import { parseLaunchPayload } from "./tui/run-launch";
+import { browserOpenArgv } from "./web/browser";
 import { ensureWorkbench } from "./web/endpoint";
 import { appendRouteHash, parseWebRoute } from "./web/route";
+import { runSetup } from "./setup/run";
+import { runUpdate } from "./update";
 
 function collectInput(value: string, previous: Record<string, string>): Record<string, string> {
   const eq = value.indexOf("=");
@@ -153,7 +156,7 @@ async function cmdRun(
     }
     inputs = payload.inputs;
   }
-  inputs = { ...inputs, ...(opts.input ?? {}) };
+  inputs = { ...inputs, ...opts.input };
   const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || resolveRepoRoot();
   const config = await loadConfig(repoRoot);
   const ctx = readInvocationContext();
@@ -182,13 +185,17 @@ async function cmdRun(
   }
 }
 
-function openBrowser(url: string): void {
-  const cmd = process.platform === "darwin" ? ["open", url] : ["xdg-open", url];
+function openBrowser(url: string, platform: NodeJS.Platform = process.platform): void {
   try {
-    Bun.spawn(cmd, { stdout: "ignore", stderr: "ignore" });
+    Bun.spawn(browserOpenArgv(url, platform), { stdout: "ignore", stderr: "ignore" });
   } catch {
-    // browser launch is best-effort; the printed URL still works
+    /* opener absence is nonfatal — the printed URL still reaches the caller */
   }
+}
+
+function registerOwnedWorkbenchShutdown(shutdown: () => void): void {
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
 }
 
 async function cmdWeb(
@@ -208,12 +215,10 @@ async function cmdWeb(
   process.stdout.write(`herdr-workflows web · ${url}\n`);
   if (opts.open !== false) openBrowser(url);
   if (!workbench.owned) return;
-  const shutdown = () => {
+  registerOwnedWorkbenchShutdown(() => {
     workbench.stop();
     process.exit(0);
-  };
-  process.once("SIGINT", shutdown);
-  process.once("SIGTERM", shutdown);
+  });
 }
 
 // bun --compile re-extracts the embedded libopentui to a temp file per spawn (~200ms on the
@@ -243,6 +248,9 @@ async function runPickerPopup(picker: typeof import("./tui/picker")): Promise<vo
 
   const ctx = readInvocationContext();
   const root = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot(ctx.cwd));
+  // Concurrent with config/workflow loading — never awaited before mount.
+  const { defaultPickerReleaseCheck } = await import("./tui/update-indicator");
+  const releaseCheck = defaultPickerReleaseCheck();
   const config = await loadConfig(root);
   const entries = await listWorkflows(root, config);
   if (!picker.hasVisibleEntries(entries)) die("no workflows found");
@@ -253,6 +261,7 @@ async function runPickerPopup(picker: typeof import("./tui/picker")): Promise<vo
     repoRoot: root,
     config,
     ctx,
+    checkLatestRelease: () => releaseCheck,
   });
   process.exit(code);
 }
@@ -324,6 +333,20 @@ function buildProgram(): Command {
     .option("--no-open", "do not open a browser")
     .action(async (route: string | undefined, opts: { port?: number; open?: boolean }) => {
       await cmdWeb(route, opts);
+    });
+
+  program
+    .command("update")
+    .description("Update to the latest published GitHub Release via Herdr")
+    .action(async () => {
+      await runUpdate();
+    });
+
+  program
+    .command("setup", { hidden: true })
+    .description("Install PATH commands and picker keybindings")
+    .action(() => {
+      runSetup({});
     });
 
   return program;

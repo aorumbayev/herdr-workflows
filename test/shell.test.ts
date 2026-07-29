@@ -11,18 +11,16 @@ afterEach(async () => {
 });
 
 describe("defaultShell", () => {
-  test("sh on POSIX, cmd on win32", () => {
+  test("defaults to sh", () => {
     expect(defaultShell("darwin")).toBe("sh");
     expect(defaultShell("linux")).toBe("sh");
-    expect(defaultShell("win32")).toBe("cmd");
-    expect(defaultShell()).toBe(process.platform === "win32" ? "cmd" : "sh");
+    expect(defaultShell()).toBe("sh");
   });
 });
 
 describe("shellArgv", () => {
   test("follows the platform default", () => {
     expect(shellArgv("echo hi", defaultShell("linux"))).toEqual(["sh", "-c", "echo hi"]);
-    expect(shellArgv("echo hi", defaultShell("win32"))).toEqual(["cmd", "/c", "echo hi"]);
   });
 
   test("explicit shell overrides the default", () => {
@@ -50,28 +48,20 @@ describe("killSpawn", () => {
     return calls;
   }
 
-  test("POSIX kills the detached process group", () => {
+  test("kills the detached process group", () => {
     const calls = spyKill(() => true);
     let childKilled = false;
-    killSpawn({ pid: 4242, kill: () => (childKilled = true) }, "linux");
+    killSpawn({ pid: 4242, kill: () => (childKilled = true) });
     expect(calls).toEqual([[-4242, "SIGKILL"]]);
     expect(childKilled).toBe(false);
   });
 
-  test("POSIX falls back to the child when the group is gone", () => {
+  test("falls back to the child when the group is gone", () => {
     spyKill(() => {
       throw new Error("ESRCH");
     });
     let childKilled = false;
-    killSpawn({ pid: 4242, kill: () => (childKilled = true) }, "darwin");
-    expect(childKilled).toBe(true);
-  });
-
-  test("win32 kills only the child — no process groups", () => {
-    const calls = spyKill(() => true);
-    let childKilled = false;
-    killSpawn({ pid: 4242, kill: () => (childKilled = true) }, "win32");
-    expect(calls).toEqual([]);
+    killSpawn({ pid: 4242, kill: () => (childKilled = true) });
     expect(childKilled).toBe(true);
   });
 });
@@ -86,5 +76,26 @@ describe("spawnCapture caps", () => {
         maxCaptureBytes: { source: "command" },
       }),
     ).rejects.toThrow(new RegExp(`command exceeded ${CAPTURE_BYTE_LIMIT} byte limit`));
+  });
+
+  test("timeout stops a shell-launched grandchild", async () => {
+    const root = await mkdtemp(join(tmpdir(), "herdr-workflows-timeout-tree-"));
+    dirs.push(root);
+    const marker = join(root, "alive.txt");
+    const child = join(root, "child.ts");
+    await Bun.write(
+      child,
+      `
+await Bun.write(${JSON.stringify(marker)}, "start");
+await Bun.sleep(5000);
+await Bun.write(${JSON.stringify(marker)}, "done");
+`,
+    );
+    const result = await spawnCapture(["bun", child], { cwd: root, timeoutMs: 200 });
+    expect(result.timedOut).toBe(true);
+    await Bun.sleep(100);
+    expect(await Bun.file(marker).text()).toBe("start");
+    await Bun.sleep(300);
+    expect(await Bun.file(marker).text()).toBe("start");
   });
 });

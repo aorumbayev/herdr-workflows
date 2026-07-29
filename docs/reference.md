@@ -23,10 +23,10 @@ Each step uses exactly one of `agent`, `run`, `herdr`, or `workflow`. Every step
 
 ### `run:`
 
-| Form   | Behavior                                                          |
-| ------ | ----------------------------------------------------------------- |
-| list   | argv, no shell. Templates allowed per element.                    |
-| string | shell (`sh` on macOS/Linux, `cmd` on Windows) unless `shell:` set |
+| Form   | Behavior                                       |
+| ------ | ---------------------------------------------- |
+| list   | argv, no shell. Templates allowed per element. |
+| string | shell (`sh` unless `shell:` set)               |
 
 The natural result is `{stdout, stderr, exit_code, failed}`. Inputs export as `HWF_<name>` variables. An explicit `env:` entry cannot use the reserved `HWF_` prefix. Omit `cwd` to use the invocation working directory. Omit `timeout` to run without a workflow timeout.
 
@@ -158,4 +158,4 @@ The method denylist covers server and plugin lifecycle, identity authority, expe
 
 ## Portability
 
-v1alpha1 syntax and argv behavior work across platforms. Runtime capability follows the installed herdr platform support. Native Windows support is in beta. Use `{{context.platform}}` with `when:` for OS-specific steps.
+v1alpha1 syntax and argv behavior work on the supported platforms (Linux and macOS; Windows via WSL2). Runtime capability follows the installed herdr. Omitted `shell:` for string `run:` defaults to `sh`. Use `{{context.platform}}` with `when:` for OS-specific steps — that is the only workflow-level OS selection.

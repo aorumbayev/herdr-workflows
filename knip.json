@@ -1,7 +1,17 @@
 {
   "$schema": "https://unpkg.com/knip/schema.json",
-  "project": ["src/**/*.ts"],
+  "entry": [
+    "scripts/prepare-release.ts",
+    "scripts/record-release-version.ts",
+    "scripts/establish-v0.1.0-baseline.ts"
+  ],
+  "project": ["src/**/*.ts", "scripts/**/*.{ts,mjs,js}"],
   "ignore": ["src/herdr-methods.generated.ts"],
-  "ignoreDependencies": ["oxfmt", "oxlint"],
-  "ignoreBinaries": ["herdr"]
+  "ignoreDependencies": [
+    "oxlint",
+    "@semantic-release/commit-analyzer",
+    "@semantic-release/github",
+    "@semantic-release/release-notes-generator",
+    "conventional-changelog-conventionalcommits"
+  ]
 }

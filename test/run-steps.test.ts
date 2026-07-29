@@ -11,7 +11,13 @@ import {
 } from "../src/run/context";
 import { resolveInputValues } from "../src/run/runner";
 import { assertFocusPolicy } from "../src/run/steps/primitive";
-import { buildHwfEnv, mergeStepEnv, runArgvStep, runShellStep } from "../src/run/steps/shell";
+import {
+  buildHwfEnv,
+  defaultShell,
+  mergeStepEnv,
+  runArgvStep,
+  runShellStep,
+} from "../src/run/steps/shell";
 import type { InputSpec } from "../src/workflow/types";
 
 async function tempDir(): Promise<string> {
@@ -22,7 +28,10 @@ describe("command results", () => {
   test("argv success reports exit code and clears failed", async () => {
     const cwd = await tempDir();
     try {
-      const result = await runArgvStep(["sh", "-c", "printf out; printf err >&2"], { cwd });
+      const result = await runArgvStep(
+        ["bun", "-e", "process.stdout.write('out'); process.stderr.write('err')"],
+        { cwd },
+      );
       expect(result).toEqual({
         ok: true,
         stdout: "out",
@@ -39,11 +48,14 @@ describe("command results", () => {
   test("nonzero exit still returns a full structured result", async () => {
     const cwd = await tempDir();
     try {
-      const result = await runShellStep("printf nope >&2; exit 3", { cwd });
+      const failCmd =
+        defaultShell() === "cmd" ? "echo nope 1>&2 & exit /b 3" : "printf nope >&2; exit 3";
+      const result = await runShellStep(failCmd, { cwd });
       expect(result.failed).toBe(true);
       expect(result.ok).toBe(false);
       expect(result.exitCode).toBe(3);
-      expect(result.stderr).toBe("nope");
+      // cmd `echo` appends CRLF (and often a trailing space); normalize for the assertion.
+      expect(result.stderr.replace(/\r\n/g, "\n").trim()).toBe("nope");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -52,7 +64,8 @@ describe("command results", () => {
   test("timeout terminates the command and names the deadline", async () => {
     const cwd = await tempDir();
     try {
-      const result = await runShellStep("sleep 5", { cwd, timeoutMs: 200 });
+      const slowCmd = defaultShell() === "cmd" ? "ping -n 6 127.0.0.1 >nul" : "sleep 5";
+      const result = await runShellStep(slowCmd, { cwd, timeoutMs: 200 });
       expect(result.timedOut).toBe(true);
       expect(result.failed).toBe(true);
       expect(result.stderr).toBe("timed out after 0.2s");
@@ -158,6 +171,11 @@ describe("coordination loss", () => {
     expect(isCoordinationError(new HerdrError("no_socket", "HERDR_SOCKET_PATH is not set"))).toBe(
       true,
     );
+    expect(
+      isCoordinationError(
+        new HerdrError("unreachable", "unreachable herdr at /tmp/x: pane.split: closed"),
+      ),
+    ).toBe(true);
     expect(isCoordinationError(new Error("read ECONNRESET"))).toBe(true);
     expect(isCoordinationError(new Error("write EPIPE"))).toBe(true);
     expect(isCoordinationError(new HerdrError("invalid_params", "bad ratio"))).toBe(false);

@@ -46,6 +46,7 @@ function pickerState(): PickerState {
     renderer: { destroy: () => undefined },
     filterRow: { visible: true },
     filter: { visible: true },
+    updateHint: { visible: false, content: "" },
     listBlock: { visible: true },
     list: {
       visible: true,
@@ -71,7 +72,7 @@ describe("review regressions", () => {
   target:
     type: choice
     options:
-      run: [printf, main]
+      run: [echo, main]
 steps:
   - run: [echo, "{{inputs.target}}"]
 `,

@@ -41,7 +41,7 @@ describe("placeCommandPane", () => {
     await placeCommandPane({
       open: "below",
       focus: true,
-      argv: ["printf", "hi"],
+      argv: ["echo", "hi"],
       deps: {
         herdrCall: async (method, params = {}) => {
           calls.push({ method, params });
@@ -90,8 +90,8 @@ describe("placeCommandPane", () => {
   });
 
   test("quoteArgvForShell preserves simple tokens and quotes spaces", () => {
-    expect(quoteArgvForShell(["echo", "hi"], "darwin")).toBe("echo hi");
-    expect(quoteArgvForShell(["sh", "-c", "echo LISTENING; sleep 1"], "darwin")).toBe(
+    expect(quoteArgvForShell(["echo", "hi"])).toBe("echo hi");
+    expect(quoteArgvForShell(["sh", "-c", "echo LISTENING; sleep 1"])).toBe(
       "sh -c 'echo LISTENING; sleep 1'",
     );
   });
