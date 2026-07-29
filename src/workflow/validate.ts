@@ -1,4 +1,5 @@
 import { isMethodResultDotPath, RESULT_DOT_PATHS } from "../herdr-methods";
+import { clausesContain } from "./conditions";
 import { isWholeValueTemplate, parseTemplatePath, textTemplates } from "./parse";
 import {
   bail,
@@ -9,6 +10,7 @@ import {
   type ReturnsSpec,
   type StepAction,
   type TemplatePath,
+  type WhenSpec,
   type WorkflowStep,
 } from "./types";
 
@@ -21,17 +23,20 @@ export type StepProducer = {
   herdrMethod?: string;
   childReturns?: ReturnsSpec;
   noneReason?: string;
+  when?: WhenSpec[];
 };
 
 type SourceType = "string" | "number" | "boolean" | "object" | "unknown";
 
 type TemplateOpts = {
   producers: Map<string, StepProducer>;
-  inputNames: Set<string>;
+  inputsByName: Map<string, InputSpec>;
   earlierOnly: boolean;
   maxStepIndex?: number;
   rejectSensitiveContext?: boolean;
   allowContextError?: boolean;
+  /** Clauses already proven at this site (structural containment). */
+  proven?: WhenSpec[];
 };
 
 const COMMAND_FIELDS = new Set(["stdout", "stderr", "exit_code", "failed"]);
@@ -66,11 +71,12 @@ function classifyProducer(
   childReturns?: ReturnsSpec,
 ): StepProducer | undefined {
   if (!step.id) return undefined;
-  const base = { id: step.id, index };
+  const base = {
+    id: step.id,
+    index,
+    ...(step.when !== undefined ? { when: step.when } : {}),
+  };
 
-  if (step.when) {
-    return { ...base, kind: "none", noneReason: "step may be skipped by when:" };
-  }
   if ((step.action.kind === "run" || step.action.kind === "agent") && step.action.background) {
     return { ...base, kind: "none", noneReason: "background steps produce no result" };
   }
@@ -312,10 +318,10 @@ function assertContextPath(
 function sourceTypeOf(
   path: TemplatePath,
   producers: Map<string, StepProducer>,
-  inputNames: Set<string>,
+  inputsByName: Map<string, InputSpec>,
 ): SourceType {
   if (path.root === "inputs") {
-    if (path.segments.length !== 1 || !inputNames.has(path.segments[0]!)) return "unknown";
+    if (path.segments.length !== 1 || !inputsByName.has(path.segments[0]!)) return "unknown";
     return "string";
   }
   if (path.root === "context") {
@@ -356,6 +362,69 @@ function sourceTypeOf(
   return "unknown";
 }
 
+function assertAvailability(
+  file: string,
+  stepIndex: number | undefined,
+  key: string,
+  proven: WhenSpec[] | undefined,
+  required: WhenSpec[] | undefined,
+  label: string,
+): void {
+  if (!required || required.length === 0) return;
+  if (!clausesContain(proven ?? [], required)) {
+    bail(
+      file,
+      stepIndex,
+      key,
+      `${label} is not proven available — consumer must include every producer when: clause`,
+    );
+  }
+}
+
+export function shellUsesInput(command: string, name: string): boolean {
+  const prefix = `HWF_${name}`;
+  let from = 0;
+  while (from <= command.length) {
+    const i = command.indexOf(prefix, from);
+    if (i === -1) break;
+    const after = command[i + prefix.length];
+    if (after === undefined || !/[A-Za-z0-9_]/.test(after)) return true;
+    from = i + prefix.length;
+  }
+  return false;
+}
+
+function assertShellHwfGuards(
+  file: string,
+  stepIndex: number,
+  command: string,
+  opts: TemplateOpts,
+): void {
+  for (const input of opts.inputsByName.values()) {
+    if (!input.when || input.when.length === 0) continue;
+    if (!shellUsesInput(command, input.name)) continue;
+    assertAvailability(file, stepIndex, "run", opts.proven, input.when, `input '${input.name}'`);
+  }
+}
+
+function assertConditionScalar(
+  file: string,
+  stepIndex: number | undefined,
+  key: string,
+  path: TemplatePath,
+  opts: TemplateOpts,
+): void {
+  const sourceType = sourceTypeOf(path, opts.producers, opts.inputsByName);
+  if (sourceType === "object") {
+    bail(
+      file,
+      stepIndex,
+      key,
+      "when: rejects structured sources — use a scalar field (string, number, boolean)",
+    );
+  }
+}
+
 function assertTemplatePath(
   file: string,
   stepIndex: number | undefined,
@@ -364,9 +433,11 @@ function assertTemplatePath(
   opts: TemplateOpts,
 ): void {
   if (path.root === "inputs") {
-    if (path.segments.length !== 1 || !opts.inputNames.has(path.segments[0]!)) {
+    if (path.segments.length !== 1 || !opts.inputsByName.has(path.segments[0]!)) {
       bail(file, stepIndex, key, `unknown input '${path.segments[0] ?? ""}'`);
     }
+    const input = opts.inputsByName.get(path.segments[0]!)!;
+    assertAvailability(file, stepIndex, key, opts.proven, input.when, `input '${input.name}'`);
     return;
   }
   if (path.root === "context") {
@@ -395,6 +466,14 @@ function assertTemplatePath(
       bail(file, stepIndex, key, `forward reference to step '${id}'`);
     }
   }
+  assertAvailability(
+    file,
+    stepIndex,
+    key,
+    opts.proven,
+    producer.when,
+    `step '${producer.id}' result`,
+  );
   assertProducerField(file, stepIndex, key, producer, path.segments.slice(1));
 }
 
@@ -467,6 +546,71 @@ function assertCwdEnvPane(
   if (action.pane?.workspace !== undefined) {
     assertTemplates(file, stepIndex, key("pane.workspace"), action.pane.workspace, opts);
   }
+  if (typeof action.pane?.open === "string" && action.pane.open.includes("{{")) {
+    assertPaneOpenTemplate(file, stepIndex, key("pane.open"), action.pane.open, action.pane, opts);
+  }
+}
+
+const PANE_OPEN_VALUES = new Set<string>(["tab", "beside", "below"]);
+
+function assertPaneOpenTemplate(
+  file: string,
+  stepIndex: number | undefined,
+  key: string,
+  open: string,
+  pane: { target?: string; workspace?: string; size?: number },
+  opts: TemplateOpts,
+): void {
+  if (!isWholeValueTemplate(open)) {
+    bail(file, stepIndex, key, "pane.open templates must be whole-value");
+  }
+  const path = parseTemplatePath(open.slice(2, -2).trim());
+  if (!path) {
+    bail(file, stepIndex, key, "invalid whole-value template");
+  }
+  if (path.root !== "inputs" || path.segments.length !== 1) {
+    bail(
+      file,
+      stepIndex,
+      key,
+      "pane.open must reference an unconditional closed static choice input",
+    );
+  }
+  const input = opts.inputsByName.get(path.segments[0]!);
+  if (!input) {
+    bail(file, stepIndex, key, `unknown input '${path.segments[0]}'`);
+  }
+  if (input.when && input.when.length > 0) {
+    bail(file, stepIndex, key, `pane.open input '${input.name}' must be unconditional`);
+  }
+  if (input.type !== "choice" || input.dynamicOptions || input.allowCustom) {
+    bail(file, stepIndex, key, `pane.open input '${input.name}' must be a closed static choice`);
+  }
+  if (!input.options || input.options.length === 0) {
+    bail(file, stepIndex, key, `pane.open input '${input.name}' has no options`);
+  }
+  for (const option of input.options) {
+    if (!PANE_OPEN_VALUES.has(option)) {
+      bail(
+        file,
+        stepIndex,
+        key,
+        `pane.open input '${input.name}' options must be tab, beside, or below`,
+      );
+    }
+  }
+  const domain = new Set(input.options);
+  if (domain.has("tab") && (pane.target !== undefined || pane.size !== undefined)) {
+    bail(file, stepIndex, key, "pane.target/size are invalid when pane.open can resolve to tab");
+  }
+  if ((domain.has("beside") || domain.has("below")) && pane.workspace !== undefined) {
+    bail(
+      file,
+      stepIndex,
+      key,
+      "pane.workspace is invalid when pane.open can resolve to beside/below",
+    );
+  }
 }
 
 function assertActionSites(
@@ -495,6 +639,8 @@ function assertActionSites(
       action.payload.argv.forEach((el, i) => {
         assertTemplates(file, stepIndex, key(`run[${i}]`), el, opts);
       });
+    } else if (stepIndex !== undefined) {
+      assertShellHwfGuards(file, stepIndex, action.payload.command, opts);
     }
     assertCwdEnvPane(file, stepIndex, action, opts, key);
     return;
@@ -517,11 +663,56 @@ function assertStepTemplates(
   opts: TemplateOpts,
   profiles: Set<string>,
 ): void {
-  if (step.when?.kind === "truthy" || step.when?.kind === "eq") {
-    const path = parseTemplatePath(step.when.path);
-    if (path) assertTemplatePath(file, stepIndex, "when", path, opts);
+  const clauses = step.when ?? [];
+  for (let i = 0; i < clauses.length; i++) {
+    const clause = clauses[i]!;
+    const path = parseTemplatePath(clause.path);
+    const key = i === 0 && clauses.length === 1 ? "when" : `when[${i}]`;
+    if (path) {
+      assertTemplatePath(file, stepIndex, key, path, {
+        ...opts,
+        proven: clauses.slice(0, i),
+      });
+      assertConditionScalar(file, stepIndex, key, path, opts);
+    }
   }
-  assertActionSites(file, stepIndex, step.action, opts, profiles);
+  assertActionSites(file, stepIndex, step.action, { ...opts, proven: clauses }, profiles);
+}
+
+function assertInputGuards(file: string, inputs: InputSpec[]): void {
+  const earlier = new Map<string, InputSpec>();
+  for (const input of inputs) {
+    const clauses = input.when ?? [];
+    for (let i = 0; i < clauses.length; i++) {
+      const clause = clauses[i]!;
+      const path = parseTemplatePath(clause.path);
+      const key =
+        clauses.length === 1 ? `inputs.${input.name}.when` : `inputs.${input.name}.when[${i}]`;
+      if (!path) {
+        bail(file, undefined, key, "when: must reference inputs|steps|context");
+      }
+      if (path.root !== "inputs" || path.segments.length !== 1) {
+        bail(file, undefined, key, "input when: may only reference earlier inputs");
+      }
+      const target = path.segments[0]!;
+      if (!earlier.has(target)) {
+        if (target === input.name || !inputs.some((row) => row.name === target)) {
+          bail(file, undefined, key, `unknown input '${target}'`);
+        }
+        bail(file, undefined, key, `forward reference to input '${target}'`);
+      }
+      const prior = earlier.get(target)!;
+      assertAvailability(
+        file,
+        undefined,
+        key,
+        clauses.slice(0, i),
+        prior.when,
+        `input '${prior.name}'`,
+      );
+    }
+    earlier.set(input.name, input);
+  }
 }
 
 function buildProducers(
@@ -545,8 +736,9 @@ export function assertWorkflowReferences(
   profiles: Set<string>,
 ): Map<string, StepProducer> {
   assertUniqueStepIds(file, workflow.steps);
+  assertInputGuards(file, workflow.inputs);
   const producers = buildProducers(workflow.steps, childReturnsById);
-  const inputNames = new Set(workflow.inputs.map((input) => input.name));
+  const inputsByName = new Map(workflow.inputs.map((input) => [input.name, input]));
 
   for (let i = 0; i < workflow.steps.length; i++) {
     assertStepTemplates(
@@ -555,7 +747,7 @@ export function assertWorkflowReferences(
       workflow.steps[i]!,
       {
         producers,
-        inputNames,
+        inputsByName,
         earlierOnly: true,
         maxStepIndex: i + 1,
         allowContextError: false,
@@ -567,10 +759,11 @@ export function assertWorkflowReferences(
   if (workflow.returns) {
     const opts: TemplateOpts = {
       producers,
-      inputNames,
+      inputsByName,
       earlierOnly: false,
       rejectSensitiveContext: true,
       allowContextError: false,
+      proven: [],
     };
     if (workflow.returns.kind === "template") {
       if (!isWholeValueTemplate(workflow.returns.template)) {
@@ -594,9 +787,10 @@ export function assertWorkflowReferences(
       workflow.onFailure,
       {
         producers,
-        inputNames,
+        inputsByName,
         earlierOnly: false,
         allowContextError: true,
+        proven: [],
       },
       profiles,
       "on_failure",
@@ -612,10 +806,12 @@ export function assertChildInputContract(
   passed: Record<string, string> | undefined,
   child: LoadedWorkflow,
   producers: Map<string, StepProducer>,
-  parentInputNames: Set<string>,
+  parentInputs: InputSpec[],
   profiles: Set<string>,
+  stepProven: WhenSpec[] = [],
 ): void {
   const declared = new Map(child.inputs.map((input) => [input.name, input]));
+  const parentByName = new Map(parentInputs.map((input) => [input.name, input]));
   const values = passed ?? {};
   for (const key of Object.keys(values)) {
     if (!declared.has(key)) {
@@ -623,13 +819,27 @@ export function assertChildInputContract(
     }
   }
   for (const input of child.inputs) {
-    if (input.default === undefined && values[input.name] === undefined) {
+    if (
+      input.default === undefined &&
+      values[input.name] === undefined &&
+      (input.when === undefined || input.when.length === 0)
+    ) {
       bail(file, stepIndex, `inputs.${input.name}`, `missing required child input '${input.name}'`);
     }
   }
   for (const [name, raw] of Object.entries(values)) {
     const input = declared.get(name)!;
-    assertChildInputValue(file, stepIndex, name, raw, input, producers, parentInputNames, profiles);
+    assertChildInputValue(
+      file,
+      stepIndex,
+      name,
+      raw,
+      input,
+      producers,
+      parentByName,
+      profiles,
+      stepProven,
+    );
   }
 }
 
@@ -640,23 +850,26 @@ function assertChildInputValue(
   raw: string,
   input: InputSpec,
   producers: Map<string, StepProducer>,
-  parentInputNames: Set<string>,
+  parentByName: Map<string, InputSpec>,
   profiles: Set<string>,
+  proven: WhenSpec[],
 ): void {
   const key = `inputs.${name}`;
+  const opts: TemplateOpts = {
+    producers,
+    inputsByName: parentByName,
+    earlierOnly: true,
+    maxStepIndex: stepIndex,
+    allowContextError: false,
+    proven,
+  };
   if (isWholeValueTemplate(raw)) {
     const path = parseTemplatePath(raw.slice(2, -2).trim());
     if (!path) {
       bail(file, stepIndex, key, "invalid whole-value template");
     }
-    assertTemplatePath(file, stepIndex, key, path, {
-      producers,
-      inputNames: parentInputNames,
-      earlierOnly: true,
-      maxStepIndex: stepIndex,
-      allowContextError: false,
-    });
-    const sourceType = sourceTypeOf(path, producers, parentInputNames);
+    assertTemplatePath(file, stepIndex, key, path, opts);
+    const sourceType = sourceTypeOf(path, producers, parentByName);
     if (sourceType === "object" || sourceType === "number" || sourceType === "boolean") {
       bail(
         file,
@@ -666,13 +879,7 @@ function assertChildInputValue(
       );
     }
   } else {
-    assertTemplates(file, stepIndex, key, raw, {
-      producers,
-      inputNames: parentInputNames,
-      earlierOnly: true,
-      maxStepIndex: stepIndex,
-      allowContextError: false,
-    });
+    assertTemplates(file, stepIndex, key, raw, opts);
   }
 
   if (raw.includes("{{")) return;
@@ -680,7 +887,12 @@ function assertChildInputValue(
   if (input.type === "profile" && !profiles.has(raw)) {
     bail(file, stepIndex, key, `child input '${name}' must name a merged profile`);
   }
-  if (input.type === "choice" && input.options && !input.options.includes(raw)) {
+  if (
+    input.type === "choice" &&
+    input.options &&
+    !input.allowCustom &&
+    !input.options.includes(raw)
+  ) {
     bail(file, stepIndex, key, `child input '${name}' must be one of: ${input.options.join(", ")}`);
   }
 }

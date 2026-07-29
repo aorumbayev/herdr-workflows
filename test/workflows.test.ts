@@ -285,19 +285,23 @@ steps:
   - run: "true"
     when: '{{context.platform}} != "linux"'
 `);
-    expect(doc.steps[0]!.when).toEqual({ kind: "truthy", path: "inputs.x" });
-    expect(doc.steps[1]!.when).toEqual({
-      kind: "eq",
-      path: "context.platform",
-      value: "windows",
-      negate: false,
-    });
-    expect(doc.steps[2]!.when).toEqual({
-      kind: "eq",
-      path: "context.platform",
-      value: "linux",
-      negate: true,
-    });
+    expect(doc.steps[0]!.when).toEqual([{ kind: "truthy", path: "inputs.x" }]);
+    expect(doc.steps[1]!.when).toEqual([
+      {
+        kind: "eq",
+        path: "context.platform",
+        value: "windows",
+        negate: false,
+      },
+    ]);
+    expect(doc.steps[2]!.when).toEqual([
+      {
+        kind: "eq",
+        path: "context.platform",
+        value: "linux",
+        negate: true,
+      },
+    ]);
   });
 
   test("when arbitrary expression rejected", () => {
@@ -549,7 +553,7 @@ describe("loader references and composition", () => {
         "skip2",
         `version: v1alpha1\ninputs:\n  flag: text\nsteps:\n  - id: maybe\n    run: [echo, hi]\n    when: "{{inputs.flag}}"\n  - run: [echo, "{{steps.maybe.stdout}}"]\n`,
       ),
-    ).rejects.toThrow(/may be skipped by when/);
+    ).rejects.toThrow(/not proven available/);
 
     await expect(
       parseWorkflowText(
@@ -828,5 +832,106 @@ steps:
         `version: v1alpha1\nsteps:\n  - run: [echo, "{{steps.missing.stdout}}"]\n`,
       ),
     ).rejects.toThrow(/run\[1\]:.*unknown step id 'missing'/);
+  });
+
+  test("shell-form HWF_ conditional inputs require proven guards", async () => {
+    await expect(
+      parseWorkflowText(
+        "hwf-unguarded",
+        `version: v1alpha1
+inputs:
+  mode: [create, delete]
+  branch:
+    type: text
+    when: '{{inputs.mode}} == "create"'
+steps:
+  - run: 'echo "$HWF_branch"'
+`,
+      ),
+    ).rejects.toThrow(/not proven available/);
+
+    await expect(
+      parseWorkflowText(
+        "hwf-guarded",
+        `version: v1alpha1
+inputs:
+  mode: [create, delete]
+  branch:
+    type: text
+    when: '{{inputs.mode}} == "create"'
+steps:
+  - run: 'echo "$HWF_branch"'
+    when: '{{inputs.mode}} == "create"'
+`,
+      ),
+    ).resolves.toBeTruthy();
+  });
+
+  test("when rejects structured step objects but keeps scalar command fields", async () => {
+    await expect(
+      parseWorkflowText(
+        "structured-when",
+        `version: v1alpha1
+steps:
+  - id: probe
+    run: [echo, hi]
+  - run: [echo, next]
+    when: "{{steps.probe}}"
+`,
+      ),
+    ).rejects.toThrow(/structured sources/);
+
+    await expect(
+      parseWorkflowText(
+        "scalar-when",
+        `version: v1alpha1
+steps:
+  - id: probe
+    run: [sh, -c, "exit 1"]
+    continue_on_error: true
+  - run: [echo, next]
+    when: "{{steps.probe.exit_code}}"
+`,
+      ),
+    ).resolves.toBeTruthy();
+  });
+
+  test("allow_custom is rejected whenever defined on non-choice inputs", async () => {
+    expect(() =>
+      parse(
+        `version: v1alpha1\ninputs:\n  note:\n    type: text\n    allow_custom: false\nsteps:\n  - run: [echo, "{{inputs.note}}"]\n`,
+      ),
+    ).toThrow(/allow_custom/);
+  });
+
+  test("profile inputs leave options unresolved at load", async () => {
+    const wf = await parseWorkflowText(
+      "prof",
+      `version: v1alpha1\ninputs:\n  role: profile\nsteps:\n  - agent: hi\n    using: "{{inputs.role}}"\n`,
+      {
+        profiles: { claude: { kind: "claude" }, codex: { kind: "codex" } },
+        transcripts: {},
+      },
+    );
+    expect(wf.inputs[0]?.type).toBe("profile");
+    expect(wf.inputs[0]?.options).toBeUndefined();
+
+    await expect(
+      parseWorkflowText(
+        "inactive-profile",
+        `version: v1alpha1
+inputs:
+  mode: [agent, skip]
+  role:
+    type: profile
+    when: '{{inputs.mode}} == "agent"'
+steps:
+  - agent: hi
+    using: "{{inputs.role}}"
+    when: '{{inputs.mode}} == "agent"'
+  - run: [echo, "{{inputs.mode}}"]
+`,
+      ),
+    ).resolves.toBeTruthy();
   });
 });

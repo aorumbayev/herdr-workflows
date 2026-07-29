@@ -21,6 +21,7 @@ import {
   parseWorkflowText,
   resolveDynamicChoices,
 } from "../src/workflow/load";
+import { collectWorkflowInputs } from "../src/workflow/inputs";
 import { workflowNeedsTranscript } from "../src/workflow/parse";
 
 const dirs: string[] = [];
@@ -209,10 +210,11 @@ describe("inputs and profile choices", () => {
       `version: v1alpha1\ninputs:\n  role: profile\nsteps:\n  - agent: hi\n    using: "{{inputs.role}}"\n`,
       cfg,
     );
-    expect(wf.inputs[0]?.options).toEqual(["alpha", "zebra"]);
+    expect(wf.inputs[0]?.type).toBe("profile");
+    expect(wf.inputs[0]?.options).toBeUndefined();
   });
 
-  test("profile input with zero profiles fails naming config paths", async () => {
+  test("active profile input with zero profiles fails collection naming config paths", async () => {
     const root = await mkdtemp(join(tmpdir(), "herdr-workflows-noprof-"));
     dirs.push(root);
     const plugin = await mkdtemp(join(tmpdir(), "herdr-workflows-plugin-"));
@@ -220,22 +222,21 @@ describe("inputs and profile choices", () => {
     process.env.HERDR_PLUGIN_CONFIG_DIR = plugin;
     const globalPath = await globalConfigPath();
     const repoPath = repoConfigPath(root);
-    let message = "";
-    try {
-      await parseWorkflowText(
-        "handoff",
-        `version: v1alpha1\ninputs:\n  target: profile\nsteps:\n  - agent: hi\n    using: "{{inputs.target}}"\n`,
-        { profiles: {}, transcripts: {} },
-        root,
-      );
-    } catch (error) {
-      message = error instanceof Error ? error.message : String(error);
-    }
-    expect(message).toContain("inputs.target: no profiles configured");
-    expect(message).toContain(globalPath);
-    expect(message).toContain(repoPath);
-    expect(message).toContain("hwf init");
-    expect(message).toContain("hwf init --global");
+    const config = { profiles: {}, transcripts: {} };
+    const workflow = await parseWorkflowText(
+      "handoff",
+      `version: v1alpha1\ninputs:\n  target: profile\nsteps:\n  - agent: hi\n    using: "{{inputs.target}}"\n`,
+      config,
+      root,
+    );
+    const collected = await collectWorkflowInputs(workflow, { config, repoRoot: root });
+    expect(collected.ok).toBe(false);
+    if (collected.ok) throw new Error("expected profile collection to fail");
+    expect(collected.error).toContain("input 'target': no profiles configured");
+    expect(collected.error).toContain(globalPath);
+    expect(collected.error).toContain(repoPath);
+    expect(collected.error).toContain("hwf init");
+    expect(collected.error).toContain("hwf init --global");
   });
 
   test("unused inputs fail load", async () => {

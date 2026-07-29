@@ -77,6 +77,30 @@
                     "additionalProperties": false
                   }
                 ]
+              },
+              "when": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                ]
+              },
+              "allow_custom": {
+                "type": "boolean"
+              },
+              "min_length": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "additionalProperties": false
@@ -175,8 +199,16 @@
           "type": "object",
           "properties": {
             "open": {
-              "type": "string",
-              "enum": ["tab", "beside", "below"]
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["tab", "beside", "below"]
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\{\\{\\s*((?:inputs|steps|context)(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)+)\\s*\\}\\}$"
+                }
+              ]
             },
             "target": {
               "type": "string",
@@ -209,6 +241,15 @@
           "type": "string",
           "pattern": "^([1-9]\\d*)(ms|s|m|h)$"
         },
+        "success_codes": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
         "id": {},
         "when": {},
         "continue_on_error": {},
@@ -228,8 +269,20 @@
             "pattern": "^[a-z][a-z0-9_]{0,31}$"
           },
           "when": {
-            "type": "string",
-            "minLength": 1
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            ]
           },
           "continue_on_error": {
             "type": "boolean"
@@ -303,8 +356,16 @@
             "type": "object",
             "properties": {
               "open": {
-                "type": "string",
-                "enum": ["tab", "beside", "below"]
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["tab", "beside", "below"]
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^\\{\\{\\s*((?:inputs|steps|context)(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)+)\\s*\\}\\}$"
+                  }
+                ]
               },
               "target": {
                 "type": "string",
@@ -336,6 +397,15 @@
           "timeout": {
             "type": "string",
             "pattern": "^([1-9]\\d*)(ms|s|m|h)$"
+          },
+          "success_codes": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
           },
           "background": {
             "type": "boolean"

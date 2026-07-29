@@ -1,12 +1,13 @@
-import { loadWorkflow, resolveDynamicChoices } from "../../workflow/load";
+import { assertHwfEnvValues } from "../../limits";
+import { collectWorkflowInputs } from "../../workflow/inputs";
 import { substituteText, substituteValue } from "../../workflow/parse";
 import type {
-  InputSpec,
   LoadedWorkflow,
   ReturnsSpec,
   StepAction,
   TemplateNamespace,
 } from "../../workflow/types";
+import { loadWorkflow } from "../../workflow/load";
 import { errorText, type RunSteps, type StepCtx, type StepOutcome } from "../context";
 
 type WorkflowActionSpec = Extract<StepAction, { kind: "workflow" }>;
@@ -18,45 +19,6 @@ export function bindIncludeRunSteps(fn: RunSteps): void {
 }
 
 type ResolvedInputs = { ok: true; values: Record<string, string> } | { ok: false; error: string };
-
-async function optionsFor(
-  child: LoadedWorkflow,
-  spec: InputSpec,
-  repoRoot: string,
-): Promise<string[] | undefined> {
-  if (spec.options) return spec.options;
-  if (!spec.dynamicOptions) return undefined;
-  return resolveDynamicChoices(child.file, spec.name, spec.dynamicOptions, repoRoot);
-}
-
-async function resolveChildInputs(
-  child: LoadedWorkflow,
-  passed: Record<string, string>,
-  repoRoot: string,
-): Promise<ResolvedInputs> {
-  const declared = new Set(child.inputs.map((spec) => spec.name));
-  for (const name of Object.keys(passed)) {
-    if (!declared.has(name)) {
-      return { ok: false, error: `workflow '${child.name}' does not declare input '${name}'` };
-    }
-  }
-  const values: Record<string, string> = {};
-  for (const spec of child.inputs) {
-    const value = Object.hasOwn(passed, spec.name) ? passed[spec.name] : spec.default;
-    if (value === undefined) {
-      return { ok: false, error: `workflow '${child.name}' requires input '${spec.name}'` };
-    }
-    const options = await optionsFor(child, spec, repoRoot);
-    if (options && !options.includes(value)) {
-      return {
-        ok: false,
-        error: `workflow '${child.name}' input '${spec.name}' must be one of: ${options.join(", ")}`,
-      };
-    }
-    values[spec.name] = value;
-  }
-  return { ok: true, values };
-}
 
 export function evaluateReturns(returns: ReturnsSpec, ns: TemplateNamespace): unknown {
   if (returns.kind === "template") return substituteValue(returns.template, ns);
@@ -92,11 +54,25 @@ async function runChild(
   );
   let inputs: ResolvedInputs;
   try {
-    inputs = await resolveChildInputs(child, passed, repoRoot);
+    const collected = await collectWorkflowInputs(child, {
+      provided: passed,
+      config: c.opts.config,
+      repoRoot,
+      resolveDynamic: true,
+    });
+    inputs = collected.ok
+      ? { ok: true, values: collected.values }
+      : { ok: false, error: collected.error };
   } catch (error) {
     return { ok: false, error: errorText(error), details: { workflow: action.name } };
   }
   if (!inputs.ok) return { ok: false, error: inputs.error, details: { workflow: action.name } };
+
+  try {
+    assertHwfEnvValues("HWF environment", inputs.values);
+  } catch (error) {
+    return { ok: false, error: errorText(error), details: { workflow: action.name } };
+  }
 
   const childValues: TemplateNamespace = {
     inputs: inputs.values,

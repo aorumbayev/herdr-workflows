@@ -141,6 +141,11 @@ function dumpInputs(lines: string[], inputs: NonNullable<RawWorkflowDoc["inputs"
       }
     }
     if (inp.default !== undefined) lines.push(`${IND}${IND}default: ${scalar(inp.default)}`);
+    if (inp.when !== undefined) lines.push(`${IND}${IND}when: ${JSON.stringify(inp.when)}`);
+    if (inp.allow_custom !== undefined) {
+      lines.push(`${IND}${IND}allow_custom: ${String(inp.allow_custom)}`);
+    }
+    if (inp.min_length !== undefined) lines.push(`${IND}${IND}min_length: ${inp.min_length}`);
   }
 }
 
@@ -283,7 +288,6 @@ async function handleValidate(repoRoot: string, body: Record<string, unknown>): 
       await configOf(repoRoot),
       repoRoot,
       `${name}.yaml`,
-      false,
     );
     return json({ ok: true });
   } catch (error) {
@@ -312,7 +316,7 @@ async function writeWorkflow(
 ): Promise<Response> {
   if (!WORKFLOW_NAME_RE.test(name)) return json({ ok: false, error: "invalid workflow name" }, 400);
   try {
-    await parseWorkflowText(name, text, await configOf(repoRoot), repoRoot, `${name}.yaml`, false);
+    await parseWorkflowText(name, text, await configOf(repoRoot), repoRoot, `${name}.yaml`);
   } catch (error) {
     return json({ ok: false, error: errText(error) }, 400);
   }
@@ -339,14 +343,7 @@ async function handleWorkflow(
     let error: string | undefined;
     if (text) {
       try {
-        await parseWorkflowText(
-          name,
-          text,
-          await configOf(repoRoot),
-          repoRoot,
-          `${name}.yaml`,
-          false,
-        );
+        await parseWorkflowText(name, text, await configOf(repoRoot), repoRoot, `${name}.yaml`);
       } catch (e) {
         valid = false;
         error = errText(e);

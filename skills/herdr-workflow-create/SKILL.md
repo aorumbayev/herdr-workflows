@@ -132,7 +132,7 @@ Optional IDE schema line:
 
 ## Rules that break workflows
 
-1. **No templates in string `run:` text.** Use argv `run: [git, checkout, "{{inputs.branch}}"]` or `env:` / `$HWF_…`.
+1. **No templates in string `run:` text.** Use argv `run: [git, checkout, "{{inputs.branch}}"]` or `env:` / `$HWF_…`. Shell `$HWF_<conditional>` needs the step's matching `when:` guards.
 2. **Every declared input must be referenced** (templates or `$HWF_<name>` in shell text).
 3. **No `out:`, `wait:`, `in:`, `use:`, `with:`, `for:`/`as:`, `allow_fail`, `on_error`, dotted method keys, flat `{name}`.**
 4. **`retry`** only on blocking local `run:` or `herdr:`.
@@ -142,5 +142,6 @@ Optional IDE schema line:
 8. **`on_failure`** is entry-only, one action, once.
 9. **Transcript / identity context** unavailable → preflight failure.
 10. **Denied Herdr methods** fail at load — denylist is a misuse rail, not a sandbox.
+11. **`when:`** lists are ordered AND; reject structured sources (use scalar fields). `allow_custom` only on choices.
 
 Out of scope: parallelism, loops, external engines. OS branching uses `{{context.platform}}` + `when:`. Windows runs through WSL2. Needs herdr ≥ 0.7.5.

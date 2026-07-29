@@ -24,3 +24,14 @@ export function assertUnderHwfEnvCap(source: string, text: string): void {
   const bytes = Buffer.byteLength(text);
   if (bytes > HWF_ENV_BYTE_LIMIT) throw new CaptureLimitError(source, bytes, HWF_ENV_BYTE_LIMIT);
 }
+
+/** Serialize collected inputs as the generated `HWF_*` environment block. */
+function formatHwfEnvBlock(values: Record<string, string>): string {
+  return Object.entries(values)
+    .map(([name, value]) => `HWF_${name}=${value}`)
+    .join("\n");
+}
+
+export function assertHwfEnvValues(source: string, values: Record<string, string>): void {
+  assertUnderHwfEnvCap(source, formatHwfEnvBlock(values));
+}

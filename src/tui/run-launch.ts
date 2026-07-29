@@ -12,6 +12,8 @@ export type DetachedRunHandle = {
 export type LaunchPayload = {
   name: string;
   inputs: Record<string, string>;
+  /** Resolved dynamic choice domains keyed by input name. */
+  domains?: Record<string, string[]>;
 };
 
 export type LaunchRunRequest = {
@@ -19,6 +21,7 @@ export type LaunchRunRequest = {
   repoRoot: string;
   ctx: InvocationContext;
   inputs: Record<string, string>;
+  domains?: Record<string, string[]>;
   onProgressLine: (line: string) => void;
   env?: NodeJS.ProcessEnv;
   spawn?: typeof Bun.spawn;
@@ -92,8 +95,16 @@ export function buildRunArgs(name: string): string[] {
   return [name, "--launch-payload"];
 }
 
-export function buildLaunchPayload(name: string, inputs: Record<string, string>): LaunchPayload {
-  return { name, inputs };
+export function buildLaunchPayload(
+  name: string,
+  inputs: Record<string, string>,
+  domains?: Record<string, string[]>,
+): LaunchPayload {
+  return {
+    name,
+    inputs,
+    ...(domains !== undefined && Object.keys(domains).length > 0 ? { domains } : {}),
+  };
 }
 
 export function parseLaunchPayload(text: string): LaunchPayload {
@@ -122,7 +133,20 @@ export function parseLaunchPayload(text: string): LaunchPayload {
       inputs[key] = value;
     }
   }
-  return { name: row.name, inputs };
+  let domains: Record<string, string[]> | undefined;
+  if (row.domains !== undefined) {
+    if (row.domains === null || typeof row.domains !== "object" || Array.isArray(row.domains)) {
+      throw new Error("launch payload domains must be an object");
+    }
+    domains = {};
+    for (const [key, value] of Object.entries(row.domains as Record<string, unknown>)) {
+      if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+        throw new Error(`launch payload domains.${key} must be a string array`);
+      }
+      domains[key] = value as string[];
+    }
+  }
+  return { name: row.name, inputs, ...(domains !== undefined ? { domains } : {}) };
 }
 
 function decodeLines(
@@ -158,7 +182,7 @@ function decodeLines(
 export function launchDetachedRun(req: LaunchRunRequest): DetachedRunHandle {
   const spawn = req.spawn ?? Bun.spawn.bind(Bun);
   const argv = selfRunArgv(buildRunArgs(req.name));
-  const payload = JSON.stringify(buildLaunchPayload(req.name, req.inputs));
+  const payload = JSON.stringify(buildLaunchPayload(req.name, req.inputs, req.domains));
   const env = {
     ...process.env,
     ...req.env,

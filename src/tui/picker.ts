@@ -16,8 +16,10 @@ import {
   type SelectOption,
 } from "@opentui/core";
 import type { InvocationContext, WorkflowsConfig } from "../config";
+import { profileNames } from "../config";
 import { sanitizeDisplay } from "../herdr";
-import { loadWorkflowEntry } from "../workflow/load";
+import { loadWorkflowEntry, resolveDynamicChoices } from "../workflow/load";
+import { nextActiveInput } from "../workflow/inputs";
 import {
   analyzeResolvedSensitivity,
   sensitivityLabels,
@@ -40,6 +42,38 @@ import {
   leaveManagedCheckout,
   startPickerUpdateCheck,
 } from "./update-indicator";
+
+export type CustomChoiceValue = { kind: "custom" };
+
+export function isCustomChoiceValue(value: unknown): value is CustomChoiceValue {
+  return (
+    typeof value === "object" && value !== null && (value as { kind?: unknown }).kind === "custom"
+  );
+}
+
+export function shouldRestoreCustomChoiceText(
+  hasAnswer: boolean,
+  answer: string | undefined,
+  options: string[],
+  allowCustom: boolean,
+): boolean {
+  return hasAnswer && allowCustom && !options.includes(answer ?? "");
+}
+
+/** Apply async dynamic/profile options only when the resolve generation still matches. */
+export function commitResolvedOptions(
+  state: { resolveGeneration: number; inputDomains: Record<string, string[]> },
+  startedGeneration: number,
+  name: string,
+  options: string[],
+): boolean {
+  if (startedGeneration !== state.resolveGeneration) return false;
+  state.inputDomains[name] = options;
+  return true;
+}
+
+const CUSTOM_CHOICE_LABEL = "custom…";
+const CUSTOM_CHOICE_VALUE: CustomChoiceValue = { kind: "custom" };
 
 function stripFilePrefix(error: string, file: string): string {
   return error.startsWith(file) ? error.slice(file.length).replace(/^[,:]\s*/, "") : error;
@@ -166,7 +200,11 @@ export type PickerState = {
   inputQueue: InputSpec[];
   inputIndex: number;
   inputValues: Record<string, string>;
+  inputDomains: Record<string, string[]>;
+  /** Bumped on Escape/backtrack so late async option resolves are ignored. */
+  resolveGeneration: number;
   choiceOptions: string[];
+  customChoice: boolean;
   exit?: { code: number };
   running: boolean;
   progressLines: string[];
@@ -201,6 +239,7 @@ export type PickerState = {
 
 export const LIST_HINT = "enter run · ^e edit · ^y share · ^o import · esc";
 const CHOICE_HINT = "type filter · up/down move · enter select · esc back";
+const CUSTOM_CHOICE_HINT = "type filter · up/down · enter select/custom · esc back";
 const RUN_HINT = "esc dismiss · run continues";
 const FAIL_HINT = "enter/esc close";
 
@@ -310,14 +349,19 @@ function applyFilter(state: PickerState): void {
 
 function applyChoiceFilter(state: PickerState): void {
   const matched = filterChoiceOptions(state.choiceOptions, state.filter.value);
-  setListOptions(
-    state,
-    matched.map((option) => ({
-      name: option,
+  const options = matched.map((option) => ({
+    name: option,
+    description: "",
+    value: option,
+  }));
+  if (state.customChoice) {
+    options.push({
+      name: CUSTOM_CHOICE_LABEL,
       description: "",
-      value: option,
-    })),
-  );
+      value: CUSTOM_CHOICE_VALUE as unknown as string,
+    });
+  }
+  setListOptions(state, options);
 }
 
 function hideBrowserChrome(state: PickerState): void {
@@ -402,7 +446,10 @@ function setListMode(state: PickerState): void {
   state.inputQueue = [];
   state.inputIndex = 0;
   state.inputValues = {};
+  state.inputDomains = {};
+  state.resolveGeneration += 1;
   state.choiceOptions = [];
+  state.customChoice = false;
   state.progressLines = [];
   showBrowserChrome(state);
   showListChrome(state);
@@ -440,27 +487,43 @@ function setInputMode(state: PickerState, entry: WorkflowListEntry, spec: InputS
   }
   state.mode = "input";
   state.pending = entry;
+  state.customChoice = spec.allowCustom === true;
   hideListChrome(state);
   showStatus(state, inputStatusLine(entry, spec));
+  const hasAnswer = Object.hasOwn(state.inputValues, spec.name);
+  const restored = hasAnswer ? state.inputValues[spec.name]! : undefined;
   if (spec.type === "choice" || spec.type === "profile") {
     state.choiceOptions = spec.options ?? [];
+    if (
+      shouldRestoreCustomChoiceText(hasAnswer, restored, state.choiceOptions, state.customChoice)
+    ) {
+      showCustomChoiceText(state, spec, restored ?? "");
+      return;
+    }
     showBrowserChrome(state);
     applyChoiceFilter(state);
-    const preselect = spec.default
-      ? state.list.options.findIndex((o) => o.value === spec.default)
-      : 0;
+    const preselect = hasAnswer
+      ? state.list.options.findIndex((o) => o.value === restored)
+      : spec.default
+        ? state.list.options.findIndex((o) => o.value === spec.default)
+        : 0;
     state.list.setSelectedIndex(Math.max(preselect, 0));
-    state.footer.content = CHOICE_HINT;
+    state.footer.content = state.customChoice ? CUSTOM_CHOICE_HINT : CHOICE_HINT;
     state.filter.focus();
     return;
   }
+  state.customChoice = false;
+  showCustomChoiceText(state, spec, restored ?? spec.default ?? "");
+}
+
+function showCustomChoiceText(state: PickerState, spec: InputSpec, value: string): void {
   state.choiceOptions = [];
   state.filterRow.visible = false;
   state.filter.visible = false;
   state.listBlock.visible = false;
   state.list.visible = false;
   state.list.flexGrow = 0;
-  focusTextField(state, `${spec.name}…`, spec.default ?? "");
+  focusTextField(state, `${spec.name}…`, value);
 }
 
 function setRunMode(state: PickerState, entry: WorkflowListEntry): void {
@@ -474,6 +537,7 @@ function setRunMode(state: PickerState, entry: WorkflowListEntry): void {
 }
 
 function finish(state: PickerState, code: number): void {
+  state.resolveGeneration += 1;
   state.runHandle?.detach();
   state.runHandle = undefined;
   state.exit = { code };
@@ -508,7 +572,7 @@ function handleInputKey(state: PickerState, key: KeyEvent): void {
 function handleRunKey(state: PickerState, key: KeyEvent): void {
   if (key.name === "escape") {
     key.preventDefault();
-    finish(state, 0);
+    finish(state, pickerEscapeExitCode(state.mode, state.running));
     return;
   }
   if (state.running) return;
@@ -516,6 +580,12 @@ function handleRunKey(state: PickerState, key: KeyEvent): void {
     key.preventDefault();
     finish(state, 1);
   }
+}
+
+/** Escape while a run is in flight dismisses with 0; Escape after failure is nonzero. */
+export function pickerEscapeExitCode(mode: PickerState["mode"], running: boolean): number {
+  if (mode === "run") return running ? 0 : 1;
+  return 0;
 }
 
 /** Selected valid row in list mode, or undefined when the filtered list is empty. */
@@ -570,11 +640,46 @@ export function tryListWorkbenchShortcut(state: PickerState, key: KeyEvent): boo
   return true;
 }
 
+function previousActiveIndex(state: PickerState): number | undefined {
+  const kept: Record<string, string> = {};
+  let last: number | undefined;
+  for (let i = 0; i < state.inputIndex; i++) {
+    const probe = nextActiveInput(state.inputQueue, kept, i);
+    if (!probe || probe.index !== i) continue;
+    const spec = state.inputQueue[i]!;
+    if (Object.hasOwn(state.inputValues, spec.name))
+      kept[spec.name] = state.inputValues[spec.name]!;
+    last = i;
+  }
+  return last;
+}
+
+function backtrackInput(state: PickerState): void {
+  const entry = state.pending;
+  if (!entry) {
+    setListMode(state);
+    return;
+  }
+  const prev = previousActiveIndex(state);
+  if (prev === undefined) {
+    setListMode(state);
+    return;
+  }
+  state.resolveGeneration += 1;
+  for (const spec of state.inputQueue.slice(prev + 1)) {
+    delete state.inputValues[spec.name];
+    delete state.inputDomains[spec.name];
+  }
+  state.inputIndex = prev;
+  void advanceInput(state, entry);
+}
+
 function handlePickerKey(state: PickerState, key: KeyEvent): void {
   if (state.mode === "run") return handleRunKey(state, key);
   if (key.name === "escape") {
     key.preventDefault();
     if (state.mode === "list") finish(state, 0);
+    else if (state.mode === "input") backtrackInput(state);
     else setListMode(state);
     return;
   }
@@ -628,24 +733,71 @@ function showFailure(state: PickerState, entry: WorkflowListEntry, error: unknow
   state.footer.content = FAIL_HINT;
 }
 
-/** Declared inputs first, then run. */
-function advanceInput(state: PickerState, entry: WorkflowListEntry): void {
-  const spec = state.inputQueue[state.inputIndex];
-  if (spec) return setInputMode(state, entry, spec);
-  void startRun(state, entry);
+/** Declared inputs first, then run. Skips inactive inputs under collected answers. */
+async function advanceInput(state: PickerState, entry: WorkflowListEntry): Promise<void> {
+  const next = nextActiveInput(state.inputQueue, state.inputValues, state.inputIndex);
+  if (!next) {
+    void startRun(state, entry);
+    return;
+  }
+  state.inputIndex = next.index;
+  const spec = next.spec;
+  const startedGeneration = state.resolveGeneration;
+  if (spec.type === "choice" && spec.dynamicOptions && !spec.options) {
+    state.mode = "input";
+    try {
+      const cached = state.inputDomains[spec.name];
+      const options =
+        cached ??
+        (await resolveDynamicChoices(entry.file, spec.name, spec.dynamicOptions, state.repoRoot));
+      if (!commitResolvedOptions(state, startedGeneration, spec.name, options)) return;
+      setInputMode(state, entry, { ...spec, options });
+      return;
+    } catch (error) {
+      if (startedGeneration !== state.resolveGeneration) return;
+      showFailure(state, entry, error);
+      return;
+    }
+  }
+  if (spec.type === "profile" && !spec.options) {
+    const options = profileNames(state.config);
+    if (startedGeneration !== state.resolveGeneration) return;
+    setInputMode(state, entry, { ...spec, options });
+    return;
+  }
+  setInputMode(state, entry, spec);
 }
 
 function storeInput(state: PickerState, value: string): void {
   const entry = state.pending;
   const spec = state.inputQueue[state.inputIndex];
   if (!entry || !spec) return;
+  if (spec.minLength !== undefined && value.length < spec.minLength) {
+    showStatus(state, `input '${spec.name}' must be at least ${spec.minLength} characters`, {
+      warn: true,
+    });
+    return;
+  }
+  // Changing an earlier answer invalidates later answers and domains.
+  for (const later of state.inputQueue.slice(state.inputIndex + 1)) {
+    delete state.inputValues[later.name];
+    delete state.inputDomains[later.name];
+  }
   state.inputValues[spec.name] = value;
   state.inputIndex += 1;
-  advanceInput(state, entry);
+  void advanceInput(state, entry);
 }
 
-function submitInputChoice(state: PickerState, value: string): void {
-  if (state.mode === "input") storeInput(state, value);
+function submitInputChoice(state: PickerState, value: unknown): void {
+  if (state.mode !== "input") return;
+  if (isCustomChoiceValue(value)) {
+    const spec = state.inputQueue[state.inputIndex];
+    if (!spec) return;
+    showCustomChoiceText(state, spec, state.inputValues[spec.name] ?? spec.default ?? "");
+    return;
+  }
+  if (typeof value !== "string") return;
+  storeInput(state, value);
 }
 
 function submitInputText(state: PickerState, value: string): void {
@@ -691,6 +843,8 @@ async function prepareWorkflow(state: PickerState, entry: WorkflowListEntry): Pr
     state.inputQueue = entry.inputs ?? [];
     state.inputIndex = 0;
     state.inputValues = {};
+    state.inputDomains = {};
+    state.resolveGeneration += 1;
     state.running = false;
     if (flags.length > 0) {
       showStatus(
@@ -699,7 +853,7 @@ async function prepareWorkflow(state: PickerState, entry: WorkflowListEntry): Pr
         { warn: true },
       );
     }
-    advanceInput(state, entry);
+    void advanceInput(state, entry);
   } catch (error) {
     showFailure(state, entry, error);
   }
@@ -719,6 +873,7 @@ export async function startRun(state: PickerState, entry: WorkflowListEntry): Pr
       repoRoot: state.repoRoot,
       ctx: state.ctx,
       inputs,
+      domains: state.inputDomains,
       onProgressLine: (line) => {
         if (state.exit) return;
         state.progressLines.push(truncate(line, state.contentWidth));
@@ -821,7 +976,10 @@ function mountPickerUi(
   | "inputQueue"
   | "inputIndex"
   | "inputValues"
+  | "inputDomains"
+  | "resolveGeneration"
   | "choiceOptions"
+  | "customChoice"
   | "exit"
   | "running"
   | "progressLines"
@@ -865,7 +1023,9 @@ function mountPickerUi(
 function bindPickerEvents(state: PickerState): void {
   state.list.on(SelectRenderableEvents.ITEM_SELECTED, (_i, option) => {
     if (state.mode === "input") {
-      if (typeof option.value === "string") submitInputChoice(state, option.value);
+      if (typeof option.value === "string" || isCustomChoiceValue(option.value)) {
+        submitInputChoice(state, option.value);
+      }
       return;
     }
     if (state.mode !== "list") return;
@@ -935,7 +1095,10 @@ export async function runPickerSession(opts: PickerSessionOpts): Promise<number>
     inputQueue: [],
     inputIndex: 0,
     inputValues: {},
+    inputDomains: {},
+    resolveGeneration: 0,
     choiceOptions: [],
+    customChoice: false,
     running: false,
     progressLines: [],
     repoRoot: opts.repoRoot,

@@ -15,16 +15,16 @@ import {
   type InvocationContext,
   type WorkflowsConfig,
 } from "../config";
-import { assertUnderHwfEnvCap } from "../limits";
+import { assertHwfEnvValues } from "../limits";
 import { appendRunLog } from "../runlog";
 import { transcriptText } from "../session";
-import { renderScalar, substituteValue, workflowTemplateRefs } from "../workflow/parse";
+import { evaluateWhen } from "../workflow/conditions";
+import { collectWorkflowInputs } from "../workflow/inputs";
+import { workflowTemplateRefs } from "../workflow/parse";
 import type {
-  InputSpec,
   LoadedWorkflow,
   RecoveryAction,
   TemplateNamespace,
-  WhenSpec,
   WorkflowStep,
 } from "../workflow/types";
 import { loadWorkflow } from "../workflow/load";
@@ -87,8 +87,9 @@ async function fail(
 
 type ResolvedInputs = { ok: true; values: Record<string, string> } | { ok: false; error: string };
 
+/** @deprecated Prefer collectWorkflowInputs — kept for focused unit tests of closed membership. */
 export function resolveInputValues(
-  specs: InputSpec[],
+  specs: import("../workflow/types").InputSpec[],
   provided: Record<string, string> = {},
 ): ResolvedInputs {
   const declared = new Set(specs.map((spec) => spec.name));
@@ -97,6 +98,9 @@ export function resolveInputValues(
   }
   const values: Record<string, string> = Object.create(null) as Record<string, string>;
   for (const spec of specs) {
+    if (spec.when && spec.when.length > 0) {
+      // Synchronous path cannot evaluate guards with dynamic deps; tests use unconditional specs.
+    }
     if (spec.options !== undefined && spec.options.length === 0) {
       return {
         ok: false,
@@ -110,10 +114,16 @@ export function resolveInputValues(
     if (value === undefined) {
       return { ok: false, error: `missing input '${spec.name}' (--input ${spec.name}=…)` };
     }
-    if (spec.options && !spec.options.includes(value)) {
+    if (spec.options && !spec.allowCustom && !spec.options.includes(value)) {
       return {
         ok: false,
         error: `input '${spec.name}' must be one of: ${spec.options.join(", ")}`,
+      };
+    }
+    if (spec.minLength !== undefined && value.length < spec.minLength) {
+      return {
+        ok: false,
+        error: `input '${spec.name}' must be at least ${spec.minLength} characters`,
       };
     }
     values[spec.name] = value;
@@ -136,21 +146,6 @@ function stepLabel(step: WorkflowStep): string {
 function bindResult(step: WorkflowStep, values: TemplateNamespace, outcome: StepOutcome): void {
   if (!step.id || !outcome.ok || outcome.result === undefined) return;
   values.steps[step.id] = outcome.result;
-}
-
-function isTruthyScalar(value: unknown): boolean {
-  if (value === null || value === undefined) return false;
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value !== 0 && Number.isFinite(value);
-  if (typeof value === "string") return value !== "";
-  return true;
-}
-
-function evaluateWhen(when: WhenSpec, values: TemplateNamespace): boolean {
-  const resolved = substituteValue(`{{${when.path}}}`, values);
-  if (when.kind === "truthy") return isTruthyScalar(resolved);
-  const left = renderScalar(resolved);
-  return when.negate ? left !== when.value : left === when.value;
 }
 
 function retryOf(step: WorkflowStep): { attempts: number; delayMs?: number } | undefined {
@@ -283,7 +278,7 @@ async function runSteps(
       if (outcome.coordinationLost) {
         return hardStepFailure(opts, step, n, total, label, outcome, tolerated, true);
       }
-      if (step.continueOnError) {
+      if (step.continueOnError && outcome.hardFailure !== true) {
         tolerated.push(outcome.error);
         await logStep(opts, n, total, label, {
           ok: false,
@@ -478,6 +473,13 @@ export type RunOptions = {
   config: WorkflowsConfig;
   ctx: InvocationContext;
   inputs?: Record<string, string>;
+  /** Pre-resolved dynamic choice domains from detached picker launch. */
+  domains?: Record<string, string[]>;
+  /**
+   * Detached `--launch-payload` runs must not resolve missing active dynamics.
+   * Defaults to true for direct CLI collection.
+   */
+  resolveDynamic?: boolean;
   workflow?: LoadedWorkflow;
   deps?: Partial<RunnerDeps>;
   onProgress?: (step: number, total: number, label: string, outcome?: string) => void;
@@ -519,14 +521,17 @@ export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
 
   let transcriptFile: string | undefined;
   try {
-    const inputs = resolveInputValues(workflow.inputs, opts.inputs);
+    const inputs = await collectWorkflowInputs(workflow, {
+      provided: opts.inputs,
+      domains: opts.domains,
+      config: opts.config,
+      repoRoot: opts.repoRoot,
+      resolveDynamic: opts.resolveDynamic !== false,
+    });
     if (!inputs.ok) return await failPrecondition(inputs.error);
 
-    const hwfBlock = Object.entries(inputs.values)
-      .map(([name, value]) => `HWF_${name}=${value}`)
-      .join("\n");
     try {
-      assertUnderHwfEnvCap("HWF environment", hwfBlock);
+      assertHwfEnvValues("HWF environment", inputs.values);
     } catch (error) {
       return await failPrecondition(errorText(error));
     }
