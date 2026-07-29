@@ -341,8 +341,47 @@ describe("web workbench presentation", () => {
     expect(page).toContain("redos");
     expect(page).not.toContain("move to ");
     expect(page).not.toMatch(/mkBtn\(""|\/\* Move/);
-    expect(page).toMatch(/\.zoombar\s*button\s*\{[^}]*min-height:\s*32px/);
+    expect(page).toMatch(/\.zoombar\s*button\s*,\s*\.viewbar\s*button\s*\{[^}]*min-height:\s*32px/);
     expect(page).toMatch(/\.bar\s*button\s*\{[^}]*min-height:\s*32px/);
+
+    expect(page).toContain("function mkMenu(");
+    expect(page).toContain('setAttribute("aria-haspopup", "menu")');
+    expect(page).toContain('setAttribute("role", "menu")');
+    expect(page).toContain('setAttribute("role", "menuitem")');
+    expect(page).toContain('className = "bar"');
+    expect(page).toContain('className = "bar-spacer"');
+    expect(page).toContain('className = "chip"');
+    expect(page).toContain('className = "viewbar"');
+    expect(page).toContain('Math.round(view.z * 100) + "%"');
+    expect(page).toContain('name: "Reset zoom"');
+    expect(page).toContain('setAttribute("aria-label", "Add step")');
+    expect(page).toContain('setAttribute("aria-label", "Keyboard shortcuts")');
+    expect(page).toContain("tip.hidden = true");
+    expect(page).toContain("function setTipOpen(");
+    expect(page).toContain(".status:empty");
+    expect(page).not.toContain("run in a terminal:");
+    expect(page).not.toContain('className = "addnode"');
+    expect(page).not.toContain('className = "addbar"');
+    expect(page).toContain('flagBox.className = "chip"');
+    expect(page).toMatch(/@media\s*\(max-width:\s*720px\)/);
+    expect(page).toMatch(/@media\s*\(max-width:\s*480px\)/);
+    expect(page).toContain("flex: 1 0 100%");
+    expect(page).toContain("grid-template-columns: minmax(0, 1fr)");
+    expect(page).toContain('id="list-btn"');
+    expect(page).toContain("function setListCollapsed(");
+    expect(page).toContain("function narrowViewport(");
+    expect(page).toContain('aria-label="Hide workflow list"');
+    // Collapsing routes through `.hide`, which outranks the narrow-viewport `aside` rules.
+    expect(page).toContain('$("list").classList.toggle("hide", !showList)');
+    expect(page).toMatch(/\.hide\s*\{\s*display:\s*none\s*!important/);
+    // `⋯` is not an accessible name, and an outside click must not pull focus back to the trigger.
+    expect(page).toContain('"More actions"');
+    expect(page).toContain("if (back) btn.focus()");
+    expect(page).toContain("close(false)");
+    // A folded history item offers only what the bar pair would allow.
+    expect(page).toContain("item.el.disabled = item.pair.disabled");
+    // The height the retired bands freed belongs to the canvas.
+    expect(page).toMatch(/\.canvas\s*\{[^}]*flex:\s*1 1 auto/);
   });
 });
 
