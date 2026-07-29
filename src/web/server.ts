@@ -1,7 +1,9 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { z } from "zod";
 import { globalConfigPath, loadConfig, parseConfigText, repoConfigPath } from "../config";
+import { HERDR_METHOD_BY_NAME } from "../herdr-methods.generated";
 import { readRunLog, recentRuns } from "../runlog";
 import { exportWorkflowBundle } from "../workflow/export";
 import {
@@ -19,6 +21,9 @@ import pageHtml from "./page.html" with { type: "text" };
 const PAGE = pageHtml as unknown as string;
 const IND = "  ";
 const WORKFLOW_NAME_RE = /^[a-z0-9][a-z0-9-_]*$/;
+// Same call `scripts/generate-schema.ts` commits, so the served copy cannot go stale.
+const WORKFLOW_JSON_SCHEMA = z.toJSONSchema(rawWorkflowSchema);
+const METHOD_TABLE = [...HERDR_METHOD_BY_NAME.values()];
 
 type Scope = "repo" | "global";
 
@@ -289,6 +294,7 @@ function handleFormat(body: Record<string, unknown>): Response {
         {
           ok: false,
           error: parsed.error.issues.map((i) => i.message).join("; "),
+          issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
         },
         400,
       );
@@ -621,6 +627,9 @@ function createHandler(
           : ((await req.json().catch(() => ({}))) as Record<string, unknown>);
 
       if (url.pathname === "/api/state") return getState(repoRoot);
+      if (url.pathname === "/api/schema" && req.method === "GET") return json(WORKFLOW_JSON_SCHEMA);
+      if (url.pathname === "/api/methods" && req.method === "GET")
+        return json({ methods: METHOD_TABLE });
       if (url.pathname === "/api/workflow") return handleWorkflow(repoRoot, req, url, body);
       if (url.pathname === "/api/parse" && req.method === "POST") return handleParse(body);
       if (url.pathname === "/api/format" && req.method === "POST") return handleFormat(body);

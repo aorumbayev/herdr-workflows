@@ -11,14 +11,68 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
 
-async function servedPage(): Promise<string> {
+async function served(): Promise<{ page: string; base: string; token: string }> {
   const root = await mkdtemp(join(tmpdir(), "herdr-workflows-web-pres-"));
   dirs.push(root);
   const s = await startWebServer({ repoRoot: root });
   servers.push(s);
   const res = await fetch(s.url);
   expect(res.status).toBe(200);
-  return await res.text();
+  const url = new URL(s.url);
+  return { page: await res.text(), base: `${url.protocol}//${url.host}`, token: s.token };
+}
+
+async function servedPage(): Promise<string> {
+  return (await served()).page;
+}
+
+type Widget = { kind: string; options?: string[]; item?: Widget };
+type Field = { key: string; widget: Widget; label: string; group: string };
+type Props = Record<string, Record<string, unknown>>;
+
+type FieldModel = {
+  widgetFor: (node: unknown) => Widget;
+  stepFields: (props: Props, verb: string) => Field[];
+  formFromStep: (
+    props: Props,
+    verb: string,
+    step: Record<string, unknown>,
+    methods: unknown,
+  ) => Record<string, unknown>;
+  stepFromForm: (
+    props: Props,
+    verb: string,
+    form: Record<string, unknown>,
+    extra: Record<string, unknown>,
+    methods: unknown,
+  ) => { step?: Record<string, unknown>; error?: string };
+  extraOf: (props: Props, verb: string, step: Record<string, unknown>) => Record<string, unknown>;
+  issueField: (path: unknown) => { index: number; key: string } | null;
+  addressesField: (issueKey: string, fieldKey: string) => boolean;
+  sectionSummary: (fields: Field[], form: Record<string, unknown>) => string[];
+};
+
+const MODEL_START = "/* ---------- node form field model (pure) ---------- */";
+const MODEL_END = "/* ---------- end node form field model ---------- */";
+
+// The page is served as one file, so the field model is tested the way the browser gets it.
+function fieldModel(page: string): FieldModel {
+  const start = page.indexOf(MODEL_START);
+  const end = page.indexOf(MODEL_END);
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
+  const block = page.slice(start, end);
+  const exports =
+    "return { widgetFor, stepFields, formFromStep, stepFromForm, extraOf, issueField, addressesField, sectionSummary };";
+  return new Function(`${block}\n${exports}`)() as FieldModel;
+}
+
+async function stepProps(base: string, token: string): Promise<Props> {
+  const res = await fetch(`${base}/api/schema`, { headers: { "x-hwf-token": token } });
+  const schema = (await res.json()) as {
+    properties: { steps: { items: { properties: Props } } };
+  };
+  return schema.properties.steps.items.properties;
 }
 
 function extractBlock(page: string, startRe: RegExp): string {
@@ -289,5 +343,201 @@ describe("web workbench presentation", () => {
     expect(page).not.toMatch(/mkBtn\(""|\/\* Move/);
     expect(page).toMatch(/\.zoombar\s*button\s*\{[^}]*min-height:\s*32px/);
     expect(page).toMatch(/\.bar\s*button\s*\{[^}]*min-height:\s*32px/);
+  });
+});
+
+describe("node form field model", () => {
+  test("every step key resolves to a typed widget, and the page restates no bound", async () => {
+    const { page, base, token } = await served();
+    const model = fieldModel(page);
+    const props = await stepProps(base, token);
+    for (const [key, node] of Object.entries(props)) {
+      const kind = model.widgetFor(node).kind;
+      // `params` is the one key whose values the schema leaves unconstrained.
+      if (key === "params") expect(kind).toBe("json");
+      else expect(kind, `${key} fell back to JSON entry`).not.toBe("json");
+    }
+    expect(model.widgetFor(props.shell)).toMatchObject({
+      kind: "enum",
+      options: ["sh", "bash", "zsh", "pwsh", "powershell", "cmd"],
+    });
+    const pane = props.pane as { properties: Props };
+    expect(model.widgetFor(pane.properties.size)).toMatchObject({
+      kind: "number",
+      min: 1,
+      max: 99,
+    });
+    expect(model.widgetFor(pane.properties.open)).toMatchObject({
+      kind: "enumText",
+      options: ["tab", "beside", "below"],
+    });
+    // Bounds and enumerations come from the served schema, never from the page.
+    expect(page).not.toContain("pane.size must be");
+    expect(page).not.toMatch(/\bfunction (fieldsFor|readPane|formFrom|stepFrom)\b/);
+    expect(page).not.toContain('"powershell"');
+  });
+
+  test("step to form to step preserves every key the form renders", async () => {
+    const { page, base, token } = await served();
+    const model = fieldModel(page);
+    const props = await stepProps(base, token);
+    const step = {
+      id: "build",
+      run: ["echo", "hi {{inputs.name}}"],
+      shell: "bash",
+      cwd: "/tmp",
+      env: { LEVEL: "2" },
+      pane: { open: "beside", size: 40, focus: true, close: "success" },
+      background: true,
+      timeout: "30s",
+      retry: { attempts: 3, delay: "5s" },
+      success_codes: [0, 3],
+      when: ["{{inputs.go}}", '"{{context.platform}}" == "macos"'],
+      continue_on_error: true,
+    };
+    const form = model.formFromStep(props, "run", step, {});
+    const back = model.stepFromForm(props, "run", form, model.extraOf(props, "run", step), {});
+    expect(back.error).toBeUndefined();
+    expect(back.step).toEqual(step);
+  });
+
+  test("an argv element keeps its own spacing", async () => {
+    const { page, base, token } = await served();
+    const model = fieldModel(page);
+    const props = await stepProps(base, token);
+    // Empty and padded arguments are legal argv, and the line widget must not rewrite them.
+    const step = { run: ["printf", "%s|%s|", "", "  padded  "] };
+    const form = model.formFromStep(props, "run", step, {});
+    const back = model.stepFromForm(props, "run", form, model.extraOf(props, "run", step), {});
+    expect(back.step).toEqual(step);
+    // Codes are scalars, so a stray blank line there is still noise rather than a value.
+    const codes = model.formFromStep(props, "run", { run: "echo hi", success_codes: [0, 3] }, {});
+    codes.success_codes = "0\n\n 3 \n";
+    expect(model.stepFromForm(props, "run", codes, {}, {}).step?.success_codes).toEqual([0, 3]);
+  });
+
+  test("an argv element holding a newline stays in YAML", async () => {
+    const { page, base, token } = await served();
+    const model = fieldModel(page);
+    const props = await stepProps(base, token);
+    const step = { run: ["python", "-c", "import sys\nprint(1)"] };
+    // One line per element cannot express it, so the form carries the value instead of splitting it.
+    const extra = model.extraOf(props, "run", step);
+    expect(extra).toEqual({ run: step.run });
+    const form = model.formFromStep(props, "run", step, {});
+    expect(form.run).toBeUndefined();
+    expect(model.stepFromForm(props, "run", form, extra, {}).step).toEqual(step);
+  });
+
+  test("a placement value survives an unset required sibling", async () => {
+    const { page, base, token } = await served();
+    const model = fieldModel(page);
+    const props = await stepProps(base, token);
+    const form = model.formFromStep(props, "run", { run: "echo hi" }, {});
+    form["pane.size"] = "40";
+    form["pane.target"] = "{{steps.one.pane_id}}";
+    const back = model.stepFromForm(props, "run", form, {}, {});
+    expect(back.step?.pane).toEqual({ size: 40, target: "{{steps.one.pane_id}}" });
+  });
+
+  test("herdr params round-trip through the generated method specification", async () => {
+    const { page, base, token } = await served();
+    const model = fieldModel(page);
+    const props = await stepProps(base, token);
+    const res = await fetch(`${base}/api/methods`, { headers: { "x-hwf-token": token } });
+    const { methods } = (await res.json()) as { methods: { method: string }[] };
+    const table: Record<string, unknown> = {};
+    for (const m of methods) table[m.method] = m;
+    const step = { herdr: "notification.show", params: { title: "done", sound: "done" } };
+    const form = model.formFromStep(props, "herdr", step, table);
+    expect(form["params.title"]).toBe("done");
+    expect(form.params).toBe("");
+    // Switching method keeps values the new specification also names.
+    form.herdr = "client.window_title.set";
+    const back = model.stepFromForm(props, "herdr", form, {}, table);
+    expect(back.step?.params).toEqual({ title: "done" });
+  });
+
+  test("issue paths address the field they name", async () => {
+    const model = fieldModel(await servedPage());
+    expect(model.issueField(["steps", 2, "retry", "attempts"])).toEqual({
+      index: 2,
+      key: "retry.attempts",
+    });
+    expect(model.issueField(["steps", 0, "success_codes", 1])).toEqual({
+      index: 0,
+      key: "success_codes",
+    });
+    expect(model.issueField(["steps", 1])).toEqual({ index: 1, key: "" });
+    expect(model.issueField(["version"])).toBeNull();
+    expect(model.issueField(["on_failure", "retry"])).toBeNull();
+  });
+
+  test("an issue on a group addresses the fields that group renders", async () => {
+    const { page, base, token } = await served();
+    const model = fieldModel(page);
+    const props = await stepProps(base, token);
+    // `background: rejects retry` names the group, and the form renders its parts.
+    const at = model.issueField(["steps", 0, "retry"]);
+    const rendered = model
+      .stepFields(props, "run")
+      .filter((f) => model.addressesField(at?.key ?? "", f.key))
+      .map((f) => f.key);
+    expect(rendered).toEqual(["retry.attempts", "retry.delay"]);
+    // A path deeper than the field that holds the value still addresses that field.
+    expect(model.addressesField("env.LANG", "env")).toBe(true);
+    expect(model.addressesField("timeout", "timeout")).toBe(true);
+    expect(model.addressesField("retry", "timeout")).toBe(false);
+    expect(model.addressesField("", "timeout")).toBe(false);
+    // A key no rendered field carries stays reportable elsewhere.
+    expect(model.stepFields(props, "run").some((f) => model.addressesField("nudge", f.key))).toBe(
+      false,
+    );
+  });
+
+  test("a schema key with no presentation entry lands in the trailing section", async () => {
+    const { page, base, token } = await served();
+    const model = fieldModel(page);
+    const props = await stepProps(base, token);
+    const grown = Object.assign({ nudge: { type: "string" } }, props) as Props;
+    const fields = model.stepFields(grown, "run");
+    const nudge = fields.find((f) => f.key === "nudge");
+    expect(nudge).toMatchObject({ group: "other", label: "nudge" });
+    expect(nudge?.widget.kind).toBe("text");
+    expect(fields[fields.length - 1]?.key).toBe("nudge");
+    // A key the served schema does not describe is not a field at all: it is carried over.
+    const step = { run: "echo hi", from_yaml: { deep: true } };
+    expect(model.extraOf(props, "run", step)).toEqual({ from_yaml: { deep: true } });
+    const back = model.stepFromForm(
+      props,
+      "run",
+      model.formFromStep(props, "run", step, {}),
+      model.extraOf(props, "run", step),
+      {},
+    );
+    expect(back.step?.from_yaml).toEqual({ deep: true });
+  });
+
+  test("a section summarises what is set and the form marks the field with an issue", async () => {
+    const { page, base, token } = await served();
+    const model = fieldModel(page);
+    const props = await stepProps(base, token);
+    const form = model.formFromStep(
+      props,
+      "run",
+      { run: "echo hi", timeout: "30s", retry: { attempts: 3 } },
+      {},
+    );
+    const fails = model.stepFields(props, "run").filter((f) => f.group === "fails");
+    expect(model.sectionSummary(fails, form)).toEqual(["30s", "attempts 3"]);
+    expect(
+      model.sectionSummary(
+        model.stepFields(props, "run").filter((f) => f.group === "when"),
+        form,
+      ),
+    ).toEqual([]);
+    expect(page).toContain('head.setAttribute("aria-expanded", on ? "true" : "false")');
+    expect(page).toContain("function paintNdvIssues()");
+    expect(page).toContain("canvas.setIssues(r.data.issues || [])");
   });
 });
