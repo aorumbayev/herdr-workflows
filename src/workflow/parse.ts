@@ -76,12 +76,35 @@ const paneOpenSchema = z.union([
 
 const paneSchema = z
   .object({
-    open: paneOpenSchema,
-    target: z.string().min(1).optional(),
-    workspace: z.string().min(1).optional(),
-    size: z.number().int().min(1).max(99).optional(),
-    focus: z.boolean().optional(),
-    close: z.enum(["success", "always"]).optional(),
+    open: paneOpenSchema.describe(
+      "Where the pane goes: a new `tab`, or a `beside`/`below` split of the anchor pane. Accepts a whole-value template when the referenced input is an unconditional closed static choice of those three values.",
+    ),
+    target: z
+      .string()
+      .min(1)
+      .describe("Pane to split. `beside`/`below` only; defaults to the invocation pane.")
+      .optional(),
+    workspace: z
+      .string()
+      .min(1)
+      .describe("Workspace for the new tab. `tab` only; defaults to the invocation workspace.")
+      .optional(),
+    size: z
+      .number()
+      .int()
+      .min(1)
+      .max(99)
+      .describe(
+        "Percent of the anchor given to the new pane. `beside`/`below` only. herdr clamps the effective split ratio, so an extreme value is approximated rather than rejected.",
+      )
+      .optional(),
+    focus: z.boolean().describe("Focus the new pane once it opens.").optional(),
+    close: z
+      .enum(["success", "always"])
+      .describe(
+        "Close the pane after a successful turn, or after any turn. Foreground `agent:` steps only — a `run:` step and a background step both reject it.",
+      )
+      .optional(),
   })
   .strict()
   .superRefine((pane, ctx) => {
@@ -114,8 +137,12 @@ const paneSchema = z
 
 const retrySchema = z
   .object({
-    attempts: z.number().int().min(2),
-    delay: durationSchema.optional(),
+    attempts: z
+      .number()
+      .int()
+      .min(2)
+      .describe("Total attempts including the first, so at least 2."),
+    delay: durationSchema.describe("Wait between attempts.").optional(),
   })
   .strict();
 
@@ -123,7 +150,12 @@ const envSchema = z.record(z.string(), z.string());
 
 const dynamicChoiceSchema = z
   .object({
-    run: z.array(z.string().min(1)).min(1),
+    run: z
+      .array(z.string().min(1))
+      .min(1)
+      .describe(
+        "argv run from the repo root to discover the options, one per line. Must be template-free and independent of earlier answers; treat it as read-only. Capped at 10s, 1,000 options, and 8 MiB.",
+      ),
   })
   .strict()
   .superRefine((dc, ctx) => {
@@ -143,13 +175,43 @@ const whenSchema = z.union([whenClauseSchema, z.array(whenClauseSchema).min(1)])
 
 const rawInputMapSchema = z
   .object({
-    type: z.enum(["text", "choice", "profile"]).optional(),
-    description: z.string().optional(),
-    default: z.string().optional(),
-    options: z.union([z.array(z.string().min(1)).min(1), dynamicChoiceSchema]).optional(),
-    when: whenSchema.optional(),
-    allow_custom: z.boolean().optional(),
-    min_length: z.number().int().min(0).optional(),
+    type: z
+      .enum(["text", "choice", "profile"])
+      .describe(
+        "`text` accepts free-form input, `choice` picks from `options:`, `profile` picks from the configured profile names. Inferred as `choice` when `options:` is set, otherwise `text`.",
+      )
+      .optional(),
+    description: z
+      .string()
+      .describe(
+        "Shown in the prompt. This is the only part of the prompt line an author controls, so describe every input.",
+      )
+      .optional(),
+    default: z
+      .string()
+      .describe(
+        "Pre-filled answer. For a closed `choice` or `profile` it must be one of the available values.",
+      )
+      .optional(),
+    options: z
+      .union([z.array(z.string().min(1)).min(1), dynamicChoiceSchema])
+      .describe("Values a `choice` offers: a static list, or `{run: argv}` to discover them.")
+      .optional(),
+    when: whenSchema
+      .describe(
+        "Guards, in order, that may reference earlier inputs. An inactive input never prompts, resolves, or exports an `HWF_` value, and supplying one fails collection.",
+      )
+      .optional(),
+    allow_custom: z
+      .boolean()
+      .describe("Accept values outside `options:`, making the list suggestions. `choice` only.")
+      .optional(),
+    min_length: z
+      .number()
+      .int()
+      .min(0)
+      .describe("Minimum number of characters for an active answer.")
+      .optional(),
   })
   .strict()
   .superRefine((map, ctx) => {
@@ -178,10 +240,13 @@ const rawInputMapSchema = z
   });
 
 const rawInputValueSchema = z.union([
-  z.literal("text"),
-  z.literal("profile"),
-  z.array(z.string().min(1)).min(1),
-  rawInputMapSchema,
+  z.literal("text").describe("Shorthand for a free-form text input with no other settings."),
+  z.literal("profile").describe("Shorthand for a choice over the configured profile names."),
+  z
+    .array(z.string().min(1))
+    .min(1)
+    .describe("Shorthand for a closed static choice over these values."),
+  rawInputMapSchema.describe("Full declaration, for a default, a guard, or discovered options."),
 ]);
 
 type RefineCtx = z.core.$RefinementCtx<Record<string, unknown>>;
@@ -496,31 +561,122 @@ function refineRawStep(step: Record<string, unknown>, ctx: RefineCtx): void {
 }
 
 const sharedActionFields = {
-  agent: z.string().optional(),
-  using: z.string().min(1).optional(),
-  target: z.string().min(1).optional(),
-  run: z.union([z.string().min(1), z.array(z.string()).min(1)]).optional(),
-  shell: z.enum(SHELLS).optional(),
-  herdr: z.string().optional(),
-  params: z.record(z.string(), z.unknown()).optional(),
-  workflow: z.string().optional(),
-  inputs: z.record(z.string(), z.string()).optional(),
-  cwd: z.string().min(1).optional(),
-  env: envSchema.optional(),
-  pane: paneSchema.optional(),
-  ready_when: readyWhenSchema.optional(),
-  timeout: durationSchema.optional(),
-  success_codes: z.array(z.number().int()).min(1).optional(),
+  agent: z
+    .string()
+    .describe(
+      "Action: prompt text for an agent. Pair with `using:` to start a new agent or `target:` to address a running one. The result is `{response, agent, pane_id}`; the default turn timeout is 30 minutes.",
+    )
+    .optional(),
+  using: z
+    .string()
+    .min(1)
+    .describe(
+      "Profile that starts a new managed agent for this prompt. Mutually exclusive with `target:`; omit both to use the default profile.",
+    )
+    .optional(),
+  target: z
+    .string()
+    .min(1)
+    .describe(
+      "Existing agent name or pane ID to prompt, which must be idle or done. On a step it rejects `pane:`, `cwd:`, and `env:` because the agent already has a pane. Mutually exclusive with `using:`.",
+    )
+    .optional(),
+  run: z
+    .union([z.string().min(1), z.array(z.string()).min(1)])
+    .describe(
+      "Action: a command. A list is argv with no shell; a string runs through `shell:`. Inputs are exported as `HWF_<name>`. A blocking local run results in `{stdout, stderr, exit_code, failed}`; a placed run results in its readiness payload, and a background run has no result to reference.",
+    )
+    .optional(),
+  shell: z
+    .enum(SHELLS)
+    .describe(
+      "Shell for a string `run:`, defaulting to `sh`. The argv form rejects it, since argv runs without a shell.",
+    )
+    .optional(),
+  herdr: z
+    .string()
+    .describe(
+      "Action: a herdr socket method such as `notification.show`. Nothing is filled in automatically, and a denied method fails at load. The result is the complete herdr payload.",
+    )
+    .optional(),
+  params: z
+    .record(z.string(), z.unknown())
+    .describe("Arguments for the `herdr:` method.")
+    .optional(),
+  workflow: z
+    .string()
+    .describe(
+      "Action: a child workflow, run in isolation. Its `returns:` becomes this step's result; its own `on_failure` does not run under a parent.",
+    )
+    .optional(),
+  inputs: z
+    .record(z.string(), z.string())
+    .describe("Values passed to the child workflow, keyed by its declared input names.")
+    .optional(),
+  cwd: z
+    .string()
+    .min(1)
+    .describe(
+      "Working directory, defaulting to the invocation working directory. `agent:` and `run:` steps only; `herdr:` and `workflow:` reject it.",
+    )
+    .optional(),
+  env: envSchema
+    .describe(
+      "Extra environment variables. `agent:` and `run:` steps only. The `HWF_` prefix is reserved for exported inputs: a `run:` step fails on one at runtime rather than at load, and an agent step passes it through.",
+    )
+    .optional(),
+  pane: paneSchema
+    .describe(
+      "Place this step in a herdr pane instead of running it invisibly. `agent:` and `run:` steps only. A placed `run:` must also set `background:` or `ready_when:`, and rejects `pane.close`.",
+    )
+    .optional(),
+  ready_when: readyWhenSchema
+    .describe(
+      "`/regex/`, no flags, matched against recent pane output to decide the step is ready. `run:` only, and requires both `pane:` and `timeout:`. Matches text already on screen, and does not detect process exit.",
+    )
+    .optional(),
+  timeout: durationSchema
+    .describe(
+      "Time limit for an `agent:` or `run:` step; `herdr:` and `workflow:` reject it. Omitting it leaves a local `run:` uncapped, but an agent turn still falls back to 30 minutes, and a placed `run:` with `ready_when:` requires it.",
+    )
+    .optional(),
+  success_codes: z
+    .array(z.number().int())
+    .min(1)
+    .describe(
+      "Exit codes counted as success instead of the default `[0]`. Blocking local `run:` steps only — a placed, background, or `on_failure` run rejects it, as do the other three actions.",
+    )
+    .optional(),
 };
 
 const rawStepSchema = z
   .object({
-    id: identSchema.optional(),
-    when: whenSchema.optional(),
-    continue_on_error: z.boolean().optional(),
+    id: identSchema
+      .describe("Name this step so later steps can read `{{steps.<id>.field}}` from its result.")
+      .optional(),
+    when: whenSchema
+      .describe(
+        "Guard: one clause, or an ordered list evaluated as a short-circuit AND. A clause is a truthiness check or an `==`/`!=` comparison against a quoted string. A false result skips the step.",
+      )
+      .optional(),
+    continue_on_error: z
+      .boolean()
+      .describe(
+        "Tolerate an ordinary failure here: later steps continue and `on_failure` is suppressed, though the run still exits nonzero. A hard failure — a timeout, a capture overflow, or a spawn error — aborts anyway, and lost herdr coordination aborts before this is consulted.",
+      )
+      .optional(),
     ...sharedActionFields,
-    background: z.boolean().optional(),
-    retry: retrySchema.optional(),
+    background: z
+      .boolean()
+      .describe(
+        "Start the step and move on without waiting, so it produces no result to reference. The process is pane-owned and survives client detach, but not a herdr server restart. Rejects `timeout:`, `retry:`, and `pane.close`; a background `run:` also requires `pane:`.",
+      )
+      .optional(),
+    retry: retrySchema
+      .describe(
+        "Retry a failed attempt. `run:` and `herdr:` steps only, and never on a background step or in `on_failure`.",
+      )
+      .optional(),
   })
   .passthrough()
   .superRefine((step, ctx) => refineRawStep(step, ctx));
@@ -579,42 +735,80 @@ function refineRecoveryStep(step: Record<string, unknown>, ctx: RefineCtx): void
   }
 }
 
+// The step-only keys are accepted here only so the refinement can name each one it rejects.
+const REJECTED_BY_RECOVERY = "Not valid on `on_failure`, which runs once and is never guarded.";
+
 const recoveryStepSchema = z
   .object({
     ...sharedActionFields,
-    id: z.unknown().optional(),
-    when: z.unknown().optional(),
-    continue_on_error: z.unknown().optional(),
-    background: z.unknown().optional(),
-    retry: z.unknown().optional(),
+    id: z.unknown().describe(REJECTED_BY_RECOVERY).optional(),
+    when: z.unknown().describe(REJECTED_BY_RECOVERY).optional(),
+    continue_on_error: z.unknown().describe(REJECTED_BY_RECOVERY).optional(),
+    background: z.unknown().describe(REJECTED_BY_RECOVERY).optional(),
+    retry: z.unknown().describe(REJECTED_BY_RECOVERY).optional(),
   })
   .passthrough()
   .superRefine((step, ctx) => refineRecoveryStep(step, ctx));
 
 const returnsSchema = z.union([
-  z.string().min(1),
-  z.record(identSchema, z.string().min(1)).refine((m) => Object.keys(m).length > 0, {
-    message: "returns: map must be non-empty",
-  }),
+  z.string().min(1).describe("A single template, which becomes the whole result."),
+  z
+    .record(identSchema, z.string().min(1))
+    .refine((m) => Object.keys(m).length > 0, {
+      message: "returns: map must be non-empty",
+    })
+    .describe("Named templates, which become the fields of the result."),
 ]);
 
 export const rawWorkflowSchema = z
   .object({
-    version: z.string().superRefine((value, ctx) => {
-      if (value !== WORKFLOW_FORMAT) {
-        ctx.addIssue({
-          code: "custom",
-          message: `unsupported workflow format '${value}' — supported format is ${WORKFLOW_FORMAT}; rewrite the workflow or upgrade herdr-workflows`,
-        });
-      }
-    }),
-    title: z.string().optional(),
-    description: z.string().optional(),
-    hidden: z.boolean().optional(),
-    inputs: z.record(identSchema, rawInputValueSchema).optional(),
-    returns: returnsSchema.optional(),
-    on_failure: recoveryStepSchema.optional(),
-    steps: z.array(rawStepSchema).min(1),
+    version: z
+      .string()
+      .superRefine((value, ctx) => {
+        if (value !== WORKFLOW_FORMAT) {
+          ctx.addIssue({
+            code: "custom",
+            message: `unsupported workflow format '${value}' — supported format is ${WORKFLOW_FORMAT}; rewrite the workflow or upgrade herdr-workflows`,
+          });
+        }
+      })
+      .describe(
+        `Workflow format version. Must be \`${WORKFLOW_FORMAT}\`; any other value fails the load with rewrite-or-upgrade guidance.`,
+      ),
+    title: z
+      .string()
+      .describe(
+        "Picker label. Defaults to the humanized filename, and is truncated to the picker row width.",
+      )
+      .optional(),
+    description: z
+      .string()
+      .describe("Picker subtitle, wrapped or truncated to at most two rows.")
+      .optional(),
+    hidden: z
+      .boolean()
+      .describe("Hide from the picker. `hwf run` still launches the workflow.")
+      .optional(),
+    inputs: z
+      .record(identSchema, rawInputValueSchema)
+      .describe(
+        "Values collected before the run, keyed by a name matching `[a-z][a-z0-9_]{0,31}`. Only the entry workflow prompts, in declaration order; a child receives values from its parent's step `inputs:`.",
+      )
+      .optional(),
+    returns: returnsSchema
+      .describe("What a parent's `workflow:` step gets as this workflow's result.")
+      .optional(),
+    on_failure: recoveryStepSchema
+      .describe(
+        "Recovery action, run once after the first non-tolerated failure. Entry workflow only, and `{{context.error}}` is available. Rejects `id`, `when`, `continue_on_error`, `background`, `retry`, and `success_codes`. Skipped entirely when herdr coordination is lost.",
+      )
+      .optional(),
+    steps: z
+      .array(rawStepSchema)
+      .min(1)
+      .describe(
+        "Steps in execution order. Each uses exactly one of `agent:`, `run:`, `herdr:`, or `workflow:`.",
+      ),
   })
   .strict();
 

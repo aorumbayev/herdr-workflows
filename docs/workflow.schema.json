@@ -3,18 +3,23 @@
   "type": "object",
   "properties": {
     "version": {
+      "description": "Workflow format version. Must be `v1alpha1`; any other value fails the load with rewrite-or-upgrade guidance.",
       "type": "string"
     },
     "title": {
+      "description": "Picker label. Defaults to the humanized filename, and is truncated to the picker row width.",
       "type": "string"
     },
     "description": {
+      "description": "Picker subtitle, wrapped or truncated to at most two rows.",
       "type": "string"
     },
     "hidden": {
+      "description": "Hide from the picker. `hwf run` still launches the workflow.",
       "type": "boolean"
     },
     "inputs": {
+      "description": "Values collected before the run, keyed by a name matching `[a-z][a-z0-9_]{0,31}`. Only the entry workflow prompts, in declaration order; a child receives values from its parent's step `inputs:`.",
       "type": "object",
       "propertyNames": {
         "type": "string",
@@ -23,14 +28,17 @@
       "additionalProperties": {
         "anyOf": [
           {
+            "description": "Shorthand for a free-form text input with no other settings.",
             "type": "string",
             "const": "text"
           },
           {
+            "description": "Shorthand for a choice over the configured profile names.",
             "type": "string",
             "const": "profile"
           },
           {
+            "description": "Shorthand for a closed static choice over these values.",
             "minItems": 1,
             "type": "array",
             "items": {
@@ -39,19 +47,24 @@
             }
           },
           {
+            "description": "Full declaration, for a default, a guard, or discovered options.",
             "type": "object",
             "properties": {
               "type": {
+                "description": "`text` accepts free-form input, `choice` picks from `options:`, `profile` picks from the configured profile names. Inferred as `choice` when `options:` is set, otherwise `text`.",
                 "type": "string",
                 "enum": ["text", "choice", "profile"]
               },
               "description": {
+                "description": "Shown in the prompt. This is the only part of the prompt line an author controls, so describe every input.",
                 "type": "string"
               },
               "default": {
+                "description": "Pre-filled answer. For a closed `choice` or `profile` it must be one of the available values.",
                 "type": "string"
               },
               "options": {
+                "description": "Values a `choice` offers: a static list, or `{run: argv}` to discover them.",
                 "anyOf": [
                   {
                     "minItems": 1,
@@ -65,6 +78,7 @@
                     "type": "object",
                     "properties": {
                       "run": {
+                        "description": "argv run from the repo root to discover the options, one per line. Must be template-free and independent of earlier answers; treat it as read-only. Capped at 10s, 1,000 options, and 8 MiB.",
                         "minItems": 1,
                         "type": "array",
                         "items": {
@@ -79,6 +93,7 @@
                 ]
               },
               "when": {
+                "description": "Guards, in order, that may reference earlier inputs. An inactive input never prompts, resolves, or exports an `HWF_` value, and supplying one fails collection.",
                 "anyOf": [
                   {
                     "type": "string",
@@ -95,9 +110,11 @@
                 ]
               },
               "allow_custom": {
+                "description": "Accept values outside `options:`, making the list suggestions. `choice` only.",
                 "type": "boolean"
               },
               "min_length": {
+                "description": "Minimum number of characters for an active answer.",
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 9007199254740991
@@ -109,12 +126,15 @@
       }
     },
     "returns": {
+      "description": "What a parent's `workflow:` step gets as this workflow's result.",
       "anyOf": [
         {
+          "description": "A single template, which becomes the whole result.",
           "type": "string",
           "minLength": 1
         },
         {
+          "description": "Named templates, which become the fields of the result.",
           "type": "object",
           "propertyNames": {
             "type": "string",
@@ -128,20 +148,25 @@
       ]
     },
     "on_failure": {
+      "description": "Recovery action, run once after the first non-tolerated failure. Entry workflow only, and `{{context.error}}` is available. Rejects `id`, `when`, `continue_on_error`, `background`, `retry`, and `success_codes`. Skipped entirely when herdr coordination is lost.",
       "type": "object",
       "properties": {
         "agent": {
+          "description": "Action: prompt text for an agent. Pair with `using:` to start a new agent or `target:` to address a running one. The result is `{response, agent, pane_id}`; the default turn timeout is 30 minutes.",
           "type": "string"
         },
         "using": {
+          "description": "Profile that starts a new managed agent for this prompt. Mutually exclusive with `target:`; omit both to use the default profile.",
           "type": "string",
           "minLength": 1
         },
         "target": {
+          "description": "Existing agent name or pane ID to prompt, which must be idle or done. On a step it rejects `pane:`, `cwd:`, and `env:` because the agent already has a pane. Mutually exclusive with `using:`.",
           "type": "string",
           "minLength": 1
         },
         "run": {
+          "description": "Action: a command. A list is argv with no shell; a string runs through `shell:`. Inputs are exported as `HWF_<name>`. A blocking local run results in `{stdout, stderr, exit_code, failed}`; a placed run results in its readiness payload, and a background run has no result to reference.",
           "anyOf": [
             {
               "type": "string",
@@ -157,13 +182,16 @@
           ]
         },
         "shell": {
+          "description": "Shell for a string `run:`, defaulting to `sh`. The argv form rejects it, since argv runs without a shell.",
           "type": "string",
           "enum": ["sh", "bash", "zsh", "pwsh", "powershell", "cmd"]
         },
         "herdr": {
+          "description": "Action: a herdr socket method such as `notification.show`. Nothing is filled in automatically, and a denied method fails at load. The result is the complete herdr payload.",
           "type": "string"
         },
         "params": {
+          "description": "Arguments for the `herdr:` method.",
           "type": "object",
           "propertyNames": {
             "type": "string"
@@ -171,9 +199,11 @@
           "additionalProperties": {}
         },
         "workflow": {
+          "description": "Action: a child workflow, run in isolation. Its `returns:` becomes this step's result; its own `on_failure` does not run under a parent.",
           "type": "string"
         },
         "inputs": {
+          "description": "Values passed to the child workflow, keyed by its declared input names.",
           "type": "object",
           "propertyNames": {
             "type": "string"
@@ -183,10 +213,12 @@
           }
         },
         "cwd": {
+          "description": "Working directory, defaulting to the invocation working directory. `agent:` and `run:` steps only; `herdr:` and `workflow:` reject it.",
           "type": "string",
           "minLength": 1
         },
         "env": {
+          "description": "Extra environment variables. `agent:` and `run:` steps only. The `HWF_` prefix is reserved for exported inputs: a `run:` step fails on one at runtime rather than at load, and an agent step passes it through.",
           "type": "object",
           "propertyNames": {
             "type": "string"
@@ -196,9 +228,11 @@
           }
         },
         "pane": {
+          "description": "Place this step in a herdr pane instead of running it invisibly. `agent:` and `run:` steps only. A placed `run:` must also set `background:` or `ready_when:`, and rejects `pane.close`.",
           "type": "object",
           "properties": {
             "open": {
+              "description": "Where the pane goes: a new `tab`, or a `beside`/`below` split of the anchor pane. Accepts a whole-value template when the referenced input is an unconditional closed static choice of those three values.",
               "anyOf": [
                 {
                   "type": "string",
@@ -211,22 +245,27 @@
               ]
             },
             "target": {
+              "description": "Pane to split. `beside`/`below` only; defaults to the invocation pane.",
               "type": "string",
               "minLength": 1
             },
             "workspace": {
+              "description": "Workspace for the new tab. `tab` only; defaults to the invocation workspace.",
               "type": "string",
               "minLength": 1
             },
             "size": {
+              "description": "Percent of the anchor given to the new pane. `beside`/`below` only. herdr clamps the effective split ratio, so an extreme value is approximated rather than rejected.",
               "type": "integer",
               "minimum": 1,
               "maximum": 99
             },
             "focus": {
+              "description": "Focus the new pane once it opens.",
               "type": "boolean"
             },
             "close": {
+              "description": "Close the pane after a successful turn, or after any turn. Foreground `agent:` steps only — a `run:` step and a background step both reject it.",
               "type": "string",
               "enum": ["success", "always"]
             }
@@ -235,13 +274,16 @@
           "additionalProperties": false
         },
         "ready_when": {
+          "description": "`/regex/`, no flags, matched against recent pane output to decide the step is ready. `run:` only, and requires both `pane:` and `timeout:`. Matches text already on screen, and does not detect process exit.",
           "type": "string"
         },
         "timeout": {
+          "description": "Time limit for an `agent:` or `run:` step; `herdr:` and `workflow:` reject it. Omitting it leaves a local `run:` uncapped, but an agent turn still falls back to 30 minutes, and a placed `run:` with `ready_when:` requires it.",
           "type": "string",
           "pattern": "^([1-9]\\d*)(ms|s|m|h)$"
         },
         "success_codes": {
+          "description": "Exit codes counted as success instead of the default `[0]`. Blocking local `run:` steps only — a placed, background, or `on_failure` run rejects it, as do the other three actions.",
           "minItems": 1,
           "type": "array",
           "items": {
@@ -250,25 +292,38 @@
             "maximum": 9007199254740991
           }
         },
-        "id": {},
-        "when": {},
-        "continue_on_error": {},
-        "background": {},
-        "retry": {}
+        "id": {
+          "description": "Not valid on `on_failure`, which runs once and is never guarded."
+        },
+        "when": {
+          "description": "Not valid on `on_failure`, which runs once and is never guarded."
+        },
+        "continue_on_error": {
+          "description": "Not valid on `on_failure`, which runs once and is never guarded."
+        },
+        "background": {
+          "description": "Not valid on `on_failure`, which runs once and is never guarded."
+        },
+        "retry": {
+          "description": "Not valid on `on_failure`, which runs once and is never guarded."
+        }
       },
       "additionalProperties": {}
     },
     "steps": {
+      "description": "Steps in execution order. Each uses exactly one of `agent:`, `run:`, `herdr:`, or `workflow:`.",
       "minItems": 1,
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
           "id": {
+            "description": "Name this step so later steps can read `{{steps.<id>.field}}` from its result.",
             "type": "string",
             "pattern": "^[a-z][a-z0-9_]{0,31}$"
           },
           "when": {
+            "description": "Guard: one clause, or an ordered list evaluated as a short-circuit AND. A clause is a truthiness check or an `==`/`!=` comparison against a quoted string. A false result skips the step.",
             "anyOf": [
               {
                 "type": "string",
@@ -285,20 +340,25 @@
             ]
           },
           "continue_on_error": {
+            "description": "Tolerate an ordinary failure here: later steps continue and `on_failure` is suppressed, though the run still exits nonzero. A hard failure — a timeout, a capture overflow, or a spawn error — aborts anyway, and lost herdr coordination aborts before this is consulted.",
             "type": "boolean"
           },
           "agent": {
+            "description": "Action: prompt text for an agent. Pair with `using:` to start a new agent or `target:` to address a running one. The result is `{response, agent, pane_id}`; the default turn timeout is 30 minutes.",
             "type": "string"
           },
           "using": {
+            "description": "Profile that starts a new managed agent for this prompt. Mutually exclusive with `target:`; omit both to use the default profile.",
             "type": "string",
             "minLength": 1
           },
           "target": {
+            "description": "Existing agent name or pane ID to prompt, which must be idle or done. On a step it rejects `pane:`, `cwd:`, and `env:` because the agent already has a pane. Mutually exclusive with `using:`.",
             "type": "string",
             "minLength": 1
           },
           "run": {
+            "description": "Action: a command. A list is argv with no shell; a string runs through `shell:`. Inputs are exported as `HWF_<name>`. A blocking local run results in `{stdout, stderr, exit_code, failed}`; a placed run results in its readiness payload, and a background run has no result to reference.",
             "anyOf": [
               {
                 "type": "string",
@@ -314,13 +374,16 @@
             ]
           },
           "shell": {
+            "description": "Shell for a string `run:`, defaulting to `sh`. The argv form rejects it, since argv runs without a shell.",
             "type": "string",
             "enum": ["sh", "bash", "zsh", "pwsh", "powershell", "cmd"]
           },
           "herdr": {
+            "description": "Action: a herdr socket method such as `notification.show`. Nothing is filled in automatically, and a denied method fails at load. The result is the complete herdr payload.",
             "type": "string"
           },
           "params": {
+            "description": "Arguments for the `herdr:` method.",
             "type": "object",
             "propertyNames": {
               "type": "string"
@@ -328,9 +391,11 @@
             "additionalProperties": {}
           },
           "workflow": {
+            "description": "Action: a child workflow, run in isolation. Its `returns:` becomes this step's result; its own `on_failure` does not run under a parent.",
             "type": "string"
           },
           "inputs": {
+            "description": "Values passed to the child workflow, keyed by its declared input names.",
             "type": "object",
             "propertyNames": {
               "type": "string"
@@ -340,10 +405,12 @@
             }
           },
           "cwd": {
+            "description": "Working directory, defaulting to the invocation working directory. `agent:` and `run:` steps only; `herdr:` and `workflow:` reject it.",
             "type": "string",
             "minLength": 1
           },
           "env": {
+            "description": "Extra environment variables. `agent:` and `run:` steps only. The `HWF_` prefix is reserved for exported inputs: a `run:` step fails on one at runtime rather than at load, and an agent step passes it through.",
             "type": "object",
             "propertyNames": {
               "type": "string"
@@ -353,9 +420,11 @@
             }
           },
           "pane": {
+            "description": "Place this step in a herdr pane instead of running it invisibly. `agent:` and `run:` steps only. A placed `run:` must also set `background:` or `ready_when:`, and rejects `pane.close`.",
             "type": "object",
             "properties": {
               "open": {
+                "description": "Where the pane goes: a new `tab`, or a `beside`/`below` split of the anchor pane. Accepts a whole-value template when the referenced input is an unconditional closed static choice of those three values.",
                 "anyOf": [
                   {
                     "type": "string",
@@ -368,22 +437,27 @@
                 ]
               },
               "target": {
+                "description": "Pane to split. `beside`/`below` only; defaults to the invocation pane.",
                 "type": "string",
                 "minLength": 1
               },
               "workspace": {
+                "description": "Workspace for the new tab. `tab` only; defaults to the invocation workspace.",
                 "type": "string",
                 "minLength": 1
               },
               "size": {
+                "description": "Percent of the anchor given to the new pane. `beside`/`below` only. herdr clamps the effective split ratio, so an extreme value is approximated rather than rejected.",
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 99
               },
               "focus": {
+                "description": "Focus the new pane once it opens.",
                 "type": "boolean"
               },
               "close": {
+                "description": "Close the pane after a successful turn, or after any turn. Foreground `agent:` steps only — a `run:` step and a background step both reject it.",
                 "type": "string",
                 "enum": ["success", "always"]
               }
@@ -392,13 +466,16 @@
             "additionalProperties": false
           },
           "ready_when": {
+            "description": "`/regex/`, no flags, matched against recent pane output to decide the step is ready. `run:` only, and requires both `pane:` and `timeout:`. Matches text already on screen, and does not detect process exit.",
             "type": "string"
           },
           "timeout": {
+            "description": "Time limit for an `agent:` or `run:` step; `herdr:` and `workflow:` reject it. Omitting it leaves a local `run:` uncapped, but an agent turn still falls back to 30 minutes, and a placed `run:` with `ready_when:` requires it.",
             "type": "string",
             "pattern": "^([1-9]\\d*)(ms|s|m|h)$"
           },
           "success_codes": {
+            "description": "Exit codes counted as success instead of the default `[0]`. Blocking local `run:` steps only — a placed, background, or `on_failure` run rejects it, as do the other three actions.",
             "minItems": 1,
             "type": "array",
             "items": {
@@ -408,17 +485,21 @@
             }
           },
           "background": {
+            "description": "Start the step and move on without waiting, so it produces no result to reference. The process is pane-owned and survives client detach, but not a herdr server restart. Rejects `timeout:`, `retry:`, and `pane.close`; a background `run:` also requires `pane:`.",
             "type": "boolean"
           },
           "retry": {
+            "description": "Retry a failed attempt. `run:` and `herdr:` steps only, and never on a background step or in `on_failure`.",
             "type": "object",
             "properties": {
               "attempts": {
+                "description": "Total attempts including the first, so at least 2.",
                 "type": "integer",
                 "minimum": 2,
                 "maximum": 9007199254740991
               },
               "delay": {
+                "description": "Wait between attempts.",
                 "type": "string",
                 "pattern": "^([1-9]\\d*)(ms|s|m|h)$"
               }
