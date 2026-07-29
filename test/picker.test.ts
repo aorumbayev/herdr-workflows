@@ -18,11 +18,11 @@ import {
   isCustomChoiceValue,
   LIST_HINT,
   PICKER_CHROME_STRINGS,
-  resolveListWorkbenchRoute,
   shouldDropStdinLeakSequence,
   shouldRestoreCustomChoiceText,
   truncate,
 } from "../src/tui/picker";
+import { EMPTY_CATALOG_MESSAGE, resolvePaletteLetter } from "../src/tui/picker-actions";
 import { humanizeWorkflowName, workflowDisplayTitle } from "../src/workflow/trust";
 
 const entries: WorkflowListEntry[] = [
@@ -482,49 +482,44 @@ describe("picker column layout", () => {
   });
 });
 
-describe("list workbench shortcuts", () => {
-  test("footer identifies run edit share import dismiss", () => {
+describe("actions palette letters", () => {
+  test("footer identifies run ctrl+k dismiss", () => {
     expect(LIST_HINT).toContain("enter run");
-    expect(LIST_HINT).toContain("^e edit");
-    expect(LIST_HINT).toContain("^y share");
-    expect(LIST_HINT).toContain("^o import");
+    expect(LIST_HINT).toContain("ctrl+k");
     expect(LIST_HINT).toContain("esc");
+    expect(LIST_HINT).not.toContain("^e");
+    expect(LIST_HINT).not.toContain("^y");
+    expect(LIST_HINT).not.toContain("^o");
   });
 
-  test("printable e y o are filter letters not workbench actions", () => {
+  test("palette letters map with and without selection", () => {
     const entry: WorkflowListEntry = { name: "deploy", source: "repo", file: "/r/d.yaml" };
-    expect(resolveListWorkbenchRoute({ name: "e", ctrl: false }, entry)).toBeUndefined();
-    expect(resolveListWorkbenchRoute({ name: "y", ctrl: false }, entry)).toBeUndefined();
-    expect(resolveListWorkbenchRoute({ name: "o", ctrl: false }, entry)).toBeUndefined();
+    expect(resolvePaletteLetter("n", undefined)).toEqual({ id: "new", route: "new" });
+    expect(resolvePaletteLetter("i", undefined)).toEqual({ id: "import", route: "import" });
+    expect(resolvePaletteLetter("e", undefined)).toEqual({ id: "examples" });
+    expect(resolvePaletteLetter("o", undefined)).toBeUndefined();
+    expect(resolvePaletteLetter("s", undefined)).toBeUndefined();
+    expect(resolvePaletteLetter("d", undefined)).toBeUndefined();
+    expect(resolvePaletteLetter("o", entry)).toEqual({ id: "open", route: "w=repo:deploy" });
+    expect(resolvePaletteLetter("s", entry)).toEqual({ id: "share", entry });
+    expect(resolvePaletteLetter("d", entry)).toEqual({ id: "delete", entry });
+    expect(resolvePaletteLetter("x", entry)).toBeUndefined();
   });
 
-  test("ctrl+e and ctrl+y preserve selected repo/global provenance", () => {
-    expect(
-      resolveListWorkbenchRoute(
-        { name: "e", ctrl: true },
-        { name: "deploy", source: "repo", file: "/r/d.yaml" },
-      ),
-    ).toBe("w=repo:deploy");
-    expect(
-      resolveListWorkbenchRoute(
-        { name: "y", ctrl: true },
-        { name: "deploy", source: "global", file: "/g/d.yaml" },
-      ),
-    ).toBe("share=global:deploy");
-  });
-
-  test("edit/share noop without selection; import works with empty list", () => {
-    expect(resolveListWorkbenchRoute({ name: "e", ctrl: true }, undefined)).toBe("noop");
-    expect(resolveListWorkbenchRoute({ name: "y", ctrl: true }, undefined)).toBe("noop");
-    expect(resolveListWorkbenchRoute({ name: "o", ctrl: true }, undefined)).toBe("import");
+  test("empty catalog and filter-miss detail copy", () => {
+    expect(EMPTY_CATALOG_MESSAGE).toMatch(/no runnable workflows/i);
+    expect(formatDetailLines(`No workflows matching xyz`, 80)).toContain(
+      "No workflows matching xyz",
+    );
+    expect(hasVisibleEntries([])).toBe(false);
   });
 });
 
 describe("stdin leak prepend boundary", () => {
-  test("preserves Ctrl+E/O/Y C0 bytes while dropping unrelated prefix leaks", () => {
-    expect(shouldDropStdinLeakSequence(String.fromCharCode(0x05))).toBe(false); // Ctrl+E
-    expect(shouldDropStdinLeakSequence(String.fromCharCode(0x0f))).toBe(false); // Ctrl+O
-    expect(shouldDropStdinLeakSequence(String.fromCharCode(0x19))).toBe(false); // Ctrl+Y
+  test("preserves Ctrl+K C0 byte while dropping unrelated prefix leaks", () => {
+    expect(shouldDropStdinLeakSequence(String.fromCharCode(0x0b))).toBe(false); // Ctrl+K
+    expect(shouldDropStdinLeakSequence(String.fromCharCode(0x05))).toBe(true); // Ctrl+E
+    expect(shouldDropStdinLeakSequence(String.fromCharCode(0x0f))).toBe(true); // Ctrl+O
     expect(shouldDropStdinLeakSequence("\t")).toBe(false);
     expect(shouldDropStdinLeakSequence("\n")).toBe(false);
     expect(shouldDropStdinLeakSequence("\r")).toBe(false);

@@ -55,6 +55,7 @@ describe("web route", () => {
       hash: "share=global:handoff",
     });
     expect(parseWebRoute("import")).toEqual({ kind: "import", hash: "import" });
+    expect(parseWebRoute("new")).toEqual({ kind: "new", hash: "new" });
   });
 
   test("rejects arbitrary URL text and invalid names", () => {

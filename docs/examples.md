@@ -2,7 +2,7 @@
 
 Each card copies a `hwf workflow import "<bundle>"` command (gzip+base64 `{name, yaml}[]`).
 
-Import reviews every bundled YAML file. It marks commands, transcript access, and sensitive herdr methods. It asks for confirmation and one repo or global destination, then writes.
+Paste the copied command into the terminal (`hwf workflow import`) or the workbench Import view. The workbench also accepts pasted raw workflow YAML with an explicit name. Import reviews every YAML body, marks commands, transcript access, and sensitive herdr methods, then asks for confirmation and one repo or global destination before it writes.
 
 On a name conflict, the workbench shows a replace-all prompt. The CLI needs `--force` on a rerun. See [Guide · Share and import](/guide#share-and-import). Old single-workflow payloads are rejected. Share and import never run workflows.
 

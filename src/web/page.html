@@ -1406,7 +1406,7 @@
       let editorFileText = ""; // open workflow as last read from disk — live reload compares to it
       let editorMode = "text"; // desired mode, kept across live reloads
       let wantOpen = null; // {name, scope} from the URL hash; opened as soon as the file exists
-      let routeView = null; // null | {kind:"share",scope,name} | {kind:"import"}
+      let routeView = null; // null | {kind:"share",scope,name} | {kind:"import"} | {kind:"new"}
       let listCollapsed = false;
 
       function errMsg(e) {
@@ -1494,7 +1494,7 @@
       }
 
       function clearRouteHash() {
-        if (!/^#(share=|import)/.test(location.hash)) return;
+        if (!/^#(share=|import|new)/.test(location.hash)) return;
         history.replaceState(null, "", location.pathname + location.search);
       }
 
@@ -1502,6 +1502,7 @@
         if (tab !== "workflows") return "";
         if (routeView) {
           if (routeView.kind === "import") return "#import";
+          if (routeView.kind === "new") return "#new";
           if (routeView.kind === "share") return "#share=" + routeView.scope + ":" + routeView.name;
         }
         if (current && current.name) return "#w=" + current.scope + ":" + current.name;
@@ -1555,12 +1556,26 @@
         syncWorkflowLayout();
         const list = $("list");
         list.innerHTML = "";
+        const actions = document.createElement("div");
+        actions.className = "bar";
+        actions.style.flexDirection = "column";
+        actions.style.gap = "4px";
+        actions.style.width = "100%";
         const nu = document.createElement("button");
         nu.type = "button";
         nu.textContent = "+ new";
         nu.className = "tab new";
         nu.onclick = newWorkflow;
-        list.appendChild(nu);
+        const imp = document.createElement("button");
+        imp.textContent = "import";
+        imp.className = "tab";
+        imp.style.width = "100%";
+        imp.setAttribute("aria-label", "import workflows");
+        imp.onclick = () => {
+          if (confirmLeave()) openImport();
+        };
+        actions.append(nu, imp);
+        list.appendChild(actions);
         const addRow = (e) => {
           const row = document.createElement("button");
           row.type = "button";
@@ -1598,10 +1613,11 @@
         if (state.entries.length === 0) {
           const empty = document.createElement("p");
           empty.className = "hint";
-          empty.textContent = "no workflows yet — create one above";
+          empty.textContent = "no workflows yet — create or import above";
           list.appendChild(empty);
         }
-        if (!current) $("pane").innerHTML = "<p class=hint>Select a workflow or create one.</p>";
+        if (!current && !routeView)
+          $("pane").innerHTML = "<p class=hint>Select a workflow, create one, or import.</p>";
       }
 
       async function openWorkflow(name, scope) {
@@ -1639,8 +1655,9 @@
       function newWorkflow() {
         if (!confirmLeave()) return;
         openSeq += 1; // cancel any in-flight openWorkflow
-        routeView = null;
+        routeView = { kind: "new" };
         current = { name: "", scope: "repo" };
+        setHash("new");
         if (narrowViewport()) listCollapsed = true;
         syncWorkflowLayout();
         renderWorkflows();
@@ -4071,6 +4088,15 @@
             },
           },
         ];
+        if (name) {
+          overflowItems.push({
+            label: "share",
+            fn: () => {
+              if (!confirmLeave()) return;
+              openShare(scope, name);
+            },
+          });
+        }
         if (inBoth) {
           for (const [scopes, lbl] of [
             [["repo"], "local"],
@@ -4434,9 +4460,20 @@
         pane.appendChild(head);
         const paste = document.createElement("textarea");
         paste.id = "import-paste";
-        paste.setAttribute("aria-label", "import command or encoded bundle");
-        paste.placeholder = 'hwf workflow import "…"  — or paste the encoded bundle';
+        paste.setAttribute("aria-label", "import command, encoded bundle, or workflow YAML");
+        paste.placeholder =
+          'hwf workflow import "…"  — encoded bundle — or paste raw workflow YAML';
         pane.appendChild(paste);
+        const nameRow = document.createElement("div");
+        nameRow.className = "bar";
+        nameRow.innerHTML = "<span class=cap>name (raw YAML)</span>";
+        const nameIn = document.createElement("input");
+        nameIn.type = "text";
+        nameIn.id = "import-name";
+        nameIn.setAttribute("aria-label", "workflow name for raw YAML import");
+        nameIn.placeholder = "required when pasting YAML";
+        nameRow.appendChild(nameIn);
+        pane.appendChild(nameRow);
         const bar = document.createElement("div");
         bar.className = "bar";
         const previewBtn = mkBtn("preview", () => runImportPreview());
@@ -4455,13 +4492,14 @@
           const text = paste.value.trim();
           review.innerHTML = "";
           if (!text) {
-            setStatus(status, false, "paste an import command or encoded bundle");
+            setStatus(status, false, "paste an import command, encoded bundle, or workflow YAML");
             return;
           }
+          const yamlName = (nameIn.value || "").trim();
           setStatus(status, "info", "loading preview…");
           const r = await api("/api/import/preview", {
             method: "POST",
-            body: JSON.stringify({ text }),
+            body: JSON.stringify({ text, name: yamlName || undefined }),
           });
           if (!r.data.ok) {
             setStatus(status, false, r.data.error || "preview failed");
@@ -4564,7 +4602,7 @@
               )
             )
               return;
-            await writeImport(text, scope, false);
+            await writeImport(text, scope, false, yamlName || undefined);
           });
           confirmBtn.className = "primary";
           actions.appendChild(confirmBtn);
@@ -4574,12 +4612,12 @@
           resultBox.className = "status";
           review.appendChild(resultBox);
 
-          async function writeImport(payload, scope, replaceAll) {
+          async function writeImport(payload, scope, replaceAll, name) {
             const out = $("import-result") || resultBox;
             setStatus(out, "info", replaceAll ? "replacing…" : "importing…");
             const wr = await api("/api/import", {
               method: "POST",
-              body: JSON.stringify({ text: payload, scope, replaceAll }),
+              body: JSON.stringify({ text: payload, scope, replaceAll, name }),
             });
             if (wr.status === 409) {
               const conflicts = wr.data.conflicts || [];
@@ -4594,7 +4632,7 @@
                 setStatus(out, false, "import cancelled — existing files kept");
                 return;
               }
-              return writeImport(payload, scope, true);
+              return writeImport(payload, scope, true, name);
             }
             if (!wr.data.ok) {
               setStatus(out, false, wr.data.error || "import failed");
@@ -4667,6 +4705,7 @@
       // #w=<scope>:<name> — editor deep link
       // #share=<scope>:<name> — share bundle + import command
       // #import — paste/preview/confirm import (no run)
+      // #new — blank unsaved editor (same as + new)
       // empty hash — leave share/import (and editor deep-link) for the workflow list
       function applyHash() {
         const hash = location.hash.slice(1);
@@ -4683,6 +4722,15 @@
           tab = "workflows";
           syncWorkflowLayout();
           renderWorkflows();
+          return;
+        }
+        if (hash === "new") {
+          if (routeView && routeView.kind === "new") return;
+          if (!confirmLeave()) {
+            restoreRouteHash();
+            return;
+          }
+          newWorkflow();
           return;
         }
         if (hash === "import") {

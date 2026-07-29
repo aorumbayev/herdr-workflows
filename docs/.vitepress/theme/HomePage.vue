@@ -89,8 +89,8 @@ steps:
         <article>
           <h3>prefix+k</h3>
           <p>
-            The picker runs workflows. In list mode, <code>Ctrl+E</code>, <code>Ctrl+Y</code>, and
-            <code>Ctrl+O</code> open edit, share, or import in the workbench.
+            The picker runs workflows. In list mode, <code>Ctrl+K</code> opens actions: new, import,
+            examples, open, share-copy, and delete.
           </p>
         </article>
         <article>

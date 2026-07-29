@@ -17,8 +17,9 @@ import {
 } from "@opentui/core";
 import type { InvocationContext, WorkflowsConfig } from "../config";
 import { profileNames } from "../config";
+import { loadConfig } from "../config";
 import { sanitizeDisplay } from "../herdr";
-import { loadWorkflowEntry, resolveDynamicChoices } from "../workflow/load";
+import { listWorkflows, loadWorkflowEntry, resolveDynamicChoices } from "../workflow/load";
 import { nextActiveInput } from "../workflow/inputs";
 import {
   analyzeResolvedSensitivity,
@@ -27,6 +28,18 @@ import {
 } from "../workflow/trust";
 import type { InputSpec, LoadedWorkflow, WorkflowListEntry } from "../workflow/types";
 import { parseWebRoute } from "../web/route";
+import {
+  deleteWorkflowFile,
+  EMPTY_CATALOG_MESSAGE,
+  EMPTY_LIST_HINT,
+  formatPaletteBody,
+  openExamplesInBrowser,
+  PALETTE_HINT,
+  DELETE_CONFIRM_HINT,
+  resolvePaletteLetter,
+  shareWorkflowCopy,
+  type ResolvedPaletteAction,
+} from "./picker-actions";
 import {
   launchDetachedRun,
   launchDetachedWeb,
@@ -224,9 +237,10 @@ export function filterChoiceOptions(options: string[], filter: string): string[]
 }
 
 export type PickerState = {
-  mode: "list" | "input" | "run";
+  mode: "list" | "input" | "run" | "palette" | "delete-confirm";
   entries: WorkflowListEntry[];
   pending?: WorkflowListEntry;
+  deleteTarget?: WorkflowListEntry;
   inputQueue: InputSpec[];
   inputIndex: number;
   inputValues: Record<string, string>;
@@ -248,6 +262,7 @@ export type PickerState = {
   ) => Promise<LoadedWorkflow>;
   launchRun?: (req: LaunchRunRequest) => DetachedRunHandle;
   launchWeb?: (req: LaunchWebRequest) => void;
+  reloadEntries: () => Promise<WorkflowListEntry[]>;
   runHandle?: DetachedRunHandle;
   workflow?: LoadedWorkflow;
   contentWidth: number;
@@ -267,7 +282,7 @@ export type PickerState = {
   newerReleaseVersion?: string;
 };
 
-export const LIST_HINT = `enter run${CHROME_SEP}^e edit${CHROME_SEP}^y share${CHROME_SEP}^o import${CHROME_SEP}esc`;
+export const LIST_HINT = `enter run${CHROME_SEP}ctrl+k${CHROME_SEP}esc`;
 const CHOICE_HINT = `type filter${CHROME_SEP}up/down move${CHROME_SEP}enter select${CHROME_SEP}esc back`;
 const CUSTOM_CHOICE_HINT = `type filter${CHROME_SEP}up/down${CHROME_SEP}enter select/custom${CHROME_SEP}esc back`;
 const RUN_HINT = `esc dismiss${CHROME_SEP}run continues`;
@@ -276,6 +291,9 @@ const FAIL_HINT = "enter/esc close";
 /** Every chrome fragment the picker draws; each glyph must be unambiguous single-column. */
 export const PICKER_CHROME_STRINGS: readonly string[] = [
   LIST_HINT,
+  EMPTY_LIST_HINT,
+  PALETTE_HINT,
+  DELETE_CONFIRM_HINT,
   CHOICE_HINT,
   CUSTOM_CHOICE_HINT,
   RUN_HINT,
@@ -288,6 +306,7 @@ export const PICKER_CHROME_STRINGS: readonly string[] = [
   "filter...",
   "prompt...",
   `enter submit${CHROME_SEP}esc back`,
+  EMPTY_CATALOG_MESSAGE,
 ];
 
 export function formatRule(contentWidth: number): string {
@@ -299,18 +318,19 @@ export function formatListFooter(
   contentWidth: number,
   selectedIndex: number,
   total: number,
+  hint: string = LIST_HINT,
 ): string {
-  if (total === 0) return truncate(LIST_HINT, contentWidth);
+  if (total === 0) return truncate(hint, contentWidth);
   const counter = `${selectedIndex + 1}/${total}`;
-  const hintCols = columns(LIST_HINT);
+  const hintCols = columns(hint);
   const counterCols = columns(counter);
   if (hintCols + 1 + counterCols <= contentWidth) {
     const pad = contentWidth - hintCols - counterCols;
-    return `${LIST_HINT}${" ".repeat(pad)}${counter}`;
+    return `${hint}${" ".repeat(pad)}${counter}`;
   }
-  const hint = truncate(LIST_HINT, Math.max(0, contentWidth - counterCols - 1));
-  const pad = Math.max(0, contentWidth - columns(hint) - counterCols);
-  return `${hint}${" ".repeat(pad)}${counter}`;
+  const clipped = truncate(hint, Math.max(0, contentWidth - counterCols - 1));
+  const pad = Math.max(0, contentWidth - columns(clipped) - counterCols);
+  return `${clipped}${" ".repeat(pad)}${counter}`;
 }
 
 function takeWrappedLine(text: string, budget: number): string {
@@ -338,17 +358,27 @@ function updateDetail(state: PickerState): void {
     state.detail.content = "";
     return;
   }
-  const option =
-    state.list.options.length > 0 ? state.list.options[state.list.getSelectedIndex()] : undefined;
+  if (!hasVisibleEntries(state.entries)) {
+    state.detail.content = formatDetailLines(EMPTY_CATALOG_MESSAGE, state.contentWidth);
+    return;
+  }
+  if (state.list.options.length === 0) {
+    const needle = state.filter.value.trim() || "…";
+    state.detail.content = formatDetailLines(`No workflows matching ${needle}`, state.contentWidth);
+    return;
+  }
+  const option = state.list.options[state.list.getSelectedIndex()];
   state.detail.content = formatDetailLines(option?.description ?? "", state.contentWidth);
 }
 
 function updateListFooter(state: PickerState): void {
   if (state.mode !== "list") return;
+  const hint = hasVisibleEntries(state.entries) ? LIST_HINT : EMPTY_LIST_HINT;
   state.footer.content = formatListFooter(
     state.contentWidth,
     state.list.getSelectedIndex(),
     state.list.options.length,
+    hint,
   );
 }
 
@@ -426,8 +456,9 @@ function hideBrowserChrome(state: PickerState): void {
 
 function showBrowserChrome(state: PickerState): void {
   state.promptInput.visible = false;
-  state.filterRow.visible = true;
-  state.filter.visible = true;
+  const showFilter = hasVisibleEntries(state.entries);
+  state.filterRow.visible = showFilter;
+  state.filter.visible = showFilter;
   state.filter.placeholder = "filter...";
   state.filter.value = "";
   state.listBlock.visible = true;
@@ -507,7 +538,8 @@ function setListMode(state: PickerState): void {
   state.status.content = "";
   state.status.flexGrow = 0;
   applyFilter(state);
-  state.filter.focus();
+  if (state.filter.visible) state.filter.focus();
+  else state.list.focus();
 }
 
 /**
@@ -692,25 +724,6 @@ export function selectedListEntry(state: PickerState): WorkflowListEntry | undef
   return value?.entry;
 }
 
-/**
- * Resolve a list-mode workbench shortcut.
- * `undefined` = not a workbench shortcut; `"noop"` = recognized but no launch;
- * otherwise a validated route hash for `hwf web`.
- */
-export function resolveListWorkbenchRoute(
-  key: { name: string; ctrl: boolean },
-  selected: WorkflowListEntry | undefined,
-): string | "noop" | undefined {
-  if (!key.ctrl) return undefined;
-  const name = key.name.toLowerCase();
-  if (name === "o") return "import";
-  if (name !== "e" && name !== "y") return undefined;
-  if (!selected) return "noop";
-  const kind = name === "e" ? "w" : "share";
-  const route = `${kind}=${selected.source}:${selected.name}`;
-  return parseWebRoute(route) ? route : "noop";
-}
-
 export function launchWorkbenchRoute(state: PickerState, route: string): void {
   const parsed = parseWebRoute(route);
   if (!parsed) return;
@@ -726,13 +739,105 @@ export function launchWorkbenchRoute(state: PickerState, route: string): void {
   finish(state, 0);
 }
 
-export function tryListWorkbenchShortcut(state: PickerState, key: KeyEvent): boolean {
-  if (state.mode !== "list") return false;
-  const resolved = resolveListWorkbenchRoute(key, selectedListEntry(state));
-  if (resolved === undefined) return false;
+function openActionsPalette(state: PickerState): void {
+  state.mode = "palette";
+  state.deleteTarget = undefined;
+  hideBrowserChrome(state);
+  hideListChrome(state);
+  showStatus(state, formatPaletteBody(selectedListEntry(state)), { flexGrow: 1 });
+  state.footer.content = PALETTE_HINT;
+}
+
+function openDeleteConfirm(state: PickerState, entry: WorkflowListEntry): void {
+  state.mode = "delete-confirm";
+  state.deleteTarget = entry;
+  hideBrowserChrome(state);
+  hideListChrome(state);
+  showStatus(state, `Delete ${entry.name} (${entry.source})?\ny  yes, delete\nn  no`, {
+    flexGrow: 1,
+  });
+  state.footer.content = DELETE_CONFIRM_HINT;
+}
+
+function failPalette(state: PickerState, label: string, error: unknown): void {
+  const detail = truncate(error instanceof Error ? error.message : String(error), 60);
+  showStatus(state, `${label}${CHROME_SEP}${detail}`);
+  state.footer.content = PALETTE_HINT;
+}
+
+async function runPaletteAction(state: PickerState, action: ResolvedPaletteAction): Promise<void> {
+  if (action.id === "new" || action.id === "import" || action.id === "open") {
+    launchWorkbenchRoute(state, action.route);
+    return;
+  }
+  if (action.id === "examples") {
+    try {
+      await openExamplesInBrowser();
+    } catch (error) {
+      failPalette(state, "examples failed", error);
+      return;
+    }
+    setListMode(state);
+    return;
+  }
+  if (action.id === "share") {
+    try {
+      await shareWorkflowCopy({ entry: action.entry, repoRoot: state.repoRoot });
+    } catch (error) {
+      failPalette(state, "share failed", error);
+      return;
+    }
+    setListMode(state);
+    return;
+  }
+  if (action.id === "delete") openDeleteConfirm(state, action.entry);
+}
+
+function handlePaletteKey(state: PickerState, key: KeyEvent): void {
+  if (key.name === "escape") {
+    key.preventDefault();
+    setListMode(state);
+    return;
+  }
+  if (key.ctrl || key.meta || key.sequence.length !== 1) return;
+  const letter = key.sequence.toLowerCase();
+  const action = resolvePaletteLetter(letter, selectedListEntry(state));
+  if (!action) return;
   key.preventDefault();
-  if (resolved === "noop") return true;
-  launchWorkbenchRoute(state, resolved);
+  void runPaletteAction(state, action);
+}
+
+function handleDeleteConfirmKey(state: PickerState, key: KeyEvent): void {
+  if (key.name === "escape" || (key.sequence.length === 1 && key.sequence.toLowerCase() === "n")) {
+    key.preventDefault();
+    openActionsPalette(state);
+    return;
+  }
+  if (!(key.sequence.length === 1 && key.sequence.toLowerCase() === "y")) return;
+  key.preventDefault();
+  const entry = state.deleteTarget;
+  if (!entry) {
+    setListMode(state);
+    return;
+  }
+  void (async () => {
+    try {
+      await deleteWorkflowFile(entry);
+      state.entries = await state.reloadEntries();
+      setListMode(state);
+    } catch (error) {
+      const detail = truncate(error instanceof Error ? error.message : String(error), 60);
+      showStatus(state, `delete failed${CHROME_SEP}${detail}`);
+      state.footer.content = DELETE_CONFIRM_HINT;
+    }
+  })();
+}
+
+export function tryOpenActionsPalette(state: PickerState, key: KeyEvent): boolean {
+  if (state.mode !== "list") return false;
+  if (!key.ctrl || key.name.toLowerCase() !== "k") return false;
+  key.preventDefault();
+  openActionsPalette(state);
   return true;
 }
 
@@ -772,6 +877,8 @@ function backtrackInput(state: PickerState): void {
 
 function handlePickerKey(state: PickerState, key: KeyEvent): void {
   if (state.mode === "run") return handleRunKey(state, key);
+  if (state.mode === "palette") return handlePaletteKey(state, key);
+  if (state.mode === "delete-confirm") return handleDeleteConfirmKey(state, key);
   if (key.name === "escape") {
     key.preventDefault();
     if (state.mode === "list") finish(state, 0);
@@ -780,27 +887,19 @@ function handlePickerKey(state: PickerState, key: KeyEvent): void {
     return;
   }
   if (state.mode === "input") return handleInputKey(state, key);
-  if (tryListWorkbenchShortcut(state, key)) return;
+  if (tryOpenActionsPalette(state, key)) return;
   navigateSelectList(state, key);
 }
 
-/** herdr prefix-key C0 bytes sit in the popup PTY; drop buffered + ignore late leaks. */
-const WORKBENCH_SHORTCUT_C0 = new Set([
-  0x05, // Ctrl+E
-  0x0f, // Ctrl+O
-  0x19, // Ctrl+Y
-]);
-
 /**
  * True when a raw stdin sequence should be dropped as a herdr prefix-key leak.
- * Keeps tab/newline/CR/escape and Ctrl+E/O/Y so OpenTUI can emit workbench keypresses.
+ * Keeps tab/newline/CR/escape and Ctrl+K (0x0b) so OpenTUI can emit the actions-palette keypress.
  */
 export function shouldDropStdinLeakSequence(sequence: string): boolean {
   if (sequence.length !== 1) return false;
   const c = sequence.charCodeAt(0);
   if (c >= 0x20) return false;
-  if (c === 0x09 || c === 0x0a || c === 0x0d || c === 0x1b) return false;
-  if (WORKBENCH_SHORTCUT_C0.has(c)) return false;
+  if (c === 0x09 || c === 0x0a || c === 0x0d || c === 0x1b || c === 0x0b) return false;
   return true;
 }
 
@@ -1176,6 +1275,11 @@ export async function runPickerSession(opts: PickerSessionOpts): Promise<number>
     config: opts.config,
     ctx: opts.ctx,
     loadWorkflow: loadWorkflowEntry,
+    reloadEntries: async () => {
+      const config = await loadConfig(opts.repoRoot);
+      state.config = config;
+      return listWorkflows(opts.repoRoot, config);
+    },
     contentWidth: pickerContentWidth(renderer.width),
     theme,
     ...ui,

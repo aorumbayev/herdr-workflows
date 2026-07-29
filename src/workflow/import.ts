@@ -13,7 +13,13 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { decodePayload, type WorkflowBundle } from "./payload";
+import { assertUnderCaptureCap } from "../limits";
+import {
+  assertWorkflowName,
+  decodePayload,
+  looksLikeWorkflowYaml,
+  type WorkflowBundle,
+} from "./payload";
 import { parseRaw } from "./parse";
 import {
   analyzeRawWorkflow,
@@ -54,16 +60,35 @@ export type BundlePreview = {
   text: string;
 };
 
+function bundleFromRawYaml(yaml: string, name: string): WorkflowBundle {
+  const n = assertWorkflowName(name);
+  const body = yaml.trim();
+  assertUnderCaptureCap("workflow yaml", body);
+  parseRaw(`${n}.yaml`, body);
+  return [{ name: n, yaml: body }];
+}
+
 /**
  * Schema-only check. Deliberately not the full load path: that resolves child workflows and
  * runs `options:` shell commands, which would execute the payload before the user consents.
+ * Accepts a shared bundle/command, or raw workflow YAML when `name` is supplied.
  */
-export function checkPayload(payload: string): WorkflowBundle {
-  const bundle = decodePayload(payload);
-  for (const entry of bundle) {
-    parseRaw(`${entry.name}.yaml`, entry.yaml);
+export function checkPayload(payload: string, opts?: { name?: string }): WorkflowBundle {
+  const text = payload.trim();
+  try {
+    const bundle = decodePayload(text);
+    for (const entry of bundle) {
+      parseRaw(`${entry.name}.yaml`, entry.yaml);
+    }
+    return bundle;
+  } catch (error) {
+    if (!looksLikeWorkflowYaml(text)) throw error;
+    const name = opts?.name;
+    if (!name) {
+      throw new WorkflowLoadError("raw YAML import requires a workflow name");
+    }
+    return bundleFromRawYaml(text, name);
   }
-  return bundle;
 }
 
 export function previewBundle(bundle: WorkflowBundle): BundlePreview {
@@ -372,12 +397,13 @@ export async function runImport(
     home?: string;
     scope?: ImportScope;
     force?: boolean;
+    name?: string;
     prompts?: ImportPrompts;
     afterPublish?: (info: { name: string; path: string }) => void | Promise<void>;
     beforeSwap?: () => void | Promise<void>;
   },
 ): Promise<{ bundle: WorkflowBundle; result: ImportWriteResult; dir: string } | { aborted: true }> {
-  const bundle = checkPayload(payload);
+  const bundle = checkPayload(payload, { name: opts.name });
   const preview = previewBundle(bundle);
   if (opts.prompts && !(await opts.prompts.confirm(preview.text))) {
     return { aborted: true };
