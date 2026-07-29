@@ -514,7 +514,7 @@
   },
   "required": ["version", "steps"],
   "additionalProperties": false,
-  "$id": "https://raw.githubusercontent.com/aorumbayev/herdr-workflows/main/docs/workflow.schema.json",
+  "$id": "https://raw.githubusercontent.com/aorumbayev/herdr-workflows/v0.2.0/docs/workflow.schema.json",
   "title": "herdr-workflows workflow",
   "description": "Linear YAML workflow for the herdr-workflows herdr plugin (format v1alpha1). Cross-field rules are enforced by the parser and loader, not this schema."
 }

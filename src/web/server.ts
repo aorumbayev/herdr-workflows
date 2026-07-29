@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { globalConfigPath, loadConfig, parseConfigText, repoConfigPath } from "../config";
+import { workflowSchemaUrl } from "../setup/paths";
 import { HERDR_METHOD_BY_NAME } from "../herdr-methods.generated";
 import { readRunLog, recentRuns } from "../runlog";
 import { exportWorkflowBundle } from "../workflow/export";
@@ -61,6 +62,26 @@ async function claimFile(file: string, text: string, taken: string): Promise<Res
 
 function scopeOf(v: unknown): Scope | undefined {
   return v === "repo" || v === "global" ? v : undefined;
+}
+
+const SCHEMA_POINTER_RE = /^#\s*yaml-language-server:\s*\$schema=\S+\s*$/;
+
+function schemaPointer(): string {
+  return `# yaml-language-server: $schema=${workflowSchemaUrl()}`;
+}
+
+/**
+ * Give workflow text a schema pointer for the contract this build implements. Any pointer already
+ * present is replaced wherever it sits, so a file authored against another version cannot end up
+ * carrying two contradictory pointers. Text already pinned is returned byte-identical.
+ */
+function withPinnedSchemaPointer(text: string): string {
+  const pointer = schemaPointer();
+  if (text.length === 0) return `${pointer}\n`;
+  const lines = text.split("\n");
+  const kept = lines.filter((line) => !SCHEMA_POINTER_RE.test(line));
+  if (kept.length === lines.length - 1 && lines[0] === pointer) return text;
+  return [pointer, ...kept].join("\n");
 }
 
 /**
@@ -189,6 +210,7 @@ function dumpInputs(lines: string[], inputs: NonNullable<RawWorkflowDoc["inputs"
 
 export function dumpWorkflow(doc: RawWorkflowDoc): string {
   const lines: string[] = [];
+  lines.push(schemaPointer());
   lines.push(`version: ${scalar(doc.version)}`);
   if (doc.title) {
     field(lines, "", "title", doc.title);
@@ -275,6 +297,7 @@ async function getState(repoRoot: string): Promise<Response> {
     canonicalRepoRoot: repoRoot,
     profiles,
     entries: mapped,
+    workflowSchemaUrl: workflowSchemaUrl(),
   });
 }
 
@@ -399,8 +422,9 @@ async function writeWorkflow(
   base?: string,
 ): Promise<Response> {
   if (!WORKFLOW_NAME_RE.test(name)) return json({ ok: false, error: "invalid workflow name" }, 400);
+  const normalized = withPinnedSchemaPointer(text);
   try {
-    await parseWorkflowText(name, text, await loadConfig(repoRoot), repoRoot, `${name}.yaml`);
+    await parseWorkflowText(name, normalized, await loadConfig(repoRoot), repoRoot, `${name}.yaml`);
   } catch (error) {
     return json({ ok: false, error: errText(error) }, 400);
   }
@@ -422,12 +446,12 @@ async function writeWorkflow(
       );
     }
     await mkdir(dirname(file), { recursive: true });
-    await Bun.write(file, text);
-    return json({ ok: true, base: contentToken(text) });
+    await Bun.write(file, normalized);
+    return json({ ok: true, base: contentToken(normalized) });
   }
-  const claimed = await claimFile(file, text, `'${name}' already exists in ${scope}`);
+  const claimed = await claimFile(file, normalized, `'${name}' already exists in ${scope}`);
   if (claimed) return claimed;
-  if (!previous) return json({ ok: true });
+  if (!previous) return json({ ok: true, base: contentToken(normalized) });
   return dropSource(workflowPath(previous.scope, repoRoot, previous.name), file, previous.name);
 }
 

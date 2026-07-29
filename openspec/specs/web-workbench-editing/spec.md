@@ -22,6 +22,25 @@ The workbench MUST consider a workflow unsaved when its name, selected scope, or
 - **WHEN** the workbench cannot remove a workflow file
 - **THEN** the failure is reported and the workflow is not presented as deleted
 
+### Requirement: Workbench-written workflows carry a build-pinned schema pointer
+A workflow the workbench writes MUST begin with a schema pointer that resolves to the workflow contract this build implements, and MUST NOT reference a ref whose content can change independently of the build. A pointer already present MUST be replaced wherever it appears rather than duplicated. The rest of the text, including the format version line and the author's formatting, MUST be preserved, and the save baseline the workbench reports MUST identify the bytes actually written. Resolving the pointer MUST NOT require a network call at save time.
+
+#### Scenario: No schema pointer present
+- **WHEN** the workbench saves workflow text carrying no schema pointer
+- **THEN** the written file begins with a pointer to this build's contract and the remainder of the text is unchanged
+
+#### Scenario: Pointer names another build's contract
+- **WHEN** the workbench saves workflow text whose schema pointer references a different ref, on the first line or below it
+- **THEN** that pointer is replaced with this build's pointer and the file carries exactly one
+
+#### Scenario: Pointer already correct
+- **WHEN** the workbench saves workflow text already pinned to this build's contract
+- **THEN** the written bytes are identical to the submitted text
+
+#### Scenario: Saving normalized text again
+- **WHEN** a save adds or replaces the pointer and the editor saves again from the baseline that save reported
+- **THEN** the second save is accepted rather than rejected as stale
+
 ### Requirement: Scope changes are applied by explicit save
 The workflow scope selector MUST mark a changed scope as unsaved and MUST NOT move a workflow immediately. A successful Save MUST apply a rename or re-scope as a single request that claims the destination and removes the original source. A save MUST NOT destroy content the buffer was not derived from: it MUST replace only content that still matches what the editor loaded, and MUST otherwise be rejected as stale, naming the conflict and leaving the file as the other writer left it. A save that cannot complete MUST leave the filesystem unchanged. The editor MUST NOT provide a separate move-to-scope action.
 

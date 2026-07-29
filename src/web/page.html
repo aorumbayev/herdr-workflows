@@ -1422,7 +1422,16 @@
         current = { name: "", scope: "repo" };
         syncWorkflowLayout();
         renderWorkflows();
-        renderEditor("", "repo", "version: v1alpha1\nsteps:\n  - run: [echo, hello]\n", "", []);
+        const pointer = state.workflowSchemaUrl
+          ? "# yaml-language-server: $schema=" + state.workflowSchemaUrl + "\n"
+          : "";
+        renderEditor(
+          "",
+          "repo",
+          pointer + "version: v1alpha1\nsteps:\n  - run: [echo, hello]\n",
+          "",
+          [],
+        );
       }
 
       // Readable step blocks appended at the end of the step list (the right slot for a linear runner).

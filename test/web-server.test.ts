@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { workflowSchemaUrl } from "../src/setup/paths";
 import { dropSource, startWebServer, type WebServer } from "../src/web/server";
 
 const dirs: string[] = [];
@@ -57,9 +58,15 @@ describe("web server security", () => {
     const { base, token } = await serve(root);
     const res = await fetch(`${base}/api/state`, { headers: { "x-hwf-token": token } });
     expect(res.status).toBe(200);
-    const data = (await res.json()) as { profiles: string[]; canonicalRepoRoot: string };
+    const data = (await res.json()) as {
+      profiles: string[];
+      canonicalRepoRoot: string;
+      workflowSchemaUrl: string;
+    };
     expect(data.profiles).toContain("claude");
     expect(data.canonicalRepoRoot).toBe(root);
+    expect(data.workflowSchemaUrl).toBe(workflowSchemaUrl());
+    expect(data.workflowSchemaUrl).not.toContain("/main/");
   });
 
   test("workflow GET rejects path-traversal names", async () => {
@@ -425,6 +432,120 @@ steps:
     });
     expect(((await res.json()) as { ok: boolean }).ok).toBe(true);
     expect(await Bun.file(join(root, ".hwf", "workflows", "good.yaml")).exists()).toBe(true);
+  });
+
+  // A workflow written by the workbench must point an editor at the contract THIS build
+  // implements; a moving ref would describe some other version's schema.
+  test("PUT pins a missing schema pointer, and the next save from the returned base works", async () => {
+    const root = await repo();
+    const file = join(root, ".hwf", "workflows", "edit.yaml");
+    const body = `${V1}steps:\n  - run: echo hi\n`;
+    await writeFile(file, body);
+    const { base, token } = await serve(root);
+    const loaded = (await (
+      await fetch(`${base}/api/workflow?name=edit&scope=repo`, {
+        headers: { "x-hwf-token": token },
+      })
+    ).json()) as { base: string };
+    const first = await fetch(`${base}/api/workflow`, {
+      method: "PUT",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "edit",
+        scope: "repo",
+        previousName: "edit",
+        previousScope: "repo",
+        base: loaded.base,
+        text: body,
+      }),
+    });
+    expect(first.status).toBe(200);
+    const firstBody = (await first.json()) as { ok: boolean; base: string };
+    const pointer = `# yaml-language-server: $schema=${workflowSchemaUrl()}`;
+    const onDisk = await Bun.file(file).text();
+    expect(onDisk).toBe(`${pointer}\n${body}`);
+
+    // The baseline must name the bytes that landed, or normalization breaks the next save.
+    const second = await fetch(`${base}/api/workflow`, {
+      method: "PUT",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "edit",
+        scope: "repo",
+        previousName: "edit",
+        previousScope: "repo",
+        base: firstBody.base,
+        text: onDisk.replace("echo hi", "echo again"),
+      }),
+    });
+    expect(second.status).toBe(200);
+    expect(await Bun.file(file).text()).toContain("echo again");
+  });
+
+  test("PUT replaces a pointer pinned elsewhere, wherever it sits, without duplicating it", async () => {
+    const root = await repo();
+    const stale =
+      "# yaml-language-server: $schema=https://raw.githubusercontent.com/aorumbayev/herdr-workflows/main/docs/workflow.schema.json";
+    for (const [name, text] of [
+      ["first", `${stale}\n${V1}steps:\n  - run: echo hi\n`],
+      ["below", `${V1}${stale}\nsteps:\n  - run: echo hi\n`],
+    ] as const) {
+      const file = join(root, ".hwf", "workflows", `${name}.yaml`);
+      await writeFile(file, text);
+      const { base, token } = await serve(root);
+      const loaded = (await (
+        await fetch(`${base}/api/workflow?name=${name}&scope=repo`, {
+          headers: { "x-hwf-token": token },
+        })
+      ).json()) as { base: string };
+      const res = await fetch(`${base}/api/workflow`, {
+        method: "PUT",
+        headers: { "x-hwf-token": token, "content-type": "application/json" },
+        body: JSON.stringify({
+          name,
+          scope: "repo",
+          previousName: name,
+          previousScope: "repo",
+          base: loaded.base,
+          text,
+        }),
+      });
+      expect(res.status).toBe(200);
+      const onDisk = await Bun.file(file).text();
+      expect(onDisk.match(/yaml-language-server:/g)?.length).toBe(1);
+      expect(onDisk).not.toContain("/main/");
+      expect(onDisk.startsWith(`# yaml-language-server: $schema=${workflowSchemaUrl()}\n`)).toBe(
+        true,
+      );
+      expect(onDisk).toContain("run: echo hi");
+    }
+  });
+
+  test("PUT leaves an already-pinned pointer byte-identical", async () => {
+    const root = await repo();
+    const file = join(root, ".hwf", "workflows", "edit.yaml");
+    const body = `# yaml-language-server: $schema=${workflowSchemaUrl()}\n${V1}steps:\n  - run: echo hi\n`;
+    await writeFile(file, body);
+    const { base, token } = await serve(root);
+    const loaded = (await (
+      await fetch(`${base}/api/workflow?name=edit&scope=repo`, {
+        headers: { "x-hwf-token": token },
+      })
+    ).json()) as { base: string };
+    const res = await fetch(`${base}/api/workflow`, {
+      method: "PUT",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "edit",
+        scope: "repo",
+        previousName: "edit",
+        previousScope: "repo",
+        base: loaded.base,
+        text: body,
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(await Bun.file(file).text()).toBe(body);
   });
 
   test("same-path PUT overwrites the workflow the buffer was loaded from", async () => {
