@@ -461,16 +461,52 @@ function setListMode(state: PickerState): void {
   state.filter.focus();
 }
 
+/**
+ * What the prompt is collecting, then how to answer it. The description carries the author's
+ * intent; without one the type and domain still say more than a bare name.
+ */
 export function formatInputPrompt(spec: InputSpec): string {
   const desc = spec.description?.trim();
   const label = desc ? `${spec.name} — ${desc}` : spec.name;
-  if (spec.type === "text") return `${label} · type free text`;
-  return `${label} · type to filter, enter to select`;
+  const hints: string[] = [];
+  if (spec.type === "text") {
+    hints.push("type free text");
+    if (spec.default) hints.push(`default ${spec.default}`);
+  } else {
+    const count = spec.options?.length;
+    hints.push(count === undefined ? "pick one" : `pick one of ${count}`);
+    if (spec.allowCustom) hints.push("or type your own");
+  }
+  if (spec.minLength !== undefined && spec.minLength > 0) {
+    hints.push(`min ${spec.minLength} char${spec.minLength === 1 ? "" : "s"}`);
+  }
+  return `${label} · ${hints.join(" · ")}`;
 }
 
-function inputStatusLine(entry: WorkflowListEntry, spec: InputSpec): string {
+/** Answers already collected, so a filtered domain is not a mystery. */
+export function formatInputAnswers(
+  queue: InputSpec[],
+  values: Record<string, string>,
+  contentWidth: number,
+): string {
+  const answered = queue
+    .filter((spec) => Object.hasOwn(values, spec.name))
+    .map((spec) => `${spec.name}=${values[spec.name]}`);
+  if (answered.length === 0) return "";
+  return truncate(`chosen: ${answered.join(" · ")}`, contentWidth);
+}
+
+function inputStatusLine(
+  entry: WorkflowListEntry,
+  spec: InputSpec,
+  ordinal: number,
+  answers: string,
+): string {
   const title = workflowDisplayTitle(entry.name, entry.title);
-  return `${title} · ${entry.source}\n${formatInputPrompt(spec)}`;
+  const head = `${title} · ${entry.source} · input ${ordinal}`;
+  const lines = [head, formatInputPrompt(spec)];
+  if (answers) lines.push(answers);
+  return lines.join("\n");
 }
 
 function emptyInputOptionsError(spec: InputSpec): string {
@@ -489,7 +525,18 @@ function setInputMode(state: PickerState, entry: WorkflowListEntry, spec: InputS
   state.pending = entry;
   state.customChoice = spec.allowCustom === true;
   hideListChrome(state);
-  showStatus(state, inputStatusLine(entry, spec));
+  const answered = state.inputQueue.filter(
+    (other) => other.name !== spec.name && Object.hasOwn(state.inputValues, other.name),
+  );
+  showStatus(
+    state,
+    inputStatusLine(
+      entry,
+      spec,
+      answered.length + 1,
+      formatInputAnswers(answered, state.inputValues, state.contentWidth),
+    ),
+  );
   const hasAnswer = Object.hasOwn(state.inputValues, spec.name);
   const restored = hasAnswer ? state.inputValues[spec.name]! : undefined;
   if (spec.type === "choice" || spec.type === "profile") {

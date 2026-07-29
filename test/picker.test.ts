@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { WorkflowListEntry } from "../src/workflow/types";
+import type { InputSpec, WorkflowListEntry } from "../src/workflow/types";
 import {
   buildInvalidOptions,
   buildPickerOptions,
@@ -8,6 +8,7 @@ import {
   filterChoiceOptions,
   filterWorkflowEntries,
   formatDetailLines,
+  formatInputAnswers,
   formatInputPrompt,
   formatListFooter,
   formatPickerRowName,
@@ -293,16 +294,14 @@ describe("filterChoiceOptions", () => {
 
 describe("formatInputPrompt", () => {
   test("names the input, description, and line role", () => {
-    expect(formatInputPrompt({ name: "target", type: "profile" })).toBe(
-      "target · type to filter, enter to select",
-    );
+    expect(formatInputPrompt({ name: "target", type: "profile" })).toBe("target · pick one");
     expect(
       formatInputPrompt({
         name: "target",
         type: "profile",
         description: "Agent to hand off to",
       }),
-    ).toBe("target — Agent to hand off to · type to filter, enter to select");
+    ).toBe("target — Agent to hand off to · pick one");
     expect(formatInputPrompt({ name: "focus", type: "text" })).toBe("focus · type free text");
     expect(
       formatInputPrompt({
@@ -311,7 +310,61 @@ describe("formatInputPrompt", () => {
         options: ["main"],
         description: "Which branch",
       }),
-    ).toBe("branch — Which branch · type to filter, enter to select");
+    ).toBe("branch — Which branch · pick one of 1");
+  });
+
+  test("states the domain size, custom entry, default, and minimum length", () => {
+    expect(
+      formatInputPrompt({ name: "ref", type: "choice", options: ["main", "dev", "next"] }),
+    ).toBe("ref · pick one of 3");
+    expect(
+      formatInputPrompt({
+        name: "branch",
+        type: "choice",
+        options: ["main"],
+        allowCustom: true,
+        minLength: 1,
+      }),
+    ).toBe("branch · pick one of 1 · or type your own · min 1 char");
+    expect(formatInputPrompt({ name: "focus", type: "text", default: "all" })).toBe(
+      "focus · type free text · default all",
+    );
+    expect(formatInputPrompt({ name: "note", type: "text", minLength: 4 })).toBe(
+      "note · type free text · min 4 chars",
+    );
+  });
+
+  test("reports an unresolved dynamic domain without inventing a count", () => {
+    expect(
+      formatInputPrompt({
+        name: "ref",
+        type: "choice",
+        dynamicOptions: { run: ["git", "branch"] },
+      }),
+    ).toBe("ref · pick one");
+  });
+});
+
+describe("formatInputAnswers", () => {
+  const queue: InputSpec[] = [
+    { name: "mode", type: "choice", options: ["create", "delete"] },
+    { name: "scope", type: "choice", options: ["one", "both"] },
+  ];
+
+  test("lists collected answers in declaration order", () => {
+    expect(formatInputAnswers(queue, { mode: "delete", scope: "both" }, 60)).toBe(
+      "chosen: mode=delete · scope=both",
+    );
+  });
+
+  test("is empty before anything is answered", () => {
+    expect(formatInputAnswers(queue, {}, 60)).toBe("");
+  });
+
+  test("truncates to the content width", () => {
+    expect(formatInputAnswers(queue, { mode: "delete", scope: "both" }, 20)).toBe(
+      "chosen: mode=delete…",
+    );
   });
 });
 
