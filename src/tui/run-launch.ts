@@ -70,18 +70,36 @@ const SERVED_SOURCE_RE = /\.(ts|html)$/;
 export type CodeWatchTarget = { path: string; recursive: boolean };
 
 /**
- * What an owned workbench watches to learn its own code changed. A compiled install watches its
- * executable — a plugin upgrade renames the managed checkout out from under it. A script entry
- * means the executable is only the runtime, so the entry's source tree is the build instead.
+ * Identity of the build this process runs, recorded on an owned workbench's endpoint so an
+ * adopting client can refuse a workbench built from other code. A script entry has no stable
+ * identity — `execPath` is then the runtime, unchanged by edits — so dev relies on the watch
+ * instead.
  */
-export function codeWatchTarget(
+export function buildIdentity(
   entry: string | undefined = Bun.main,
   execPath: string = process.execPath,
-): CodeWatchTarget {
+): string | undefined {
+  if (entry !== undefined && isRuntimeScriptEntry(entry)) return undefined;
+  try {
+    const stat = statSync(execPath);
+    return `${stat.ino}:${stat.mtimeMs}:${stat.size}`;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * What an owned workbench watches to learn its own code changed, or undefined when there is
+ * nothing worth watching. Only a script entry watches: its sources change in place, under a
+ * directory that stays put. A compiled install is covered by build identity at adoption instead —
+ * an upgrade renames the whole managed checkout, and a filesystem watch cannot see a rename of an
+ * ancestor on Linux, where watches are bound to inodes rather than paths.
+ */
+export function codeWatchTarget(entry: string | undefined = Bun.main): CodeWatchTarget | undefined {
   if (entry !== undefined && isRuntimeScriptEntry(entry)) {
     return { path: dirname(entry), recursive: true };
   }
-  return { path: execPath, recursive: false };
+  return undefined;
 }
 
 /**
@@ -91,8 +109,9 @@ export function codeWatchTarget(
  */
 export function retireOnCodeChange(
   onRetire: () => void,
-  target: CodeWatchTarget = codeWatchTarget(),
+  target: CodeWatchTarget | undefined = codeWatchTarget(),
 ): () => void {
+  if (!target) return () => undefined;
   let watcher: FSWatcher;
   try {
     watcher = watch(target.path, { recursive: target.recursive }, (_event, file) => {

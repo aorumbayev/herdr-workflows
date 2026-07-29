@@ -25,7 +25,7 @@ import {
 } from "./workflow/types";
 import { CaptureLimitError } from "./limits";
 import { runWorkflow } from "./run/runner";
-import { parseLaunchPayload, retireOnCodeChange } from "./tui/run-launch";
+import { buildIdentity, parseLaunchPayload, retireOnCodeChange } from "./tui/run-launch";
 import { ensureWorkbench } from "./web/endpoint";
 import { appendRouteHash, parseWebRoute } from "./web/route";
 import { runSetup } from "./setup/run";
@@ -321,7 +321,7 @@ async function cmdWeb(
     );
   }
   const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot());
-  const workbench = await ensureWorkbench({ repoRoot, port });
+  const workbench = await ensureWorkbench({ repoRoot, port, build: buildIdentity() });
   const url = appendRouteHash(workbench.url, route);
   // Open before printing: a detached picker handoff can already have a dead
   // stdout, and SIGPIPE on write must not skip the browser.
@@ -333,8 +333,8 @@ async function cmdWeb(
     process.exit(0);
   };
   registerOwnedWorkbenchShutdown(shutdown);
-  // Adoption trusts any endpoint that answers a probe, so a workbench outliving its own build
-  // would keep serving the previous one to every picker action.
+  // Only a dev script entry watches: a compiled build is refused at adoption by identity, so
+  // stopping here frees the port rather than upholding the invariant.
   retireOnCodeChange(shutdown);
 }
 

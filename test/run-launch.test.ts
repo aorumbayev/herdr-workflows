@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { KeyEvent } from "@opentui/core";
@@ -19,6 +19,7 @@ import {
   buildInvocationEnv,
   buildLaunchPayload,
   buildRunArgs,
+  buildIdentity,
   buildWebLaunchEnv,
   codeWatchTarget,
   isRuntimeScriptEntry,
@@ -753,11 +754,8 @@ async function waitFor(predicate: () => boolean, timeoutMs = 3000): Promise<bool
 }
 
 describe("code-change retirement", () => {
-  test("codeWatchTarget watches the executable for a compiled entry", () => {
-    expect(codeWatchTarget("/$bunfs/root/cli", "/opt/herdr-workflows")).toEqual({
-      path: "/opt/herdr-workflows",
-      recursive: false,
-    });
+  test("a compiled entry has no watch target and relies on build identity", () => {
+    expect(codeWatchTarget("/$bunfs/root/cli")).toBeUndefined();
   });
 
   test("codeWatchTarget watches the source tree for a script entry", async () => {
@@ -765,25 +763,50 @@ describe("code-change retirement", () => {
     dirs.push(root);
     const entry = join(root, "cli.ts");
     await writeFile(entry, "export {};\n");
-    expect(codeWatchTarget(entry, "/runtime/bun")).toEqual({ path: root, recursive: true });
+    expect(codeWatchTarget(entry)).toEqual({ path: root, recursive: true });
   });
 
-  test("replacing the watched executable retires the workbench", async () => {
-    const root = await mkdtemp(join(tmpdir(), "hwf-retire-bin-"));
-    dirs.push(root);
-    const binary = join(root, "herdr-workflows");
-    await writeFile(binary, "build-1");
+  test("no watch target is a no-op disposer, not a failure", () => {
     let retired = 0;
-    const stop = retireOnCodeChange(() => retired++, { path: binary, recursive: false });
-    // fs.watch registers asynchronously on macOS, so a single write can land before the
-    // watcher is armed. Re-trigger until it fires instead of racing one write.
-    let fired = false;
-    for (let build = 2; build < 32 && !fired; build++) {
-      await writeFile(binary, `build-${build}`);
-      fired = await waitFor(() => retired > 0, 100);
-    }
-    expect(fired).toBe(true);
-    stop();
+    const stop = retireOnCodeChange(() => retired++, undefined);
+    expect(retired).toBe(0);
+    expect(() => stop()).not.toThrow();
+  });
+
+  // Every mechanism a plugin upgrade can use to install a new build must change the identity.
+  // A filesystem watch cannot see all three: on Linux, watches bind to inodes, so renaming an
+  // ancestor directory — the managed-checkout case — emits nothing.
+  test("build identity changes however the new build is installed", async () => {
+    const base = await mkdtemp(join(tmpdir(), "hwf-build-id-"));
+    dirs.push(base);
+    const checkout = join(base, "checkout");
+    await mkdir(join(checkout, "bin"), { recursive: true });
+    const binary = join(checkout, "bin", "herdr-workflows");
+    await writeFile(binary, "build-1");
+    const entry = "/$bunfs/root/cli";
+    const before = buildIdentity(entry, binary);
+    expect(before).toBeString();
+
+    await writeFile(binary, "build-2-rewritten-in-place");
+    expect(buildIdentity(entry, binary)).not.toBe(before);
+
+    const staged = join(base, "staged");
+    await writeFile(staged, "build-3");
+    await rename(staged, binary);
+    const afterAtomic = buildIdentity(entry, binary);
+    expect(afterAtomic).not.toBe(before);
+
+    await rename(checkout, join(base, "checkout.old"));
+    expect(buildIdentity(entry, binary)).toBeUndefined();
+    expect(buildIdentity(entry, binary)).not.toBe(afterAtomic);
+  });
+
+  test("a script entry claims no build identity, since its runtime never changes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-build-id-src-"));
+    dirs.push(root);
+    const entry = join(root, "cli.ts");
+    await writeFile(entry, "export {};\n");
+    expect(buildIdentity(entry, process.execPath)).toBeUndefined();
   });
 
   test("a watched source tree retires on served sources only", async () => {
@@ -793,6 +816,10 @@ describe("code-change retirement", () => {
     await writeFile(join(root, "cli.ts"), "export {};\n");
     let retired = 0;
     const stop = retireOnCodeChange(() => retired++, { path: root, recursive: true });
+    // The fixture's own cli.ts write can be delivered after the watcher arms, so let the
+    // directory settle and start counting from a live, quiet watcher.
+    await Bun.sleep(200);
+    retired = 0;
     await writeFile(join(root, "notes.md"), "not served\n");
     await Bun.sleep(200);
     expect(retired).toBe(0);
