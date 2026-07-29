@@ -277,26 +277,35 @@ export function webLaunchStderrPath(stateDir: string = pluginStateDir()): string
  * the web command owns endpoint reuse and browser open.
  * Stdout stays ignored: the picker dismisses and Herdr tears down the popup PTY;
  * inheriting it raises EPIPE in `hwf web` before it can open the browser.
- * Stderr appends to plugin state so post-spawn failures remain diagnosable.
+ * Stderr prefers an append log under plugin state; if that path is unusable,
+ * fall back to ignore so diagnostics never block the handoff.
  */
 export function launchDetachedWeb(req: LaunchWebRequest): void {
   const spawn = req.spawn ?? Bun.spawn.bind(Bun);
   const argv = selfWebArgv([req.route]);
   const env = buildWebLaunchEnv(req.repoRoot, { ...process.env, ...req.env });
-  const stateDir = pluginStateDir(env);
-  mkdirSync(stateDir, { recursive: true });
-  const stderrFd = openSync(webLaunchStderrPath(stateDir), "a");
+  const stderr = openWebLaunchStderr(pluginStateDir(env));
   try {
     const proc = spawn(argv, {
       cwd: req.repoRoot,
       env,
       stdin: "ignore",
       stdout: "ignore",
-      stderr: stderrFd,
+      stderr,
       detached: true,
     });
     proc.unref();
   } finally {
-    closeSync(stderrFd);
+    if (typeof stderr === "number") closeSync(stderr);
+  }
+}
+
+/** Best-effort stderr sink; `"ignore"` when the state log cannot be opened. */
+export function openWebLaunchStderr(stateDir: string): number | "ignore" {
+  try {
+    mkdirSync(stateDir, { recursive: true });
+    return openSync(webLaunchStderrPath(stateDir), "a");
+  } catch {
+    return "ignore";
   }
 }

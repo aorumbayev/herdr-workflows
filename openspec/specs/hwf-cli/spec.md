@@ -113,7 +113,7 @@ Commander MUST validate argv before command handlers run. After successful parsi
 
 #### Scenario: Detached picker handoff ignores launcher stdout
 - **WHEN** the picker launches a detached `hwf web <route>` child
-- **THEN** the child does not inherit the picker's stdout, so tearing down the picker popup cannot abort the child before it opens the browser, and the child's stderr is retained in plugin state for post-spawn diagnosis
+- **THEN** the child does not inherit the picker's stdout, so tearing down the picker popup cannot abort the child before it opens the browser, and the child's stderr is retained in plugin state when that path is writable (otherwise ignored without blocking the handoff)
 
 ### Requirement: Picker stays lazily loaded
 The `picker` command MUST dynamically import the TUI module only when that command is selected. Program construction and other commands MUST NOT load `@opentui/core` through the picker module.
