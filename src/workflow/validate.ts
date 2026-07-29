@@ -819,11 +819,7 @@ export function assertChildInputContract(
     }
   }
   for (const input of child.inputs) {
-    if (
-      input.default === undefined &&
-      values[input.name] === undefined &&
-      (input.when === undefined || input.when.length === 0)
-    ) {
+    if (input.default === undefined && values[input.name] === undefined) {
       bail(file, stepIndex, `inputs.${input.name}`, `missing required child input '${input.name}'`);
     }
   }

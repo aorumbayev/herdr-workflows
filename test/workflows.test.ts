@@ -680,6 +680,25 @@ steps:
 steps:
   - workflow: needs
 `,
+      conditional_needs: `version: v1alpha1
+inputs:
+  mode: [create, delete]
+  branch:
+    type: text
+    when: '{{inputs.mode}} == "create"'
+steps:
+  - run: [echo, "{{inputs.mode}}"]
+  - when: '{{inputs.mode}} == "create"'
+    run: [echo, "{{inputs.branch}}"]
+`,
+      missing_conditional: `version: v1alpha1
+inputs:
+  mode: [create, delete]
+steps:
+  - workflow: conditional_needs
+    inputs:
+      mode: "{{inputs.mode}}"
+`,
       typed: `version: v1alpha1
 inputs:
   n: text
@@ -706,6 +725,9 @@ steps:
     await expect(loadWorkflow("a", root, config)).rejects.toThrow(/workflow cycle: a → b → a/);
     await expect(loadWorkflow("missing", root, config)).rejects.toThrow(
       /missing required child input 'suite'/,
+    );
+    await expect(loadWorkflow("missing_conditional", root, config)).rejects.toThrow(
+      /missing required child input 'branch'/,
     );
     await expect(loadWorkflow("bad_type", root, config)).rejects.toThrow(
       /must resolve to text \(source type object\)/,
