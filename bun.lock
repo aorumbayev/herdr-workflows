@@ -24,7 +24,6 @@
         "oxfmt": "0.59.0",
         "oxlint": "1.74.0",
         "semantic-release": "24.2.9",
-        "skott": "0.35.11",
         "typescript": "5.8.2",
         "vitepress": "1.6.4",
       },

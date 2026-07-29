@@ -44,14 +44,13 @@
     "release": "semantic-release",
     "release:dry": "semantic-release --dry-run",
     "prepare": "git config core.hooksPath .githooks",
-    "verify:lint": "verifyx lint",
+    "verify:lint": "verifyx lint -- --max-warnings=0",
     "verify:format": "verifyx format",
     "verify:check-types": "verifyx check-types",
     "verify": "verifyx --no-tests",
     "verify:unused-code": "verifyx unused-code --max-warnings 0",
     "verify:duplicate-code": "verifyx duplicate-code --max-warnings 0",
     "verify:comments": "verifyx comments --pushback",
-    "verify:circular-deps": "skott --displayMode=raw --showCircularDependencies --exitCodeOnCircularDependencies=1",
     "verify:hardcoded-colors": "verifyx hardcoded-colors"
   },
   "dependencies": {
@@ -74,7 +73,6 @@
     "oxfmt": "0.59.0",
     "oxlint": "1.74.0",
     "semantic-release": "24.2.9",
-    "skott": "0.35.11",
     "typescript": "5.8.2",
     "vitepress": "1.6.4"
   }
