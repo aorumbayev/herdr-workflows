@@ -3708,9 +3708,11 @@
             body: JSON.stringify(putBody),
           });
           if (!r.data.ok) {
+            // A failed save leaves the buffer alone; only a save that could not undo its own
+            // copy changed the disk, and it says so, so the list is refreshed just for that.
             showProblem(false, r.data.error || "save failed");
             toast("not saved — " + (r.data.error || "save failed"), false);
-            await loadState();
+            if (r.data.orphan) await loadState();
             return;
           }
           savedName = newName;

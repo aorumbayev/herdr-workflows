@@ -576,10 +576,12 @@ steps:
     await mkdir(join(wdir, "dest.yaml", "child"), { recursive: true });
     const res = await dropSource(join(wdir, "src.yaml"), join(wdir, "dest.yaml"), "src");
     expect(res.status).toBe(500);
-    const data = (await res.json()) as { ok: boolean; error?: string };
+    const data = (await res.json()) as { ok: boolean; error?: string; orphan?: string };
     expect(data.ok).toBe(false);
     expect(data.error).toMatch(/'src' could not be removed/);
     expect(data.error).toMatch(/could not be undone/);
+    // The one failure that changed the disk, so clients can reconcile their view.
+    expect(data.orphan).toContain("dest.yaml");
     expect(data.error).toContain("dest.yaml");
   });
 

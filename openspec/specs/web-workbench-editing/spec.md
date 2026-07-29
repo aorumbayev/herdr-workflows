@@ -47,7 +47,7 @@ The workflow scope selector MUST mark a changed scope as unsaved and MUST NOT mo
 
 #### Scenario: Undoing the destination claim also fails
 - **WHEN** the source cannot be removed and the claimed destination cannot be undone either
-- **THEN** the reported failure names the copy left behind so the collision it will cause is explained
+- **THEN** the reported failure names the copy left behind so the collision it will cause is explained, and the workbench refreshes its workflow list because that copy is now on disk
 
 #### Scenario: Both scope variants exist
 - **WHEN** local and global workflows already share the edited name
