@@ -371,6 +371,9 @@ describe("web workbench presentation", () => {
     expect(page).toContain("function setListCollapsed(");
     expect(page).toContain("function narrowViewport(");
     expect(page).toContain('aria-label="Hide workflow list"');
+    // Collapsing routes through `.hide`, which outranks the narrow-viewport `aside` rules.
+    expect(page).toContain('$("list").classList.toggle("hide", !showList)');
+    expect(page).toMatch(/\.hide\s*\{\s*display:\s*none\s*!important/);
     // `⋯` is not an accessible name, and an outside click must not pull focus back to the trigger.
     expect(page).toContain('"More actions"');
     expect(page).toContain("if (back) btn.focus()");
