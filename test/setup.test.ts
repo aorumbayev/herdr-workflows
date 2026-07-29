@@ -239,7 +239,8 @@ describe("keybinding install", () => {
     dirs.push(dir);
     const { bin: herdrBin, log: logPath } = await writeRecordingHerdr(dir);
     const path = join(dir, "config.toml");
-    const stale = `
+    const stale = `# keep me
+
 [[keys.command]]
 key = "prefix+k"
 type = "plugin_action"
@@ -274,6 +275,17 @@ description = "view completed herdr-workflows job results"
     expect(text).not.toContain("lembas.launch");
     expect(text).not.toContain("herdr-workflows.results");
     expect(text).not.toContain("prefix+r");
+
+    const again = installKeybindings({
+      env: {
+        ...process.env,
+        HERDR_CONFIG_PATH: path,
+        HERDR_BIN_PATH: herdrBin,
+      },
+    });
+    expect(again.messages.join("\n")).toContain("already present");
+    expect(await readFile(path, "utf8")).toBe(text);
+    expect(await readFile(`${path}.hwf.bak`, "utf8")).toBe(stale);
   });
 
   test("missing herdr validator does not write config", async () => {

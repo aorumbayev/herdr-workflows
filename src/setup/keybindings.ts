@@ -79,7 +79,7 @@ export function stripDeadBindings(text: string): string {
     if (command && DEAD_ACTIONS.has(command)) continue;
     out += header + body;
   }
-  return out.replace(/\n{3,}/g, "\n\n");
+  return out;
 }
 
 export function installKeybindings(opts: {
