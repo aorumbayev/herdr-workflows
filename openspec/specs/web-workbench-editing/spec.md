@@ -23,7 +23,7 @@ The workbench MUST consider a workflow unsaved when its name, selected scope, or
 - **THEN** the failure is reported and the workflow is not presented as deleted
 
 ### Requirement: Scope changes are applied by explicit save
-The workflow scope selector MUST mark a changed scope as unsaved and MUST NOT move a workflow immediately. A successful Save MUST apply a rename or re-scope as a single request that claims the destination and removes the original source. Save MUST NOT overwrite any path other than the one the buffer was loaded from, and a save that cannot complete MUST leave the filesystem unchanged. The editor MUST NOT provide a separate move-to-scope action.
+The workflow scope selector MUST mark a changed scope as unsaved and MUST NOT move a workflow immediately. A successful Save MUST apply a rename or re-scope as a single request that claims the destination and removes the original source. A save MUST NOT destroy content the buffer was not derived from: it MUST replace only content that still matches what the editor loaded, and MUST otherwise be rejected as stale, naming the conflict and leaving the file as the other writer left it. A save that cannot complete MUST leave the filesystem unchanged. The editor MUST NOT provide a separate move-to-scope action.
 
 #### Scenario: Scope selection changes
 - **WHEN** a user changes a workflow from global to local
@@ -40,6 +40,14 @@ The workflow scope selector MUST mark a changed scope as unsaved and MUST NOT mo
 #### Scenario: Concurrent saves claim the same destination
 - **WHEN** two saves target the same previously absent destination
 - **THEN** exactly one succeeds and the other is rejected as a collision
+
+#### Scenario: The loaded file changed underneath the editor
+- **WHEN** a save targets the path its buffer was loaded from and that file's content has changed since it was loaded, whether by another workbench tab, an import, or a checkout
+- **THEN** the save is rejected as stale, the other writer's content is left in place, and the editor keeps the unsaved buffer
+
+#### Scenario: Save cannot identify what it would replace
+- **WHEN** a save targets the path its buffer was loaded from but carries no record of the content it loaded
+- **THEN** the save is rejected rather than overwriting the file unseen
 
 #### Scenario: Source removal fails
 - **WHEN** a rename or re-scope claims its destination but cannot remove the original source

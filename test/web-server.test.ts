@@ -432,6 +432,11 @@ steps:
     const file = join(root, ".hwf", "workflows", "edit.yaml");
     await writeFile(file, `${V1}steps:\n  - run: echo old\n`);
     const { base, token } = await serve(root);
+    const loaded = (await (
+      await fetch(`${base}/api/workflow?name=edit&scope=repo`, {
+        headers: { "x-hwf-token": token },
+      })
+    ).json()) as { base: string };
     const res = await fetch(`${base}/api/workflow`, {
       method: "PUT",
       headers: { "x-hwf-token": token, "content-type": "application/json" },
@@ -440,12 +445,67 @@ steps:
         scope: "repo",
         previousName: "edit",
         previousScope: "repo",
+        base: loaded.base,
         text: `${V1}steps:\n  - run: echo new\n`,
       }),
     });
     expect(res.status).toBe(200);
     expect(((await res.json()) as { ok: boolean }).ok).toBe(true);
     expect(await Bun.file(file).text()).toContain("echo new");
+  });
+
+  // Endpoint reuse makes two editors on one workflow the default, not the exception.
+  test("same-path PUT refuses to discard a write the buffer never saw", async () => {
+    const root = await repo();
+    const file = join(root, ".hwf", "workflows", "edit.yaml");
+    await writeFile(file, `${V1}steps:\n  - run: echo original\n`);
+    const { base, token } = await serve(root);
+    const loaded = (await (
+      await fetch(`${base}/api/workflow?name=edit&scope=repo`, {
+        headers: { "x-hwf-token": token },
+      })
+    ).json()) as { base: string };
+
+    await writeFile(file, `${V1}steps:\n  - run: echo someone-elses-fix\n`);
+
+    const res = await fetch(`${base}/api/workflow`, {
+      method: "PUT",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "edit",
+        scope: "repo",
+        previousName: "edit",
+        previousScope: "repo",
+        base: loaded.base,
+        text: `${V1}steps:\n  - run: echo my-edit\n`,
+      }),
+    });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { ok: boolean; stale?: boolean; error?: string };
+    expect(body.ok).toBe(false);
+    expect(body.stale).toBe(true);
+    expect(body.error).toContain("changed");
+    expect(await Bun.file(file).text()).toContain("someone-elses-fix");
+  });
+
+  test("same-path PUT with no baseline is refused rather than overwriting blind", async () => {
+    const root = await repo();
+    const file = join(root, ".hwf", "workflows", "edit.yaml");
+    await writeFile(file, `${V1}steps:\n  - run: echo original\n`);
+    const { base, token } = await serve(root);
+    const res = await fetch(`${base}/api/workflow`, {
+      method: "PUT",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "edit",
+        scope: "repo",
+        previousName: "edit",
+        previousScope: "repo",
+        text: `${V1}steps:\n  - run: echo blind\n`,
+      }),
+    });
+    expect(res.status).toBe(409);
+    expect(await Bun.file(file).text()).toContain("echo original");
   });
 
   test("PUT without a previous path refuses to clobber an existing workflow", async () => {

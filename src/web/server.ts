@@ -63,6 +63,22 @@ function scopeOf(v: unknown): Scope | undefined {
   return v === "repo" || v === "global" ? v : undefined;
 }
 
+/**
+ * Identity of the bytes an editor loaded. A save carries the token it was handed and may only
+ * overwrite content that still hashes to it, so a writer the editor never saw — a second tab,
+ * an import, a checkout — is never silently discarded.
+ */
+function contentToken(text: string): string {
+  return new Bun.CryptoHasher("sha256").update(text).digest("hex").slice(0, 16);
+}
+
+async function diskToken(file: string): Promise<string | undefined> {
+  const text = await Bun.file(file)
+    .text()
+    .catch(() => undefined);
+  return text === undefined ? undefined : contentToken(text);
+}
+
 function scalar(v: string): string {
   return Bun.YAML.stringify(v);
 }
@@ -368,10 +384,11 @@ export async function dropSource(
 
 /**
  * Persist a workflow. `previous` is the path the editor loaded this buffer from: the same
- * path means an in-place edit (overwrite), a different path — or no previous at all — means
- * the destination is being claimed, so it must be free. A move claims the destination and
- * drops the source in one request; a source that will not go away undoes the claim, so the
- * call either moves the workflow or changes nothing.
+ * path means an in-place edit, a different path — or no previous at all — means the destination
+ * is being claimed, so it must be free. An in-place edit may only replace the content the buffer
+ * was derived from, identified by `base`. A move claims the destination and drops the source in
+ * one request; a source that will not go away undoes the claim, so the call either moves the
+ * workflow or changes nothing.
  */
 async function writeWorkflow(
   repoRoot: string,
@@ -379,6 +396,7 @@ async function writeWorkflow(
   scope: Scope,
   text: string,
   previous?: { name: string; scope: Scope },
+  base?: string,
 ): Promise<Response> {
   if (!WORKFLOW_NAME_RE.test(name)) return json({ ok: false, error: "invalid workflow name" }, 400);
   try {
@@ -389,9 +407,23 @@ async function writeWorkflow(
   const file = workflowPath(scope, repoRoot, name);
   const prev = previous ? workflowPath(previous.scope, repoRoot, previous.name) : undefined;
   if (prev === file) {
+    const onDisk = await diskToken(file);
+    if (onDisk !== base) {
+      return json(
+        {
+          ok: false,
+          stale: true,
+          error:
+            onDisk === undefined
+              ? `'${name}' no longer exists in ${scope}; it changed since this buffer was loaded`
+              : `'${name}' changed in ${scope} since this buffer was loaded — reload to see the current file before saving`,
+        },
+        409,
+      );
+    }
     await mkdir(dirname(file), { recursive: true });
     await Bun.write(file, text);
-    return json({ ok: true });
+    return json({ ok: true, base: contentToken(text) });
   }
   const claimed = await claimFile(file, text, `'${name}' already exists in ${scope}`);
   if (claimed) return claimed;
@@ -430,7 +462,7 @@ async function handleWorkflow(
         flags = [];
       }
     }
-    return json({ text, valid, error, flags });
+    return json({ text, valid, error, flags, base: text ? contentToken(text) : undefined });
   }
   if (req.method === "PUT") {
     const scope = scopeOf(body.scope);
@@ -449,6 +481,7 @@ async function handleWorkflow(
       scope,
       String(body.text ?? ""),
       previous,
+      typeof body.base === "string" && body.base ? body.base : undefined,
     );
   }
   if (req.method === "DELETE") {
