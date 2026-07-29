@@ -2997,9 +2997,9 @@
             body: JSON.stringify(putBody),
           });
           if (!r.data.ok) {
+            // A failed save changed nothing on disk, so the buffer and the list both stand.
             showProblem(false, r.data.error || "save failed");
             toast("not saved — " + (r.data.error || "save failed"), false);
-            await loadState();
             return;
           }
           savedName = newName;
