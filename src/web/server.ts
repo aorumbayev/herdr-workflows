@@ -348,9 +348,12 @@ export async function dropSource(
     try {
       await rm(claimed, { force: true });
     } catch (rollbackError) {
+      // The only failure that leaves a file behind, so say so: the caller's view of
+      // what is on disk is now wrong.
       return json(
         {
           ok: false,
+          orphan: shortPath(claimed),
           error: `${kept}; the copy at ${shortPath(claimed)} could not be undone — ${errText(rollbackError)}`,
         },
         500,
