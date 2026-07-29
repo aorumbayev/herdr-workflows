@@ -202,6 +202,81 @@ describe("web visual round-trip", () => {
   });
 });
 
+describe("web form sources", () => {
+  test("schema endpoint serves the step keys, bounds, and enumerations", async () => {
+    const root = await repo();
+    const { base, token } = await serve(root);
+    const res = await fetch(`${base}/api/schema`, { headers: { "x-hwf-token": token } });
+    expect(res.status).toBe(200);
+    const schema = (await res.json()) as {
+      properties: {
+        steps: {
+          items: {
+            properties: Record<string, Record<string, unknown>>;
+          };
+        };
+      };
+    };
+    const step = schema.properties.steps.items.properties;
+    expect(Object.keys(step)).toContain("success_codes");
+    expect(step.shell?.enum).toEqual(["sh", "bash", "zsh", "pwsh", "powershell", "cmd"]);
+    const pane = step.pane as { properties: Record<string, Record<string, unknown>> };
+    expect(pane.properties.size).toMatchObject({ type: "integer", minimum: 1, maximum: 99 });
+    const retry = step.retry as { properties: Record<string, Record<string, unknown>> };
+    expect(retry.properties.attempts).toMatchObject({ type: "integer", minimum: 2 });
+  });
+
+  test("methods endpoint serves allowed and denied methods with their reasons", async () => {
+    const root = await repo();
+    const { base, token } = await serve(root);
+    const res = await fetch(`${base}/api/methods`, { headers: { "x-hwf-token": token } });
+    expect(res.status).toBe(200);
+    const { methods } = (await res.json()) as {
+      methods: {
+        method: string;
+        allowed: boolean;
+        reason?: string;
+        params: { required: string[]; properties: Record<string, { kinds: string[] }> };
+      }[];
+    };
+    const show = methods.find((m) => m.method === "notification.show");
+    expect(show?.allowed).toBe(true);
+    expect(show?.params.required).toEqual(["title"]);
+    expect(show?.params.properties.sound?.kinds).toEqual(["string"]);
+    const denied = methods.find((m) => m.allowed === false);
+    expect(denied?.reason).toBeTruthy();
+  });
+
+  test("format reports validation issues with their paths", async () => {
+    const root = await repo();
+    const { base, token } = await serve(root);
+    const res = await fetch(`${base}/api/format`, {
+      method: "POST",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        doc: {
+          version: "v1alpha1",
+          steps: [
+            { run: "echo hi", pane: { open: "beside" }, background: true, retry: { attempts: 3 } },
+            { run: "echo hi", pane: { size: 200 } },
+          ],
+        },
+      }),
+    });
+    const data = (await res.json()) as {
+      ok: boolean;
+      error: string;
+      issues: { path: (string | number)[]; message: string }[];
+    };
+    expect(data.ok).toBe(false);
+    expect(data.error).toContain("retry");
+    const retry = data.issues.find((i) => i.path.join(".") === "steps.0.retry");
+    expect(retry?.message).toContain("retry");
+    const size = data.issues.find((i) => i.path.join(".") === "steps.1.pane.size");
+    expect(size).toBeTruthy();
+  });
+});
+
 describe("web provenance and sensitivity", () => {
   test("state exposes repo/global provenance, title, and sensitive flags", async () => {
     const root = await repo();
