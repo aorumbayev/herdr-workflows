@@ -3,20 +3,21 @@ name = "herdr-workflows"
 version = "0.1.0"
 min_herdr_version = "0.7.5"
 description = "Linear YAML workflow runner for herdr panes"
-platforms = ["linux", "macos", "windows"]
+platforms = ["linux", "macos"]
+
+# Remote GitHub install: Bun preflight → production deps → compile → native setup.
+# Local `herdr plugin link` / `bun run install:dev` do not run [[build]] — they compile the working tree.
+[[build]]
+command = ["sh", "scripts/preflight.sh"]
 
 [[build]]
-command = ["bun", "install", "--frozen-lockfile"]
+command = ["bun", "install", "--production", "--frozen-lockfile"]
 
 [[build]]
 command = ["bun", "build", "--compile", "--outfile=bin/herdr-workflows", "src/cli.ts"]
-platforms = ["linux", "macos", "windows"]
 
 [[build]]
-command = ["node", "scripts/install-cli.mjs"]
-
-[[build]]
-command = ["node", "scripts/install-keybindings.mjs"]
+command = ["bin/herdr-workflows", "setup"]
 
 [[actions]]
 id = "launch"

@@ -143,4 +143,4 @@ Optional IDE schema line:
 9. **Transcript / identity context** unavailable → preflight failure.
 10. **Denied Herdr methods** fail at load — denylist is a misuse rail, not a sandbox.
 
-Out of scope: parallelism, loops, external engines. Windows via `{{context.platform}}` + `when:`. Needs herdr ≥ 0.7.5.
+Out of scope: parallelism, loops, external engines. OS branching uses `{{context.platform}}` + `when:`. Windows runs through WSL2. Needs herdr ≥ 0.7.5.

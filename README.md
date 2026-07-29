@@ -38,13 +38,15 @@ Treat workflow YAML as reviewed executable code. There is no sandbox. A trusted 
 
 ## Install
 
-You need [herdr](https://herdr.dev) **0.7.5** or newer.
+You need [herdr](https://herdr.dev) **0.7.5** or newer and [Bun](https://bun.sh) **≥ 1.3**.
 
 ```bash
 herdr plugin install aorumbayev/herdr-workflows
 ```
 
-The install compiles the plugin, then tries to link `herdr-workflows` / `hwf` into `~/.local/bin` (or `$XDG_BIN_HOME`) and append a validated `prefix+k` picker binding. Both steps are nonfatal. Skips print a note and continue. If needed, run `command -v hwf`, `hwf --version`, and `herdr config check`. Add the bin dir to PATH when the install warns it is missing.
+Remote install compiles the checkout locally: a Bun-version preflight, `bun install --production --frozen-lockfile`, `bun build --compile`, then native setup. PATH commands install under `~/.local/bin` / `$XDG_BIN_HOME`. npm is not a distribution channel. Platforms are Linux and macOS; on Windows use WSL2 with Herdr and this plugin both installed inside WSL — a native Windows Herdr cannot pair with hwf running in WSL.
+
+**One-time migration:** if your install predates `hwf update`, run `herdr plugin install aorumbayev/herdr-workflows` once more to obtain it. Later updates: `hwf update`. Linked checkouts use `bun run install:dev` instead.
 
 Then set up profiles:
 
@@ -83,6 +85,7 @@ Press `prefix+k` to pick and run a workflow. In list mode, `Ctrl+E` edits, `Ctrl
 hwf run review      # run the workflow above, live progress in the terminal
 hwf web             # browser workbench: build/edit/validate/share/import — never runs
 hwf                 # same as `hwf web`
+hwf update          # latest published release via herdr plugin install
 hwf help run        # generated help for one command
 hwf --version       # installed plugin version
 ```

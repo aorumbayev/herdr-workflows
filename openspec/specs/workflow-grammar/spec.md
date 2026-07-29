@@ -56,9 +56,9 @@ A blocking managed agent turn MUST produce `{response, agent, pane_id}`, where `
 - **THEN** the agent step fails
 
 ### Requirement: Portable and shell run forms
-`run:` MUST accept a non-empty string or non-empty string list. List form MUST execute directly as argv on every supported platform and MUST allow templates per element. String form MUST execute as shell source, MUST reject templates, and MUST accept `shell:` values `sh`, `bash`, `zsh`, `pwsh`, `powershell`, and `cmd`. Omitted shell MUST mean `sh` on macOS/Linux and `cmd` on Windows. Each input MUST be exported as `HWF_<name>`. Prior results MUST enter shell environments only through explicit `env:` mappings. Runner-generated values MUST replace inherited collisions. Explicit env keys MUST reject reserved `HWF_` prefixes case-insensitively. The generated HWF environment block MUST have a 24 KiB cap. Captured command stdout plus stderr, managed agent response, transcript text, and dynamic-choice stdout MUST each have an 8 MiB cap. Crossing a cap MUST fail the step, naming the source and byte limit, rather than truncating output. Streaming commands MUST be terminated when their capture crosses the limit.
+`run:` MUST accept a non-empty string or non-empty string list. List form MUST execute directly as argv on every supported platform and MUST allow templates per element. String form MUST execute as shell source, MUST reject templates, and MUST accept `shell:` values `sh`, `bash`, `zsh`, `pwsh`, `powershell`, and `cmd`. The Windows shell values remain valid workflow syntax for format compatibility, but native Windows execution is unsupported. Omitted shell MUST mean `sh` on supported macOS and Linux hosts. Each input MUST be exported as `HWF_<name>`. Prior results MUST enter shell environments only through explicit `env:` mappings. Runner-generated values MUST replace inherited collisions. Explicit env keys MUST reject reserved `HWF_` prefixes case-insensitively. The generated HWF environment block MUST have a 24 KiB cap. Captured command stdout plus stderr, managed agent response, transcript text, and dynamic-choice stdout MUST each have an 8 MiB cap. Crossing a cap MUST fail the step, naming the source and byte limit, rather than truncating output. Streaming commands MUST be terminated when their capture crosses the limit, and termination MUST stop the process actually producing the output, not only the shell that launched it.
 
-`shell` MUST be invalid on argv. `cwd` MUST be template-capable text. `env` MUST be a string map with template-capable values merged over inherited environment after reserved-key checks. Timeout on a local blocking run MUST terminate its process group and fail the step. Timeout MUST be invalid on background. Omitted local-run `cwd` MUST use workflow invocation cwd. Omitted local-run timeout MUST mean no workflow timeout, though process completion still blocks the step.
+`shell` MUST be invalid on argv. `cwd` MUST be template-capable text. `env` MUST be a string map with template-capable values merged over inherited environment after reserved-key checks. Timeout on a local blocking run MUST terminate the command and its descendants and fail the step, using the host platform's mechanism for terminating a process tree. Timeout MUST be invalid on background. Omitted local-run `cwd` MUST use workflow invocation cwd. Omitted local-run timeout MUST mean no workflow timeout, though process completion still blocks the step.
 
 #### Scenario: Portable argument
 - **WHEN** argv contains a branch value with spaces
@@ -67,6 +67,14 @@ A blocking managed agent turn MUST produce `{response, agent, pane_id}`, where `
 #### Scenario: Unsafe shell interpolation
 - **WHEN** shell source contains a workflow template
 - **THEN** loading fails and directs the author to argv or explicit environment values
+
+#### Scenario: Timeout stops a shell grandchild
+- **WHEN** a string `run:` launches a long-running command through the platform shell and the step timeout expires
+- **THEN** the launched command is no longer running and the step fails naming the deadline
+
+#### Scenario: Cap termination stops the producer
+- **WHEN** a string `run:` launches a command that streams past the capture cap
+- **THEN** the producing command is terminated, the step fails naming the source and byte limit, and no output is truncated in place of failing
 
 ### Requirement: Named adaptive inputs
 Input names MUST match `[a-z][a-z0-9_]{0,31}`. Values MUST be `text`, `profile`, a non-empty static choice list, or a strict map containing only `type`, `description`, `default`, and, conditionally, `options`. Map type MUST be `text`, `choice`, or `profile`. Choice MUST require static options or `{run: <argv>}`. Text and profile MUST reject options. Dynamic choice failure or empty output MUST fail collection. Choice and profile defaults MUST exist in the available values. Only the entry workflow MUST prompt, in declaration order, and unused inputs MUST fail load.
@@ -130,8 +138,8 @@ Context MUST expose stable `workspace`, `tab`, `pane`, `worktree`, `agent`, `sel
 - **THEN** capped transcript text is sent to that profile without an additional runtime confirmation
 
 ### Requirement: Workflow metadata and portable support claim
-`title` and `description` MUST be optional text. Title MUST default from the humanized filename. `hidden: true` MUST suppress picker display but permit direct invocation. Documentation MUST describe v1alpha1 syntax and argv as cross-platform, while making runtime behavior subject to installed Herdr platform support.
+`title` and `description` MUST be optional text. Title MUST default from the humanized filename. `hidden: true` MUST suppress picker display but permit direct invocation. Documentation MUST describe v1alpha1 syntax and argv as portable across supported Linux and macOS hosts, with Windows users running both Herdr and the plugin inside WSL2.
 
-#### Scenario: Windows beta capability gap
-- **WHEN** syntax is valid but the installed Herdr reports a platform-unsupported operation
-- **THEN** the workflow reports that native Herdr error rather than claiming runtime parity
+#### Scenario: Windows uses the Linux runtime
+- **WHEN** a Windows user runs Herdr and the plugin together inside WSL2
+- **THEN** workflows execute through the supported Linux behavior without native Windows integration

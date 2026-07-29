@@ -4,13 +4,33 @@ This guide covers install steps and workflow authoring. The [Reference](/referen
 
 ## Install
 
-You need [herdr](https://herdr.dev) version 0.7.5 or newer.
+You need [herdr](https://herdr.dev) **0.7.5** or newer and [Bun](https://bun.sh) **≥ 1.3**.
 
 ```bash
 herdr plugin install aorumbayev/herdr-workflows
 ```
 
-The install compiles the plugin. It then tries to link `hwf` and `herdr-workflows` into `~/.local/bin` (or `$XDG_BIN_HOME`). It also tries to add a validated `prefix+k` picker binding. Both steps are optional. A skipped step prints a note and the install continues. If a command is missing, run `command -v hwf`, `hwf --version`, and `herdr config check`. Add the bin directory to PATH if the install warns that it is missing.
+Remote install compiles the checkout through Herdr's managed build: a Bun-version preflight (fails naming the minimum when Bun is missing or older), `bun install --production --frozen-lockfile`, `bun build --compile`, then native setup. It does **not** download release binaries. Supported platforms are Linux and macOS.
+
+Setup links `hwf` and `herdr-workflows` into `~/.local/bin` (or `$XDG_BIN_HOME`). Both PATH steps and the `prefix+k` binding are optional; skips print a note and continue. Add the bin directory to PATH if setup warns it is missing. Check with `hwf --version` / `herdr-workflows --version` and `herdr config check`.
+
+npm is **not** a distribution channel. Releases are GitHub Releases only (`0.x` while the product major stays zero) — tags and notes, no binary assets.
+
+### Windows via WSL2
+
+Use WSL2 and install Herdr plus this plugin **inside** the Linux environment. Native Windows Herdr cannot pair with hwf in WSL (separate servers, separate sockets).
+
+### Update
+
+After you have a managed GitHub install that includes the `update` command:
+
+```bash
+hwf update
+```
+
+`hwf update` checks the latest **published** release (drafts are ignored), refuses linked development checkouts (`bun run install:dev` instead), and for managed installs runs `herdr plugin install aorumbayev/herdr-workflows --yes` from outside `HERDR_PLUGIN_ROOT`. Existing installs that predate `hwf update` need **one** manual `herdr plugin install aorumbayev/herdr-workflows` to obtain the command; later updates use `hwf update`. The picker may show a nonblocking `[run hwf update]` hint in the list-mode filter row when a newer published version exists.
+
+Local development still uses `bun run install:dev` (compile + `herdr plugin link` + setup).
 
 ## Set up profiles
 
@@ -89,6 +109,7 @@ steps:
 | `hwf web` (or bare `hwf`) | Edit, share, review imports, browse the run log. Never executes   |
 | `hwf help [command]`      | Show generated command and option help                            |
 | `hwf --version`           | Show the installed plugin version                                 |
+| `hwf update`              | Install the latest published GitHub Release via Herdr             |
 
 Runs always go through the picker or `hwf run`. The workbench builds, shares, and imports workflows. It never executes them. Picker shortcuts and `hwf web` reuse one live authenticated workbench per repository, as long as the recorded endpoint still answers.
 

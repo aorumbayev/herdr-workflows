@@ -24,9 +24,10 @@ bun run install:dev                      # compile + herdr plugin link + keybind
 ```
 
 - Pre-commit (`.githooks/pre-commit`): `CI=1 npm run verify` — check-only, **no tests**.
-- CI (`.github/workflows/verify.yml`): `bun test ./test` then `npm run verify`.
+- CI (`.github/workflows/verify.yml`): `bun test ./test` on Ubuntu and macOS (`fail-fast: false`); `npm run verify` on Linux only.
 - Local `npm run verify` auto-fixes lint/format. Under `CI=1` it only checks.
-- After `install:dev`, the live binary is `bin/herdr-workflows`. The manifest invokes it directly.
+- After `install:dev`, the live binary is `bin/herdr-workflows`.
+- Remote GitHub install runs the manifest build: Bun preflight, `bun install --production --frozen-lockfile`, `bun build --compile`, then `bin/herdr-workflows setup`. Local link/dev still compiles with `bun run build` / `bun run install:dev`.
 
 ## Layout
 
@@ -64,7 +65,7 @@ Agents miss these. The loader or verifyx will fail, or the product regresses:
 - **No external workflow engine.** Linear herdr-native YAML only. Do not add Dagu, Taskfile/go-task, Cockpit, or similar sidecars.
 - **Templates are `{{inputs.*}}` / `{{steps.*}}` / `{{context.*}}` only.** Any other `{{…}}` is a load error. No flat `{name}`, no `out:` bindings, no `{session}` / `{session_file}` (use `{{context.transcript}}` / `{{context.transcript_file}}`). `{{prompt}}` is config-only and is not a workflow template.
 - **No templates in string `run:` command text** — load error. Use list-form `run:` (argv, templates allowed per element) or explicit `env:` / `HWF_<name>` values. `herdr:` `params:` take templates recursively. A whole-value template keeps its type. Embedded ones render text.
-- **Conditions only, no loops, no parallelism.** `when:` is a whole-value template or a quoted `==` / `!=` comparison. There is no `for:` / `as:`, no retry predicate/reset, no step-scoped recovery. `retry: {attempts, delay}` is allowed only on a blocking local `run:` or a `herdr:` action. `agent`, `workflow`, placed, readiness, and background actions reject it. Windows support is `{{context.platform}}` plus `when:` comparisons — no other per-OS syntax.
+- **Conditions only, no loops, no parallelism.** `when:` is a whole-value template or a quoted `==` / `!=` comparison. There is no `for:` / `as:`, no retry predicate/reset, no step-scoped recovery. `retry: {attempts, delay}` is allowed only on a blocking local `run:` or a `herdr:` action. `agent`, `workflow`, placed, readiness, and background actions reject it. OS branching is `{{context.platform}}` plus `when:` comparisons — no other per-OS syntax. Native platforms are Linux and macOS; Windows is WSL2 only.
 - **`herdr: <method>` + `params:`** is the only way to call the socket API. Dotted YAML action keys are not actions. Raw calls never autofill targets — authors pass exact selectors. Denied methods fail at load with the invariant they protect. The denylist is an accidental-misuse rail, not a sandbox (trusted `run:` can call the whole herdr CLI).
 - **Placement is the nested `pane:` block** (`open: tab|beside|below`, stable `target`/`workspace`, percentage `size`, `focus`, agent-only `close: success|always`). Anchors are captured invocation or prior-result IDs, never live UI focus. `background: true` needs a herdr-owned pane or an existing-agent `target:`. There is no local detached background. A placed `run:` takes exactly one of `background` or `ready_when: /regex/` (which requires `timeout`).
 - **Config is `profiles` / `default_profile` / `transcripts` only** — no `agents:`, no `sessions:`. Global config lives at `$HERDR_PLUGIN_CONFIG_DIR/config.yaml` (discovered via `herdr plugin config-dir` when standalone). Never add `~/.hwf/config.yaml`. Layers: global, committed `.hwf/config.yaml`, gitignored `.hwf/config.local.yaml`, replacing whole entries by name.

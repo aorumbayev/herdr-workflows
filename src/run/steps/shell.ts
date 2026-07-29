@@ -42,8 +42,8 @@ async function readStreamAgainstBudget(
 
 export type { ShellName };
 
-export function defaultShell(platform: string = process.platform): ShellName {
-  return platform === "win32" ? "cmd" : "sh";
+export function defaultShell(): ShellName {
+  return "sh";
 }
 
 export function shellArgv(command: string, shell: ShellName = defaultShell()): string[] {
@@ -63,18 +63,7 @@ export function shellArgv(command: string, shell: ShellName = defaultShell()): s
   }
 }
 
-export function killSpawn(
-  proc: { pid: number; kill: () => void },
-  platform: string = process.platform,
-): void {
-  if (platform === "win32") {
-    try {
-      proc.kill();
-    } catch {
-      /* already dead */
-    }
-    return;
-  }
+export function killSpawn(proc: { pid: number; kill: () => void }): void {
   try {
     process.kill(-proc.pid, "SIGKILL");
   } catch {
@@ -113,7 +102,6 @@ export async function spawnCapture(
     stderr: "pipe",
     env: opts.env,
     detached: true,
-    windowsHide: true,
   });
   if (opts.stdin !== undefined) proc.stdin.write(opts.stdin);
   proc.stdin.end();

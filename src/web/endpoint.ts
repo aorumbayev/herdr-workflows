@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
+  chmodSync,
   mkdirSync,
   readFileSync,
   renameSync,
@@ -8,9 +9,14 @@ import {
   writeFileSync,
   type Stats,
 } from "node:fs";
-import { chmod, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pluginStateDir } from "../config";
+import {
+  assertCredentialStoreSafe,
+  CredentialStoreError,
+  tightenPrivateDir,
+} from "./credential-store";
 import { startWebServer, type WebServer } from "./server";
 
 export type EndpointRecord = {
@@ -78,9 +84,9 @@ function ownedLockPath(base: string, token: string): string {
   return `${base}.${token}`;
 }
 
-async function ensurePrivateDir(dir: string): Promise<void> {
-  await mkdir(dir, { recursive: true, mode: 0o700 });
-  await chmod(dir, 0o700);
+async function ensurePrivateDir(stateDir: string): Promise<void> {
+  await assertCredentialStoreSafe(stateDir);
+  await tightenPrivateDir(endpointsDir(stateDir));
 }
 
 async function writePrivateFile(path: string, body: string): Promise<void> {
@@ -89,6 +95,11 @@ async function writePrivateFile(path: string, body: string): Promise<void> {
   await chmod(tmp, 0o600);
   await rename(tmp, path);
   await chmod(path, 0o600);
+  const mode = (await stat(path)).mode & 0o777;
+  if ((mode & 0o077) !== 0) {
+    await rm(path, { force: true });
+    throw new CredentialStoreError(`refusing credential file with group/world access: ${path}`);
+  }
 }
 
 export async function readEndpointRecord(
@@ -113,8 +124,7 @@ export async function writeEndpointRecord(
   record: EndpointRecord,
   stateDir: string = pluginStateDir(),
 ): Promise<void> {
-  const dir = endpointsDir(stateDir);
-  await ensurePrivateDir(dir);
+  await ensurePrivateDir(stateDir);
   await writePrivateFile(endpointRecordPath(record.repoRoot, stateDir), JSON.stringify(record));
 }
 
@@ -294,6 +304,11 @@ export function acquireEndpointLockSync(
   const tryClaim = (): boolean => {
     try {
       writeFileSync(base, token, { flag: "wx", mode: 0o600 });
+      try {
+        chmodSync(base, 0o600);
+      } catch {
+        /* best-effort */
+      }
       return true;
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
@@ -386,7 +401,7 @@ export async function ensureWorkbench(
   const lockWaitMs = deps.lockWaitMs ?? LOCK_WAIT_MS;
   const lockBase = endpointLockPath(repoRoot, stateDir);
 
-  await ensurePrivateDir(endpointsDir(stateDir));
+  await ensurePrivateDir(stateDir);
 
   for (let attempt = 0; attempt < lockAttempts; attempt++) {
     const existing = await probeLiveRecord(repoRoot, stateDir, fetchImpl);

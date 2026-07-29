@@ -22,7 +22,10 @@ describe("command results", () => {
   test("argv success reports exit code and clears failed", async () => {
     const cwd = await tempDir();
     try {
-      const result = await runArgvStep(["sh", "-c", "printf out; printf err >&2"], { cwd });
+      const result = await runArgvStep(
+        ["bun", "-e", "process.stdout.write('out'); process.stderr.write('err')"],
+        { cwd },
+      );
       expect(result).toEqual({
         ok: true,
         stdout: "out",
@@ -158,6 +161,11 @@ describe("coordination loss", () => {
     expect(isCoordinationError(new HerdrError("no_socket", "HERDR_SOCKET_PATH is not set"))).toBe(
       true,
     );
+    expect(
+      isCoordinationError(
+        new HerdrError("unreachable", "unreachable herdr at /tmp/x: pane.split: closed"),
+      ),
+    ).toBe(true);
     expect(isCoordinationError(new Error("read ECONNRESET"))).toBe(true);
     expect(isCoordinationError(new Error("write EPIPE"))).toBe(true);
     expect(isCoordinationError(new HerdrError("invalid_params", "bad ratio"))).toBe(false);

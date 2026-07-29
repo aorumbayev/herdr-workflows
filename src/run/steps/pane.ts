@@ -112,10 +112,7 @@ function layoutPlacement(result: Record<string, unknown>, split: boolean): Place
 }
 
 /** Quote argv for submission into an interactive shell via pane.send_input. */
-export function quoteArgvForShell(argv: string[], platform: string = process.platform): string {
-  if (platform === "win32") {
-    return argv.map(quoteWindowsArg).join(" ");
-  }
+export function quoteArgvForShell(argv: string[]): string {
   return argv.map(quotePosixArg).join(" ");
 }
 
@@ -123,12 +120,6 @@ function quotePosixArg(value: string): string {
   if (value.length === 0) return "''";
   if (/^[A-Za-z0-9_./:=+-]+$/.test(value)) return value;
   return `'${value.replace(/'/g, `'\\''`)}'`;
-}
-
-function quoteWindowsArg(value: string): string {
-  if (value.length === 0) return '""';
-  if (/^[A-Za-z0-9_./:=+-]+$/.test(value)) return value;
-  return `"${value.replace(/"/g, '\\"')}"`;
 }
 
 /**

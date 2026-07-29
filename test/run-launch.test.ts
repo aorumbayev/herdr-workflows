@@ -78,6 +78,7 @@ function pickerState(overrides: Partial<PickerState> = {}): PickerState {
     renderer: { destroy: () => undefined },
     filterRow: { visible: true },
     filter: { visible: true },
+    updateHint: { visible: false, content: "" },
     listBlock: { visible: true },
     list: {
       visible: true,
@@ -341,13 +342,87 @@ await Bun.write(${JSON.stringify(marker)}, "ok");
     await Bun.sleep(80);
     handle.detach();
     const result = await handle.result;
-    expect(result.ok).toBe(true);
-    expect(await Bun.file(marker).exists()).toBe(true);
+    expect(result).toEqual({ ok: true, detail: "detached" });
+
+    let markerReady = false;
+    for (let i = 0; i < 30; i++) {
+      if (await Bun.file(marker).exists()) {
+        markerReady = true;
+        break;
+      }
+      await Bun.sleep(50);
+    }
+    expect(markerReady).toBe(true);
     const env = JSON.parse(await readFile(envFile, "utf8")) as Record<string, string>;
     expect(env.pane).toBe("wLive:p1");
     expect(env.tab).toBe("wLive:t1");
     expect(env.workspace).toBe("wLive");
     expect(env.repo).toBe(root);
+  });
+
+  test("detach settles mid-run without waiting for child exit status", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-detach-mid-"));
+    dirs.push(root);
+    const marker = join(root, "done.txt");
+    const ready = join(root, "ready.txt");
+    const go = join(root, "go.txt");
+    const script = join(root, "child-fail.ts");
+    await writeFile(
+      script,
+      `
+await Bun.write(${JSON.stringify(ready)}, "1");
+for (let i = 0; i < 200; i++) {
+  if (await Bun.file(${JSON.stringify(go)}).exists()) break;
+  await Bun.sleep(25);
+}
+await Bun.write(${JSON.stringify(marker)}, "fail");
+process.exit(1);
+`,
+    );
+
+    const handle = launchDetachedRun({
+      name: "ignored",
+      repoRoot: root,
+      ctx: { selection: "", cwd: root },
+      inputs: {},
+      onProgressLine: () => undefined,
+      spawn: ((_argv, opts) =>
+        Bun.spawn([process.execPath, script], {
+          cwd: typeof opts?.cwd === "string" ? opts.cwd : root,
+          env: opts?.env,
+          stdin: "pipe",
+          stdout: "pipe",
+          stderr: "pipe",
+          detached: true,
+        })) as typeof Bun.spawn,
+    });
+
+    let childReady = false;
+    for (let i = 0; i < 80; i++) {
+      if (await Bun.file(ready).exists()) {
+        childReady = true;
+        break;
+      }
+      await Bun.sleep(25);
+    }
+    expect(childReady).toBe(true);
+
+    const settled = handle.result.then((value) => value);
+    handle.detach();
+    const result = await settled;
+    expect(result).toEqual({ ok: true, detail: "detached" });
+    expect(await Bun.file(marker).exists()).toBe(false);
+
+    await writeFile(go, "1");
+    let markerReady = false;
+    for (let i = 0; i < 80; i++) {
+      if (await Bun.file(marker).exists()) {
+        markerReady = true;
+        break;
+      }
+      await Bun.sleep(25);
+    }
+    expect(markerReady).toBe(true);
   });
 
   test("detached spawn argv never contains input values", async () => {
@@ -395,7 +470,7 @@ await Bun.write(${JSON.stringify(payloadFile)}, text);
 });
 
 describe("launchDetachedWeb", () => {
-  test("pins repo root and does not attach to stdout", async () => {
+  test("pins repo root and inherits stdout so the workbench URL reaches the caller", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-web-launch-"));
     dirs.push(root);
     const envFile = join(root, "env.json");
@@ -426,7 +501,7 @@ await Bun.write(${JSON.stringify(envFile)}, JSON.stringify(env));
           cwd: typeof opts?.cwd === "string" ? opts.cwd : root,
           env: opts?.env,
           stdin: "ignore",
-          stdout: "ignore",
+          stdout: "inherit",
           stderr: "ignore",
           detached: true,
         });
@@ -436,7 +511,7 @@ await Bun.write(${JSON.stringify(envFile)}, JSON.stringify(env));
     await Bun.sleep(120);
     expect(seenArgv.at(-2)).toBe("web");
     expect(seenArgv.at(-1)).toBe("import");
-    expect(seenStdout).toBe("ignore");
+    expect(seenStdout).toBe("inherit");
     const env = JSON.parse(await readFile(envFile, "utf8")) as Record<string, string>;
     expect(env.repo).toBe(root);
     expect(env.state).toBe(join(root, "state"));

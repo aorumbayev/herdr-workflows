@@ -11,10 +11,6 @@ for (const name of ["herdr", "hwf", "herdr-workflows"]) {
   const path = join(bin, name);
   writeFileSync(path, denied);
   chmodSync(path, 0o755);
-  writeFileSync(
-    `${path}.cmd`,
-    "@echo real herdr executables are disabled during tests 1>&2\r\n@exit /b 97\r\n",
-  );
 }
 
 for (const name of [

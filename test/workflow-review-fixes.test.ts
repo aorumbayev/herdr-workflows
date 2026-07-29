@@ -46,6 +46,7 @@ function pickerState(): PickerState {
     renderer: { destroy: () => undefined },
     filterRow: { visible: true },
     filter: { visible: true },
+    updateHint: { visible: false, content: "" },
     listBlock: { visible: true },
     list: {
       visible: true,
