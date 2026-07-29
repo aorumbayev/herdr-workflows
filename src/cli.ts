@@ -472,7 +472,7 @@ function buildProgram(): Command {
     .command("setup", { hidden: true })
     .description("Install PATH commands and picker keybindings")
     .action(() => {
-      runSetup({});
+      runSetup();
     });
 
   return program;

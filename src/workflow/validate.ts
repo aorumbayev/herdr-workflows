@@ -357,9 +357,6 @@ function sourceTypeOf(
     if (fields[0] === "agent") return fields.length === 1 ? "object" : "unknown";
     return "unknown";
   }
-  if (producer.kind === "child" && producer.childReturns?.kind === "map") {
-    if (fields.length >= 1 && fields[0]! in producer.childReturns.fields) return "unknown";
-  }
   return "unknown";
 }
 

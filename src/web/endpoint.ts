@@ -9,7 +9,7 @@ import {
   writeFileSync,
   type Stats,
 } from "node:fs";
-import { chmod, mkdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pluginStateDir } from "../config";
 import {
@@ -126,10 +126,6 @@ export async function writeEndpointRecord(
 ): Promise<void> {
   await ensurePrivateDir(stateDir);
   await writePrivateFile(endpointRecordPath(record.repoRoot, stateDir), JSON.stringify(record));
-}
-
-async function removeEndpointRecord(repoRoot: string, stateDir: string): Promise<void> {
-  await rm(endpointRecordPath(repoRoot, stateDir), { force: true });
 }
 
 /** Drop the record only when it still names this owner's URL. Caller must hold the endpoint lock. */
@@ -368,7 +364,7 @@ async function discardUnusableRecord(
   const record = await readEndpointRecord(repoRoot, stateDir);
   if (!record) return;
   if (record.repoRoot !== repoRoot) {
-    await removeEndpointRecord(repoRoot, stateDir);
+    await rm(endpointRecordPath(repoRoot, stateDir), { force: true });
     return;
   }
   if (await probeEndpoint(record.url, repoRoot, fetchImpl)) return;

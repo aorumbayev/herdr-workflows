@@ -1,5 +1,4 @@
 import { appendFile, mkdir } from "node:fs/promises";
-import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 import { join } from "node:path";
 import { pluginStateDir } from "./config";
 
@@ -59,28 +58,22 @@ export async function appendRunLog(entry: RunLogEntry): Promise<void> {
   }
 }
 
-function readFileTail(path: string, maxBytes: number): string {
-  const fd = openSync(path, "r");
-  try {
-    const size = fstatSync(fd).size;
-    if (size === 0) return "";
-    const start = Math.max(0, size - maxBytes);
-    const buf = Buffer.alloc(size - start);
-    readSync(fd, buf, 0, buf.length, start);
-    let text = buf.toString("utf8");
-    if (start > 0) {
-      const nl = text.indexOf("\n");
-      text = nl === -1 ? text : text.slice(nl + 1);
-    }
-    return text;
-  } finally {
-    closeSync(fd);
+async function readFileTail(path: string, maxBytes: number): Promise<string> {
+  const file = Bun.file(path);
+  const size = file.size;
+  if (size === 0) return "";
+  const start = Math.max(0, size - maxBytes);
+  let text = await file.slice(start).text();
+  if (start > 0) {
+    const nl = text.indexOf("\n");
+    text = nl === -1 ? text : text.slice(nl + 1);
   }
+  return text;
 }
 
 export async function readRunLog(): Promise<RunLogEntry[]> {
   try {
-    return parseLines(readFileTail(runLogPath(), RUN_LOG_READ_TAIL_BYTES));
+    return parseLines(await readFileTail(runLogPath(), RUN_LOG_READ_TAIL_BYTES));
   } catch {
     return [];
   }

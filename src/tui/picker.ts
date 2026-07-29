@@ -1012,32 +1012,7 @@ function buildPickerDetailStack(theme: HostTheme) {
   ] as const;
 }
 
-function mountPickerUi(
-  renderer: CliRenderer,
-  theme: HostTheme,
-): Omit<
-  PickerState,
-  | "mode"
-  | "entries"
-  | "pending"
-  | "inputQueue"
-  | "inputIndex"
-  | "inputValues"
-  | "inputDomains"
-  | "resolveGeneration"
-  | "choiceOptions"
-  | "customChoice"
-  | "exit"
-  | "running"
-  | "progressLines"
-  | "repoRoot"
-  | "config"
-  | "ctx"
-  | "workflow"
-  | "loadWorkflow"
-  | "contentWidth"
-  | "theme"
-> {
+function mountPickerUi(renderer: CliRenderer, theme: HostTheme) {
   renderer.root.add(
     Box(
       {

@@ -431,7 +431,6 @@ export async function listWorkflows(
       entry.hidden = workflow.hidden;
       entry.title = workflow.title;
       entry.description = workflow.description;
-      entry.needsTranscript = workflow.needsTranscript;
       entry.inputs = workflow.inputs;
       entry.repoOwned = workflow.repoOwned;
       entry.dynamicOptions = workflow.inputs.some((input) => input.dynamicOptions !== undefined);

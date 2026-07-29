@@ -10,7 +10,7 @@ import {
   sizeToFirstRatio,
 } from "../src/run/context";
 import { resolveInputValues } from "../src/run/runner";
-import { assertFocusPolicy } from "../src/run/steps/primitive";
+import { assertFocusPolicy } from "../src/herdr-policy";
 import { buildHwfEnv, mergeStepEnv, runArgvStep, runShellStep } from "../src/run/steps/shell";
 import type { InputSpec } from "../src/workflow/types";
 

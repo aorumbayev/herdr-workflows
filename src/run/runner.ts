@@ -9,12 +9,7 @@ import {
   reportToken,
   tabClose,
 } from "../herdr";
-import {
-  buildTemplateNamespace,
-  pluginStateDir,
-  type InvocationContext,
-  type WorkflowsConfig,
-} from "../config";
+import { buildTemplateNamespace, type InvocationContext, type WorkflowsConfig } from "../config";
 import { assertHwfEnvValues } from "../limits";
 import { appendRunLog } from "../runlog";
 import { transcriptText } from "../session";

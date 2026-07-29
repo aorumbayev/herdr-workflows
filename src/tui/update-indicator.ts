@@ -1,5 +1,5 @@
-import manifest from "../../herdr-plugin.toml";
-import { compareSemver, fetchLatestPublishedRelease, ReleaseCheckError } from "../release-check";
+import { compareSemver, fetchLatestPublishedRelease } from "../release-check";
+import { PRODUCT_VERSION } from "../setup/paths";
 
 /** Width-bounded list-mode filter-row hint (printable ASCII only). */
 export const UPDATE_INDICATOR = "[run hwf update]";
@@ -40,8 +40,9 @@ export function startPickerUpdateCheck(opts: PickerUpdateCheck): void {
     .check()
     .then((latest) => {
       if (!latest) return;
-      if (!updateAvailable(opts.embeddedVersion, latest.version)) return;
-      opts.onNewer(latest.version);
+      if (updateAvailable(opts.embeddedVersion, latest.version)) {
+        opts.onNewer(latest.version);
+      }
     })
     .catch(() => {
       // Timeout, network, rate-limit, parse — ignore.
@@ -51,14 +52,13 @@ export function startPickerUpdateCheck(opts: PickerUpdateCheck): void {
 export async function defaultPickerReleaseCheck(): Promise<{ version: string } | null> {
   try {
     return await fetchLatestPublishedRelease();
-  } catch (error) {
-    if (error instanceof ReleaseCheckError) return null;
+  } catch {
     return null;
   }
 }
 
 export function embeddedPluginVersion(): string {
-  return String(manifest.version);
+  return PRODUCT_VERSION;
 }
 
 /** Move process CWD to the invocation repo so Herdr can rename the managed checkout. */

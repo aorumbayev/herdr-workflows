@@ -1192,28 +1192,8 @@ function toStep(file: string, stepIndex: number, step: RawStep): WorkflowStep {
 }
 
 function toRecovery(file: string, step: z.infer<typeof recoveryStepSchema>): RecoveryAction {
-  const asStep = toAction(file, undefined, step as RawStep, "on_failure");
-  if (asStep.kind === "agent") {
-    const { background: _b, ...rest } = asStep as AgentWithBackground;
-    return rest;
-  }
-  if (asStep.kind === "run") {
-    const { background: _b, retry: _r, ...rest } = asStep as RunWithExtras;
-    return rest;
-  }
-  if (asStep.kind === "herdr") {
-    const { retry: _r, ...rest } = asStep as HerdrWithRetry;
-    return rest;
-  }
-  return asStep;
+  return toAction(file, undefined, step as RawStep, "on_failure") as RecoveryAction;
 }
-
-type AgentWithBackground = Extract<StepAction, { kind: "agent" }> & { background?: boolean };
-type RunWithExtras = Extract<StepAction, { kind: "run" }> & {
-  background?: boolean;
-  retry?: RetrySpec;
-};
-type HerdrWithRetry = Extract<StepAction, { kind: "herdr" }> & { retry?: RetrySpec };
 
 export function parseRaw(file: string, text: string): RawWorkflow {
   let data: unknown;

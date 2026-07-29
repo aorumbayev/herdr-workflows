@@ -4419,15 +4419,11 @@
         return null;
       }
 
-      function themeLabel(mode) {
-        return mode || "system";
-      }
-
       function syncThemeControl() {
         const btn = $("theme-btn");
         if (!btn) return;
         const mode = themeMode();
-        const label = themeLabel(mode);
+        const label = mode || "system";
         btn.textContent = label;
         btn.setAttribute("aria-label", "Theme: " + label);
         btn.setAttribute("aria-pressed", mode ? "true" : "false");

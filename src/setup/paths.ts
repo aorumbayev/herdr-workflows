@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { delimiter, dirname, join, resolve, sep } from "node:path";
+import { basename, delimiter, dirname, join, resolve, sep } from "node:path";
 import { homedir } from "node:os";
 import manifest from "../../herdr-plugin.toml";
 
@@ -24,17 +24,12 @@ export function resolvePluginRoot(
   const injected = env.HERDR_PLUGIN_ROOT?.trim();
   if (injected) return resolve(injected);
   const execPath = opts.execPath ?? process.execPath;
-  const base = basenameNoExt(execPath).toLowerCase();
+  const base = basename(execPath).toLowerCase();
   if (base === "herdr-workflows" || base === "hwf") {
     const parent = dirname(execPath);
-    if (basenameNoExt(parent).toLowerCase() === "bin") return resolve(dirname(parent));
+    if (basename(parent).toLowerCase() === "bin") return resolve(dirname(parent));
   }
   return resolve(opts.cwd ?? process.cwd());
-}
-
-function basenameNoExt(path: string): string {
-  const base = path.split("/").pop() ?? path;
-  return base;
 }
 
 /** Managed checkout binary path. */
