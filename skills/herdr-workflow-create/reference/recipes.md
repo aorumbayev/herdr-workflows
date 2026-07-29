@@ -22,10 +22,13 @@ steps:
 ```yaml
 version: v1alpha1
 inputs:
-  branch: text
+  branch:
+    type: text
+    description: Branch the new worktree checks out
 steps:
   - herdr: worktree.create
     params:
+      # exactly one of workspace_id | cwd — passing both fails to load
       workspace_id: "{{context.workspace}}"
       branch: "{{inputs.branch}}"
       focus: true
@@ -49,9 +52,12 @@ steps:
 
 ```yaml
 # parent.yaml
+# validate from the project root so `child` resolves
 version: v1alpha1
 inputs:
-  branch: text
+  branch:
+    type: text
+    description: Branch the child verifies
 steps:
   - workflow: child
     inputs:
@@ -102,7 +108,7 @@ Fire-and-forget in a Herdr-owned pane. Do not combine with `ready_when`.
 version: v1alpha1
 steps:
   - run: [bun, run, long-job]
-    pane: { open: tab }
+    pane: { open: tab } # a tab takes no `size:`; use open: beside to size a split
     background: true
 ```
 
@@ -117,4 +123,41 @@ steps:
     pane: { open: tab }
     ready_when: "/lazy.?git/"
     timeout: 30s
+```
+
+## Sized split, fire-and-forget
+
+`size:` is only legal with `open: beside`/`below`. "Give it 40% of the screen" means a split.
+
+```yaml
+version: v1alpha1
+steps:
+  - run: [bun, run, dev]
+    pane: { open: beside, size: 40 }
+    background: true
+```
+
+## Guarded input
+
+An input with `when:` only prompts when the guard holds, and every step referencing it needs the
+same guard. Step ids are `[a-z][a-z0-9_]{0,31}` — no hyphens.
+
+```yaml
+version: v1alpha1
+inputs:
+  deep:
+    type: choice
+    description: Run the deeper review pass?
+    options: [yes, no]
+    default: "no"
+  scope:
+    type: text
+    description: Area the deep pass should focus on
+    when: '{{inputs.deep}} == "yes"'
+steps:
+  - id: git_diff
+    run: [git, diff, HEAD]
+  - id: deep_lint
+    run: [bun, run, lint, "{{inputs.scope}}"]
+    when: '{{inputs.deep}} == "yes"'
 ```
