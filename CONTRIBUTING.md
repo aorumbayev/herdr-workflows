@@ -38,7 +38,6 @@ This repository keeps OpenSpec at the canonical root `openspec/`. The official C
 | `openspec/config.yaml`                | OpenSpec project config                              |
 | `openspec/specs/<capability>/spec.md` | Main specs (current behavior)                        |
 | `openspec/changes/<name>/`            | Active change (proposal, design, tasks, delta specs) |
-| `openspec/changes/archive/`           | Archived changes                                     |
 
 Before you change runtime behavior, read the relevant files under `openspec/specs/*/spec.md`. Cite those specs in your plan or pull request.
 

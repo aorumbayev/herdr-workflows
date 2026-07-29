@@ -107,7 +107,7 @@ Use only `{{inputs.name}}`, `{{steps.id.field}}`, and `{{context.key}}`. A whole
 
 ## Inputs
 
-A name matches `[a-z][a-z0-9_]{0,31}`. The types are `text`, `choice` (a static list or `{run: argv}`), and `profile` (merged profile names, never args). A closed `choice` or `profile` default must exist among the available values. Mapped inputs may declare ordered `when:` guards that reference earlier inputs. Inactive inputs do not prompt, resolve, or export `HWF_` values. Supplying an inactive value fails collection. A choice may set `allow_custom: true` so listed options are suggestions and other text is accepted. `min_length` is an opt-in non-negative character floor for active values. Only the entry workflow prompts, in declaration order, for inputs that are active under earlier answers.
+A name matches `[a-z][a-z0-9_]{0,31}`. The types are `text`, `choice` (a static list or `{run: argv}`), and `profile` (merged profile names, never args). A closed `choice` or `profile` default must exist among the available values. Mapped inputs may declare ordered `when:` guards that reference earlier inputs. Inactive inputs do not prompt, resolve, or export `HWF_` values. Supplying an inactive value fails collection. A choice may set `allow_custom: true` so listed options are suggestions and other text is accepted. `min_length` is an opt-in non-negative character floor for active values. Only the entry workflow prompts, in declaration order, for inputs that are active under earlier answers. A declared input that is referenced nowhere is a load-time error.
 
 The picker prompt states the input name, the declared `description`, the prompt's ordinal position,
 and how to answer: the number of options for a resolved closed domain, whether a custom value is
@@ -162,10 +162,13 @@ The layers are the global plugin config directory, then `.hwf/config.yaml`, then
 | Source                                                          | Limit  |
 | --------------------------------------------------------------- | ------ |
 | Generated `HWF_*` env block                                     | 24 KiB |
+| Agent prompt body (inline)                                      | 16 KiB |
 | Command / managed response / transcript / dynamic-choice stdout | 8 MiB  |
 | Dynamic choices                                                 | 1,000  |
 | Dynamic choice timeout                                          | 10s    |
 | Transcript extractor timeout                                    | 30s    |
+
+Oversized agent prompts spill to a file; the agent receives a pointer instruction to read that path.
 
 ## Trust, share, and import
 
@@ -173,7 +176,7 @@ A workflow file is reviewed executable code. The picker and the workbench show r
 
 Sharing uses the command `hwf workflow import "<bundle>"`. The bundle is a gzip-compressed, base64-encoded `{name, yaml}[]` array. It carries no version, root, source, or config metadata. Export starts from the exact selected source. It walks `workflow:` children using the same repo-first resolution as runtime.
 
-Import requires a review of every YAML body and the aggregate warnings. Choose one destination scope for the whole bundle, then confirm. A name conflict keeps the existing entry. The workbench asks for replace-all confirmation interactively. The CLI exits and reports the conflicts. It needs `--force` on a rerun. The old single-workflow `{v, name, body}` format is rejected. The workbench share and import views never execute workflows.
+Import requires a review of every YAML body and the aggregate warnings. The CLI confirms the reviewed preview first, then asks for one destination scope for the whole bundle. The workbench asks for destination scope, then confirms. A name conflict keeps the existing entry. The workbench asks for replace-all confirmation interactively. The CLI exits and reports the conflicts. It needs `--force` on a rerun. The old single-workflow `{v, name, body}` format is rejected. The workbench share and import views never execute workflows.
 
 The method denylist covers server and plugin lifecycle, identity authority, experimental graphics, and similar cases. It guards against accidental misuse and protects runtime safety. It is not a sandbox. A trusted `run:` step can call the complete herdr CLI or socket as the current user.
 

@@ -4,7 +4,7 @@ herdr ≥ 0.7.5 plugin. It sequences short linear YAML workflows (`agent` / `run
 
 Workflow format is `version: v1alpha1`. The package stays semver `0.x`. A later incompatible alpha increments `v1alphaN`. Workflow YAML never declares a herdr version. The plugin manifest and CLI own minimum version and protocol enforcement.
 
-Spec of record: `openspec/specs/*/spec.md`. Useful history: archived change `openspec/changes/archive/2026-07-28-redesign-workflow-v1-syntax/`. Product docs in `docs/` describe the current v1alpha1 contract. herdr runtime behavior comes from `.agents/references/herdr/docs/versions/0.7.5/`. Never invent it from memory. Clone and update that checkout with `.agents/references/AGENTS.md`.
+Spec of record: `openspec/specs/*/spec.md`. Product docs in `docs/` describe the current v1alpha1 contract. herdr runtime behavior comes from `.agents/references/herdr/docs/versions/0.7.5/`. Never invent it from memory. Clone and update that checkout with `.agents/references/AGENTS.md`.
 
 Before behavior work, read and cite the relevant `openspec/specs/*/spec.md`. See `CONTRIBUTING.md`.
 
@@ -43,10 +43,14 @@ bun run install:dev                      # compile + herdr plugin link + keybind
 | `src/limits.ts`                              | shared capture and environment byte caps                                                                               |
 | `src/session.ts`                             | transcript extraction (config extractors + built-in)                                                                   |
 | `src/runlog.ts`                              | run log                                                                                                                |
-| `src/init.ts`                                | init + workflow seeds                                                                                                  |
+| `src/init.ts`                                | `hwf init` — profile probe, config write, `.hwf/` scaffold                                                             |
+| `src/update.ts`                              | `hwf update` via herdr plugin install                                                                                  |
+| `src/release-check.ts`                       | GitHub latest-release fetch + semver compare                                                                           |
+| `src/herdr-policy.ts`                        | explicit-target focus policy for herdr methods                                                                         |
+| `src/setup/`                                 | host setup: PATH CLI install + picker keybindings                                                                      |
 | `src/workflow/`                              | types.ts, parse.ts (YAML → WorkflowStep[]), validate.ts (references, child contracts), load.ts (name → LoadedWorkflow) |
 | `src/run/`                                   | runner.ts + steps/                                                                                                     |
-| `src/tui/`                                   | picker.ts, run-launch.ts, theme.ts                                                                                     |
+| `src/tui/`                                   | picker.ts, run-launch.ts, theme.ts, update-indicator.ts                                                                |
 | `src/web/`                                   | server.ts, endpoint.ts, route.ts                                                                                       |
 | `src/web/page.html`                          | workbench UI served by the web server                                                                                  |
 | `test/setup.ts`                              | Bun preload quarantine — denies real `herdr`/`hwf`, isolates HOME/config/socket env                                    |

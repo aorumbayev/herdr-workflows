@@ -109,7 +109,8 @@ Recipes: **[reference/recipes.md](reference/recipes.md)**.
 ### 5. Validate — mandatory gate
 
 ```bash
-sh skills/herdr-workflow-create/scripts/validate.sh /tmp/draft.yaml <name>
+# From this skill's install directory (the folder that contains this SKILL.md):
+sh scripts/validate.sh /tmp/draft.yaml <name>
 ```
 
 Prints `{"ok":true}` or `{"ok":false,"error":…}`. Exit `0` = valid, `1` = invalid YAML,
