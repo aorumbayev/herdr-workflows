@@ -177,8 +177,9 @@ export function dumpWorkflow(doc: RawWorkflowDoc): string {
   if (doc.on_failure) {
     lines.push("");
     lines.push("on_failure:");
+    // dumpStep emits a list item; on_failure is a mapping — drop the marker and one indent level.
     const recovery = dumpStep(doc.on_failure as RawStep).map((ln) =>
-      ln.startsWith(`${IND}- `) ? `${IND}${ln.slice(IND.length + 2)}` : ln,
+      ln.startsWith(`${IND}- `) ? `${IND}${ln.slice(IND.length + 2)}` : ln.slice(IND.length),
     );
     lines.push(...recovery);
   }

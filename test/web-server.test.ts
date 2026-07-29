@@ -154,6 +154,52 @@ describe("web visual round-trip", () => {
     });
     expect(((await res.json()) as { ok: boolean }).ok).toBe(false);
   });
+
+  test("format round-trips on_failure herdr with nested params", async () => {
+    const root = await repo();
+    const { base, token } = await serve(root);
+    const doc = {
+      version: "v1alpha1",
+      steps: [{ run: "echo hi" }],
+      on_failure: {
+        herdr: "notification.show",
+        params: {
+          title: "handoff failed",
+          body: "{{context.error.message}}",
+          sound: "request",
+        },
+      },
+    };
+    const formatted = (await (
+      await fetch(`${base}/api/format`, {
+        method: "POST",
+        headers: { "x-hwf-token": token, "content-type": "application/json" },
+        body: JSON.stringify({ doc }),
+      })
+    ).json()) as { ok: boolean; text?: string; error?: string };
+    expect(formatted.ok).toBe(true);
+    expect(formatted.text).toMatch(/\non_failure:\n {2}herdr:/);
+    expect(formatted.text).toMatch(/\n {2}params:/);
+    expect(formatted.text).not.toMatch(/\non_failure:\n {2}- /);
+    const reparsed = (await (
+      await fetch(`${base}/api/parse`, {
+        method: "POST",
+        headers: { "x-hwf-token": token, "content-type": "application/json" },
+        body: JSON.stringify({ text: formatted.text }),
+      })
+    ).json()) as {
+      ok: boolean;
+      doc?: { on_failure?: { herdr?: string; params?: Record<string, string> } };
+      error?: string;
+    };
+    expect(reparsed.ok).toBe(true);
+    expect(reparsed.doc?.on_failure?.herdr).toBe("notification.show");
+    expect(reparsed.doc?.on_failure?.params).toMatchObject({
+      title: "handoff failed",
+      body: "{{context.error.message}}",
+      sound: "request",
+    });
+  });
 });
 
 describe("web provenance and sensitivity", () => {
@@ -488,5 +534,8 @@ describe("web page share and import routes", () => {
     expect(html).toContain("editorDirty");
     expect(html).toContain("discard unsaved config changes?");
     expect(html).toContain("discard unsaved workflow changes?");
+    expect(html).toContain("function refreshDirty()");
+    expect(html).toContain("unsaved changes");
+    expect(html).not.toContain("moved to ");
   });
 });

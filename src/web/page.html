@@ -64,7 +64,11 @@
         --fill-ink: var(--nord0);
         --canvas-bg: var(--nord0);
         --canvas-dot: var(--nord3);
-        --edge: color-mix(in srgb, var(--nord4) 14%, var(--nord3));
+        --edge: color-mix(in srgb, var(--nord4) 42%, var(--nord3));
+        --port: color-mix(in srgb, var(--nord4) 58%, var(--nord3));
+        --node-surface: var(--nord1);
+        --node-border: var(--nord3);
+        --node-shadow: 0 2px 10px color-mix(in srgb, black 38%, transparent);
         --scrim: color-mix(in srgb, color-mix(in srgb, var(--nord0) 52%, black) 72%, transparent);
         --n-trigger: var(--nord15);
         --n-run: var(--nord14);
@@ -113,7 +117,11 @@
         --fill-ink: var(--nord6);
         --canvas-bg: var(--nord6);
         --canvas-dot: rgb(195 203 217);
-        --edge: rgb(119 131 154);
+        --edge: rgb(90 102 122);
+        --port: rgb(76 86 106);
+        --node-surface: var(--nord5);
+        --node-border: rgb(160 170 186);
+        --node-shadow: 0 2px 10px color-mix(in srgb, var(--nord0) 14%, transparent);
         --scrim: rgb(46 52 64 / 60%);
         --n-trigger: rgb(122 97 118);
         --n-run: rgb(93 108 80);
@@ -600,6 +608,18 @@
         touch-action: none;
         cursor: grab;
       }
+      .canvas.expanded {
+        position: fixed;
+        inset: 0;
+        z-index: 40;
+        height: auto;
+        min-height: 0;
+        border-radius: 0;
+        border: none;
+      }
+      body.canvas-expanded {
+        overflow: hidden;
+      }
       .canvas:focus {
         outline: none;
       }
@@ -620,7 +640,7 @@
       .canvas .edges path {
         fill: none;
         stroke: var(--edge);
-        stroke-width: 2;
+        stroke-width: 2.5;
       }
       .canvas .layer {
         position: absolute;
@@ -655,8 +675,9 @@
         width: 96px;
         height: 96px;
         border-radius: 8px;
-        border: 1px solid var(--line-strong);
-        background: var(--bg-elevated);
+        border: 1px solid var(--node-border);
+        background: var(--node-surface);
+        box-shadow: var(--node-shadow);
         display: grid;
         place-items: center;
         cursor: grab;
@@ -667,11 +688,15 @@
       }
       .node.sel {
         border-color: var(--accent);
-        box-shadow: 0 0 0 2px var(--accent-soft);
+        box-shadow:
+          var(--node-shadow),
+          0 0 0 2px var(--accent-soft);
       }
       .node:focus-visible {
         border-color: var(--accent);
-        box-shadow: 0 0 0 2px var(--accent-soft);
+        box-shadow:
+          var(--node-shadow),
+          0 0 0 2px var(--accent-soft);
       }
       .node.trigger {
         border-radius: 46px 8px 8px 46px;
@@ -736,7 +761,7 @@
         width: 10px;
         height: 10px;
         border-radius: 50%;
-        background: var(--edge);
+        background: var(--port);
         transform: translateY(-50%);
       }
       .node .port.in {
@@ -759,7 +784,7 @@
       .node .tools button {
         padding: 0.1rem 0.35rem;
         font-size: 12px;
-        background: var(--bg-elevated);
+        background: var(--node-surface);
       }
       .plus {
         position: absolute;
@@ -787,14 +812,17 @@
         gap: 0.25rem;
       }
       .zoombar button {
+        min-width: 32px;
+        min-height: 32px;
         padding: 0.2rem 0.5rem;
-        background: var(--bg-elevated);
+        background: var(--node-surface);
       }
       .canvas .addnode {
         position: absolute;
         top: 0.6rem;
         right: 0.6rem;
-        background: var(--bg-elevated);
+        min-height: 32px;
+        background: var(--node-surface);
       }
       .canvas .tip {
         position: absolute;
@@ -803,6 +831,12 @@
         font-size: 11px;
         color: var(--muted);
         pointer-events: none;
+      }
+      .unsaved {
+        color: var(--yellow);
+        font-size: 12px;
+        font-weight: 600;
+        align-self: center;
       }
 
       .palette {
@@ -1633,6 +1667,10 @@
         let palette = null;
         let ndv = null;
         const undos = [];
+        const redos = [];
+        let expanded = false;
+        let expandBtn = null;
+        let onHistory = null;
 
         const trigger = document.createElement("div");
         trigger.className = "node trigger";
@@ -1656,17 +1694,21 @@
           return nodes.slice().sort((a, b) => a.x - b.x || a.y - b.y);
         }
 
+        function snapshot() {
+          return nodes.map((n) => ({
+            verb: n.verb,
+            form: Object.assign({}, n.form),
+            extra: n.extra,
+            x: n.x,
+            y: n.y,
+          }));
+        }
+
         function snap() {
-          undos.push(
-            nodes.map((n) => ({
-              verb: n.verb,
-              form: Object.assign({}, n.form),
-              extra: n.extra,
-              x: n.x,
-              y: n.y,
-            })),
-          );
+          undos.push(snapshot());
           if (undos.length > 40) undos.shift();
+          redos.length = 0;
+          if (onHistory) onHistory();
         }
 
         function setNodes(recs) {
@@ -1685,9 +1727,22 @@
         function undo() {
           const prev = undos.pop();
           if (!prev) return;
+          redos.push(snapshot());
           setNodes(prev);
           draw();
           onChange();
+          if (onHistory) onHistory();
+        }
+
+        function redo() {
+          const next = redos.pop();
+          if (!next) return;
+          undos.push(snapshot());
+          if (undos.length > 40) undos.shift();
+          setNodes(next);
+          draw();
+          onChange();
+          if (onHistory) onHistory();
         }
 
         function applyView() {
@@ -1920,7 +1975,7 @@
           makeNodeEl(n);
           selected = n;
           draw();
-          openNdv(n); // the sync fires when the modal closes, so a blank step never flashes an error
+          openNdv(n, { skipSnap: true }); // the sync fires when the modal closes, so a blank step never flashes an error
         }
 
         function slotOf(before) {
@@ -2054,17 +2109,32 @@
         );
 
         root.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") {
+            if (palette) {
+              e.preventDefault();
+              closePalette();
+            } else if (expanded && !ndv) {
+              e.preventDefault();
+              setExpanded(false);
+            }
+            return;
+          }
           if (ndv || e.target.closest("input, textarea, select, .palette")) return;
           if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
             e.preventDefault();
-            undo();
+            if (e.shiftKey) redo();
+            else undo();
+            return;
+          }
+          if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "y") {
+            e.preventDefault();
+            redo();
             return;
           }
           if ((e.key === "Delete" || e.key === "Backspace") && selected) {
             e.preventDefault();
             remove(selected);
           }
-          if (e.key === "Escape") closePalette();
         });
 
         function zoomAt(factor, clientX, clientY) {
@@ -2098,18 +2168,43 @@
 
         const zoombar = document.createElement("div");
         zoombar.className = "zoombar";
-        for (const [label, fn] of [
-          ["−", () => zoomAt(1 / 1.2)],
-          ["+", () => zoomAt(1.2)],
-          ["⤢", fit],
-          ["1:1", () => zoomAt(1 / view.z)],
+        for (const item of [
+          { label: "−", name: "Zoom out", fn: () => zoomAt(1 / 1.2) },
+          { label: "+", name: "Zoom in", fn: () => zoomAt(1.2) },
+          { label: "⤢", name: "Fit canvas", fn: fit },
+          { label: "⛶", name: "Expand canvas", expand: true },
+          { label: "1:1", name: "Reset zoom", fn: () => zoomAt(1 / view.z) },
         ]) {
           const b = document.createElement("button");
-          b.textContent = label;
-          b.onclick = fn;
+          b.type = "button";
+          b.textContent = item.label;
+          b.title = item.name;
+          b.setAttribute("aria-label", item.name);
+          if (item.expand) {
+            expandBtn = b;
+            b.setAttribute("aria-pressed", "false");
+            b.onclick = () => setExpanded(!expanded);
+          } else {
+            b.onclick = item.fn;
+          }
           zoombar.appendChild(b);
         }
         root.appendChild(zoombar);
+
+        function setExpanded(on) {
+          if (on === expanded) return;
+          expanded = on;
+          root.classList.toggle("expanded", on);
+          document.body.classList.toggle("canvas-expanded", on);
+          if (expandBtn) {
+            const name = on ? "Exit expanded canvas" : "Expand canvas";
+            expandBtn.setAttribute("aria-label", name);
+            expandBtn.setAttribute("aria-pressed", on ? "true" : "false");
+            expandBtn.title = name;
+          }
+          if (!on && expandBtn) expandBtn.focus();
+          requestAnimationFrame(fit);
+        }
 
         const addBtn = document.createElement("button");
         addBtn.className = "addnode";
@@ -2120,17 +2215,18 @@
         const tip = document.createElement("span");
         tip.className = "tip";
         tip.textContent =
-          "drag to move · scroll to pan · ⌘/ctrl+scroll to zoom · ⌘/ctrl+Z undo · Enter opens a step";
+          "drag to move · scroll to pan · ⌘/ctrl+scroll to zoom · ⌘/ctrl+Z undo · ⌘/ctrl+⇧Z redo · Enter opens a step";
         root.appendChild(tip);
 
         function closeNdv() {
           if (!ndv) return;
           const n = ndv.node;
+          const changed = ndv.isNew || JSON.stringify(n.form) !== ndv.initialForm;
           ndv.wrap.remove();
           ndv = null;
           relabel(n);
           draw();
-          onChange();
+          if (changed) onChange();
         }
 
         function trapTab(wrap, e) {
@@ -2148,8 +2244,16 @@
         }
 
         // Node parameters, n8n's detail view: edits write straight into the node's form.
-        function openNdv(n) {
+        function openNdv(n, opts) {
           closeNdv();
+          const isNew = !!(opts && opts.skipSnap);
+          const initialForm = JSON.stringify(n.form);
+          let snapped = isNew;
+          const ensureSnap = () => {
+            if (snapped) return;
+            snap();
+            snapped = true;
+          };
           const t = NODE_TYPES[n.verb];
           const wrap = document.createElement("div");
           wrap.className = "ndv";
@@ -2168,6 +2272,7 @@
           nameIn.placeholder = "step id (optional)";
           nameIn.value = n.form.id || "";
           nameIn.oninput = () => {
+            ensureSnap();
             n.form.id = nameIn.value;
             relabel(n);
           };
@@ -2191,6 +2296,7 @@
               el.type = "checkbox";
               el.checked = !!n.form[f.k];
               el.onchange = () => {
+                ensureSnap();
                 n.form[f.k] = el.checked;
                 relabel(n);
               };
@@ -2200,10 +2306,10 @@
               cap.textContent = f.l;
               if (f.t === "select") {
                 el = document.createElement("select");
-                const opts = f.opts.includes(n.form[f.k] || "")
+                const optsList = f.opts.includes(n.form[f.k] || "")
                   ? f.opts
                   : f.opts.concat([n.form[f.k]]);
-                for (const o of opts) {
+                for (const o of optsList) {
                   const opt = document.createElement("option");
                   opt.value = o;
                   opt.textContent = o || "—";
@@ -2215,6 +2321,7 @@
                 el.value = n.form[f.k] || "";
               }
               const write = () => {
+                ensureSnap();
                 n.form[f.k] = el.value;
                 relabel(n);
               };
@@ -2244,7 +2351,7 @@
           };
           wrap.appendChild(panel);
           root.appendChild(wrap);
-          ndv = { wrap, node: n };
+          ndv = { wrap, node: n, initialForm, isNew };
           nameIn.focus();
         }
 
@@ -2255,7 +2362,9 @@
           load(steps) {
             closePalette();
             closeNdv();
+            setExpanded(false);
             undos.length = 0;
+            redos.length = 0;
             setNodes(
               steps.map((step, i) => {
                 const verb = verbOf(step);
@@ -2270,6 +2379,7 @@
             );
             draw();
             fit();
+            if (onHistory) onHistory();
           },
           steps() {
             const out = [];
@@ -2282,6 +2392,18 @@
           },
           setTrigger(label) {
             trigger.querySelector(".label").textContent = label;
+          },
+          undo,
+          redo,
+          canUndo() {
+            return undos.length > 0;
+          },
+          canRedo() {
+            return redos.length > 0;
+          },
+          setExpanded,
+          onHistoryChange(fn) {
+            onHistory = fn;
           },
         };
       }
@@ -2619,8 +2741,13 @@
       function renderEditor(name, scope, text, loadError, flags) {
         const pane = $("pane");
         pane.innerHTML = "";
+        document.body.classList.remove("canvas-expanded");
         editorDirty = false;
         editorFileText = text;
+        let savedName = name;
+        let savedScope = scope;
+        let savedText = text;
+        let canvasPending = false;
         let mode = "text";
         let extras = { version: "v1alpha1" }; // metadata carried through canvas mode untouched
         let validateTimer = null;
@@ -2668,7 +2795,7 @@
         paintFlags(flags);
 
         const ed = mkCodeEditor(text, () => {
-          editorDirty = true;
+          refreshDirty();
           runValidate();
         });
         const ta = ed.ta;
@@ -2677,12 +2804,61 @@
         canvasHost.className = "canvas hide";
         const canvas = makeCanvas(
           canvasHost,
-          () => scheduleSync(),
+          () => {
+            canvasPending = true;
+            refreshDirty();
+            scheduleSync();
+          },
           () => "When you run: hwf run " + (nameIn.value.trim() || "<name>"),
         );
 
         const status = document.createElement("div");
         status.className = "status";
+
+        const unsaved = document.createElement("span");
+        unsaved.className = "unsaved hide";
+        unsaved.setAttribute("role", "status");
+        unsaved.textContent = "unsaved changes";
+
+        const undoBtn = mkBtn("↶", () => doHistory("undo"));
+        undoBtn.setAttribute("aria-label", "Undo");
+        const redoBtn = mkBtn("↷", () => doHistory("redo"));
+        redoBtn.setAttribute("aria-label", "Redo");
+
+        function refreshDirty() {
+          const dirty =
+            canvasPending ||
+            nameIn.value.trim() !== savedName ||
+            scopeSel.value !== savedScope ||
+            ta.value !== savedText;
+          editorDirty = dirty;
+          unsaved.classList.toggle("hide", !dirty);
+          save.classList.toggle("hide", !dirty);
+          updateHistoryBtns();
+        }
+
+        function updateHistoryBtns() {
+          if (mode === "visual") {
+            undoBtn.disabled = !canvas.canUndo();
+            redoBtn.disabled = !canvas.canRedo();
+          } else {
+            undoBtn.disabled = false;
+            redoBtn.disabled = false;
+          }
+        }
+
+        function doHistory(kind) {
+          if (mode === "visual") {
+            if (kind === "undo") canvas.undo();
+            else canvas.redo();
+            return;
+          }
+          ta.focus();
+          document.execCommand(kind);
+          refreshDirty();
+        }
+
+        canvas.onHistoryChange(updateHistoryBtns);
 
         function runValidate() {
           clearTimeout(validateTimer);
@@ -2719,7 +2895,7 @@
           let t = ta.value.replace(/\s+$/, "");
           if (!/^steps:/m.test(t)) t = (t ? t + "\n" : "") + "steps:";
           ed.setValue(t + "\n\n" + SKELETONS[verb] + "\n");
-          editorDirty = true;
+          refreshDirty();
           ta.focus();
           ta.setSelectionRange(ta.value.length, ta.value.length);
           runValidate();
@@ -2749,8 +2925,11 @@
             if (r.data.doc.on_failure) extras.on_failure = r.data.doc.on_failure;
             canvasHost.classList.remove("hide");
             canvas.load(r.data.doc.steps);
-          } else if (!(await syncFromCanvas())) {
-            return; // stale YAML would wipe the node edits on the way back in
+          } else {
+            canvas.setExpanded(false);
+            if (!(await syncFromCanvas())) {
+              return; // stale YAML would wipe the node edits on the way back in
+            }
           }
           mode = next;
           editorMode = next;
@@ -2759,6 +2938,7 @@
           ed.wrap.classList.toggle("hide", mode !== "text");
           addbar.classList.toggle("hide", mode !== "text");
           canvasHost.classList.toggle("hide", mode !== "visual");
+          updateHistoryBtns();
         }
 
         function scheduleSync() {
@@ -2791,7 +2971,8 @@
             return false;
           }
           ed.setValue(r.data.text);
-          editorDirty = true;
+          canvasPending = false;
+          refreshDirty();
           runValidate();
           return true;
         }
@@ -2811,16 +2992,21 @@
             toast("not saved — " + (r.data.error || "save failed"), false);
             return;
           }
-          editorDirty = false;
-          // Renamed or re-scoped: drop the previous file so a save doesn't silently fork.
+          // Renamed or re-scoped: drop the previous file only after the destination write succeeds.
           if (name && (name !== newName || scope !== newScope)) {
             await api("/api/workflow", { method: "DELETE", body: JSON.stringify({ name, scope }) });
           }
+          savedName = newName;
+          savedScope = newScope;
+          savedText = ta.value;
+          canvasPending = false;
+          refreshDirty();
           toast("saved " + newName, true);
           await loadState();
           await openWorkflow(newName, newScope);
         });
         save.className = "primary";
+        save.setAttribute("aria-label", "Save");
         const copy = mkBtn("copy", () => {
           navigator.clipboard.writeText(ta.value).then(
             () => toast("YAML copied to clipboard", true),
@@ -2837,42 +3023,13 @@
           a.remove();
           setTimeout(() => URL.revokeObjectURL(a.href), 1000);
         });
-        bar2.append(save, copy, download);
+        bar2.append(undoBtn, redoBtn, unsaved, save, copy, download);
 
         const entry = state.entries.find((e) => e.name === name);
         const inBoth = !!entry && entry.inRepo && entry.inGlobal;
-
-        // Move (copy to the other scope, then drop the source) only when the name lives in one scope;
-        // when it exists in both, a move would clobber, so no button.
-        if (entry && !inBoth) {
-          const otherLabel = (s) => (s === "repo" ? "global" : "local");
-          const move = mkBtn("", async () => {
-            const fromScope = scopeSel.value;
-            const to = fromScope === "repo" ? "global" : "repo";
-            const mvName = nameIn.value.trim();
-            const p = await api("/api/promote", {
-              method: "POST",
-              body: JSON.stringify({ name: mvName, from: fromScope, to }),
-            });
-            if (!p.data.ok) {
-              setStatus(status, false, p.data.error || "move failed");
-              return;
-            }
-            await api("/api/workflow", {
-              method: "DELETE",
-              body: JSON.stringify({ name: mvName, scope: fromScope }),
-            });
-            editorDirty = false;
-            toast("moved to " + otherLabel(fromScope), true);
-            await loadState();
-            await openWorkflow(mvName, to);
-          });
-          const syncMoveLabel = () => {
-            move.textContent = "move to " + otherLabel(scopeSel.value);
-          };
-          scopeSel.addEventListener("change", syncMoveLabel);
-          syncMoveLabel();
-          bar2.appendChild(move);
+        if (inBoth) {
+          scopeSel.disabled = true;
+          scopeSel.title = "local and global variants both exist";
         }
 
         async function dropScopes(scopes) {
@@ -2926,11 +3083,13 @@
         };
         setFoot();
         nameIn.oninput = () => {
-          editorDirty = true;
+          refreshDirty();
           setFoot();
         };
+        scopeSel.onchange = () => refreshDirty();
 
         pane.append(bar1, flagBox, ed.wrap, canvasHost, status, bar2, foot);
+        refreshDirty();
         if (loadError) showProblem(false, loadError);
         runValidate();
         if (editorMode === "visual") setMode("visual");
