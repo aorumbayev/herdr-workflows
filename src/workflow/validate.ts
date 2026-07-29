@@ -1,5 +1,5 @@
 import { isMethodResultDotPath, RESULT_DOT_PATHS } from "../herdr-methods";
-import { clausesContain } from "./conditions";
+import { clausesContain, evaluateWhen } from "./conditions";
 import { isWholeValueTemplate, parseTemplatePath, textTemplates } from "./parse";
 import {
   bail,
@@ -10,6 +10,7 @@ import {
   type ReturnsSpec,
   type StepAction,
   type TemplatePath,
+  type TemplateNamespace,
   type WhenSpec,
   type WorkflowStep,
 } from "./types";
@@ -371,12 +372,18 @@ function assertAvailability(
   label: string,
 ): void {
   if (!required || required.length === 0) return;
-  if (!clausesContain(proven ?? [], required)) {
+  const consumer = proven ?? [];
+  const missing = required.filter((clause) => !clausesContain(consumer, [clause]));
+  if (missing.length > 0) {
+    const format = (clause: WhenSpec): string =>
+      clause.kind === "truthy"
+        ? `{{${clause.path}}}`
+        : `{{${clause.path}}} ${clause.negate ? "!=" : "=="} ${JSON.stringify(clause.value)}`;
     bail(
       file,
       stepIndex,
       key,
-      `${label} is not proven available — consumer must include every producer when: clause`,
+      `${label} is not proven available — missing producer when: ${missing.map(format).join(", ")}; consumer must include: ${required.map(format).join(", ")}`,
     );
   }
 }
@@ -813,14 +820,28 @@ export function assertChildInputContract(
   const declared = new Map(child.inputs.map((input) => [input.name, input]));
   const parentByName = new Map(parentInputs.map((input) => [input.name, input]));
   const values = passed ?? {};
+  const knownInputs: Record<string, string> = {};
   for (const key of Object.keys(values)) {
     if (!declared.has(key)) {
       bail(file, stepIndex, `inputs.${key}`, `unknown child input '${key}'`);
     }
   }
   for (const input of child.inputs) {
-    if (input.default === undefined && values[input.name] === undefined) {
+    if (
+      input.default === undefined &&
+      values[input.name] === undefined &&
+      !inputIsProvablyInactive(input, knownInputs)
+    ) {
       bail(file, stepIndex, `inputs.${input.name}`, `missing required child input '${input.name}'`);
+    }
+    const value = values[input.name] ?? input.default;
+    if (value === undefined || value.includes("{{")) continue;
+    if (
+      !input.when ||
+      input.when.length === 0 ||
+      evaluateWhen(input.when, namespace(knownInputs))
+    ) {
+      knownInputs[input.name] = value;
     }
   }
   for (const [name, raw] of Object.entries(values)) {
@@ -837,6 +858,23 @@ export function assertChildInputContract(
       stepProven,
     );
   }
+}
+
+function namespace(inputs: Record<string, string>): TemplateNamespace {
+  return { inputs, steps: {}, context: {} };
+}
+
+function inputIsProvablyInactive(input: InputSpec, knownInputs: Record<string, string>): boolean {
+  if (!input.when || input.when.length === 0) return false;
+  if (
+    input.when.some(
+      (clause) =>
+        !clause.path.startsWith("inputs.") || !Object.hasOwn(knownInputs, clause.path.slice(7)),
+    )
+  ) {
+    return false;
+  }
+  return !evaluateWhen(input.when, namespace(knownInputs));
 }
 
 function assertChildInputValue(

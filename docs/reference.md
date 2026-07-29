@@ -109,6 +109,8 @@ Use only `{{inputs.name}}`, `{{steps.id.field}}`, and `{{context.key}}`. A whole
 
 A name matches `[a-z][a-z0-9_]{0,31}`. The types are `text`, `choice` (a static list or `{run: argv}`), and `profile` (merged profile names, never args). A closed `choice` or `profile` default must exist among the available values. Mapped inputs may declare ordered `when:` guards that reference earlier inputs. Inactive inputs do not prompt, resolve, or export `HWF_` values. Supplying an inactive value fails collection. A choice may set `allow_custom: true` so listed options are suggestions and other text is accepted. `min_length` is an opt-in non-negative character floor for active values. Only the entry workflow prompts, in declaration order, for inputs that are active under earlier answers.
 
+Migration: scripted `hwf run` callers must omit `--input` flags for inactive inputs. Placeholder values such as `--input branch=` now fail when an earlier answer makes `branch` inactive.
+
 A dynamic choice runs its argv from the repo root, with a 10-second timeout, a limit of 1,000 options, and an 8 MiB capture cap. Discovery argv must stay template-free and must not depend on earlier answers. Loading and listing validate declarations without executing discovery. Entry collection executes only active dynamic choices, at most once. Picker launches carry the resolved domains on the stdin payload so the detached run does not re-execute them. Treat discovery commands as read-only.
 
 Inspect declarations without running steps:

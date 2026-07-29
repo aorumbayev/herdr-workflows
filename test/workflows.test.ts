@@ -699,6 +699,12 @@ steps:
     inputs:
       mode: "{{inputs.mode}}"
 `,
+      inactive_conditional: `version: v1alpha1
+steps:
+  - workflow: conditional_needs
+    inputs:
+      mode: delete
+`,
       typed: `version: v1alpha1
 inputs:
   n: text
@@ -729,6 +735,7 @@ steps:
     await expect(loadWorkflow("missing_conditional", root, config)).rejects.toThrow(
       /missing required child input 'branch'/,
     );
+    await expect(loadWorkflow("inactive_conditional", root, config)).resolves.toBeTruthy();
     await expect(loadWorkflow("bad_type", root, config)).rejects.toThrow(
       /must resolve to text \(source type object\)/,
     );

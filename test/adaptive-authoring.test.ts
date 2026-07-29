@@ -135,7 +135,9 @@ steps:
   - run: [echo, "{{steps.probe.stdout}}"]
 `,
       ),
-    ).rejects.toThrow(/not proven available/);
+    ).rejects.toThrow(
+      /not proven available.*missing producer when: \{\{inputs\.mode\}\} == "create".*consumer must include: \{\{inputs\.mode\}\} == "create"/,
+    );
 
     await expect(
       parseWorkflowText(

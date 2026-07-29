@@ -31,4 +31,4 @@ None.
 
 ## Impact
 
-The change affects workflow parsing, reference validation, input loading and collection, local command result handling, picker state, detached launch payloads, CLI commands, the generated workflow schema, examples, and author documentation. Existing `v1alpha1` files keep their behavior, no dependency is added, and the Herdr method denylist and protocol contract remain unchanged.
+The change affects workflow parsing, reference validation, input loading and collection, local command result handling, picker state, detached launch payloads, CLI commands, the generated workflow schema, examples, and author documentation. Existing `v1alpha1` YAML needs no rewrite, but scripted callers must stop supplying values for inputs made inactive by earlier answers. No dependency is added, and the Herdr method denylist and protocol contract remain unchanged.
