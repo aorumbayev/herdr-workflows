@@ -775,8 +775,14 @@ describe("code-change retirement", () => {
     await writeFile(binary, "build-1");
     let retired = 0;
     const stop = retireOnCodeChange(() => retired++, { path: binary, recursive: false });
-    await writeFile(binary, "build-2");
-    expect(await waitFor(() => retired > 0)).toBe(true);
+    // fs.watch registers asynchronously on macOS, so a single write can land before the
+    // watcher is armed. Re-trigger until it fires instead of racing one write.
+    let fired = false;
+    for (let build = 2; build < 32 && !fired; build++) {
+      await writeFile(binary, `build-${build}`);
+      fired = await waitFor(() => retired > 0, 100);
+    }
+    expect(fired).toBe(true);
     stop();
   });
 
