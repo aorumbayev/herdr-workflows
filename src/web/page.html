@@ -1717,13 +1717,17 @@
         return typeof v === "string" ? v : JSON.stringify(v);
       }
 
+      // One line per element. A string element keeps its own spacing, including an empty or
+      // padded argument, so only the trailing line the editor leaves behind is dropped.
       function listValue(raw, item) {
-        const lines = String(raw ?? "")
-          .split("\n")
-          .map((line) => line.trim())
-          .filter((line) => line !== "");
-        if (!lines.length) return undefined;
-        return lines.map((line) => {
+        const scalar = item && (item.kind === "number" || item.kind === "json");
+        const lines = String(raw ?? "").split("\n");
+        if (lines.length && lines[lines.length - 1] === "") lines.pop();
+        const kept = scalar
+          ? lines.map((line) => line.trim()).filter((line) => line !== "")
+          : lines;
+        if (!kept.length) return undefined;
+        return kept.map((line) => {
           if (item && item.kind === "number") return numberValue(line);
           if (item && item.kind === "json") {
             try {
@@ -1734,6 +1738,14 @@
           }
           return line;
         });
+      }
+
+      // An element holding a newline has no one-line-per-element form, so the step keeps its own
+      // value instead of being split into different elements.
+      function rendersValue(widget, raw) {
+        if (widget.kind !== "list" && widget.kind !== "textOrList") return true;
+        if (!Array.isArray(raw)) return true;
+        return !raw.some((item) => typeof item === "string" && item.indexOf("\n") >= 0);
       }
 
       // A value the schema cannot accept is passed through so the loader answers on the field,
@@ -1838,6 +1850,7 @@
             continue;
           }
           const raw = valueAt(step, f.key);
+          if (!rendersValue(f.widget, raw)) continue;
           form[f.key] = encodeValue(f.widget, raw);
           if (f.widget.kind === "textOrList")
             form[f.key + MODE_SUFFIX] = Array.isArray(raw) ? "list" : "text";
@@ -1856,6 +1869,7 @@
               if (params) step.params = params;
               continue;
             }
+            if (!(f.key in form)) continue; // a value the form left in YAML stays as it was
             let v = decodeValue(f.widget, form, f.key, f.label);
             if (v === undefined && f.key === verb)
               v = form[f.key + MODE_SUFFIX] === "list" ? [] : "";
@@ -1873,7 +1887,10 @@
       // Keys this form does not render: carried through untouched and reported as from YAML.
       function extraOf(props, verb, step) {
         const shown = new Set(["id"]);
-        for (const f of stepFields(props, verb)) shown.add(f.key.split(".")[0]);
+        for (const f of stepFields(props, verb)) {
+          if (!rendersValue(f.widget, valueAt(step, f.key))) continue;
+          shown.add(f.key.split(".")[0]);
+        }
         const extra = {};
         for (const key of Object.keys(step)) if (!shown.has(key)) extra[key] = step[key];
         return extra;

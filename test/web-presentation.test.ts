@@ -401,6 +401,34 @@ describe("node form field model", () => {
     expect(back.step).toEqual(step);
   });
 
+  test("an argv element keeps its own spacing", async () => {
+    const { page, base, token } = await served();
+    const model = fieldModel(page);
+    const props = await stepProps(base, token);
+    // Empty and padded arguments are legal argv, and the line widget must not rewrite them.
+    const step = { run: ["printf", "%s|%s|", "", "  padded  "] };
+    const form = model.formFromStep(props, "run", step, {});
+    const back = model.stepFromForm(props, "run", form, model.extraOf(props, "run", step), {});
+    expect(back.step).toEqual(step);
+    // Codes are scalars, so a stray blank line there is still noise rather than a value.
+    const codes = model.formFromStep(props, "run", { run: "echo hi", success_codes: [0, 3] }, {});
+    codes.success_codes = "0\n\n 3 \n";
+    expect(model.stepFromForm(props, "run", codes, {}, {}).step?.success_codes).toEqual([0, 3]);
+  });
+
+  test("an argv element holding a newline stays in YAML", async () => {
+    const { page, base, token } = await served();
+    const model = fieldModel(page);
+    const props = await stepProps(base, token);
+    const step = { run: ["python", "-c", "import sys\nprint(1)"] };
+    // One line per element cannot express it, so the form carries the value instead of splitting it.
+    const extra = model.extraOf(props, "run", step);
+    expect(extra).toEqual({ run: step.run });
+    const form = model.formFromStep(props, "run", step, {});
+    expect(form.run).toBeUndefined();
+    expect(model.stepFromForm(props, "run", form, extra, {}).step).toEqual(step);
+  });
+
   test("a placement value survives an unset required sibling", async () => {
     const { page, base, token } = await served();
     const model = fieldModel(page);
