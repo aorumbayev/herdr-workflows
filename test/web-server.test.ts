@@ -352,6 +352,114 @@ steps:
     expect(await Bun.file(join(root, ".hwf", "workflows", "good.yaml")).exists()).toBe(true);
   });
 
+  test("same-path PUT overwrites an existing workflow", async () => {
+    const root = await repo();
+    const file = join(root, ".hwf", "workflows", "edit.yaml");
+    await writeFile(file, `${V1}steps:\n  - run: echo old\n`);
+    const { base, token } = await serve(root);
+    const res = await fetch(`${base}/api/workflow`, {
+      method: "PUT",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "edit",
+        scope: "repo",
+        text: `${V1}steps:\n  - run: echo new\n`,
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { ok: boolean }).ok).toBe(true);
+    expect(await Bun.file(file).text()).toContain("echo new");
+  });
+
+  test("rename PUT refuses occupied destination and leaves it unchanged", async () => {
+    const root = await repo();
+    const wdir = join(root, ".hwf", "workflows");
+    await writeFile(join(wdir, "src.yaml"), `${V1}steps:\n  - run: echo src\n`);
+    await writeFile(join(wdir, "taken.yaml"), `${V1}steps:\n  - run: echo taken\n`);
+    const { base, token } = await serve(root);
+    const res = await fetch(`${base}/api/workflow`, {
+      method: "PUT",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "taken",
+        scope: "repo",
+        previousName: "src",
+        previousScope: "repo",
+        text: `${V1}steps:\n  - run: echo moved\n`,
+      }),
+    });
+    expect(res.status).toBe(409);
+    const data = (await res.json()) as { ok: boolean; error?: string };
+    expect(data.ok).toBe(false);
+    expect(data.error).toMatch(/already exists in repo/);
+    expect(await Bun.file(join(wdir, "taken.yaml")).text()).toContain("echo taken");
+    expect(await Bun.file(join(wdir, "src.yaml")).text()).toContain("echo src");
+  });
+
+  test("rename PUT into free destination then DELETE previous succeeds", async () => {
+    const root = await repo();
+    const wdir = join(root, ".hwf", "workflows");
+    await writeFile(join(wdir, "old.yaml"), `${V1}steps:\n  - run: echo old\n`);
+    const { base, token } = await serve(root);
+    const put = await fetch(`${base}/api/workflow`, {
+      method: "PUT",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "fresh",
+        scope: "repo",
+        previousName: "old",
+        previousScope: "repo",
+        text: `${V1}steps:\n  - run: echo fresh\n`,
+      }),
+    });
+    expect(put.status).toBe(200);
+    expect(((await put.json()) as { ok: boolean }).ok).toBe(true);
+    expect(await Bun.file(join(wdir, "fresh.yaml")).text()).toContain("echo fresh");
+    const del = await fetch(`${base}/api/workflow`, {
+      method: "DELETE",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({ name: "old", scope: "repo" }),
+    });
+    expect(del.status).toBe(200);
+    expect(((await del.json()) as { ok: boolean }).ok).toBe(true);
+    expect(await Bun.file(join(wdir, "old.yaml")).exists()).toBe(false);
+  });
+
+  test("DELETE missing file is idempotent ok", async () => {
+    const root = await repo();
+    const { base, token } = await serve(root);
+    const res = await fetch(`${base}/api/workflow`, {
+      method: "DELETE",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({ name: "ghost", scope: "repo" }),
+    });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { ok: boolean }).ok).toBe(true);
+  });
+
+  test("DELETE reports real filesystem failure", async () => {
+    const root = await repo();
+    const wdir = join(root, ".hwf", "workflows");
+    await writeFile(join(wdir, "stuck.yaml"), `${V1}steps:\n  - run: echo stuck\n`);
+    const { chmod } = await import("node:fs/promises");
+    await chmod(wdir, 0o555);
+    try {
+      const { base, token } = await serve(root);
+      const res = await fetch(`${base}/api/workflow`, {
+        method: "DELETE",
+        headers: { "x-hwf-token": token, "content-type": "application/json" },
+        body: JSON.stringify({ name: "stuck", scope: "repo" }),
+      });
+      expect(res.status).toBe(500);
+      const data = (await res.json()) as { ok: boolean; error?: string };
+      expect(data.ok).toBe(false);
+      expect(data.error).toMatch(/EACCES|permission denied/i);
+      expect(await Bun.file(join(wdir, "stuck.yaml")).exists()).toBe(true);
+    } finally {
+      await chmod(wdir, 0o755);
+    }
+  });
+
   test("promote refuses clobber without force, overwrites with force", async () => {
     const root = await repo();
     const wdir = join(root, ".hwf", "workflows");

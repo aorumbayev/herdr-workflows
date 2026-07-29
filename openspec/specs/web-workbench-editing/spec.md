@@ -20,7 +20,7 @@ The workbench MUST consider a workflow unsaved when its name, selected scope, or
 - **THEN** the workflow remains unsaved and the original file remains intact
 
 ### Requirement: Scope changes are applied by explicit save
-The workflow scope selector MUST mark a changed scope as unsaved and MUST NOT move a workflow immediately. A successful Save MUST write the selected destination before removing the original source. The editor MUST NOT provide a separate move-to-scope action.
+The workflow scope selector MUST mark a changed scope as unsaved and MUST NOT move a workflow immediately. A successful Save MUST write the selected destination before removing the original source. Save-mediated rename or re-scope MUST NOT overwrite an existing destination. The editor MUST NOT provide a separate move-to-scope action.
 
 #### Scenario: Scope selection changes
 - **WHEN** a user changes a workflow from global to local
@@ -29,6 +29,14 @@ The workflow scope selector MUST mark a changed scope as unsaved and MUST NOT mo
 #### Scenario: Destination write succeeds
 - **WHEN** a changed scope is saved successfully
 - **THEN** the selected destination contains the workflow and the original source is removed
+
+#### Scenario: Rename or re-scope collides
+- **WHEN** Save would write a renamed or re-scoped workflow to a path that already exists
+- **THEN** the workbench rejects the save, leaves the destination unchanged, and keeps the original source
+
+#### Scenario: Destination written but source removal fails
+- **WHEN** Save writes the destination successfully and then cannot remove the original source
+- **THEN** the workflow stays unsaved, no success toast is shown, the error reports that the destination was written while the original remains, and a later Save targets the written destination without treating it as another move into a collision
 
 #### Scenario: Both scope variants exist
 - **WHEN** local and global workflows already share the edited name

@@ -266,6 +266,12 @@ describe("web workbench presentation", () => {
     expect(page).toContain("savedName");
     expect(page).toContain("savedScope");
     expect(page).toContain("savedText");
+    expect(page).toContain("previousName");
+    expect(page).toContain("previousScope");
+    expect(page).toContain("sourceName");
+    expect(page).toContain("sourceScope");
+    expect(page).toContain("del.data.ok");
+    expect(page).toContain("but the original remains");
     expect(page).toContain('setAttribute("aria-label", "Undo")');
     expect(page).toContain('setAttribute("aria-label", "Redo")');
     expect(page).toContain('setAttribute("aria-label", "Save")');

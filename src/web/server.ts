@@ -314,6 +314,7 @@ async function writeWorkflow(
   name: string,
   scope: Scope,
   text: string,
+  previous?: { name: string; scope: Scope },
 ): Promise<Response> {
   if (!WORKFLOW_NAME_RE.test(name)) return json({ ok: false, error: "invalid workflow name" }, 400);
   try {
@@ -322,6 +323,11 @@ async function writeWorkflow(
     return json({ ok: false, error: errText(error) }, 400);
   }
   const file = workflowPath(scope, repoRoot, name);
+  if (previous) {
+    const prev = workflowPath(previous.scope, repoRoot, previous.name);
+    if (prev !== file && (await Bun.file(file).exists()))
+      return json({ ok: false, error: `'${name}' already exists in ${scope}` }, 409);
+  }
   await mkdir(dirname(file), { recursive: true });
   await Bun.write(file, text);
   return json({ ok: true });
@@ -363,15 +369,35 @@ async function handleWorkflow(
   if (req.method === "PUT") {
     const scope = scopeOf(body.scope);
     if (!scope) return json({ ok: false, error: "scope required" }, 400);
-    return writeWorkflow(repoRoot, String(body.name ?? ""), scope, String(body.text ?? ""));
+    const prevName = String(body.previousName ?? "");
+    const prevScope = scopeOf(body.previousScope);
+    let previous: { name: string; scope: Scope } | undefined;
+    if (prevName !== "" || body.previousScope != null) {
+      if (!WORKFLOW_NAME_RE.test(prevName) || !prevScope)
+        return json({ ok: false, error: "previousName and previousScope required" }, 400);
+      previous = { name: prevName, scope: prevScope };
+    }
+    return writeWorkflow(
+      repoRoot,
+      String(body.name ?? ""),
+      scope,
+      String(body.text ?? ""),
+      previous,
+    );
   }
   if (req.method === "DELETE") {
     const name = String(body.name ?? "");
     const checked = requireNameScope(name, scopeOf(body.scope));
     if (!checked.ok) return checked.response;
-    await Bun.file(workflowPath(checked.scope, repoRoot, name))
-      .delete()
-      .catch(() => {});
+    try {
+      await Bun.file(workflowPath(checked.scope, repoRoot, name)).delete();
+    } catch (error) {
+      const code =
+        error && typeof error === "object" && "code" in error
+          ? String((error as { code: unknown }).code)
+          : "";
+      if (code !== "ENOENT") return json({ ok: false, error: errText(error) }, 500);
+    }
     return json({ ok: true });
   }
   return new Response("method not allowed", { status: 405 });

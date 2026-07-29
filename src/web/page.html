@@ -2747,6 +2747,8 @@
         let savedName = name;
         let savedScope = scope;
         let savedText = text;
+        let sourceName = name;
+        let sourceScope = scope;
         let canvasPending = false;
         let mode = "text";
         let extras = { version: "v1alpha1" }; // metadata carried through canvas mode untouched
@@ -2983,22 +2985,50 @@
           if (mode === "visual" && !(await syncFromCanvas())) return;
           const newName = nameIn.value.trim();
           const newScope = scopeSel.value;
+          const moved = !!(sourceName && (sourceName !== newName || sourceScope !== newScope));
+          const putBody = { name: newName, scope: newScope, text: ta.value };
+          if (moved) {
+            putBody.previousName = sourceName;
+            putBody.previousScope = sourceScope;
+          }
           const r = await api("/api/workflow", {
             method: "PUT",
-            body: JSON.stringify({ name: newName, scope: newScope, text: ta.value }),
+            body: JSON.stringify(putBody),
           });
           if (!r.data.ok) {
             showProblem(false, r.data.error || "save failed");
             toast("not saved — " + (r.data.error || "save failed"), false);
             return;
           }
-          // Renamed or re-scoped: drop the previous file only after the destination write succeeds.
-          if (name && (name !== newName || scope !== newScope)) {
-            await api("/api/workflow", { method: "DELETE", body: JSON.stringify({ name, scope }) });
+          if (moved) {
+            const prevName = sourceName;
+            const prevScope = sourceScope;
+            const del = await api("/api/workflow", {
+              method: "DELETE",
+              body: JSON.stringify({ name: prevName, scope: prevScope }),
+            });
+            if (!del.data.ok) {
+              sourceName = newName;
+              sourceScope = newScope;
+              current = { name: newName, scope: newScope };
+              setHash("w=" + newScope + ":" + newName);
+              await loadState();
+              const msg =
+                "wrote " +
+                newName +
+                " but the original remains — " +
+                (del.data.error || "delete failed");
+              showProblem(false, msg);
+              toast(msg, false);
+              refreshDirty();
+              return;
+            }
           }
           savedName = newName;
           savedScope = newScope;
           savedText = ta.value;
+          sourceName = newName;
+          sourceScope = newScope;
           canvasPending = false;
           refreshDirty();
           toast("saved " + newName, true);
