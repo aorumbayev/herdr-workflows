@@ -42,7 +42,7 @@ async function readStreamAgainstBudget(
 
 export type { ShellName };
 
-export function defaultShell(_platform: string = process.platform): ShellName {
+export function defaultShell(): ShellName {
   return "sh";
 }
 

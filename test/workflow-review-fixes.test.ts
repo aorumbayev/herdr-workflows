@@ -72,7 +72,7 @@ describe("review regressions", () => {
   target:
     type: choice
     options:
-      run: [echo, main]
+      run: [printf, main]
 steps:
   - run: [echo, "{{inputs.target}}"]
 `,

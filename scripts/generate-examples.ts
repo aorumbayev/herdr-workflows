@@ -20,8 +20,7 @@ export async function buildExamples(dir = EXAMPLES_DIR): Promise<ExampleCard[]> 
     .sort();
   const cards: ExampleCard[] = [];
   for (const name of names) {
-    // Working-tree checkout may be CRLF under core.autocrlf; keep the gallery LF-stable.
-    const body = (await readFile(join(dir, `${name}.yaml`), "utf8")).replace(/\r\n/g, "\n");
+    const body = await readFile(join(dir, `${name}.yaml`), "utf8");
     const raw = parseRaw(`${name}.yaml`, body);
     cards.push({
       name,

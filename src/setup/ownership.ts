@@ -37,7 +37,3 @@ export function writeOwnership(binDir: string, registry: OwnershipRegistry): voi
     `${JSON.stringify({ ...registry, version: PRODUCT_VERSION }, null, 2)}\n`,
   );
 }
-
-export function isOwnedEntry(binDir: string, name: string): boolean {
-  return Boolean(readOwnership(binDir).entries[name]);
-}

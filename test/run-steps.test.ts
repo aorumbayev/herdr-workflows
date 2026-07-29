@@ -11,13 +11,7 @@ import {
 } from "../src/run/context";
 import { resolveInputValues } from "../src/run/runner";
 import { assertFocusPolicy } from "../src/run/steps/primitive";
-import {
-  buildHwfEnv,
-  defaultShell,
-  mergeStepEnv,
-  runArgvStep,
-  runShellStep,
-} from "../src/run/steps/shell";
+import { buildHwfEnv, mergeStepEnv, runArgvStep, runShellStep } from "../src/run/steps/shell";
 import type { InputSpec } from "../src/workflow/types";
 
 async function tempDir(): Promise<string> {
@@ -48,14 +42,11 @@ describe("command results", () => {
   test("nonzero exit still returns a full structured result", async () => {
     const cwd = await tempDir();
     try {
-      const failCmd =
-        defaultShell() === "cmd" ? "echo nope 1>&2 & exit /b 3" : "printf nope >&2; exit 3";
-      const result = await runShellStep(failCmd, { cwd });
+      const result = await runShellStep("printf nope >&2; exit 3", { cwd });
       expect(result.failed).toBe(true);
       expect(result.ok).toBe(false);
       expect(result.exitCode).toBe(3);
-      // cmd `echo` appends CRLF (and often a trailing space); normalize for the assertion.
-      expect(result.stderr.replace(/\r\n/g, "\n").trim()).toBe("nope");
+      expect(result.stderr).toBe("nope");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -64,8 +55,7 @@ describe("command results", () => {
   test("timeout terminates the command and names the deadline", async () => {
     const cwd = await tempDir();
     try {
-      const slowCmd = defaultShell() === "cmd" ? "ping -n 6 127.0.0.1 >nul" : "sleep 5";
-      const result = await runShellStep(slowCmd, { cwd, timeoutMs: 200 });
+      const result = await runShellStep("sleep 5", { cwd, timeoutMs: 200 });
       expect(result.timedOut).toBe(true);
       expect(result.failed).toBe(true);
       expect(result.stderr).toBe("timed out after 0.2s");

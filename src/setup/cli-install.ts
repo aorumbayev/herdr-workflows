@@ -8,13 +8,7 @@ import {
   unlinkSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import {
-  isOwnedEntry,
-  readOwnership,
-  writeOwnership,
-  type OwnedKind,
-  type OwnershipRegistry,
-} from "./ownership";
+import { readOwnership, writeOwnership, type OwnedKind, type OwnershipRegistry } from "./ownership";
 import { PRODUCT_VERSION } from "./paths";
 
 export type CliInstallResult = {
@@ -43,12 +37,16 @@ function installPosixName(
   messages: string[],
 ): string | null {
   const dest = join(dir, name);
-  const owned = isOwnedEntry(dir, name);
+  const entry = registry.entries[name];
 
   if (entryExists(dest)) {
     const stat = lstatSync(dest);
     if (stat.isSymbolicLink()) {
       const target = resolve(dirname(dest), readlinkSync(dest));
+      const owned =
+        entry?.kind === "symlink" &&
+        typeof entry.source === "string" &&
+        target === resolve(entry.source);
       if (kind === "symlink" && target === resolve(source) && owned) {
         messages.push(`${name} already linked at ${dest}`);
         return dest;
@@ -58,7 +56,7 @@ function installPosixName(
         return null;
       }
       unlinkSync(dest);
-    } else if (owned) {
+    } else if (entry?.kind === "copy") {
       unlinkSync(dest);
     } else {
       messages.push(`skipped cli install: ${dest} exists and is not owned by herdr-workflows`);

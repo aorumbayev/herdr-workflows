@@ -22,14 +22,10 @@ function bin(): string {
   return process.env.HERDR_BIN_PATH ?? "herdr";
 }
 
-/** Local address for `HERDR_SOCKET_PATH`. Exported for unit tests. */
-export function resolveHerdrSocketAddress(raw: string | undefined): string {
-  if (!raw) throw new HerdrError("no_socket", "HERDR_SOCKET_PATH is not set");
-  return raw;
-}
-
 function socketPath(): string {
-  return resolveHerdrSocketAddress(process.env.HERDR_SOCKET_PATH);
+  const path = process.env.HERDR_SOCKET_PATH;
+  if (!path) throw new HerdrError("no_socket", "HERDR_SOCKET_PATH is not set");
+  return path;
 }
 
 function transportFailure(method: string, address: string, reason: string): HerdrError {

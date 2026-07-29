@@ -1,22 +1,27 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { lstatSync, readlinkSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { lstatSync, readlinkSync, symlinkSync } from "node:fs";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { installCliCommands } from "../src/setup/cli-install";
 import { installKeybindings, stripDeadBindings } from "../src/setup/keybindings";
-import { isOwnedEntry, readOwnership } from "../src/setup/ownership";
+import { readOwnership } from "../src/setup/ownership";
 import { resolveBinDir, resolveHerdrConfigPath } from "../src/setup/paths";
-import { writeHostExecutable } from "./host-executable";
 
 const dirs: string[] = [];
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
 
+async function writeExecutable(path: string, body: string): Promise<string> {
+  await writeFile(path, `#!/bin/sh\n${body}`);
+  await chmod(path, 0o755);
+  return path;
+}
+
 async function writeRecordingHerdr(dir: string): Promise<{ bin: string; log: string }> {
   const log = join(dir, "herdr-argv.log");
-  const bin = await writeHostExecutable(
+  const bin = await writeExecutable(
     join(dir, "fake-herdr"),
     `printf '%s\\n' "$*" >> ${JSON.stringify(log)}
 if [ "$1" = config ] && [ "$2" = check ]; then
@@ -67,8 +72,8 @@ describe("cli install", () => {
       ),
     ).toBe(true);
 
-    expect(isOwnedEntry(binDir, "herdr-workflows")).toBe(true);
-    expect(isOwnedEntry(binDir, "hwf")).toBe(true);
+    expect(readOwnership(binDir).entries["herdr-workflows"]).toBeDefined();
+    expect(readOwnership(binDir).entries.hwf).toBeDefined();
 
     await writeFile(source, "fake-binary-v2\n");
     const second = installCliCommands({
@@ -97,6 +102,27 @@ describe("cli install", () => {
     });
     expect(result.messages.some((m) => m.includes("not owned"))).toBe(true);
     expect(await readFile(foreign, "utf8")).toBe("not-ours\n");
+  });
+
+  test("retargeted owned symlink is preserved as foreign", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-setup-retargeted-"));
+    dirs.push(root);
+    const binDir = join(root, "bin");
+    const source = join(root, "source-bin");
+    const foreign = join(root, "foreign-bin");
+    await writeFile(source, "ours\n");
+    await writeFile(foreign, "foreign\n");
+
+    installCliCommands({ binDir, binary: source, ephemeral: false });
+    const hwf = join(binDir, "hwf");
+    await rm(hwf);
+    symlinkSync(foreign, hwf);
+
+    const result = installCliCommands({ binDir, binary: source, ephemeral: false });
+    expect(result.messages).toContain(
+      `skipped cli install: ${hwf} exists and is not owned by herdr-workflows`,
+    );
+    expect(await readFile(hwf, "utf8")).toBe("foreign\n");
   });
 
   test("ephemeral setup copies the binary once and symlinks hwf to it", async () => {
@@ -148,7 +174,6 @@ describe("cli install", () => {
     const elsewhere = join(root, "foreign-target");
     await writeFile(foreignFile, "foreign-file\n");
     await writeFile(elsewhere, "foreign-link-target\n");
-    const { symlinkSync } = await import("node:fs");
     symlinkSync(elsewhere, foreignLink);
     const source = join(root, "source-bin");
     await writeFile(source, "ours\n");
@@ -287,7 +312,7 @@ command = "herdr-workflows.results"
     const dir = await mkdtemp(join(tmpdir(), "herdr-workflows-keys-reload-"));
     dirs.push(dir);
     const log = join(dir, "herdr-argv.log");
-    const herdrBin = await writeHostExecutable(
+    const herdrBin = await writeExecutable(
       join(dir, "fake-herdr"),
       `printf '%s\\n' "$*" >> ${JSON.stringify(log)}
 if [ "$1" = config ] && [ "$2" = check ]; then

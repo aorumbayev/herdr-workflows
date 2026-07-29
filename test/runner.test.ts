@@ -8,11 +8,6 @@ import { CAPTURE_BYTE_LIMIT, HWF_ENV_BYTE_LIMIT } from "../src/limits";
 import { AGENT_PROMPT_BYTE_LIMIT, type RunnerDeps } from "../src/run/context";
 import { runWorkflow } from "../src/run/runner";
 import { runLogPath, type RunLogEntry } from "../src/runlog";
-import { bunAllocStdoutArgv, bunWriteStdoutArgv } from "./host-executable";
-
-function runArgvYaml(argv: string[]): string {
-  return `[${argv.map((el) => JSON.stringify(el)).join(", ")}]`;
-}
 
 const dirs: string[] = [];
 const prevStateDir = process.env.HERDR_PLUGIN_STATE_DIR;
@@ -283,9 +278,9 @@ describe("runner v1alpha1", () => {
       m: `version: v1alpha1
 steps:
   - id: probe
-    run: [bun, -e, "process.stdout.write('hi'); process.stderr.write('err')"]
+    run: [sh, -c, "printf hi; printf err >&2"]
   - id: next
-    run: [bun, -e, "process.stdout.write(process.env.MSG ?? '')"]
+    run: [sh, -c, 'printf "%s" "$MSG"']
     env: { MSG: "{{steps.probe.stdout}}" }
 `,
     });
@@ -667,7 +662,7 @@ steps:
           if (method === "agent.prompt") {
             const match = /absolute path ([^\s,]+)/.exec(String(params.text ?? ""));
             if (match?.[1]) responsePath = match[1]!;
-            expect(responsePath).toContain(join(root, ".hwf", "tmp"));
+            expect(responsePath).toContain(`${root}/.hwf/tmp/`);
             expect(await Bun.file(responsePath).exists()).toBe(true);
           }
           return out;
@@ -756,10 +751,10 @@ on_failure:
   params: { title: recovered }
 steps:
   - id: flag
-    run: [bun, -e, "process.stdout.write('')"]
-  - run: [bun, -e, "process.stdout.write('ran')"]
+    run: [sh, -c, "printf ''"]
+  - run: [sh, -c, "printf ran"]
     when: "{{steps.flag.stdout}}"
-  - run: [bun, -e, "process.stdout.write('done')"]
+  - run: [sh, -c, "printf done"]
 `,
     });
     const { deps, notes, calls } = mockDeps();
@@ -786,9 +781,9 @@ on_failure:
   params: { title: recovered }
 steps:
   - id: probe
-    run: [bun, -e, "process.exit(2)"]
+    run: [sh, -c, "exit 2"]
     continue_on_error: true
-  - run: [bun, -e, "process.stdout.write('ok')"]
+  - run: [sh, -c, "printf ok"]
 `,
     });
     const { deps, calls } = mockDeps();
@@ -807,7 +802,7 @@ steps:
     const root = await repoWith({
       m: `version: v1alpha1
 steps:
-  - run: [bun, -e, "import{existsSync,writeFileSync}from'fs';if(!existsSync('marker')){writeFileSync('marker','');process.exit(1)}"]
+  - run: [sh, -c, "test -f marker || (touch marker; exit 1)"]
     retry: { attempts: 2 }
 `,
     });
@@ -829,7 +824,7 @@ on_failure:
   herdr: notification.show
   params: { title: "{{context.error.workflow}}", body: "{{context.error.message}}" }
 steps:
-  - run: [bun, -e, "process.stderr.write('boom'); process.exit(1)"]
+  - run: [sh, -c, "printf boom >&2; exit 1"]
 `,
     });
     const { deps, calls } = mockDeps();
@@ -886,7 +881,7 @@ on_failure:
   params: { title: child-recovery }
 steps:
   - id: boom
-    run: [bun, -e, "process.exit(1)"]
+    run: [sh, -c, "exit 1"]
 `,
       parent: `version: v1alpha1
 on_failure:
@@ -1089,7 +1084,7 @@ steps:
       m: `version: v1alpha1
 steps:
   - id: boot
-    run: [bun, -e, "process.stdout.write('ready')"]
+    run: [sh, -c, "printf ready"]
     pane: { open: tab }
     ready_when: "/ready/"
     timeout: 5s
@@ -1119,7 +1114,7 @@ steps:
       m: `version: v1alpha1
 steps:
   - id: boot
-    run: [bun, -e, "process.stdout.write('LISTENING')"]
+    run: [sh, -c, "echo LISTENING"]
     pane: { open: beside, target: "w1:pM" }
     ready_when: "/LISTENING/"
     timeout: 5s
@@ -1149,7 +1144,7 @@ returns:
   platform: "{{context.platform}}"
 steps:
   - id: echo
-    run: ${runArgvYaml(bunWriteStdoutArgv("hello"))}
+    run: [printf, hello]
 `,
     });
     const { deps } = mockDeps();
@@ -1167,8 +1162,6 @@ steps:
   });
 
   test("progress reports one outcome line per step including skip", async () => {
-    const goArgv = bunWriteStdoutArgv("ok");
-    const skipArgv = bunWriteStdoutArgv("no");
     const root = await repoWith({
       m: `version: v1alpha1
 inputs:
@@ -1177,9 +1170,9 @@ inputs:
     default: ""
 steps:
   - id: go
-    run: ${runArgvYaml(goArgv)}
+    run: [printf, ok]
   - id: skipme
-    run: ${runArgvYaml(skipArgv)}
+    run: [printf, no]
     when: "{{inputs.flag}}"
 `,
     });
@@ -1200,13 +1193,11 @@ steps:
   });
 
   test("CLI progress emits both start and outcome exactly once per step", async () => {
-    const aArgv = bunWriteStdoutArgv("a");
-    const bArgv = bunWriteStdoutArgv("b");
     const root = await repoWith({
       m: `version: v1alpha1
 steps:
-  - run: ${runArgvYaml(aArgv)}
-  - run: ${runArgvYaml(bArgv)}
+  - run: [sh, -c, "printf a"]
+  - run: [sh, -c, "printf b"]
 `,
     });
     const { deps } = mockDeps();
@@ -1222,13 +1213,11 @@ steps:
       },
     });
     expect(result.ok).toBe(true);
-    const aLabel = `run: ${aArgv.join(" ")}`;
-    const bLabel = `run: ${bArgv.join(" ")}`;
     expect(events).toEqual([
-      `1/2:${aLabel}:start`,
-      `1/2:${aLabel}:ok`,
-      `2/2:${bLabel}:start`,
-      `2/2:${bLabel}:ok`,
+      "1/2:run: sh -c printf a:start",
+      "1/2:run: sh -c printf a:ok",
+      "2/2:run: sh -c printf b:start",
+      "2/2:run: sh -c printf b:ok",
     ]);
   });
 
@@ -1237,10 +1226,10 @@ steps:
       m: `version: v1alpha1
 steps:
   - id: serve
-    run: [bun, -e, "await Bun.sleep(100000)"]
+    run: [sh, -c, "sleep 100"]
     background: true
     pane: { open: tab }
-  - run: [bun, -e, "process.stdout.write('next')"]
+  - run: [sh, -c, "printf next"]
 `,
     });
     const { deps } = mockDeps();
@@ -1682,7 +1671,7 @@ steps:
     const root = await repoWith({
       m: `version: v1alpha1
 steps:
-  - run: ${runArgvYaml(bunAllocStdoutArgv(CAPTURE_BYTE_LIMIT + 10))}
+  - run: [sh, -c, "python3 -c 'print(\\"x\\" * ${CAPTURE_BYTE_LIMIT + 10})'"]
 `,
     });
     const { deps } = mockDeps();

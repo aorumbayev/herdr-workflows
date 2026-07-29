@@ -11,7 +11,7 @@ afterEach(async () => {
 });
 
 const SKILL_ROOT = join(import.meta.dir, "..", "skills", "herdr-workflow-create");
-const FENCE_RE = /```yaml\r?\n([\s\S]*?)```/g;
+const FENCE_RE = /```yaml\n([\s\S]*?)```/g;
 
 const config: WorkflowsConfig = {
   profiles: {
@@ -70,7 +70,7 @@ async function extractSnippets(): Promise<Snippet[]> {
   const snippets: Snippet[] = [];
   let auto = 0;
   for (const file of await collectSkillMarkdown()) {
-    const text = (await readFile(file, "utf8")).replace(/\r\n/g, "\n");
+    const text = await readFile(file, "utf8");
     FENCE_RE.lastIndex = 0;
     let match: RegExpExecArray | null;
     let index = 0;

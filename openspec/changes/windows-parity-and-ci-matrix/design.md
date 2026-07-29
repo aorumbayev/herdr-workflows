@@ -6,7 +6,7 @@ That work was implemented and measured before this change was rescoped. The meas
 
 The second complexity driver was native release binaries. Measured facts: `bun build --compile` output is 73 MiB (63 MiB is the embedded Bun runtime — an irreducible floor); runtime dependencies are three packages, so `bun install --production --frozen-lockfile` transfers roughly the same ~30 MiB as a compressed binary asset. Binaries therefore buy exactly two things — no Bun prerequisite, and a CI-frozen toolchain — at the recurring cost of a four-leg release matrix, draft-release gating, two downloaders, checksum plumbing, and release smoke tooling.
 
-Confirmed working cross-platform and retained regardless of the rescope: detached-run settlement fixes, transport-failure naming, browser-opener URL fallback, POSIX process-group termination, POSIX credential hardening, LF normalization, portable fixtures, native setup, `hwf update`, and the picker update indicator.
+Confirmed working cross-platform and retained regardless of the rescope: detached-run settlement fixes, transport-failure naming, browser-opener URL fallback, POSIX process-group termination, POSIX credential hardening, LF normalization, native setup, `hwf update`, and the picker update indicator.
 
 Constraints from `AGENTS.md`: no per-OS authoring syntax beyond `{{context.platform}}` and `when:`, caps stay in `src/limits.ts` and never truncate, no narrating comments, new modules must be reachable from the CLI graph or knip fails, and `bun run schema` / `bun run examples` outputs are compared byte for byte.
 
@@ -57,7 +57,7 @@ Detached runs keep their handle referenced while observed, settle the awaited ou
 
 ### 8. Verification stays platform-representative for the supported set
 
-PR CI runs `bun test ./test` with explicit timeouts and `fail-fast: false` on Ubuntu and macOS. Static `npm run verify` stays on Linux. `.gitattributes` LF normalization and the portable fixture helpers are retained — paid for, and they keep the repo healthy for contributors editing from any host.
+PR CI runs `bun test ./test` with explicit timeouts and `fail-fast: false` on Ubuntu and macOS. Static `npm run verify` stays on Linux. `.gitattributes` keeps tracked text LF-stable.
 
 ## Risks / Trade-offs
 
@@ -72,7 +72,7 @@ PR CI runs `bun test ./test` with explicit timeouts and `fail-fast: false` on Ub
 1. Prune the branch: delete Windows-native and binary-distribution code, tests, and CI legs listed in tasks sections 2 and 3.
 2. Rewrite `herdr-plugin.toml` to the linux+macos source-compile shape with the Bun preflight.
 3. De-asset the semantic-release configuration; keep tags, notes, and the manifest bump.
-4. Land the `v0.1.0` baseline, then the first automated release — no upstream Herdr wait remains.
+4. After merge, tag the pre-change `main` commit as `v0.1.0`, push that baseline, then manually dispatch the first automated release. No upstream Herdr wait remains.
 5. Docs: Bun prerequisite line, WSL2 paragraph, `hwf update` behavior.
 6. Existing users pick up the new manifest on their next `herdr plugin install`; installs predating `hwf update` run one final manual reinstall.
 

@@ -63,22 +63,18 @@ describe("prepare-release", () => {
     expect(flat).not.toContain("@semantic-release/npm");
     expect(flat).not.toContain("draftRelease");
     expect(flat).toContain("prepare-release.ts");
-    expect(flat).toContain("record-release-version.ts");
     expect(flat).toContain("[skip ci]");
     expect(flat).toContain('"breaking":true');
   });
 
-  test("release workflow runs semantic-release without a native asset matrix", () => {
+  test("release workflow runs semantic-release only by manual dispatch", () => {
     const yml = readFileSync(
       join(import.meta.dir, "..", ".github", "workflows", "release.yml"),
       "utf8",
     );
     expect(yml).toContain("bun x semantic-release");
     expect(yml).toContain("bun install --frozen-lockfile");
-    expect(yml).not.toContain("build-native");
-    expect(yml).not.toContain("write-checksums");
-    expect(yml).not.toContain("smoke-release-binary");
-    expect(yml).not.toContain("release-preflight");
-    expect(yml).not.toContain("gh release upload");
+    expect(yml).toContain("workflow_dispatch:");
+    expect(yml).not.toContain("push:");
   });
 });

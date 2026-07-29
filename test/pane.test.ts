@@ -41,7 +41,7 @@ describe("placeCommandPane", () => {
     await placeCommandPane({
       open: "below",
       focus: true,
-      argv: ["echo", "hi"],
+      argv: ["printf", "hi"],
       deps: {
         herdrCall: async (method, params = {}) => {
           calls.push({ method, params });

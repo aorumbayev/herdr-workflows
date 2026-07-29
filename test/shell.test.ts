@@ -12,15 +12,13 @@ afterEach(async () => {
 
 describe("defaultShell", () => {
   test("defaults to sh", () => {
-    expect(defaultShell("darwin")).toBe("sh");
-    expect(defaultShell("linux")).toBe("sh");
     expect(defaultShell()).toBe("sh");
   });
 });
 
 describe("shellArgv", () => {
   test("follows the platform default", () => {
-    expect(shellArgv("echo hi", defaultShell("linux"))).toEqual(["sh", "-c", "echo hi"]);
+    expect(shellArgv("echo hi", defaultShell())).toEqual(["sh", "-c", "echo hi"]);
   });
 
   test("explicit shell overrides the default", () => {

@@ -49,7 +49,7 @@
     "verify:check-types": "verifyx check-types",
     "verify": "verifyx --no-tests",
     "verify:unused-code": "verifyx unused-code --max-warnings 0",
-    "verify:duplicate-code": "bun scripts/verify-duplicate-code.ts",
+    "verify:duplicate-code": "verifyx duplicate-code --max-warnings 0",
     "verify:comments": "verifyx comments --pushback",
     "verify:circular-deps": "skott --displayMode=raw --showCircularDependencies --exitCodeOnCircularDependencies=1",
     "verify:hardcoded-colors": "verifyx hardcoded-colors"

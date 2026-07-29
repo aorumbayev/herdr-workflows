@@ -1,7 +1,6 @@
 ## 1. Retained completed work (record — do not redo)
 
 - [x] 1.1 LF normalization via `.gitattributes` with renormalized tree
-- [x] 1.2 Portable test fixtures and host-executable stub helpers
 - [x] 1.3 Detached-run settlement: referenced handles, detach settles outcome, launcher exits
 - [x] 1.4 Transport failures name the resolved socket address, distinct from version/protocol/authoring errors
 - [x] 1.5 POSIX process-group termination for timeout and capture overflow
@@ -22,7 +21,7 @@
 - [x] 2.4 Remove `cmd /c start ""` from `src/web/browser.ts`
 - [x] 2.5 Remove `%APPDATA%` resolution from `src/setup/paths.ts` and keybinding path handling
 - [x] 2.6 Remove `.exe` copy, `hwf.cmd` forwarder, rename-then-place, and `.old-*` sweep from `src/setup/cli-install.ts`; shrink `src/setup/ownership.ts` to symlink-into-checkout plus copy-marker recognition
-- [x] 2.7 Remove `.cmd` fixture companions and Windows-conditional assertions from tests; keep the portable stub helpers
+- [x] 2.7 Remove `.cmd` fixture companions and Windows-only fixture conditionals
 - [x] 2.8 Remove the Windows leg from `.github/workflows/verify.yml`; delete `scripts/verify-duplicate-code.ts` if its only purpose was the Windows jscpd skip
 - [x] 2.9 Remove Windows branches from `src/update.ts` and `test/update.test.ts` (10.9 verification path); keep `leaveDir`
 - [x] 2.10 Drop close-the-picker guidance from `hwf update` output and docs
@@ -56,5 +55,5 @@
 - [x] 6.1 `bun test ./test` on Linux and macOS; `CI=1 npm run verify`; `bun run docs:build`; `git diff --check`
 - [x] 6.2 Schema/example generators produce no diff
 - [x] 6.3 `openspec validate --all --strict` passes
-- [ ] 6.4 Land `v0.1.0` baseline, then first automated release
+- [ ] 6.4 After merge, tag the pre-change `main` commit as `v0.1.0`, push the tag, then manually dispatch the first automated release
 - [ ] 6.5 Sync delta capabilities into `openspec/specs/` and archive this change (consider renaming at archive to reflect the WSL-only source-install scope)

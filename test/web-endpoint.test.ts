@@ -3,7 +3,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import {
   acquireEndpointLockSync,
   canonicalRepoRoot,
@@ -289,13 +288,11 @@ describe("endpoint lifecycle", () => {
     const past = new Date(Date.now() - 60_000);
     await utimes(`${base}.${stale!.token}`, past, past);
 
-    const endpointSrc = pathToFileURL(
-      join(import.meta.dir, "..", "src", "web", "endpoint.ts"),
-    ).href;
+    const endpointSrc = join(import.meta.dir, "..", "src", "web", "endpoint.ts");
     const runReclaimer = async (): Promise<string> => {
       const proc = Bun.spawn(
         [
-          process.execPath,
+          "bun",
           "-e",
           `
             import { acquireEndpointLockSync, releaseEndpointLockSync } from ${JSON.stringify(endpointSrc)};
@@ -316,7 +313,7 @@ describe("endpoint lifecycle", () => {
         new Response(proc.stderr).text(),
         proc.exited,
       ]);
-      expect(code, stderr || stdout).toBe(0);
+      expect(code).toBe(0);
       expect(stderr).toBe("");
       return stdout;
     };
@@ -337,9 +334,7 @@ describe("endpoint lifecycle", () => {
     const past = new Date(Date.now() - 60_000);
     await utimes(`${base}.${stale!.token}`, past, past);
 
-    const endpointSrc = pathToFileURL(
-      join(import.meta.dir, "..", "src", "web", "endpoint.ts"),
-    ).href;
+    const endpointSrc = join(import.meta.dir, "..", "src", "web", "endpoint.ts");
     const gateDir = await mkdtemp(join(tmpdir(), "hwf-reclaim-gate-"));
     dirs.push(gateDir);
     const ready = join(gateDir, "ready");
@@ -347,7 +342,7 @@ describe("endpoint lifecycle", () => {
 
     const blocked = Bun.spawn(
       [
-        process.execPath,
+        "bun",
         "-e",
         `
           import { existsSync, writeFileSync } from "node:fs";

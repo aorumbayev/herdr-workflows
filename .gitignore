@@ -10,15 +10,7 @@ bun-debug.log*
 dist/
 target/
 bin/herdr-workflows
-bin/herdr-workflows.exe
-bin/herdr-workflows-smoke
-bin/herdr-workflows-smoke.exe
-bin/opentui-smoke
-bin/opentui-smoke.exe
 *.tsbuildinfo
-
-# semantic-release job handoff (never commit)
-.release-version
 
 # env / secrets
 .env

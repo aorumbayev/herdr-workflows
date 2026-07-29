@@ -36,20 +36,7 @@ const prevState = process.env.HERDR_PLUGIN_STATE_DIR;
 const prevConfig = process.env.HERDR_PLUGIN_CONFIG_DIR;
 
 afterEach(async () => {
-  for (const d of dirs.splice(0)) {
-    let lastError: unknown;
-    for (let i = 0; i < 40; i++) {
-      try {
-        await rm(d, { recursive: true, force: true });
-        lastError = undefined;
-        break;
-      } catch (error) {
-        lastError = error;
-        await Bun.sleep(50);
-      }
-    }
-    if (lastError) throw lastError;
-  }
+  await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
   if (prevState === undefined) delete process.env.HERDR_PLUGIN_STATE_DIR;
   else process.env.HERDR_PLUGIN_STATE_DIR = prevState;
   if (prevConfig === undefined) delete process.env.HERDR_PLUGIN_CONFIG_DIR;
@@ -371,8 +358,6 @@ await Bun.write(${JSON.stringify(marker)}, "ok");
     expect(env.tab).toBe("wLive:t1");
     expect(env.workspace).toBe("wLive");
     expect(env.repo).toBe(root);
-    // Let the detached child fully exit before afterEach removes its cwd (Windows locks).
-    await Bun.sleep(100);
   });
 
   test("detach settles mid-run without waiting for child exit status", async () => {

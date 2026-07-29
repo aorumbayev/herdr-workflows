@@ -20,7 +20,6 @@ import { WORKFLOW_FORMAT, WorkflowLoadError } from "./workflow/types";
 import { CaptureLimitError } from "./limits";
 import { runWorkflow } from "./run/runner";
 import { parseLaunchPayload } from "./tui/run-launch";
-import { browserOpenArgv } from "./web/browser";
 import { ensureWorkbench } from "./web/endpoint";
 import { appendRouteHash, parseWebRoute } from "./web/route";
 import { runSetup } from "./setup/run";
@@ -185,9 +184,12 @@ async function cmdRun(
   }
 }
 
-function openBrowser(url: string, platform: NodeJS.Platform = process.platform): void {
+function openBrowser(url: string): void {
   try {
-    Bun.spawn(browserOpenArgv(url, platform), { stdout: "ignore", stderr: "ignore" });
+    Bun.spawn(process.platform === "darwin" ? ["open", url] : ["xdg-open", url], {
+      stdout: "ignore",
+      stderr: "ignore",
+    });
   } catch {
     /* opener absence is nonfatal — the printed URL still reaches the caller */
   }

@@ -31,7 +31,6 @@ export default {
       "@semantic-release/exec",
       {
         prepareCmd: "bun scripts/prepare-release.ts ${nextRelease.version}",
-        successCmd: "bun scripts/record-release-version.ts ${nextRelease.version}",
       },
     ],
     [

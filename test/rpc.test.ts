@@ -1,22 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { createServer } from "node:net";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HerdrError, herdrRequest, resolveHerdrSocketAddress } from "../src/herdr";
-import { listenAddressForMarker, listenHerdrSocket } from "./herdr-socket";
-
-describe("resolveHerdrSocketAddress", () => {
-  test("throws no_socket when unset", () => {
-    expect(() => resolveHerdrSocketAddress(undefined)).toThrow(
-      expect.objectContaining({ name: "HerdrError", code: "no_socket" }),
-    );
-  });
-
-  test("passes Unix paths unchanged", () => {
-    const path = "/tmp/herdr.sock";
-    expect(resolveHerdrSocketAddress(path)).toBe(path);
-  });
-});
+import { HerdrError, herdrRequest } from "../src/herdr";
 
 describe("herdrRequest socket failures", () => {
   test("rejects when socket closes without a response and names the address", async () => {
@@ -24,17 +11,19 @@ describe("herdrRequest socket failures", () => {
     const sockPath = join(dir, "herdr.sock");
     const prev = process.env.HERDR_SOCKET_PATH;
     process.env.HERDR_SOCKET_PATH = sockPath;
-    const resolved = listenAddressForMarker(sockPath);
-
-    const server = await listenHerdrSocket(sockPath, (socket) => {
+    const server = createServer((socket) => {
       socket.end();
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.listen(sockPath, () => resolve());
+      server.on("error", reject);
     });
 
     try {
       await expect(herdrRequest("layout.apply", {})).rejects.toMatchObject({
         name: "HerdrError",
         code: "unreachable",
-        message: expect.stringContaining(`unreachable herdr at ${resolved}`),
+        message: expect.stringContaining(`unreachable herdr at ${sockPath}`),
       });
       await expect(herdrRequest("layout.apply", {})).rejects.toMatchObject({
         message: expect.stringContaining("layout.apply"),

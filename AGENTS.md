@@ -25,7 +25,7 @@ bun run install:dev                      # compile + herdr plugin link + keybind
 
 - Pre-commit (`.githooks/pre-commit`): `CI=1 npm run verify` — check-only, **no tests**.
 - CI (`.github/workflows/verify.yml`): `bun test ./test` on Ubuntu and macOS (`fail-fast: false`); `npm run verify` on Linux only.
-- Local `npm run verify` auto-fixes lint/format. Under `CI=1` it only checks. `verify:duplicate-code` skips on hosts where jscpd has no binary (Linux CI retains it).
+- Local `npm run verify` auto-fixes lint/format. Under `CI=1` it only checks.
 - After `install:dev`, the live binary is `bin/herdr-workflows`.
 - Remote GitHub install runs the manifest build: Bun preflight, `bun install --production --frozen-lockfile`, `bun build --compile`, then `bin/herdr-workflows setup`. Local link/dev still compiles with `bun run build` / `bun run install:dev`.
 

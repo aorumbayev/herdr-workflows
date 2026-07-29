@@ -12,7 +12,7 @@ Native release binaries were the second complexity driver. They buy exactly two 
 - Integrate semantic-release light: conventional-commit versioning within `0.x`, generated notes, `herdr-plugin.toml` as the product-version source, a one-time `v0.1.0` baseline, no npm publication, and no binary assets, checksums, or draft gating.
 - Add `hwf update`: checks the latest published release, compares the embedded manifest version, refuses linked development checkouts, leaves the plugin root, and synchronously delegates to `herdr plugin install aorumbayev/herdr-workflows --yes`.
 - Show a nonblocking ASCII update indicator in the picker when a newer published version exists.
-- Keep the cross-platform correctness fixes this work surfaced: detached-run settlement, transport-failure naming, browser-opener URL fallback (the WSL case), POSIX process-group termination, POSIX credential hardening, LF normalization, portable fixtures, and ubuntu+macos unit CI.
+- Keep the cross-platform correctness fixes this work surfaced: detached-run settlement, transport-failure naming, browser-opener URL fallback (the WSL case), POSIX process-group termination, POSIX credential hardening, LF normalization, and ubuntu+macos unit CI.
 - Delete the Windows-native and binary-distribution code: `windows-acl.ts`, named-pipe addressing, `taskkill`, `cmd /c start`, `%APPDATA%` config resolution, `.exe`/`hwf.cmd`/rename-then-place setup, both release downloaders, the native release matrix, checksums, and release smoke tooling.
 - Keep workflow grammar, templates, and loader behavior unchanged.
 

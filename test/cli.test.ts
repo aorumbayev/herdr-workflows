@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import manifest from "../herdr-plugin.toml";
 import { HERDR_PROTOCOL, MIN_HERDR_VERSION } from "../src/herdr-methods";
 import { encodePayload } from "../src/workflow/payload";
-import { listenHerdrSocket } from "./herdr-socket";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -65,7 +65,7 @@ async function withPingSocket(
   const dir = await mkdtemp(join(tmpdir(), "hwf-cli-sock-"));
   dirs.push(dir);
   const socketPath = join(dir, "herdr.sock");
-  const server = await listenHerdrSocket(socketPath, (socket) => {
+  const server = createServer((socket) => {
     let buf = "";
     socket.on("data", (chunk) => {
       buf += chunk.toString("utf8");
@@ -78,6 +78,10 @@ async function withPingSocket(
         })}\n`,
       );
     });
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.listen(socketPath, () => resolve());
+    server.on("error", reject);
   });
   try {
     await fn(socketPath);
@@ -160,7 +164,7 @@ describe("cli parse and dispatch", () => {
   test("unknown option exits nonzero with a native diagnostic", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-cli-opt-"));
     dirs.push(root);
-    await writeWorkflow(root, "hi", 'version: v1alpha1\nsteps:\n  - run: "echo ok"\n');
+    await writeWorkflow(root, "hi", 'version: v1alpha1\nsteps:\n  - run: "printf ok"\n');
     const result = await runCli(["run", "hi", "--not-a-real-flag"], root, {
       HERDR_WORKFLOWS_REPO_ROOT: root,
     });
@@ -191,7 +195,7 @@ describe("cli run", () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-cli-repo-"));
     const elsewhere = await mkdtemp(join(tmpdir(), "hwf-cli-elsewhere-"));
     dirs.push(root, elsewhere);
-    await writeWorkflow(root, "hi", 'version: v1alpha1\nsteps:\n  - run: "echo ok"\n');
+    await writeWorkflow(root, "hi", 'version: v1alpha1\nsteps:\n  - run: "printf ok"\n');
 
     const result = await runCli(["run", "hi"], elsewhere, {
       HERDR_WORKFLOWS_REPO_ROOT: root,
@@ -204,7 +208,7 @@ describe("cli run", () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-cli-repo-"));
     const elsewhere = await mkdtemp(join(tmpdir(), "hwf-cli-elsewhere-"));
     dirs.push(root, elsewhere);
-    await writeWorkflow(root, "hi", 'version: v1alpha1\nsteps:\n  - run: "echo ok"\n');
+    await writeWorkflow(root, "hi", 'version: v1alpha1\nsteps:\n  - run: "printf ok"\n');
 
     const result = await runCli(["run", "hi"], elsewhere);
     expect(result.code).toBe(1);
@@ -214,7 +218,7 @@ describe("cli run", () => {
   test("run treats an empty HERDR_WORKFLOWS_REPO_ROOT as unset", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-cli-repo-"));
     dirs.push(root);
-    await writeWorkflow(root, "hi", 'version: v1alpha1\nsteps:\n  - run: "echo ok"\n');
+    await writeWorkflow(root, "hi", 'version: v1alpha1\nsteps:\n  - run: "printf ok"\n');
 
     const result = await runCli(["run", "hi"], root, { HERDR_WORKFLOWS_REPO_ROOT: "" });
     expect(result.code).toBe(0);
@@ -254,7 +258,7 @@ describe("cli run", () => {
   test("run rejects invalid --input values", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-cli-bad-input-"));
     dirs.push(root);
-    await writeWorkflow(root, "hi", 'version: v1alpha1\nsteps:\n  - run: "echo ok"\n');
+    await writeWorkflow(root, "hi", 'version: v1alpha1\nsteps:\n  - run: "printf ok"\n');
 
     const result = await runCli(["run", "hi", "--input", "novalue"], root, {
       HERDR_WORKFLOWS_REPO_ROOT: root,
@@ -330,7 +334,7 @@ describe("cli run", () => {
   test("run rejects herdr version below manifest minimum before execution", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-cli-repo-"));
     dirs.push(root);
-    await writeWorkflow(root, "hi", 'version: v1alpha1\nsteps:\n  - run: "echo ok"\n');
+    await writeWorkflow(root, "hi", 'version: v1alpha1\nsteps:\n  - run: "printf ok"\n');
 
     await withPingSocket({ protocol: HERDR_PROTOCOL, version: "0.7.4" }, async (socketPath) => {
       const result = await runCli(["run", "hi"], root, {
@@ -359,7 +363,7 @@ describe("cli workflow import", () => {
   test("accepts --to=repo with non-TTY preapproval flags", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-cli-to-ok-"));
     dirs.push(root);
-    const yaml = 'version: v1alpha1\nsteps:\n  - run: "echo ok"\n';
+    const yaml = 'version: v1alpha1\nsteps:\n  - run: "printf ok"\n';
     const payload = encodePayload([{ name: "imported", yaml }]);
     const result = await runCli(["workflow", "import", payload, "--yes", "--to=repo"], root, {
       HERDR_WORKFLOWS_REPO_ROOT: root,
