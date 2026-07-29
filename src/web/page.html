@@ -331,6 +331,18 @@
         flex-direction: column;
         gap: 0.3rem;
       }
+      aside > .new {
+        width: 100%;
+      }
+      header .list-toggle {
+        min-width: 32px;
+        min-height: 32px;
+        padding: 0.35rem 0.65rem;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: lowercase;
+      }
       aside .row {
         width: 100%;
         text-align: left;
@@ -363,16 +375,29 @@
         font-size: 11px;
         color: var(--muted);
       }
-      .flags {
+      .flags,
+      .chip {
         font-size: 11px;
         color: var(--n-use);
+      }
+      .flags {
         margin: 0.35rem 0 0.6rem;
       }
-      .flags.warn {
-        padding: 0.4rem 0.55rem;
+      .chip {
+        white-space: nowrap;
+        max-width: 16rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .flags.warn,
+      .chip.warn {
+        padding: 0.2rem 0.5rem;
         border: 1px solid color-mix(in srgb, var(--n-use) 40%, var(--line));
         border-radius: var(--radius);
         background: color-mix(in srgb, var(--n-use) 12%, transparent);
+      }
+      .flags.warn {
+        padding: 0.4rem 0.55rem;
       }
       .row-meta {
         display: flex;
@@ -405,12 +430,66 @@
         flex-wrap: wrap;
         align-items: center;
       }
+      .bar-spacer {
+        flex: 1 1 auto;
+        min-width: 0.5rem;
+      }
+      .bar > input {
+        flex: 1 1 8rem;
+        max-width: 22rem;
+        min-width: 0;
+      }
       .bar .cap {
         font-size: 11px;
         color: var(--muted);
         text-transform: lowercase;
         letter-spacing: 0.06em;
         font-weight: 600;
+      }
+      .menu {
+        position: relative;
+        display: inline-flex;
+      }
+      .menu-pop {
+        position: absolute;
+        top: calc(100% + 0.25rem);
+        right: 0;
+        z-index: 6;
+        min-width: 10rem;
+        max-width: min(18rem, calc(100vw - 1.5rem));
+        padding: 0.25rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.1rem;
+        background: var(--pop-bg);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: 0 6px 20px var(--scrim);
+      }
+      .menu-pop[hidden] {
+        display: none;
+      }
+      .menu-pop button {
+        min-height: 32px;
+        justify-content: flex-start;
+        text-align: left;
+        border-color: transparent;
+        color: var(--ink-soft);
+        background: transparent;
+      }
+      .menu-pop button:hover:not(:disabled),
+      .menu-pop button:focus-visible {
+        background: var(--pop-sel);
+        border-color: transparent;
+        color: var(--ink);
+      }
+      .menu-pop button:active {
+        background: var(--pop-sel);
+      }
+      @media (min-width: 721px) {
+        .menu-pop .hist-item {
+          display: none;
+        }
       }
       textarea {
         flex: 1;
@@ -429,6 +508,9 @@
         white-space: pre-wrap;
         font-size: 0.85rem;
         color: var(--muted);
+      }
+      .status:empty {
+        display: none;
       }
       .status.bad {
         color: var(--red);
@@ -587,18 +669,10 @@
       .seg button.on:hover {
         background: var(--fill);
       }
-      .addbar {
-        display: flex;
-        gap: 0.4rem;
-        flex-wrap: wrap;
-        align-items: center;
-      }
-
       /* canvas */
       .canvas {
         position: relative;
-        flex: none;
-        height: 62vh;
+        flex: 1 1 auto;
         min-height: 22rem;
         overflow: hidden;
         border: 1px solid var(--line);
@@ -821,33 +895,36 @@
         color: var(--accent);
       }
 
-      .zoombar {
+      .zoombar,
+      .viewbar {
         position: absolute;
-        left: 0.6rem;
-        bottom: 0.6rem;
+        bottom: max(0.6rem, env(safe-area-inset-bottom, 0px));
         display: flex;
         gap: 0.25rem;
+        z-index: 2;
       }
-      .zoombar button {
+      .zoombar {
+        left: max(0.6rem, env(safe-area-inset-left, 0px));
+      }
+      .viewbar {
+        right: max(0.6rem, env(safe-area-inset-right, 0px));
+      }
+      .zoombar button,
+      .viewbar button {
         min-width: 32px;
         min-height: 32px;
         padding: 0.2rem 0.5rem;
         background: var(--node-surface);
       }
-      .canvas .addnode {
-        position: absolute;
-        top: 0.6rem;
-        right: 0.6rem;
-        min-height: 32px;
-        background: var(--node-surface);
-      }
       .canvas .tip {
         position: absolute;
-        right: 0.6rem;
-        bottom: 0.6rem;
+        right: max(0.6rem, env(safe-area-inset-right, 0px));
+        bottom: calc(3.2rem + env(safe-area-inset-bottom, 0px));
         font-size: 11px;
         color: var(--muted);
         pointer-events: none;
+        max-width: min(28rem, calc(100% - 8rem));
+        text-align: right;
       }
       .unsaved {
         color: var(--yellow);
@@ -1034,7 +1111,7 @@
         padding: 0.2rem 0.5rem;
         min-height: 32px;
       }
-      .seg {
+      .field > .seg {
         display: flex;
         flex-direction: column;
         gap: 0.35rem;
@@ -1174,9 +1251,117 @@
         header {
           flex-wrap: wrap;
           gap: 0.6rem;
+          padding: 0.55rem 0.75rem;
+        }
+        header .tabs {
+          padding-left: 0;
+          border-left: 0;
+          flex: 1 1 auto;
         }
         header .theme {
           margin-left: 0;
+        }
+        header .repo {
+          flex: 1 1 100%;
+          order: 3;
+        }
+        main {
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: auto minmax(0, 1fr);
+        }
+        main.full {
+          grid-template-rows: minmax(0, 1fr);
+        }
+        aside {
+          border-right: none;
+          border-bottom: 1px solid var(--line);
+          flex-direction: row;
+          flex-wrap: nowrap;
+          align-items: stretch;
+          overflow-x: auto;
+          overflow-y: hidden;
+          padding: 0.5rem 0.6rem;
+          gap: 0.35rem;
+          -webkit-overflow-scrolling: touch;
+        }
+        aside .row,
+        aside > .new,
+        aside > button {
+          width: auto;
+          flex: 0 0 auto;
+          min-width: 7.5rem;
+          max-width: 12rem;
+        }
+        header .list-toggle {
+          order: 2;
+        }
+        section {
+          padding: 0.65rem 0.75rem;
+          gap: 0.5rem;
+        }
+        .bar {
+          gap: 0.4rem;
+        }
+        .bar-spacer {
+          flex: 1 0 100%;
+          width: 0;
+          height: 0;
+          min-width: 0;
+          margin: 0;
+          overflow: hidden;
+        }
+        .bar .hist {
+          display: none !important;
+        }
+        .bar > input {
+          flex: 1 1 7rem;
+        }
+        .chip {
+          max-width: min(11rem, 42vw);
+        }
+        .unsaved {
+          flex: 1 1 auto;
+          min-width: 0;
+        }
+        .ed,
+        textarea {
+          min-height: 40vh;
+        }
+        .canvas {
+          flex: none;
+          height: min(58vh, 28rem);
+          min-height: 14rem;
+        }
+        .palette {
+          width: min(17rem, 100%);
+        }
+        .ndv .panel {
+          width: min(46rem, calc(100vw - 1.2rem));
+          max-height: calc(100vh - 1.2rem);
+        }
+        .canvas .tip {
+          left: max(0.4rem, env(safe-area-inset-left, 0px));
+          right: max(0.4rem, env(safe-area-inset-right, 0px));
+          bottom: calc(3.4rem + env(safe-area-inset-bottom, 0px));
+          max-width: none;
+          text-align: center;
+        }
+      }
+      @media (max-width: 480px) {
+        .viewbar {
+          left: max(0.4rem, env(safe-area-inset-left, 0px));
+          right: auto;
+          bottom: calc(2.9rem + env(safe-area-inset-bottom, 0px));
+        }
+        .zoombar {
+          left: max(0.4rem, env(safe-area-inset-left, 0px));
+          bottom: max(0.4rem, env(safe-area-inset-bottom, 0px));
+        }
+        .canvas .tip {
+          bottom: calc(5.8rem + env(safe-area-inset-bottom, 0px));
+        }
+        .seg button {
+          padding: 0.4rem 0.55rem;
         }
       }
     </style>
@@ -1189,6 +1374,17 @@
         <button class="tab" data-tab="config">Config</button>
         <button class="tab" data-tab="runs">Runs</button>
       </nav>
+      <button
+        type="button"
+        class="list-toggle"
+        id="list-btn"
+        aria-controls="list"
+        aria-expanded="true"
+        aria-pressed="false"
+        aria-label="Hide workflow list"
+      >
+        hide list
+      </button>
       <button type="button" class="theme" id="theme-btn" aria-label="Theme: system">system</button>
       <span id="repo" class="repo"></span>
     </header>
@@ -1211,9 +1407,14 @@
       let editorMode = "text"; // desired mode, kept across live reloads
       let wantOpen = null; // {name, scope} from the URL hash; opened as soon as the file exists
       let routeView = null; // null | {kind:"share",scope,name} | {kind:"import"}
+      let listCollapsed = false;
 
       function errMsg(e) {
         return (e && e.message) || String(e);
+      }
+
+      function narrowViewport() {
+        return matchMedia("(max-width: 720px)").matches;
       }
 
       function esc(s) {
@@ -1313,11 +1514,30 @@
         history.replaceState(null, "", location.pathname + location.search + want);
       }
 
+      function syncListToggle() {
+        const btn = $("list-btn");
+        if (!btn) return;
+        const usable = tab === "workflows" && !routeView;
+        btn.classList.toggle("hide", !usable);
+        if (!usable) return;
+        const name = listCollapsed ? "Show workflow list" : "Hide workflow list";
+        btn.textContent = listCollapsed ? "show list" : "hide list";
+        btn.setAttribute("aria-label", name);
+        btn.setAttribute("aria-expanded", listCollapsed ? "false" : "true");
+        btn.setAttribute("aria-pressed", listCollapsed ? "true" : "false");
+        btn.title = name;
+      }
+
       function syncWorkflowLayout() {
-        const full = tab !== "workflows" || !!routeView;
-        document.querySelector("main").classList.toggle("full", full);
-        if (full) $("list").classList.add("hide");
-        else $("list").classList.remove("hide");
+        const showList = tab === "workflows" && !routeView && !listCollapsed;
+        document.querySelector("main").classList.toggle("full", !showList);
+        $("list").classList.toggle("hide", !showList);
+        syncListToggle();
+      }
+
+      function setListCollapsed(on) {
+        listCollapsed = !!on;
+        syncWorkflowLayout();
       }
 
       function render() {
@@ -1336,9 +1556,9 @@
         const list = $("list");
         list.innerHTML = "";
         const nu = document.createElement("button");
+        nu.type = "button";
         nu.textContent = "+ new";
-        nu.className = "tab";
-        nu.style.width = "100%";
+        nu.className = "tab new";
         nu.onclick = newWorkflow;
         list.appendChild(nu);
         const addRow = (e) => {
@@ -1389,6 +1609,7 @@
         routeView = null;
         current = { name, scope };
         wantOpen = null;
+        if (narrowViewport()) listCollapsed = true;
         setHash("w=" + scope + ":" + name);
         syncWorkflowLayout();
         renderWorkflows();
@@ -1413,6 +1634,7 @@
         openSeq += 1; // cancel any in-flight openWorkflow
         routeView = null;
         current = { name: "", scope: "repo" };
+        if (narrowViewport()) listCollapsed = true;
         syncWorkflowLayout();
         renderWorkflows();
         renderEditor("", "repo", "version: v1alpha1\nsteps:\n  - run: [echo, hello]\n", "", []);
@@ -2025,6 +2247,7 @@
         const redos = [];
         let expanded = false;
         let expandBtn = null;
+        let zoomPct = null;
         let onHistory = null;
 
         const trigger = document.createElement("div");
@@ -2044,6 +2267,19 @@
         emptyBtn.onclick = () => openPalette(null);
         empty.append(emptyMsg, emptyBtn);
         root.appendChild(empty);
+
+        let tipBtn = null;
+        const tip = document.createElement("span");
+        tip.className = "tip";
+        tip.hidden = true;
+        tip.textContent =
+          "drag to move · scroll to pan · ⌘/ctrl+scroll to zoom · ⌘/ctrl+Z undo · ⌘/ctrl+⇧Z redo · Enter opens a step";
+        root.appendChild(tip);
+
+        function setTipOpen(on) {
+          tip.hidden = !on;
+          if (tipBtn) tipBtn.setAttribute("aria-expanded", on ? "true" : "false");
+        }
 
         function ordered() {
           return nodes.slice().sort((a, b) => a.x - b.x || a.y - b.y);
@@ -2170,6 +2406,7 @@
           );
           root.style.backgroundSize = 20 * view.z + "px " + 20 * view.z + "px";
           root.style.backgroundPosition = view.x + "px " + view.y + "px";
+          if (zoomPct) zoomPct.textContent = Math.round(view.z * 100) + "%";
         }
 
         // Counter-scale so the 20px hit target stays clickable when the canvas is zoomed out.
@@ -2464,7 +2701,7 @@
         let pan = null;
         root.addEventListener("pointerdown", (e) => {
           if (e.button !== 0) return;
-          if (e.target.closest(".node, .plus, .palette, .zoombar, .addnode, .ndv, .empty")) return;
+          if (e.target.closest(".node, .plus, .palette, .zoombar, .viewbar, .ndv, .empty")) return;
           selected = null;
           place();
           pan = { px: e.clientX, py: e.clientY, x: view.x, y: view.y };
@@ -2531,6 +2768,9 @@
             if (palette) {
               e.preventDefault();
               closePalette();
+            } else if (!tip.hidden) {
+              e.preventDefault();
+              setTipOpen(false);
             } else if (expanded && !ndv) {
               e.preventDefault();
               setExpanded(false);
@@ -2588,10 +2828,37 @@
         zoombar.className = "zoombar";
         for (const item of [
           { label: "−", name: "Zoom out", fn: () => zoomAt(1 / 1.2) },
+          {
+            label: Math.round(view.z * 100) + "%",
+            name: "Reset zoom",
+            pct: true,
+            fn: () => zoomAt(1 / view.z),
+          },
           { label: "+", name: "Zoom in", fn: () => zoomAt(1.2) },
+        ]) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.textContent = item.label;
+          b.title = item.name;
+          b.setAttribute("aria-label", item.name);
+          b.onclick = item.fn;
+          if (item.pct) zoomPct = b;
+          zoombar.appendChild(b);
+        }
+        root.appendChild(zoombar);
+
+        const viewbar = document.createElement("div");
+        viewbar.className = "viewbar";
+        const addBtn = document.createElement("button");
+        addBtn.type = "button";
+        addBtn.textContent = "+";
+        addBtn.title = "Add step";
+        addBtn.setAttribute("aria-label", "Add step");
+        addBtn.onclick = () => openPalette(null);
+        viewbar.appendChild(addBtn);
+        for (const item of [
           { label: "⤢", name: "Fit canvas", fn: fit },
           { label: "⛶", name: "Expand canvas", expand: true },
-          { label: "1:1", name: "Reset zoom", fn: () => zoomAt(1 / view.z) },
         ]) {
           const b = document.createElement("button");
           b.type = "button";
@@ -2605,9 +2872,18 @@
           } else {
             b.onclick = item.fn;
           }
-          zoombar.appendChild(b);
+          viewbar.appendChild(b);
         }
-        root.appendChild(zoombar);
+        const tipBtnEl = document.createElement("button");
+        tipBtnEl.type = "button";
+        tipBtnEl.textContent = "?";
+        tipBtnEl.title = "Keyboard shortcuts";
+        tipBtnEl.setAttribute("aria-label", "Keyboard shortcuts");
+        tipBtnEl.setAttribute("aria-expanded", "false");
+        tipBtnEl.onclick = () => setTipOpen(tip.hidden);
+        tipBtn = tipBtnEl;
+        viewbar.appendChild(tipBtnEl);
+        root.appendChild(viewbar);
 
         function setExpanded(on) {
           if (on === expanded) return;
@@ -2623,18 +2899,6 @@
           if (!on && expandBtn) expandBtn.focus();
           requestAnimationFrame(fit);
         }
-
-        const addBtn = document.createElement("button");
-        addBtn.className = "addnode";
-        addBtn.textContent = "+ add step";
-        addBtn.onclick = () => openPalette(null);
-        root.appendChild(addBtn);
-
-        const tip = document.createElement("span");
-        tip.className = "tip";
-        tip.textContent =
-          "drag to move · scroll to pan · ⌘/ctrl+scroll to zoom · ⌘/ctrl+Z undo · ⌘/ctrl+⇧Z redo · Enter opens a step";
-        root.appendChild(tip);
 
         function closeNdv() {
           if (!ndv) return;
@@ -3468,20 +3732,13 @@
         textBtn.classList.add("on");
         modeSeg.append(textBtn, visBtn);
 
-        const addbar = document.createElement("div");
-        addbar.className = "addbar";
-        const addCap = document.createElement("span");
-        addCap.className = "cap";
-        addCap.textContent = "append";
-        addbar.appendChild(addCap);
-        for (const verb of VERBS) addbar.appendChild(mkBtn("+ " + verb, () => addStep(verb)));
+        const stepMenu = mkMenu(
+          "+ step",
+          VERBS.map((verb) => ({ label: "+ " + verb, fn: () => addStep(verb) })),
+        );
 
-        const bar1 = document.createElement("div");
-        bar1.className = "bar";
-        bar1.append(nameIn, scopeSel, modeSeg, addbar);
-
-        const flagBox = document.createElement("div");
-        flagBox.className = "flags";
+        const flagBox = document.createElement("span");
+        flagBox.className = "chip";
         function paintFlags(list) {
           const items = list || [];
           if (!items.length) {
@@ -3495,6 +3752,9 @@
           flagBox.textContent = "sensitive: " + items.join(" · ");
         }
         paintFlags(flags);
+
+        const spacer = document.createElement("span");
+        spacer.className = "bar-spacer";
 
         const ed = mkCodeEditor(text, () => {
           refreshDirty();
@@ -3523,9 +3783,17 @@
         unsaved.textContent = "unsaved changes";
 
         const undoBtn = mkBtn("↶", () => doHistory("undo"));
+        undoBtn.classList.add("hist");
         undoBtn.setAttribute("aria-label", "Undo");
         const redoBtn = mkBtn("↷", () => doHistory("redo"));
+        redoBtn.classList.add("hist");
         redoBtn.setAttribute("aria-label", "Redo");
+
+        // Narrow viewports hide the bar pair and show these instead; they share its enabled state.
+        const histItems = [
+          { label: "undo", fn: () => doHistory("undo"), className: "hist-item", pair: undoBtn },
+          { label: "redo", fn: () => doHistory("redo"), className: "hist-item", pair: redoBtn },
+        ];
 
         function refreshDirty() {
           const dirty =
@@ -3546,6 +3814,9 @@
           } else {
             undoBtn.disabled = false;
             redoBtn.disabled = false;
+          }
+          for (const item of histItems) {
+            if (item.el) item.el.disabled = item.pair.disabled;
           }
         }
 
@@ -3570,7 +3841,7 @@
               body: JSON.stringify({ name: nameIn.value.trim() || "buffer", text: ta.value }),
             });
             if (!ta.isConnected) return; // editor was replaced while the request was in flight
-            showProblem(r.data.ok, r.data.ok ? "valid" : r.data.error);
+            showProblem(r.data.ok, r.data.ok ? "" : r.data.error);
             const t = ta.value;
             const next = [];
             if (/^\s*-\s*run\s*:/m.test(t) || /\n\s*-\s*run\s*:/.test(t)) next.push("commands");
@@ -3625,6 +3896,9 @@
             if (r.data.doc.inputs) extras.inputs = r.data.doc.inputs;
             if (r.data.doc.returns) extras.returns = r.data.doc.returns;
             if (r.data.doc.on_failure) extras.on_failure = r.data.doc.on_failure;
+            // The editor leaves first: the canvas grows into its space, so load() fits to the
+            // height it will keep.
+            ed.wrap.classList.add("hide");
             canvasHost.classList.remove("hide");
             canvas.load(r.data.doc.steps);
           } else {
@@ -3638,7 +3912,7 @@
           textBtn.classList.toggle("on", mode === "text");
           visBtn.classList.toggle("on", mode === "visual");
           ed.wrap.classList.toggle("hide", mode !== "text");
-          addbar.classList.toggle("hide", mode !== "text");
+          stepMenu.classList.toggle("hide", mode !== "text");
           canvasHost.classList.toggle("hide", mode !== "visual");
           updateHistoryBtns();
         }
@@ -3690,8 +3964,6 @@
           return true;
         }
 
-        const bar2 = document.createElement("div");
-        bar2.className = "bar";
         const save = mkBtn("save", async () => {
           if (mode === "visual" && !(await syncFromCanvas())) return;
           const newName = nameIn.value.trim();
@@ -3728,23 +4000,6 @@
         });
         save.className = "primary";
         save.setAttribute("aria-label", "Save");
-        const copy = mkBtn("copy", () => {
-          navigator.clipboard.writeText(ta.value).then(
-            () => toast("YAML copied to clipboard", true),
-            (e) => toast("copy failed — " + errMsg(e), false),
-          );
-        });
-        const download = mkBtn("download", () => {
-          const blob = new Blob([ta.value], { type: "text/yaml" });
-          const a = document.createElement("a");
-          a.href = URL.createObjectURL(blob);
-          a.download = (nameIn.value.trim() || "workflow") + ".yaml";
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-        });
-        bar2.append(undoBtn, redoBtn, unsaved, save, copy, download);
 
         const entry = state.entries.find((e) => e.name === name);
         const inBoth = !!entry && entry.inRepo && entry.inGlobal;
@@ -3772,41 +4027,73 @@
           await loadState();
         }
 
-        // Delete: when the name exists in both scopes, let the user pick which variant(s) to remove.
+        const overflowItems = [
+          ...histItems,
+          {
+            label: "copy",
+            fn: () => {
+              navigator.clipboard.writeText(ta.value).then(
+                () => toast("YAML copied to clipboard", true),
+                (e) => toast("copy failed — " + errMsg(e), false),
+              );
+            },
+          },
+          {
+            label: "download",
+            fn: () => {
+              const blob = new Blob([ta.value], { type: "text/yaml" });
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(blob);
+              a.download = (nameIn.value.trim() || "workflow") + ".yaml";
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+            },
+          },
+        ];
         if (inBoth) {
-          const delSel = document.createElement("select");
-          for (const [val, lbl] of [
-            ["repo", "local"],
-            ["global", "global"],
-            ["both", "both"],
+          for (const [scopes, lbl] of [
+            [["repo"], "local"],
+            [["global"], "global"],
+            [["repo", "global"], "both"],
           ]) {
-            const o = document.createElement("option");
-            o.value = val;
-            o.textContent = lbl;
-            delSel.appendChild(o);
+            overflowItems.push({
+              label: "delete " + lbl,
+              fn: () => {
+                if (!confirm("delete " + name + " (" + lbl + ")?")) return;
+                dropScopes(scopes);
+              },
+            });
           }
-          const del = mkBtn("delete", () => {
-            const which = delSel.value;
-            if (!confirm("delete " + name + " (" + (which === "repo" ? "local" : which) + ")?"))
-              return;
-            dropScopes(which === "both" ? ["repo", "global"] : [which]);
-          });
-          bar2.append(delSel, del);
         } else {
-          const del = mkBtn("delete", () => {
-            if (!confirm("delete " + name + "?")) return;
-            dropScopes([scope]);
+          overflowItems.push({
+            label: "delete",
+            fn: () => {
+              if (!confirm("delete " + name + "?")) return;
+              dropScopes([scope]);
+            },
           });
-          bar2.appendChild(del);
         }
+        const overflow = mkMenu("⋯", overflowItems, "More actions");
 
-        const foot = document.createElement("div");
-        foot.className = "hint";
-        foot.append("run in a terminal: ");
-        const footCmd = document.createElement("code");
-        foot.append(footCmd, " (no run from browser)");
+        const bar = document.createElement("div");
+        bar.className = "bar";
+        bar.append(
+          nameIn,
+          scopeSel,
+          flagBox,
+          spacer,
+          modeSeg,
+          stepMenu,
+          undoBtn,
+          redoBtn,
+          unsaved,
+          save,
+          overflow,
+        );
+
         const setFoot = () => {
-          footCmd.textContent = "hwf run " + (nameIn.value.trim() || "<name>");
           canvas.setTrigger("When you run: hwf run " + (nameIn.value.trim() || "<name>"));
         };
         setFoot();
@@ -3816,7 +4103,7 @@
         };
         scopeSel.onchange = () => refreshDirty();
 
-        pane.append(bar1, flagBox, ed.wrap, canvasHost, status, bar2, foot);
+        pane.append(bar, ed.wrap, canvasHost, status);
         refreshDirty();
         if (loadError) showProblem(false, loadError);
         runValidate();
@@ -3840,6 +4127,67 @@
         b.textContent = label;
         b.onclick = fn;
         return b;
+      }
+
+      function mkMenu(label, items, name) {
+        const wrap = document.createElement("div");
+        wrap.className = "menu";
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = label;
+        btn.setAttribute("aria-haspopup", "menu");
+        btn.setAttribute("aria-expanded", "false");
+        btn.setAttribute("aria-label", name || label);
+        btn.title = name || label;
+        const pop = document.createElement("div");
+        pop.className = "menu-pop";
+        pop.setAttribute("role", "menu");
+        pop.hidden = true;
+        // `back` is false when the pointer landed elsewhere: returning focus would steal it.
+        function close(back) {
+          if (pop.hidden) return;
+          pop.hidden = true;
+          btn.setAttribute("aria-expanded", "false");
+          document.removeEventListener("pointerdown", onOut, true);
+          if (back) btn.focus();
+        }
+        function onOut(e) {
+          if (!wrap.contains(e.target)) close(false);
+        }
+        function open() {
+          pop.hidden = false;
+          btn.setAttribute("aria-expanded", "true");
+          document.addEventListener("pointerdown", onOut, true);
+          const first = [...pop.querySelectorAll('[role="menuitem"]')].find(
+            (el) => el.getClientRects().length > 0,
+          );
+          if (first) first.focus();
+        }
+        for (const item of items) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.setAttribute("role", "menuitem");
+          b.textContent = item.label;
+          if (item.className) b.className = item.className;
+          b.onclick = () => {
+            close(true);
+            item.fn();
+          };
+          item.el = b;
+          pop.appendChild(b);
+        }
+        btn.onclick = () => {
+          if (pop.hidden) open();
+          else close(true);
+        };
+        pop.addEventListener("keydown", (e) => {
+          if (e.key !== "Escape") return;
+          e.preventDefault();
+          e.stopPropagation();
+          close(true);
+        });
+        wrap.append(btn, pop);
+        return wrap;
       }
 
       function setStatus(el, ok, msg, jump) {
@@ -4447,7 +4795,9 @@
       }
 
       $("theme-btn").addEventListener("click", cycleTheme);
+      $("list-btn").addEventListener("click", () => setListCollapsed(!listCollapsed));
       syncThemeControl();
+      syncListToggle();
       try {
         matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
           if (themeMode() == null) syncThemeControl();
