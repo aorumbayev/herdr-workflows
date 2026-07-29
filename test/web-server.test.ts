@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { startWebServer, type WebServer } from "../src/web/server";
+import { dropSource, startWebServer, type WebServer } from "../src/web/server";
 
 const dirs: string[] = [];
 const servers: WebServer[] = [];
@@ -491,6 +491,21 @@ steps:
     expect(data.error).toMatch(/could not be removed/);
     expect(await Bun.file(join(wdir, "moved.yaml")).exists()).toBe(false);
     expect(await Bun.file(join(wdir, "stuck.yaml", "child")).exists()).toBe(true);
+  });
+
+  test("a move that can neither remove its source nor undo its claim reports both", async () => {
+    const root = await repo();
+    const wdir = join(root, ".hwf", "workflows");
+    // Both paths refuse removal, so the source delete and the rollback each fail.
+    await mkdir(join(wdir, "src.yaml", "child"), { recursive: true });
+    await mkdir(join(wdir, "dest.yaml", "child"), { recursive: true });
+    const res = await dropSource(join(wdir, "src.yaml"), join(wdir, "dest.yaml"), "src");
+    expect(res.status).toBe(500);
+    const data = (await res.json()) as { ok: boolean; error?: string };
+    expect(data.ok).toBe(false);
+    expect(data.error).toMatch(/'src' could not be removed/);
+    expect(data.error).toMatch(/could not be undone/);
+    expect(data.error).toContain("dest.yaml");
   });
 
   test("DELETE missing file is idempotent ok", async () => {

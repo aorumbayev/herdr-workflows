@@ -331,6 +331,37 @@ function requireNameScope(
 }
 
 /**
+ * Finish a move: remove the source now that `claimed` holds the workflow. A source that will
+ * not go away undoes the claim so nothing changed. If that undo also fails the caller is told
+ * which copy was left behind, because it is what makes later saves collide.
+ */
+export async function dropSource(
+  source: string,
+  claimed: string,
+  label: string,
+): Promise<Response> {
+  try {
+    await Bun.file(source).delete();
+  } catch (error) {
+    if (errCode(error) === "ENOENT") return json({ ok: true });
+    const kept = `'${label}' could not be removed — ${errText(error)}`;
+    try {
+      await rm(claimed, { force: true });
+    } catch (rollbackError) {
+      return json(
+        {
+          ok: false,
+          error: `${kept}; the copy at ${shortPath(claimed)} could not be undone — ${errText(rollbackError)}`,
+        },
+        500,
+      );
+    }
+    return json({ ok: false, error: kept }, 500);
+  }
+  return json({ ok: true });
+}
+
+/**
  * Persist a workflow. `previous` is the path the editor loaded this buffer from: the same
  * path means an in-place edit (overwrite), a different path — or no previous at all — means
  * the destination is being claimed, so it must be free. A move claims the destination and
@@ -359,19 +390,8 @@ async function writeWorkflow(
   }
   const claimed = await claimFile(file, text, `'${name}' already exists in ${scope}`);
   if (claimed) return claimed;
-  if (!prev) return json({ ok: true });
-  try {
-    await Bun.file(prev).delete();
-  } catch (error) {
-    if (errCode(error) !== "ENOENT") {
-      await rm(file, { force: true }).catch(() => {});
-      return json(
-        { ok: false, error: `'${previous?.name}' could not be removed — ${errText(error)}` },
-        500,
-      );
-    }
-  }
-  return json({ ok: true });
+  if (!previous) return json({ ok: true });
+  return dropSource(workflowPath(previous.scope, repoRoot, previous.name), file, previous.name);
 }
 
 async function handleWorkflow(

@@ -46,6 +46,10 @@ The workflow scope selector MUST mark a changed scope as unsaved and MUST NOT mo
 - **WHEN** a rename or re-scope claims its destination but cannot remove the original source
 - **THEN** the destination claim is undone, the workflow stays unsaved, no success toast is shown, and only the original source remains on disk
 
+#### Scenario: Undoing the destination claim also fails
+- **WHEN** the source cannot be removed and the claimed destination cannot be undone either
+- **THEN** the reported failure names the copy left behind so the collision it will cause is explained
+
 #### Scenario: Both scope variants exist
 - **WHEN** local and global workflows already share the edited name
 - **THEN** the scope selector is unavailable so saving cannot overwrite either variant
