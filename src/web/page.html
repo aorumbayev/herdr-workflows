@@ -2985,9 +2985,10 @@
           if (mode === "visual" && !(await syncFromCanvas())) return;
           const newName = nameIn.value.trim();
           const newScope = scopeSel.value;
-          const moved = !!(sourceName && (sourceName !== newName || sourceScope !== newScope));
+          // One request: the server overwrites the path this buffer came from, or claims a
+          // free destination and drops the source. Either the whole save lands, or nothing.
           const putBody = { name: newName, scope: newScope, text: ta.value };
-          if (moved) {
+          if (sourceName) {
             putBody.previousName = sourceName;
             putBody.previousScope = sourceScope;
           }
@@ -2998,31 +2999,8 @@
           if (!r.data.ok) {
             showProblem(false, r.data.error || "save failed");
             toast("not saved — " + (r.data.error || "save failed"), false);
+            await loadState();
             return;
-          }
-          if (moved) {
-            const prevName = sourceName;
-            const prevScope = sourceScope;
-            const del = await api("/api/workflow", {
-              method: "DELETE",
-              body: JSON.stringify({ name: prevName, scope: prevScope }),
-            });
-            if (!del.data.ok) {
-              sourceName = newName;
-              sourceScope = newScope;
-              current = { name: newName, scope: newScope };
-              setHash("w=" + newScope + ":" + newName);
-              await loadState();
-              const msg =
-                "wrote " +
-                newName +
-                " but the original remains — " +
-                (del.data.error || "delete failed");
-              showProblem(false, msg);
-              toast(msg, false);
-              refreshDirty();
-              return;
-            }
           }
           savedName = newName;
           savedScope = newScope;
@@ -3063,11 +3041,18 @@
         }
 
         async function dropScopes(scopes) {
-          for (const s of scopes)
-            await api("/api/workflow", {
+          for (const s of scopes) {
+            const r = await api("/api/workflow", {
               method: "DELETE",
               body: JSON.stringify({ name, scope: s }),
             });
+            if (r.data.ok) continue;
+            const msg = "not deleted — " + (r.data.error || "delete failed");
+            showProblem(false, msg);
+            toast(msg, false);
+            await loadState();
+            return;
+          }
           editorDirty = false;
           current = null;
           toast("deleted " + name, true);

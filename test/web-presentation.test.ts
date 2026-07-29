@@ -270,8 +270,10 @@ describe("web workbench presentation", () => {
     expect(page).toContain("previousScope");
     expect(page).toContain("sourceName");
     expect(page).toContain("sourceScope");
-    expect(page).toContain("del.data.ok");
-    expect(page).toContain("but the original remains");
+    // Moves are one server-side request: no client-side write-then-delete sequence.
+    expect(page).not.toMatch(/method:\s*"DELETE",\s*\n\s*body: JSON.stringify\(\{ name: prev/);
+    expect(page).toContain('"not saved — "');
+    expect(page).toContain('"not deleted — "');
     expect(page).toContain('setAttribute("aria-label", "Undo")');
     expect(page).toContain('setAttribute("aria-label", "Redo")');
     expect(page).toContain('setAttribute("aria-label", "Save")');
