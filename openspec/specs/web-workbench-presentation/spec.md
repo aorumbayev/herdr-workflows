@@ -174,4 +174,3 @@ The header MUST provide a single control that hides and shows the workflow list,
 #### Scenario: Not offered where it does not apply
 - **WHEN** the config tab, the runs tab, or a share or import view is showing
 - **THEN** the list control is absent
-
