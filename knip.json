@@ -7,7 +7,6 @@
     "oxlint",
     "@semantic-release/commit-analyzer",
     "@semantic-release/github",
-    "@semantic-release/release-notes-generator",
     "conventional-changelog-conventionalcommits"
   ]
 }
