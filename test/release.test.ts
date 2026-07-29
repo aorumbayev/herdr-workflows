@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { generateNotes } from "@semantic-release/release-notes-generator";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -65,6 +66,21 @@ describe("prepare-release", () => {
     expect(flat).toContain("prepare-release.ts");
     expect(flat).toContain("[skip ci]");
     expect(flat).toContain('"breaking":true');
+  });
+
+  test("release notes include feature commits", async () => {
+    const notes = await generateNotes(
+      {},
+      {
+        commits: [{ hash: "0123456789abcdef", message: "feat: add release notes" }],
+        lastRelease: { gitTag: "v0.1.0", gitHead: "abcdef" },
+        nextRelease: { version: "0.2.0", gitTag: "v0.2.0", gitHead: "012345" },
+        options: { repositoryUrl: "https://github.com/aorumbayev/herdr-workflows.git" },
+        cwd: join(import.meta.dir, ".."),
+      },
+    );
+    expect(notes).toContain("Features");
+    expect(notes).toContain("add release notes");
   });
 
   test("release workflow runs semantic-release only by manual dispatch", () => {

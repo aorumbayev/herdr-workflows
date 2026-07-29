@@ -21,12 +21,7 @@ export default {
         ],
       },
     ],
-    [
-      "@semantic-release/release-notes-generator",
-      {
-        preset: "conventionalcommits",
-      },
-    ],
+    "@semantic-release/release-notes-generator",
     [
       "@semantic-release/exec",
       {
