@@ -17,6 +17,7 @@ async function runCli(
   cwd: string,
   extraEnv: Record<string, string> = {},
   stdinText?: string,
+  preload?: string,
 ): Promise<{ stdout: string; stderr: string; code: number }> {
   const home = await mkdtemp(join(tmpdir(), "hwf-cli-home-"));
   const state = await mkdtemp(join(tmpdir(), "hwf-cli-state-"));
@@ -34,8 +35,9 @@ async function runCli(
   delete env.HERDR_TAB_ID;
   delete env.HERDR_WORKSPACE_ID;
   Object.assign(env, extraEnv);
+  const bunArgs = preload ? ["--preload", preload] : [];
   const proc = Bun.spawn(
-    [process.execPath, join(import.meta.dir, "..", "src", "cli.ts"), ...args],
+    [process.execPath, ...bunArgs, join(import.meta.dir, "..", "src", "cli.ts"), ...args],
     {
       cwd,
       env,
@@ -418,6 +420,145 @@ describe("cli run", () => {
       expect(result.stderr).toContain(`required≥${MIN_HERDR_VERSION}`);
       expect(result.stdout).not.toContain("[1/1]");
     });
+  });
+});
+
+describe("cli picker", () => {
+  test("rejects herdr protocol mismatch before mounting UI", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-picker-proto-"));
+    dirs.push(root);
+    await mkdir(join(root, ".hwf", "workflows"), { recursive: true });
+
+    await withPingSocket(
+      { protocol: HERDR_PROTOCOL + 1, version: MIN_HERDR_VERSION },
+      async (socketPath) => {
+        const result = await runCli(["picker"], root, {
+          HERDR_WORKFLOWS_REPO_ROOT: root,
+          HERDR_SOCKET_PATH: socketPath,
+        });
+        expect(result.code).toBe(1);
+        expect(result.stderr).toContain("herdr protocol mismatch");
+        expect(result.stderr).toContain(`pinned=${HERDR_PROTOCOL}`);
+      },
+    );
+  });
+
+  test("protocol mismatch retains precedence over concurrent picker import failure", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-picker-import-race-"));
+    dirs.push(root);
+    await mkdir(join(root, ".hwf", "workflows"), { recursive: true });
+
+    const mockDir = await mkdtemp(join(tmpdir(), "hwf-cli-picker-import-fail-"));
+    dirs.push(mockDir);
+    const preload = join(mockDir, "preload.ts");
+    const pickerAbs = join(import.meta.dir, "..", "src", "tui", "picker.ts");
+    await writeFile(
+      preload,
+      [
+        'import { mock } from "bun:test";',
+        `mock.module(${JSON.stringify(pickerAbs)}, () => {`,
+        '  throw new Error("forced picker import failure");',
+        "});",
+        "",
+      ].join("\n"),
+    );
+
+    await withPingSocket(
+      { protocol: HERDR_PROTOCOL + 1, version: MIN_HERDR_VERSION },
+      async (socketPath) => {
+        const result = await runCli(
+          ["picker"],
+          root,
+          {
+            HERDR_WORKFLOWS_REPO_ROOT: root,
+            HERDR_SOCKET_PATH: socketPath,
+          },
+          undefined,
+          preload,
+        );
+        expect(result.code).toBe(1);
+        expect(result.stderr).toContain("herdr protocol mismatch");
+        expect(result.stderr).toContain(`pinned=${HERDR_PROTOCOL}`);
+        expect(result.stderr).not.toContain("forced picker import failure");
+      },
+    );
+  });
+});
+
+describe("cli launch", () => {
+  test("rejects herdr protocol mismatch before opening the picker pane", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-launch-proto-"));
+    dirs.push(root);
+    await mkdir(join(root, ".hwf", "workflows"), { recursive: true });
+
+    await withPingSocket(
+      { protocol: HERDR_PROTOCOL + 1, version: MIN_HERDR_VERSION },
+      async (socketPath) => {
+        const result = await runCli(["launch"], root, { HERDR_SOCKET_PATH: socketPath });
+        expect(result.code).toBe(1);
+        expect(result.stderr).toContain("herdr protocol mismatch");
+        expect(result.stderr).toContain(`pinned=${HERDR_PROTOCOL}`);
+      },
+    );
+  });
+
+  test("forwards repo root and plugin context after protocol preflight", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-launch-env-"));
+    dirs.push(root);
+    await mkdir(join(root, ".hwf", "workflows"), { recursive: true });
+
+    const methods: string[] = [];
+    let openedEnv: Record<string, string> | undefined;
+    const dir = await mkdtemp(join(tmpdir(), "hwf-cli-launch-env-sock-"));
+    dirs.push(dir);
+    const socketPath = join(dir, "herdr.sock");
+    const server = createServer((socket) => {
+      let buf = "";
+      socket.on("data", (chunk) => {
+        buf += chunk.toString("utf8");
+        if (!buf.includes("\n")) return;
+        const req = JSON.parse(buf.slice(0, buf.indexOf("\n"))) as {
+          id: string;
+          method: string;
+          params?: { env?: Record<string, string> };
+        };
+        methods.push(req.method);
+        if (req.method === "ping") {
+          socket.end(
+            `${JSON.stringify({
+              id: req.id,
+              result: { type: "pong", protocol: HERDR_PROTOCOL, version: MIN_HERDR_VERSION },
+            })}\n`,
+          );
+          return;
+        }
+        if (req.method === "plugin.pane.open") {
+          openedEnv = req.params?.env;
+          socket.end(`${JSON.stringify({ id: req.id, result: { type: "ok" } })}\n`);
+          return;
+        }
+        socket.end(
+          `${JSON.stringify({ id: req.id, error: { code: "unexpected", message: req.method } })}\n`,
+        );
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.listen(socketPath, () => resolve());
+      server.on("error", reject);
+    });
+    try {
+      const ctx = JSON.stringify({ focused_pane_cwd: root, selected_text: "sel" });
+      const result = await runCli(["launch"], root, {
+        HERDR_SOCKET_PATH: socketPath,
+        HERDR_PLUGIN_CONTEXT_JSON: ctx,
+      });
+      expect(result.code).toBe(0);
+      expect(methods).toEqual(["ping", "plugin.pane.open"]);
+      expect(openedEnv?.HERDR_WORKFLOWS_REPO_ROOT).toBe(root);
+      expect(openedEnv?.HERDR_PLUGIN_CONTEXT_JSON).toBe(ctx);
+    } finally {
+      server.close();
+    }
   });
 });
 

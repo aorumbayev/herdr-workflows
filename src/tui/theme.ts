@@ -71,9 +71,21 @@ export function themeFromPalette(colors: TerminalColors | null): HostTheme {
   };
 }
 
+const STANDALONE_PALETTE_TIMEOUT_MS = 400;
+// Herdr plugin panes inject HERDR_PLUGIN_ENTRYPOINT_ID; measured popup answer matches at 1ms vs 400ms.
+const HERDR_PANE_PALETTE_TIMEOUT_MS = 1;
+
+function hostPaletteTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  return env.HERDR_PLUGIN_ENTRYPOINT_ID
+    ? HERDR_PANE_PALETTE_TIMEOUT_MS
+    : STANDALONE_PALETTE_TIMEOUT_MS;
+}
+
 export async function resolveHostTheme(renderer: CliRenderer): Promise<HostTheme> {
   try {
-    return themeFromPalette(await renderer.getPalette({ size: 16, timeout: 400 }));
+    return themeFromPalette(
+      await renderer.getPalette({ size: 16, timeout: hostPaletteTimeoutMs() }),
+    );
   } catch {
     return themeFromPalette(null);
   }

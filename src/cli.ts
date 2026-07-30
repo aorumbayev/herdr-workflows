@@ -223,7 +223,7 @@ async function cmdWorkflowInspect(
 
 async function cmdLaunch(): Promise<void> {
   await ensureHerdrProtocol();
-  // Picker popup is rooted at the plugin dir; forward the invoking repo and context.
+  // Picker popup cwd is the plugin dir; forward invocation repo + context.
   const ctx = readInvocationContext();
   const repoRoot = await resolveRepoRoot(ctx.cwd);
   const env: Record<string, string> = { HERDR_WORKFLOWS_REPO_ROOT: repoRoot };
@@ -346,16 +346,25 @@ function preferOnDiskOpentuiLib(): void {
   }
 }
 
-async function runPickerPopup(picker: typeof import("./tui/picker")): Promise<void> {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) die("picker requires a tty");
-
+async function runPickerPopup(
+  pickerImport: Promise<typeof import("./tui/picker")>,
+  protocolReady: Promise<void>,
+): Promise<void> {
   const ctx = readInvocationContext();
-  const root = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot(ctx.cwd));
-  // Concurrent with config/workflow loading — never awaited before mount.
-  const { defaultPickerReleaseCheck } = await import("./tui/update-indicator");
-  const releaseCheck = defaultPickerReleaseCheck();
-  const config = await loadConfig(root);
-  const entries = await listWorkflows(root, config);
+  const loading = (async () => {
+    const root = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot(ctx.cwd));
+    const { defaultPickerReleaseCheck } = await import("./tui/update-indicator");
+    const releaseCheck = defaultPickerReleaseCheck();
+    const config = await loadConfig(root);
+    const entries = await listWorkflows(root, config);
+    return { releaseCheck, config, entries, root };
+  })();
+  void loading.catch(() => {});
+
+  await protocolReady;
+  if (!process.stdin.isTTY || !process.stdout.isTTY) die("picker requires a tty");
+  const picker = await pickerImport;
+  const { releaseCheck, config, entries, root } = await loading;
 
   ctx.cwd = root;
   const code = await picker.runPickerSession({
@@ -431,9 +440,12 @@ function buildProgram(): Command {
     .command("picker")
     .description("Run the picker TUI (plugin popup entrypoint)")
     .action(async () => {
-      await ensureHerdrProtocol();
       preferOnDiskOpentuiLib();
-      await runPickerPopup(await import("./tui/picker"));
+      const protocolReady = ensureHerdrProtocol();
+      const pickerImport = import("./tui/picker");
+      void protocolReady.catch(() => {});
+      void pickerImport.catch(() => {});
+      await runPickerPopup(pickerImport, protocolReady);
     });
 
   program
