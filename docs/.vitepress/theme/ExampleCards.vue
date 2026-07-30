@@ -133,7 +133,7 @@ function toggle(name) {
   padding: 0.6rem;
   border: 1px solid var(--line, var(--vp-c-divider));
   border-radius: var(--radius-md, 4px);
-  background: color-mix(in srgb, var(--bg, var(--vp-c-bg)) 80%, #000);
+  background: var(--code-bg, var(--vp-code-bg));
   font-size: 0.72rem;
   line-height: 1.4;
   overflow-x: auto;

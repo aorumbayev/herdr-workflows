@@ -31,7 +31,7 @@ export default {
     [
       "@semantic-release/git",
       {
-        assets: ["herdr-plugin.toml"],
+        assets: ["herdr-plugin.toml", "docs/workflow.schema.json"],
         message: "chore(release): ${nextRelease.version} [skip ci]",
       },
     ],

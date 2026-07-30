@@ -1,18 +1,34 @@
-/* herdr.dev nord palette + type (https://herdr.dev/css/style.css) */
+/* Nord palette — same tokens as hwf web (src/web/page.html). */
 :root {
-  --bg: #2e3440;
-  --bg-elevated: #343b49;
-  --ink: #ffffff;
-  --ink-soft: #eceff4;
-  --muted: #8792a8;
-  --muted-2: #5f6a80;
-  --line: #434c5e;
-  --line-strong: #4c566a;
-  --accent: #88c0d0;
-  --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
-  --green: #a3be8c;
-  --yellow: #ebcb8b;
-  --red: #bf616a;
+  --nord0: #2e3440;
+  --nord1: #3b4252;
+  --nord2: #434c5e;
+  --nord3: #4c566a;
+  --nord4: #d8dee9;
+  --nord5: #e5e9f0;
+  --nord6: #eceff4;
+  --nord8: #88c0d0;
+  --nord10: #5e81ac;
+  --nord11: #bf616a;
+  --nord13: #ebcb8b;
+  --nord14: #a3be8c;
+
+  /* Nord Light (default when html is not .dark) */
+  --bg: var(--nord6);
+  --bg-elevated: var(--nord5);
+  --ink: var(--nord0);
+  --ink-soft: var(--nord1);
+  --muted: var(--nord3);
+  --muted-2: #5d6879;
+  --line: var(--nord4);
+  --line-strong: #c3cbd9;
+  --accent: var(--nord10);
+  --accent-soft: #dde4ed;
+  --green: #5d6c50;
+  --yellow: #756545;
+  --red: #94535d;
+  --code-bg: var(--nord5);
+  --elev-shadow: 0 18px 50px color-mix(in srgb, var(--nord0) 12%, transparent);
   --radius-sm: 2px;
   --radius-md: 4px;
   --radius-lg: 6px;
@@ -63,11 +79,29 @@
   --vp-button-alt-hover-text: var(--accent);
 
   --vp-code-color: var(--accent);
-  --vp-code-bg: color-mix(in srgb, var(--bg-elevated) 80%, #000);
-  --vp-code-block-bg: color-mix(in srgb, var(--bg-elevated) 80%, #000);
+  --vp-code-bg: var(--code-bg);
+  --vp-code-block-bg: var(--code-bg);
 
   --vp-nav-bg-color: color-mix(in srgb, var(--bg) 92%, transparent);
   --vp-sidebar-bg-color: var(--bg);
+}
+
+.dark {
+  --bg: var(--nord0);
+  --bg-elevated: color-mix(in srgb, var(--nord1) 50%, var(--nord0));
+  --ink: #ffffff;
+  --ink-soft: var(--nord6);
+  --muted: color-mix(in srgb, var(--nord4) 52%, var(--nord3));
+  --muted-2: color-mix(in srgb, var(--nord4) 14%, var(--nord3));
+  --line: var(--nord2);
+  --line-strong: var(--nord3);
+  --accent: var(--nord8);
+  --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
+  --green: var(--nord14);
+  --yellow: var(--nord13);
+  --red: var(--nord11);
+  --code-bg: color-mix(in srgb, var(--bg-elevated) 80%, #000);
+  --elev-shadow: 0 18px 50px color-mix(in srgb, #000 28%, transparent);
 }
 
 ::selection {
@@ -105,6 +139,11 @@ html {
 .VPNavBarMenuLink:hover,
 .VPNavBarMenuLink.active {
   color: var(--accent) !important;
+}
+
+.VPSwitchAppearance {
+  --vp-c-bg: var(--bg-elevated);
+  --vp-c-text-2: var(--muted);
 }
 
 .VPButton {
@@ -168,4 +207,21 @@ html {
 .VPLocalSearchBox .result.selected,
 .DocSearch-Hit[aria-selected="true"] a {
   background: var(--accent-soft) !important;
+}
+
+.VPFooter {
+  border-top: 1px solid var(--line) !important;
+  background: var(--bg) !important;
+}
+
+.VPFooter .message,
+.VPFooter .copyright {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--muted) !important;
+}
+
+.VPFooter .message a,
+.VPFooter .copyright a {
+  color: var(--accent);
 }

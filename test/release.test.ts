@@ -11,7 +11,7 @@ afterEach(async () => {
 });
 
 describe("prepare-release", () => {
-  test("updates only the herdr-plugin.toml version field", async () => {
+  test("updates only the herdr-plugin.toml version field for a fixture path", async () => {
     const dir = await mkdtemp(join(tmpdir(), "hwf-prepare-"));
     dirs.push(dir);
     const toml = join(dir, "herdr-plugin.toml");
@@ -24,9 +24,35 @@ describe("prepare-release", () => {
     const [stdout, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
     expect(code).toBe(0);
     expect(stdout).toContain("0.2.0");
+    expect(stdout).not.toContain("regenerated docs/workflow.schema.json");
     expect(await readFile(toml, "utf8")).toBe(
       `id = "herdr-workflows"\nversion = "0.2.0"\nname = "herdr-workflows"\n`,
     );
+  });
+
+  test("default prepare regenerates the schema $id for the new version", async () => {
+    const script = join(import.meta.dir, "..", "scripts", "prepare-release.ts");
+    const toml = join(import.meta.dir, "..", "herdr-plugin.toml");
+    const schemaPath = join(import.meta.dir, "..", "docs", "workflow.schema.json");
+    const beforeToml = await readFile(toml, "utf8");
+    const current = /^version\s*=\s*"([^"]+)"/m.exec(beforeToml)?.[1];
+    expect(current).toMatch(/^\d+\.\d+\.\d+$/);
+    try {
+      const proc = Bun.spawn(["bun", script, current!], {
+        stdout: "pipe",
+        stderr: "pipe",
+        cwd: join(import.meta.dir, ".."),
+      });
+      const [stdout, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+      expect(code).toBe(0);
+      expect(stdout).toContain("regenerated docs/workflow.schema.json");
+      const schema = JSON.parse(await readFile(schemaPath, "utf8")) as { $id: string };
+      expect(schema.$id).toBe(
+        `https://raw.githubusercontent.com/aorumbayev/herdr-workflows/v${current}/docs/workflow.schema.json`,
+      );
+    } finally {
+      await writeFile(toml, beforeToml);
+    }
   });
 
   test("rejects malformed versions", async () => {
@@ -64,6 +90,7 @@ describe("prepare-release", () => {
     expect(flat).not.toContain("@semantic-release/npm");
     expect(flat).not.toContain("draftRelease");
     expect(flat).toContain("prepare-release.ts");
+    expect(flat).toContain("docs/workflow.schema.json");
     expect(flat).toContain("[skip ci]");
     expect(flat).toContain('"breaking":true');
   });

@@ -4,8 +4,9 @@ export default defineConfig({
   title: "herdr-workflows",
   description: "Short linear YAML workflows for herdr. Run commands, agents, and herdr calls.",
   base: "/herdr-workflows/",
-  appearance: "force-dark",
+  appearance: "dark",
   head: [
+    ["link", { rel: "icon", href: "/herdr-workflows/favicon.svg", type: "image/svg+xml" }],
     ["link", { rel: "preconnect", href: "https://fonts.googleapis.com" }],
     ["link", { rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: "" }],
     [
@@ -42,5 +43,9 @@ export default defineConfig({
     socialLinks: [{ icon: "github", link: "https://github.com/aorumbayev/herdr-workflows" }],
     search: { provider: "local" },
     outline: [2, 3],
+    footer: {
+      copyright:
+        'Copyright © 2026 · <a href="https://github.com/aorumbayev/herdr-workflows/blob/main/LICENSE">MIT License</a>',
+    },
   },
 });

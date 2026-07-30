@@ -18,8 +18,10 @@ import { listWorkflows, parseWorkflowText, workflowPath } from "../workflow/load
 import { parseRaw, rawWorkflowSchema, type RawStep, type RawWorkflowDoc } from "../workflow/parse";
 import { analyzeYamlTree, sensitivityLabels, workflowDisplayTitle } from "../workflow/trust";
 import pageHtml from "./page.html" with { type: "text" };
+import logoSvg from "../../docs/assets/logo.svg" with { type: "text" };
 
 const PAGE = pageHtml as unknown as string;
+const LOGO = logoSvg as unknown as string;
 const IND = "  ";
 const WORKFLOW_NAME_RE = /^[a-z0-9][a-z0-9-_]*$/;
 // Same call `scripts/generate-schema.ts` commits, so the served copy cannot go stale.
@@ -669,6 +671,15 @@ function createHandler(
         return new Response("forbidden", { status: 403 });
       const origin = req.headers.get("origin");
       if (origin && !hostAllowed(origin, port)) return new Response("forbidden", { status: 403 });
+
+      if (url.pathname === "/favicon.svg" || url.pathname === "/favicon.ico") {
+        return new Response(LOGO, {
+          headers: {
+            "content-type": "image/svg+xml",
+            "cache-control": "public, max-age=86400",
+          },
+        });
+      }
 
       if (url.pathname === "/") {
         if (url.searchParams.get("token") !== token)

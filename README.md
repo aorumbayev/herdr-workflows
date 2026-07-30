@@ -1,4 +1,5 @@
 <h3 align="center">
+  <img src="docs/assets/logo.svg" width="80" alt="herdr-workflows" /><br />
   herdr-workflows
 </h3>
 

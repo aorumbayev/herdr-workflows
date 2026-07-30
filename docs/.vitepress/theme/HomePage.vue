@@ -31,17 +31,22 @@ const initCmd = "hwf init";
           <a class="btn btn-primary" href="#install">Quick start</a>
           <a class="btn btn-secondary" :href="withBase('/guide')">Read the guide</a>
         </div>
-        <p class="note">Needs herdr ≥ 0.7.5 · no Electron, no account · MIT</p>
+        <p class="note">
+          Needs
+          <a href="https://herdr.dev" target="_blank" rel="noopener noreferrer">herdr</a> ≥ 0.7.5
+        </p>
       </div>
       <!-- object, not img: the chapter buttons inside the SVG only work when its script runs -->
       <div class="hero-shot">
-        <object
-          type="image/svg+xml"
-          :data="workbench"
-          aria-label="herdr-workflows in five chapters — animated walkthrough"
-        >
-          <img :src="workbench" alt="herdr-workflows in five chapters" />
-        </object>
+        <div class="hero-shot-inner">
+          <object
+            type="image/svg+xml"
+            :data="workbench"
+            aria-label="herdr-workflows in five chapters — animated walkthrough"
+          >
+            <img :src="workbench" alt="herdr-workflows in five chapters" />
+          </object>
+        </div>
       </div>
     </section>
 
@@ -237,12 +242,27 @@ steps:
   font-size: 0.78rem;
 }
 
+.note a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.note a:hover {
+  text-decoration: underline;
+}
+
 .hero-shot {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background: var(--bg-elevated);
+  background: #2e3440;
+  box-shadow: var(--elev-shadow);
+}
+
+.hero-shot-inner {
+  border-radius: calc(var(--radius-lg) - 1px);
   overflow: hidden;
-  box-shadow: 0 18px 50px color-mix(in srgb, #000 28%, transparent);
+  background: #2e3440;
+  line-height: 0;
 }
 
 .hero-shot object,
@@ -251,6 +271,7 @@ steps:
   width: 100%;
   aspect-ratio: 1200 / 720;
   height: auto;
+  background: #2e3440;
 }
 
 .install,
@@ -281,12 +302,12 @@ steps:
   gap: 0.6rem;
   padding: 0.7rem 0.85rem;
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-elevated) 88%, #000);
+  background: var(--code-bg);
   border: 1px solid var(--line);
 }
 
 .install-card.secondary {
-  background: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
+  background: var(--bg-elevated);
 }
 
 .prompt {
@@ -346,7 +367,7 @@ steps:
   padding: 0.85rem 1rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-elevated) 88%, #000);
+  background: var(--code-bg);
   overflow-x: auto;
   font-size: 0.82rem;
   line-height: 1.5;

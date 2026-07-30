@@ -9,117 +9,205 @@
     svg { --f: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
     svg.paused * { animation-play-state: paused; }
 
-    /* every element on the master 50s clock; --d is the negative of its start time */
-    .a { animation: 50s linear infinite both; animation-delay: calc(var(--seek, 0s) + var(--d, 0s)); }
-    .v14 { animation-name: v14 }
-    @keyframes v14 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 2.8% { opacity:1;transform:none } 3.3% { opacity:0 } 100% { opacity:0 } }
-    .v34 { animation-name: v34 }
-    @keyframes v34 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 6.8% { opacity:1;transform:none } 7.3% { opacity:0 } 100% { opacity:0 } }
-    .v52 { animation-name: v52 }
-    @keyframes v52 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 10.4% { opacity:1;transform:none } 10.9% { opacity:0 } 100% { opacity:0 } }
-    .v10 { animation-name: v10 }
-    @keyframes v10 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 2.0% { opacity:1;transform:none } 2.5% { opacity:0 } 100% { opacity:0 } }
-    .v15 { animation-name: v15 }
-    @keyframes v15 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 3.0% { opacity:1;transform:none } 3.5% { opacity:0 } 100% { opacity:0 } }
-    .v20 { animation-name: v20 }
-    @keyframes v20 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 4.0% { opacity:1;transform:none } 4.5% { opacity:0 } 100% { opacity:0 } }
-    .v25 { animation-name: v25 }
-    @keyframes v25 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 5.0% { opacity:1;transform:none } 5.5% { opacity:0 } 100% { opacity:0 } }
-    .v30 { animation-name: v30 }
-    @keyframes v30 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 6.0% { opacity:1;transform:none } 6.5% { opacity:0 } 100% { opacity:0 } }
-    .v35 { animation-name: v35 }
-    @keyframes v35 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 7.0% { opacity:1;transform:none } 7.5% { opacity:0 } 100% { opacity:0 } }
-    .v40 { animation-name: v40 }
-    @keyframes v40 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 8.0% { opacity:1;transform:none } 8.5% { opacity:0 } 100% { opacity:0 } }
-    .v45 { animation-name: v45 }
-    @keyframes v45 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 9.0% { opacity:1;transform:none } 9.5% { opacity:0 } 100% { opacity:0 } }
-    .v50 { animation-name: v50 }
-    @keyframes v50 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 10.0% { opacity:1;transform:none } 10.5% { opacity:0 } 100% { opacity:0 } }
-    .v55 { animation-name: v55 }
-    @keyframes v55 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 11.0% { opacity:1;transform:none } 11.5% { opacity:0 } 100% { opacity:0 } }
-    .v60 { animation-name: v60 }
-    @keyframes v60 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 12.0% { opacity:1;transform:none } 12.5% { opacity:0 } 100% { opacity:0 } }
-    .v65 { animation-name: v65 }
-    @keyframes v65 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 13.0% { opacity:1;transform:none } 13.5% { opacity:0 } 100% { opacity:0 } }
-    .v70 { animation-name: v70 }
-    @keyframes v70 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 14.0% { opacity:1;transform:none } 14.5% { opacity:0 } 100% { opacity:0 } }
-    .v75 { animation-name: v75 }
-    @keyframes v75 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 15.0% { opacity:1;transform:none } 15.5% { opacity:0 } 100% { opacity:0 } }
-    .v80 { animation-name: v80 }
-    @keyframes v80 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 16.0% { opacity:1;transform:none } 16.5% { opacity:0 } 100% { opacity:0 } }
-    .v85 { animation-name: v85 }
-    @keyframes v85 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 17.0% { opacity:1;transform:none } 17.5% { opacity:0 } 100% { opacity:0 } }
-    .v90 { animation-name: v90 }
-    @keyframes v90 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 18.0% { opacity:1;transform:none } 18.5% { opacity:0 } 100% { opacity:0 } }
-    .v95 { animation-name: v95 }
-    @keyframes v95 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 19.0% { opacity:1;transform:none } 19.5% { opacity:0 } 100% { opacity:0 } }
-    .v100 { animation-name: v100 }
-    @keyframes v100 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 20.0% { opacity:1;transform:none } 20.5% { opacity:0 } 100% { opacity:0 } }
-    .v125 { animation-name: v125 }
-    @keyframes v125 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 25.0% { opacity:1;transform:none } 25.5% { opacity:0 } 100% { opacity:0 } }
-    .v130 { animation-name: v130 }
-    @keyframes v130 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 26.0% { opacity:1;transform:none } 26.5% { opacity:0 } 100% { opacity:0 } }
-    .v135 { animation-name: v135 }
-    @keyframes v135 { 0% { opacity:0;transform:translateY(6px) } 1.2% { opacity:1;transform:none } 27.0% { opacity:1;transform:none } 27.5% { opacity:0 } 100% { opacity:0 } }
+    /* master 65s clock; --d is start time; fades stay ~0.6s / 0.25s absolute */
+    .a { animation: 65s linear infinite both; animation-delay: calc(var(--seek, 0s) + var(--d, 0s)); }
     .p15 { animation-name: p15; transform-box: fill-box; transform-origin: center }
-    @keyframes p15 { 0% { opacity:0;transform:scale(.9) } 1.2% { opacity:1;transform:none } 3.0% { opacity:1;transform:none } 3.5% { opacity:0 } 100% { opacity:0 } }
+    @keyframes p15 { 0% { opacity:0;transform:scale(.9) } 0.923% { opacity:1;transform:none } 2.308% { opacity:1;transform:none } 2.692% { opacity:0 } 100% { opacity:0 } }
     .p20 { animation-name: p20; transform-box: fill-box; transform-origin: center }
-    @keyframes p20 { 0% { opacity:0;transform:scale(.9) } 1.2% { opacity:1;transform:none } 4.0% { opacity:1;transform:none } 4.5% { opacity:0 } 100% { opacity:0 } }
+    @keyframes p20 { 0% { opacity:0;transform:scale(.9) } 0.923% { opacity:1;transform:none } 3.077% { opacity:1;transform:none } 3.462% { opacity:0 } 100% { opacity:0 } }
     .p30 { animation-name: p30; transform-box: fill-box; transform-origin: center }
-    @keyframes p30 { 0% { opacity:0;transform:scale(.9) } 1.2% { opacity:1;transform:none } 6.0% { opacity:1;transform:none } 6.5% { opacity:0 } 100% { opacity:0 } }
+    @keyframes p30 { 0% { opacity:0;transform:scale(.9) } 0.923% { opacity:1;transform:none } 4.615% { opacity:1;transform:none } 5% { opacity:0 } 100% { opacity:0 } }
     .p40 { animation-name: p40; transform-box: fill-box; transform-origin: center }
-    @keyframes p40 { 0% { opacity:0;transform:scale(.9) } 1.2% { opacity:1;transform:none } 8.0% { opacity:1;transform:none } 8.5% { opacity:0 } 100% { opacity:0 } }
+    @keyframes p40 { 0% { opacity:0;transform:scale(.9) } 0.923% { opacity:1;transform:none } 6.154% { opacity:1;transform:none } 6.538% { opacity:0 } 100% { opacity:0 } }
+    .p46 { animation-name: p46; transform-box: fill-box; transform-origin: center }
+    @keyframes p46 { 0% { opacity:0;transform:scale(.9) } 0.923% { opacity:1;transform:none } 7.077% { opacity:1;transform:none } 7.462% { opacity:0 } 100% { opacity:0 } }
     .p50 { animation-name: p50; transform-box: fill-box; transform-origin: center }
-    @keyframes p50 { 0% { opacity:0;transform:scale(.9) } 1.2% { opacity:1;transform:none } 10.0% { opacity:1;transform:none } 10.5% { opacity:0 } 100% { opacity:0 } }
+    @keyframes p50 { 0% { opacity:0;transform:scale(.9) } 0.923% { opacity:1;transform:none } 7.692% { opacity:1;transform:none } 8.077% { opacity:0 } 100% { opacity:0 } }
     .p60 { animation-name: p60; transform-box: fill-box; transform-origin: center }
-    @keyframes p60 { 0% { opacity:0;transform:scale(.9) } 1.2% { opacity:1;transform:none } 12.0% { opacity:1;transform:none } 12.5% { opacity:0 } 100% { opacity:0 } }
+    @keyframes p60 { 0% { opacity:0;transform:scale(.9) } 0.923% { opacity:1;transform:none } 9.231% { opacity:1;transform:none } 9.615% { opacity:0 } 100% { opacity:0 } }
+    .p68 { animation-name: p68; transform-box: fill-box; transform-origin: center }
+    @keyframes p68 { 0% { opacity:0;transform:scale(.9) } 0.923% { opacity:1;transform:none } 10.462% { opacity:1;transform:none } 10.846% { opacity:0 } 100% { opacity:0 } }
     .p75 { animation-name: p75; transform-box: fill-box; transform-origin: center }
-    @keyframes p75 { 0% { opacity:0;transform:scale(.9) } 1.2% { opacity:1;transform:none } 15.0% { opacity:1;transform:none } 15.5% { opacity:0 } 100% { opacity:0 } }
+    @keyframes p75 { 0% { opacity:0;transform:scale(.9) } 0.923% { opacity:1;transform:none } 11.538% { opacity:1;transform:none } 11.923% { opacity:0 } 100% { opacity:0 } }
+    .p80 { animation-name: p80; transform-box: fill-box; transform-origin: center }
+    @keyframes p80 { 0% { opacity:0;transform:scale(.9) } 0.923% { opacity:1;transform:none } 12.308% { opacity:1;transform:none } 12.692% { opacity:0 } 100% { opacity:0 } }
+    .p90 { animation-name: p90; transform-box: fill-box; transform-origin: center }
+    @keyframes p90 { 0% { opacity:0;transform:scale(.9) } 0.923% { opacity:1;transform:none } 13.846% { opacity:1;transform:none } 14.231% { opacity:0 } 100% { opacity:0 } }
+    .p104 { animation-name: p104; transform-box: fill-box; transform-origin: center }
+    @keyframes p104 { 0% { opacity:0;transform:scale(.9) } 0.923% { opacity:1;transform:none } 16% { opacity:1;transform:none } 16.385% { opacity:0 } 100% { opacity:0 } }
+    .p105 { animation-name: p105; transform-box: fill-box; transform-origin: center }
+    @keyframes p105 { 0% { opacity:0;transform:scale(.9) } 0.923% { opacity:1;transform:none } 16.154% { opacity:1;transform:none } 16.538% { opacity:0 } 100% { opacity:0 } }
     .p110 { animation-name: p110; transform-box: fill-box; transform-origin: center }
-    @keyframes p110 { 0% { opacity:0;transform:scale(.9) } 1.2% { opacity:1;transform:none } 22.0% { opacity:1;transform:none } 22.5% { opacity:0 } 100% { opacity:0 } }
+    @keyframes p110 { 0% { opacity:0;transform:scale(.9) } 0.923% { opacity:1;transform:none } 16.923% { opacity:1;transform:none } 17.308% { opacity:0 } 100% { opacity:0 } }
+    .p140 { animation-name: p140; transform-box: fill-box; transform-origin: center }
+    @keyframes p140 { 0% { opacity:0;transform:scale(.9) } 0.923% { opacity:1;transform:none } 21.538% { opacity:1;transform:none } 21.923% { opacity:0 } 100% { opacity:0 } }
     .s25 { animation-name: s25 }
-    @keyframes s25 { 0% { opacity:0;transform:translateX(26px) } 1.2% { opacity:1;transform:none } 5.0% { opacity:1;transform:none } 5.5% { opacity:0 } 100% { opacity:0 } }
+    @keyframes s25 { 0% { opacity:0;transform:translateX(26px) } 0.923% { opacity:1;transform:none } 3.846% { opacity:1;transform:none } 4.231% { opacity:0 } 100% { opacity:0 } }
     .s35 { animation-name: s35 }
-    @keyframes s35 { 0% { opacity:0;transform:translateX(26px) } 1.2% { opacity:1;transform:none } 7.0% { opacity:1;transform:none } 7.5% { opacity:0 } 100% { opacity:0 } }
+    @keyframes s35 { 0% { opacity:0;transform:translateX(26px) } 0.923% { opacity:1;transform:none } 5.385% { opacity:1;transform:none } 5.769% { opacity:0 } 100% { opacity:0 } }
     .s40 { animation-name: s40 }
-    @keyframes s40 { 0% { opacity:0;transform:translateX(26px) } 1.2% { opacity:1;transform:none } 8.0% { opacity:1;transform:none } 8.5% { opacity:0 } 100% { opacity:0 } }
+    @keyframes s40 { 0% { opacity:0;transform:translateX(26px) } 0.923% { opacity:1;transform:none } 6.154% { opacity:1;transform:none } 6.538% { opacity:0 } 100% { opacity:0 } }
     .s50 { animation-name: s50 }
-    @keyframes s50 { 0% { opacity:0;transform:translateX(26px) } 1.2% { opacity:1;transform:none } 10.0% { opacity:1;transform:none } 10.5% { opacity:0 } 100% { opacity:0 } }
+    @keyframes s50 { 0% { opacity:0;transform:translateX(26px) } 0.923% { opacity:1;transform:none } 7.692% { opacity:1;transform:none } 8.077% { opacity:0 } 100% { opacity:0 } }
+    .s55 { animation-name: s55 }
+    @keyframes s55 { 0% { opacity:0;transform:translateX(26px) } 0.923% { opacity:1;transform:none } 8.462% { opacity:1;transform:none } 8.846% { opacity:0 } 100% { opacity:0 } }
     .s60 { animation-name: s60 }
-    @keyframes s60 { 0% { opacity:0;transform:translateX(26px) } 1.2% { opacity:1;transform:none } 12.0% { opacity:1;transform:none } 12.5% { opacity:0 } 100% { opacity:0 } }
+    @keyframes s60 { 0% { opacity:0;transform:translateX(26px) } 0.923% { opacity:1;transform:none } 9.231% { opacity:1;transform:none } 9.615% { opacity:0 } 100% { opacity:0 } }
+    .s64 { animation-name: s64 }
+    @keyframes s64 { 0% { opacity:0;transform:translateX(26px) } 0.923% { opacity:1;transform:none } 9.846% { opacity:1;transform:none } 10.231% { opacity:0 } 100% { opacity:0 } }
+    .s70 { animation-name: s70 }
+    @keyframes s70 { 0% { opacity:0;transform:translateX(26px) } 0.923% { opacity:1;transform:none } 10.769% { opacity:1;transform:none } 11.154% { opacity:0 } 100% { opacity:0 } }
+    .s80 { animation-name: s80 }
+    @keyframes s80 { 0% { opacity:0;transform:translateX(26px) } 0.923% { opacity:1;transform:none } 12.308% { opacity:1;transform:none } 12.692% { opacity:0 } 100% { opacity:0 } }
+    .s88 { animation-name: s88 }
+    @keyframes s88 { 0% { opacity:0;transform:translateX(26px) } 0.923% { opacity:1;transform:none } 13.538% { opacity:1;transform:none } 13.923% { opacity:0 } 100% { opacity:0 } }
     .s95 { animation-name: s95 }
-    @keyframes s95 { 0% { opacity:0;transform:translateX(26px) } 1.2% { opacity:1;transform:none } 19.0% { opacity:1;transform:none } 19.5% { opacity:0 } 100% { opacity:0 } }
+    @keyframes s95 { 0% { opacity:0;transform:translateX(26px) } 0.923% { opacity:1;transform:none } 14.615% { opacity:1;transform:none } 15% { opacity:0 } 100% { opacity:0 } }
+    .s124 { animation-name: s124 }
+    @keyframes s124 { 0% { opacity:0;transform:translateX(26px) } 0.923% { opacity:1;transform:none } 19.077% { opacity:1;transform:none } 19.462% { opacity:0 } 100% { opacity:0 } }
+    .v10 { animation-name: v10 }
+    @keyframes v10 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 1.538% { opacity:1;transform:none } 1.923% { opacity:0 } 100% { opacity:0 } }
+    .v14 { animation-name: v14 }
+    @keyframes v14 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 2.154% { opacity:1;transform:none } 2.538% { opacity:0 } 100% { opacity:0 } }
+    .v15 { animation-name: v15 }
+    @keyframes v15 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 2.308% { opacity:1;transform:none } 2.692% { opacity:0 } 100% { opacity:0 } }
+    .v20 { animation-name: v20 }
+    @keyframes v20 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 3.077% { opacity:1;transform:none } 3.462% { opacity:0 } 100% { opacity:0 } }
+    .v25 { animation-name: v25 }
+    @keyframes v25 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 3.846% { opacity:1;transform:none } 4.231% { opacity:0 } 100% { opacity:0 } }
+    .v30 { animation-name: v30 }
+    @keyframes v30 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 4.615% { opacity:1;transform:none } 5% { opacity:0 } 100% { opacity:0 } }
+    .v34 { animation-name: v34 }
+    @keyframes v34 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 5.231% { opacity:1;transform:none } 5.615% { opacity:0 } 100% { opacity:0 } }
+    .v35 { animation-name: v35 }
+    @keyframes v35 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 5.385% { opacity:1;transform:none } 5.769% { opacity:0 } 100% { opacity:0 } }
+    .v40 { animation-name: v40 }
+    @keyframes v40 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 6.154% { opacity:1;transform:none } 6.538% { opacity:0 } 100% { opacity:0 } }
+    .v42 { animation-name: v42 }
+    @keyframes v42 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 6.462% { opacity:1;transform:none } 6.846% { opacity:0 } 100% { opacity:0 } }
+    .v44 { animation-name: v44 }
+    @keyframes v44 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 6.769% { opacity:1;transform:none } 7.154% { opacity:0 } 100% { opacity:0 } }
+    .v45 { animation-name: v45 }
+    @keyframes v45 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 6.923% { opacity:1;transform:none } 7.308% { opacity:0 } 100% { opacity:0 } }
+    .v46 { animation-name: v46 }
+    @keyframes v46 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 7.077% { opacity:1;transform:none } 7.462% { opacity:0 } 100% { opacity:0 } }
+    .v50 { animation-name: v50 }
+    @keyframes v50 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 7.692% { opacity:1;transform:none } 8.077% { opacity:0 } 100% { opacity:0 } }
+    .v52 { animation-name: v52 }
+    @keyframes v52 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 8% { opacity:1;transform:none } 8.385% { opacity:0 } 100% { opacity:0 } }
+    .v54 { animation-name: v54 }
+    @keyframes v54 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 8.308% { opacity:1;transform:none } 8.692% { opacity:0 } 100% { opacity:0 } }
+    .v55 { animation-name: v55 }
+    @keyframes v55 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 8.462% { opacity:1;transform:none } 8.846% { opacity:0 } 100% { opacity:0 } }
+    .v58 { animation-name: v58 }
+    @keyframes v58 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 8.923% { opacity:1;transform:none } 9.308% { opacity:0 } 100% { opacity:0 } }
+    .v60 { animation-name: v60 }
+    @keyframes v60 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 9.231% { opacity:1;transform:none } 9.615% { opacity:0 } 100% { opacity:0 } }
+    .v64 { animation-name: v64 }
+    @keyframes v64 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 9.846% { opacity:1;transform:none } 10.231% { opacity:0 } 100% { opacity:0 } }
+    .v65 { animation-name: v65 }
+    @keyframes v65 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 10% { opacity:1;transform:none } 10.385% { opacity:0 } 100% { opacity:0 } }
+    .v70 { animation-name: v70 }
+    @keyframes v70 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 10.769% { opacity:1;transform:none } 11.154% { opacity:0 } 100% { opacity:0 } }
+    .v74 { animation-name: v74 }
+    @keyframes v74 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 11.385% { opacity:1;transform:none } 11.769% { opacity:0 } 100% { opacity:0 } }
+    .v75 { animation-name: v75 }
+    @keyframes v75 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 11.538% { opacity:1;transform:none } 11.923% { opacity:0 } 100% { opacity:0 } }
+    .v78 { animation-name: v78 }
+    @keyframes v78 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 12% { opacity:1;transform:none } 12.385% { opacity:0 } 100% { opacity:0 } }
+    .v80 { animation-name: v80 }
+    @keyframes v80 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 12.308% { opacity:1;transform:none } 12.692% { opacity:0 } 100% { opacity:0 } }
+    .v83 { animation-name: v83 }
+    @keyframes v83 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 12.769% { opacity:1;transform:none } 13.154% { opacity:0 } 100% { opacity:0 } }
+    .v85 { animation-name: v85 }
+    @keyframes v85 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 13.077% { opacity:1;transform:none } 13.462% { opacity:0 } 100% { opacity:0 } }
+    .v89 { animation-name: v89 }
+    @keyframes v89 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 13.692% { opacity:1;transform:none } 14.077% { opacity:0 } 100% { opacity:0 } }
+    .v90 { animation-name: v90 }
+    @keyframes v90 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 13.846% { opacity:1;transform:none } 14.231% { opacity:0 } 100% { opacity:0 } }
+    .v93 { animation-name: v93 }
+    @keyframes v93 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 14.308% { opacity:1;transform:none } 14.692% { opacity:0 } 100% { opacity:0 } }
+    .v95 { animation-name: v95 }
+    @keyframes v95 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 14.615% { opacity:1;transform:none } 15% { opacity:0 } 100% { opacity:0 } }
+    .v98 { animation-name: v98 }
+    @keyframes v98 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 15.077% { opacity:1;transform:none } 15.462% { opacity:0 } 100% { opacity:0 } }
+    .v100 { animation-name: v100 }
+    @keyframes v100 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 15.385% { opacity:1;transform:none } 15.769% { opacity:0 } 100% { opacity:0 } }
+    .v104 { animation-name: v104 }
+    @keyframes v104 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 16% { opacity:1;transform:none } 16.385% { opacity:0 } 100% { opacity:0 } }
+    .v105 { animation-name: v105 }
+    @keyframes v105 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 16.154% { opacity:1;transform:none } 16.538% { opacity:0 } 100% { opacity:0 } }
+    .v110 { animation-name: v110 }
+    @keyframes v110 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 16.923% { opacity:1;transform:none } 17.308% { opacity:0 } 100% { opacity:0 } }
+    .v114 { animation-name: v114 }
+    @keyframes v114 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 17.538% { opacity:1;transform:none } 17.923% { opacity:0 } 100% { opacity:0 } }
+    .v115 { animation-name: v115 }
+    @keyframes v115 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 17.692% { opacity:1;transform:none } 18.077% { opacity:0 } 100% { opacity:0 } }
+    .v118 { animation-name: v118 }
+    @keyframes v118 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 18.154% { opacity:1;transform:none } 18.538% { opacity:0 } 100% { opacity:0 } }
+    .v120 { animation-name: v120 }
+    @keyframes v120 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 18.462% { opacity:1;transform:none } 18.846% { opacity:0 } 100% { opacity:0 } }
+    .v124 { animation-name: v124 }
+    @keyframes v124 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 19.077% { opacity:1;transform:none } 19.462% { opacity:0 } 100% { opacity:0 } }
+    .v125 { animation-name: v125 }
+    @keyframes v125 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 19.231% { opacity:1;transform:none } 19.615% { opacity:0 } 100% { opacity:0 } }
+    .v128 { animation-name: v128 }
+    @keyframes v128 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 19.692% { opacity:1;transform:none } 20.077% { opacity:0 } 100% { opacity:0 } }
+    .v130 { animation-name: v130 }
+    @keyframes v130 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 20% { opacity:1;transform:none } 20.385% { opacity:0 } 100% { opacity:0 } }
+    .v135 { animation-name: v135 }
+    @keyframes v135 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 20.769% { opacity:1;transform:none } 21.154% { opacity:0 } 100% { opacity:0 } }
+    .v154 { animation-name: v154 }
+    @keyframes v154 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 23.692% { opacity:1;transform:none } 24.077% { opacity:0 } 100% { opacity:0 } }
+    .v155 { animation-name: v155 }
+    @keyframes v155 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 23.846% { opacity:1;transform:none } 24.231% { opacity:0 } 100% { opacity:0 } }
+    .v159 { animation-name: v159 }
+    @keyframes v159 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 24.462% { opacity:1;transform:none } 24.846% { opacity:0 } 100% { opacity:0 } }
+    .v160 { animation-name: v160 }
+    @keyframes v160 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 24.615% { opacity:1;transform:none } 25% { opacity:0 } 100% { opacity:0 } }
+    .v163 { animation-name: v163 }
+    @keyframes v163 { 0% { opacity:0;transform:translateY(6px) } 0.923% { opacity:1;transform:none } 25.077% { opacity:1;transform:none } 25.462% { opacity:0 } 100% { opacity:0 } }
+    .w3 { animation-name: w3; transform-box: fill-box; transform-origin: left center }
+    @keyframes w3 { 0% { transform:scaleX(0) } 1.308% { transform:scaleX(1) } 0.462% { transform:scaleX(1) } 0.846% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
     .w30 { animation-name: w30; transform-box: fill-box; transform-origin: left center }
-    @keyframes w30 { 0% { transform:scaleX(0) } 1.7% { transform:scaleX(1) } 6.0% { transform:scaleX(1) } 6.5% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
+    @keyframes w30 { 0% { transform:scaleX(0) } 1.308% { transform:scaleX(1) } 4.615% { transform:scaleX(1) } 5% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
     .w40 { animation-name: w40; transform-box: fill-box; transform-origin: left center }
-    @keyframes w40 { 0% { transform:scaleX(0) } 1.7% { transform:scaleX(1) } 8.0% { transform:scaleX(1) } 8.5% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
+    @keyframes w40 { 0% { transform:scaleX(0) } 1.308% { transform:scaleX(1) } 6.154% { transform:scaleX(1) } 6.538% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
     .w50 { animation-name: w50; transform-box: fill-box; transform-origin: left center }
-    @keyframes w50 { 0% { transform:scaleX(0) } 1.7% { transform:scaleX(1) } 10.0% { transform:scaleX(1) } 10.5% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
+    @keyframes w50 { 0% { transform:scaleX(0) } 1.308% { transform:scaleX(1) } 7.692% { transform:scaleX(1) } 8.077% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
     .w60 { animation-name: w60; transform-box: fill-box; transform-origin: left center }
-    @keyframes w60 { 0% { transform:scaleX(0) } 1.7% { transform:scaleX(1) } 12.0% { transform:scaleX(1) } 12.5% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
+    @keyframes w60 { 0% { transform:scaleX(0) } 1.308% { transform:scaleX(1) } 9.231% { transform:scaleX(1) } 9.615% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
     .w65 { animation-name: w65; transform-box: fill-box; transform-origin: left center }
-    @keyframes w65 { 0% { transform:scaleX(0) } 1.7% { transform:scaleX(1) } 13.0% { transform:scaleX(1) } 13.5% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
+    @keyframes w65 { 0% { transform:scaleX(0) } 1.308% { transform:scaleX(1) } 10% { transform:scaleX(1) } 10.385% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
     .w70 { animation-name: w70; transform-box: fill-box; transform-origin: left center }
-    @keyframes w70 { 0% { transform:scaleX(0) } 1.7% { transform:scaleX(1) } 14.0% { transform:scaleX(1) } 14.5% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
+    @keyframes w70 { 0% { transform:scaleX(0) } 1.308% { transform:scaleX(1) } 10.769% { transform:scaleX(1) } 11.154% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
     .w80 { animation-name: w80; transform-box: fill-box; transform-origin: left center }
-    @keyframes w80 { 0% { transform:scaleX(0) } 1.7% { transform:scaleX(1) } 16.0% { transform:scaleX(1) } 16.5% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
+    @keyframes w80 { 0% { transform:scaleX(0) } 1.308% { transform:scaleX(1) } 12.308% { transform:scaleX(1) } 12.692% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
+    .w90 { animation-name: w90; transform-box: fill-box; transform-origin: left center }
+    @keyframes w90 { 0% { transform:scaleX(0) } 1.308% { transform:scaleX(1) } 13.846% { transform:scaleX(1) } 14.231% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
+    .w95 { animation-name: w95; transform-box: fill-box; transform-origin: left center }
+    @keyframes w95 { 0% { transform:scaleX(0) } 1.308% { transform:scaleX(1) } 14.615% { transform:scaleX(1) } 15% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
+    .w98 { animation-name: w98; transform-box: fill-box; transform-origin: left center }
+    @keyframes w98 { 0% { transform:scaleX(0) } 1.308% { transform:scaleX(1) } 15.077% { transform:scaleX(1) } 15.462% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
+    .w108 { animation-name: w108; transform-box: fill-box; transform-origin: left center }
+    @keyframes w108 { 0% { transform:scaleX(0) } 1.308% { transform:scaleX(1) } 16.615% { transform:scaleX(1) } 17% { transform:scaleX(0) } 100% { transform:scaleX(0) } }
 
-    /* chapters: 1) 0-9s  2) 9-20s  3) 20-29s  4) 29-43s  5) 43-50s */
+    /* chapters (+3s hold after final state): 1) 0-12s  2) 12-26s  3) 26-38s  4) 38-55s  5) 55-65s */
     .sc1 { animation-name: sc1 } .sc2 { animation-name: sc2 } .sc3 { animation-name: sc3 }
     .sc4 { animation-name: sc4 } .sc5 { animation-name: sc5 }
-    @keyframes sc1 { 0% { opacity: 0 } 1% { opacity: 1 } 17.2% { opacity: 1 } 18% { opacity: 0 } 100% { opacity: 0 } }
-    @keyframes sc2 { 0% { opacity: 0 } 17.8% { opacity: 0 } 18.8% { opacity: 1 } 39.2% { opacity: 1 } 40% { opacity: 0 } 100% { opacity: 0 } }
-    @keyframes sc3 { 0% { opacity: 0 } 39.8% { opacity: 0 } 40.8% { opacity: 1 } 57.2% { opacity: 1 } 58% { opacity: 0 } 100% { opacity: 0 } }
-    @keyframes sc4 { 0% { opacity: 0 } 57.8% { opacity: 0 } 58.8% { opacity: 1 } 85.2% { opacity: 1 } 86% { opacity: 0 } 100% { opacity: 0 } }
-    @keyframes sc5 { 0% { opacity: 0 } 85.8% { opacity: 0 } 86.8% { opacity: 1 } 99% { opacity: 1 } 100% { opacity: 0 } }
+    @keyframes sc1 { 0% { opacity: 0 } 0.769% { opacity: 1 } 17.846% { opacity: 1 } 18.462% { opacity: 0 } 100% { opacity: 0 } }
+    @keyframes sc2 { 0% { opacity: 0 } 18.308% { opacity: 0 } 19.231% { opacity: 1 } 39.385% { opacity: 1 } 40% { opacity: 0 } 100% { opacity: 0 } }
+    @keyframes sc3 { 0% { opacity: 0 } 39.846% { opacity: 0 } 40.769% { opacity: 1 } 57.846% { opacity: 1 } 58.462% { opacity: 0 } 100% { opacity: 0 } }
+    @keyframes sc4 { 0% { opacity: 0 } 58.308% { opacity: 0 } 59.231% { opacity: 1 } 84% { opacity: 1 } 84.615% { opacity: 0 } 100% { opacity: 0 } }
+    @keyframes sc5 { 0% { opacity: 0 } 84.462% { opacity: 0 } 85.385% { opacity: 1 } 99.231% { opacity: 1 } 100% { opacity: 0 } }
 
     .on1 { animation-name: on1 } .on2 { animation-name: on2 } .on3 { animation-name: on3 }
     .on4 { animation-name: on4 } .on5 { animation-name: on5 }
-    @keyframes on1 { 0% { opacity: 1 } 17.9% { opacity: 1 } 18% { opacity: 0 } 100% { opacity: 0 } }
-    @keyframes on2 { 0% { opacity: 0 } 17.9% { opacity: 0 } 18% { opacity: 1 } 39.9% { opacity: 1 } 40% { opacity: 0 } 100% { opacity: 0 } }
-    @keyframes on3 { 0% { opacity: 0 } 39.9% { opacity: 0 } 40% { opacity: 1 } 57.9% { opacity: 1 } 58% { opacity: 0 } 100% { opacity: 0 } }
-    @keyframes on4 { 0% { opacity: 0 } 57.9% { opacity: 0 } 58% { opacity: 1 } 85.9% { opacity: 1 } 86% { opacity: 0 } 100% { opacity: 0 } }
-    @keyframes on5 { 0% { opacity: 0 } 85.9% { opacity: 0 } 86% { opacity: 1 } 100% { opacity: 1 } }
+    @keyframes on1 { 0% { opacity: 1 } 18.385% { opacity: 1 } 18.462% { opacity: 0 } 100% { opacity: 0 } }
+    @keyframes on2 { 0% { opacity: 0 } 18.385% { opacity: 0 } 18.462% { opacity: 1 } 39.923% { opacity: 1 } 40% { opacity: 0 } 100% { opacity: 0 } }
+    @keyframes on3 { 0% { opacity: 0 } 39.923% { opacity: 0 } 40% { opacity: 1 } 58.385% { opacity: 1 } 58.462% { opacity: 0 } 100% { opacity: 0 } }
+    @keyframes on4 { 0% { opacity: 0 } 58.385% { opacity: 0 } 58.462% { opacity: 1 } 84.538% { opacity: 1 } 84.615% { opacity: 0 } 100% { opacity: 0 } }
+    @keyframes on5 { 0% { opacity: 0 } 84.538% { opacity: 0 } 84.615% { opacity: 1 } 100% { opacity: 1 } }
 
     .bar { animation-name: bar; transform-box: fill-box; transform-origin: left center }
     @keyframes bar { 0% { transform: scaleX(0) } 100% { transform: scaleX(1) } }
@@ -127,9 +215,9 @@
     .pill { animation-name: pill }
     @keyframes pill {
       0%   { opacity: 0; transform: none }
-      1.2% { opacity: 1; transform: none }
-      4.0% { opacity: 1; transform: translate(420px, 140px) }
-      4.8% { opacity: 0; transform: translate(420px, 140px) }
+      0.923% { opacity: 1; transform: none }
+      3.077% { opacity: 1; transform: translate(420px, 140px) }
+      3.692% { opacity: 0; transform: translate(420px, 140px) }
       100% { opacity: 0; transform: translate(420px, 140px) }
     }
 
@@ -159,17 +247,16 @@
   </style>
 
   <defs>
-    <clipPath id="t1"><rect class="a w80" style="--d:0.8s"  x="76" y="184" width="600" height="24"/></clipPath>
-    <clipPath id="t2"><rect class="a w65" style="--d:1.9s"  x="76" y="224" width="600" height="24"/></clipPath>
-    <clipPath id="t3"><rect class="a w60" style="--d:2.5s"  x="76" y="264" width="600" height="24"/></clipPath>
-    <clipPath id="t4"><rect class="a w50" style="--d:3.4s"  x="76" y="304" width="600" height="24"/></clipPath>
-    <clipPath id="t5"><rect class="a w40" style="--d:4.6s"  x="76" y="344" width="600" height="24"/></clipPath>
-    <clipPath id="t6"><rect class="a w30" style="--d:5.4s"  x="76" y="384" width="600" height="24"/></clipPath>
-    <clipPath id="t7"><rect class="a w70" style="--d:21.8s" x="324" y="200" width="300" height="24"/></clipPath>
-    <clipPath id="frame"><rect x="0" y="0" width="1200" height="720" rx="10"/></clipPath>
+    <clipPath id="t1"><rect class="a w108" style="--d:0.8s"  x="76" y="184" width="600" height="24"/></clipPath>
+    <clipPath id="t2"><rect class="a w95" style="--d:1.9s"  x="76" y="224" width="600" height="24"/></clipPath>
+    <clipPath id="t3"><rect class="a w90" style="--d:2.5s"  x="76" y="264" width="600" height="24"/></clipPath>
+    <clipPath id="t4"><rect class="a w80" style="--d:3.4s"  x="76" y="304" width="600" height="24"/></clipPath>
+    <clipPath id="t5"><rect class="a w70" style="--d:4.6s"  x="76" y="344" width="600" height="24"/></clipPath>
+    <clipPath id="t6"><rect class="a w60" style="--d:5.4s"  x="76" y="384" width="600" height="24"/></clipPath>
+    <clipPath id="t7"><rect class="a w98" style="--d:27.8s" x="324" y="200" width="300" height="24"/></clipPath>
   </defs>
 
-  <g clip-path="url(#frame)">
+  <g>
     <rect width="1200" height="720" fill="#2e3440"/>
 
     <!-- window chrome -->
@@ -194,20 +281,20 @@
       <g clip-path="url(#t4)"><text x="76" y="319" class="mm">    …waiting…</text></g>
       <g clip-path="url(#t5)"><text x="76" y="359" class="m"><tspan class="cy">$ </tspan>herdr notification.show --title "review done"</text></g>
       <g clip-path="url(#t6)"><text x="76" y="399" class="m"><tspan class="cy">$ </tspan>lazygit</text></g>
-      <g class="a v50" style="--d:3.4s"><circle class="spin" cx="252" cy="313" r="6" fill="none" stroke="#ebcb8b" stroke-width="2" stroke-dasharray="20 8"/></g>
-      <g class="a v25" style="--d:6.2s"><rect class="blink" x="76" y="424" width="9" height="18" fill="#88c0d0"/></g>
+      <g class="a v80" style="--d:3.4s"><circle class="spin" cx="252" cy="313" r="6" fill="none" stroke="#ebcb8b" stroke-width="2" stroke-dasharray="20 8"/></g>
+      <g class="a v54" style="--d:6.2s"><rect class="blink" x="76" y="424" width="9" height="18" fill="#88c0d0"/></g>
 
-      <text style="--d:1.6s" x="744" y="196" class="a v70 h1">Five commands.</text>
-      <text style="--d:3.4s" x="744" y="238" class="a v50 h1">From memory.</text>
-      <text style="--d:5.6s" x="744" y="280" class="a v30 h1 cy">Every single time.</text>
-      <text style="--d:6.4s" x="744" y="330" class="a v20 p">Same order. Same flags. Same</text>
-      <text style="--d:6.4s" x="744" y="352" class="a v20 p">half-remembered prompt.</text>
-      <g class="a p15" style="--d:7.0s">
+      <text style="--d:1.6s" x="744" y="196" class="a v100 h1">Five commands.</text>
+      <text style="--d:3.4s" x="744" y="238" class="a v80 h1">From memory.</text>
+      <text style="--d:5.6s" x="744" y="280" class="a v60 h1 cy">Every single time.</text>
+      <text style="--d:6.4s" x="744" y="330" class="a v50 p">Same order. Same flags. Same</text>
+      <text style="--d:6.4s" x="744" y="352" class="a v50 p">half-remembered prompt.</text>
+      <g class="a p46" style="--d:7s">
         <rect x="744" y="388" width="176" height="34" rx="4" fill="#bf616a" fill-opacity=".14" stroke="#bf616a" stroke-opacity=".5"/>
         <text x="762" y="410" class="m rd">14 times this week</text>
       </g>
 
-      <text style="--d:7.6s" x="56" y="596" class="a v10 p">The work is identical every time — so stop typing it every time.</text>
+      <text style="--d:7.6s" x="56" y="596" class="a v40 p">The work is identical every time — so stop typing it every time.</text>
     </g>
 
     <!-- ── 2 · write it once ──────────────────────────────────────────── -->
@@ -218,89 +305,89 @@
       <line x1="56" y1="164" x2="716" y2="164" stroke="#434c5e"/>
       <text x="76" y="152" class="k">.hwf/workflows/ship.yaml</text>
 
-      <rect class="a v50" style="--d:14.6s" x="68" y="315" width="636" height="20" fill="#a3be8c" fill-opacity=".10"/>
-      <rect class="a v40" style="--d:15.4s" x="68" y="339" width="636" height="20" fill="#88c0d0" fill-opacity=".10"/>
-      <rect class="a v35" style="--d:16.2s" x="68" y="459" width="636" height="20" fill="#ebcb8b" fill-opacity=".10"/>
-      <rect class="a v25" style="--d:17.0s" x="68" y="531" width="636" height="20" fill="#b48ead" fill-opacity=".10"/>
+      <rect class="a v80" style="--d:17.6s" x="68" y="315" width="636" height="20" fill="#a3be8c" fill-opacity=".10"/>
+      <rect class="a v70" style="--d:18.4s" x="68" y="339" width="636" height="20" fill="#88c0d0" fill-opacity=".10"/>
+      <rect class="a v64" style="--d:19.2s" x="68" y="459" width="636" height="20" fill="#ebcb8b" fill-opacity=".10"/>
+      <rect class="a v55" style="--d:20s" x="68" y="531" width="636" height="20" fill="#b48ead" fill-opacity=".10"/>
 
       <g font-size="13" class="m">
-        <text class="a v100" style="--d:9.8s"  x="76" y="186"><tspan class="cy">version:</tspan> v1alpha1</text>
-        <text class="a v95" style="--d:10.0s" x="76" y="210"><tspan class="cy">title:</tspan> Ship</text>
-        <text class="a v95" style="--d:10.2s" x="76" y="234"><tspan class="cy">inputs:</tspan></text>
-        <text class="a v90" style="--d:10.4s" x="76" y="258">  <tspan class="cy">reviewer:</tspan> profile</text>
-        <text class="a v90" style="--d:10.6s" x="76" y="282"><tspan class="cy">steps:</tspan></text>
-        <text class="a v85" style="--d:10.9s" x="76" y="306">  - <tspan class="cy">id:</tspan> diff</text>
-        <text class="a v85" style="--d:11.2s" x="76" y="330">    <tspan class="gr">run:</tspan> [git, diff, --staged]</text>
-        <text class="a v80" style="--d:11.6s" x="76" y="354">  - <tspan class="cy">agent:</tspan> |</text>
-        <text class="a v75" style="--d:11.9s" x="76" y="378">      Review this diff. Blocking only.</text>
-        <text class="a v75" style="--d:12.2s" x="76" y="402">      <tspan class="yl">{{steps.diff.stdout}}</tspan></text>
-        <text class="a v70" style="--d:12.5s" x="76" y="426">    <tspan class="cy">using:</tspan> "<tspan class="yl">{{inputs.reviewer}}</tspan>"</text>
-        <text class="a v70" style="--d:12.8s" x="76" y="450">    <tspan class="cy">pane:</tspan> { open: beside }</text>
-        <text class="a v65" style="--d:13.1s" x="76" y="474">  - <tspan class="yl">herdr:</tspan> notification.show</text>
-        <text class="a v60" style="--d:13.4s" x="76" y="498">    <tspan class="cy">params:</tspan> { title: review done }</text>
-        <text class="a v60" style="--d:13.7s" x="76" y="522">  - <tspan class="gr">run:</tspan> [lazygit]</text>
-        <text class="a v55" style="--d:14.0s" x="76" y="546">  - <tspan class="pu">workflow:</tspan> deploy</text>
+        <text class="a v128" style="--d:12.8s"  x="76" y="186"><tspan class="cy">version:</tspan> v1alpha1</text>
+        <text class="a v125" style="--d:13s" x="76" y="210"><tspan class="cy">title:</tspan> Ship</text>
+        <text class="a v124" style="--d:13.2s" x="76" y="234"><tspan class="cy">inputs:</tspan></text>
+        <text class="a v120" style="--d:13.4s" x="76" y="258">  <tspan class="cy">reviewer:</tspan> profile</text>
+        <text class="a v120" style="--d:13.6s" x="76" y="282"><tspan class="cy">steps:</tspan></text>
+        <text class="a v115" style="--d:13.9s" x="76" y="306">  - <tspan class="cy">id:</tspan> diff</text>
+        <text class="a v114" style="--d:14.2s" x="76" y="330">    <tspan class="gr">run:</tspan> [git, diff, --staged]</text>
+        <text class="a v110" style="--d:14.6s" x="76" y="354">  - <tspan class="cy">agent:</tspan> |</text>
+        <text class="a v105" style="--d:14.9s" x="76" y="378">      Review this diff. Blocking only.</text>
+        <text class="a v104" style="--d:15.2s" x="76" y="402">      <tspan class="yl">{{steps.diff.stdout}}</tspan></text>
+        <text class="a v100" style="--d:15.5s" x="76" y="426">    <tspan class="cy">using:</tspan> "<tspan class="yl">{{inputs.reviewer}}</tspan>"</text>
+        <text class="a v98" style="--d:15.8s" x="76" y="450">    <tspan class="cy">pane:</tspan> { open: beside }</text>
+        <text class="a v95" style="--d:16.1s" x="76" y="474">  - <tspan class="yl">herdr:</tspan> notification.show</text>
+        <text class="a v90" style="--d:16.4s" x="76" y="498">    <tspan class="cy">params:</tspan> { title: review done }</text>
+        <text class="a v89" style="--d:16.7s" x="76" y="522">  - <tspan class="gr">run:</tspan> [lazygit]</text>
+        <text class="a v85" style="--d:17s" x="76" y="546">  - <tspan class="pu">workflow:</tspan> deploy</text>
       </g>
 
-      <text style="--d:9.6s" x="744" y="152" class="a v100 p">Four things a step can do:</text>
-      <g class="a s50" style="--d:14.6s">
+      <text style="--d:12.6s" x="744" y="152" class="a v130 p">Four things a step can do:</text>
+      <g class="a s80" style="--d:17.6s">
         <rect class="card" x="744" y="176" width="400" height="66" rx="5"/>
         <rect x="744" y="176" width="3" height="66" fill="#a3be8c"/>
         <text x="768" y="204" class="m gr">run:</text><text x="768" y="226" class="mm">any command, on your machine</text>
       </g>
-      <g class="a s40" style="--d:15.4s">
+      <g class="a s70" style="--d:18.4s">
         <rect class="card" x="744" y="256" width="400" height="66" rx="5"/>
         <rect x="744" y="256" width="3" height="66" fill="#88c0d0"/>
         <text x="768" y="284" class="m cy">agent:</text><text x="768" y="306" class="mm">a real agent turn, in a real pane</text>
       </g>
-      <g class="a s35" style="--d:16.2s">
+      <g class="a s64" style="--d:19.2s">
         <rect class="card" x="744" y="336" width="400" height="66" rx="5"/>
         <rect x="744" y="336" width="3" height="66" fill="#ebcb8b"/>
         <text x="768" y="364" class="m yl">herdr:</text><text x="768" y="386" class="mm">panes, tabs, notifications — from herdr</text>
       </g>
-      <g class="a s25" style="--d:17.0s">
+      <g class="a s55" style="--d:20s">
         <rect class="card" x="744" y="416" width="400" height="66" rx="5"/>
         <rect x="744" y="416" width="3" height="66" fill="#b48ead"/>
         <text x="768" y="444" class="m pu">workflow:</text><text x="768" y="466" class="mm">a child workflow, its own inputs</text>
       </g>
-      <text style="--d:18.0s" x="744" y="522" class="a v15 p">Templates read earlier steps:</text>
-      <text style="--d:18.0s" x="744" y="546" class="a v15 m yl">{{steps.diff.stdout}}</text>
+      <text style="--d:21s" x="744" y="522" class="a v46 p">Templates read earlier steps:</text>
+      <text style="--d:21s" x="744" y="546" class="a v46 m yl">{{steps.diff.stdout}}</text>
 
-      <text style="--d:18.4s" x="56" y="608" class="a v10 p">One file. Reviewed like code, committed like code, shared like code.</text>
+      <text style="--d:21.4s" x="56" y="608" class="a v42 p">One file. Reviewed like code, committed like code, shared like code.</text>
     </g>
 
     <!-- ── 3 · pick it ────────────────────────────────────────────────── -->
     <g class="a sc3">
       <text x="56" y="96" class="k">CHAPTER THREE — REACH FOR IT</text>
-      <text style="--d:20.2s" x="56" y="150" class="a v85 h2">Two keys, wherever you are.</text>
+      <text style="--d:26.2s" x="56" y="150" class="a v114 h2">Two keys, wherever you are.</text>
 
-      <g class="a v80" style="--d:20.5s">
+      <g class="a v110" style="--d:26.5s">
         <rect x="56" y="196" width="92" height="40" rx="5" fill="#343b49" stroke="#4c566a"/>
         <text x="76" y="222" class="m">prefix</text>
         <rect x="160" y="196" width="46" height="40" rx="5" fill="#343b49" stroke="#4c566a"/>
         <text x="177" y="222" class="m">k</text>
       </g>
-      <g class="a p75" style="--d:20.9s">
+      <g class="a p105" style="--d:26.9s">
         <rect x="160" y="196" width="46" height="40" rx="5" fill="#88c0d0" fill-opacity=".18" stroke="#88c0d0"/>
         <text x="177" y="222" class="m cy">k</text>
       </g>
-      <text style="--d:27.0s" x="56" y="308" class="a v15 p">Or from a script,</text>
-      <text style="--d:27.0s" x="56" y="330" class="a v15 p">same runner:</text>
-      <g class="a v10" style="--d:27.4s">
+      <text style="--d:33s" x="56" y="308" class="a v46 p">Or from a script,</text>
+      <text style="--d:33s" x="56" y="330" class="a v46 p">same runner:</text>
+      <g class="a v42" style="--d:33.4s">
         <rect class="well" x="56" y="352" width="212" height="70" rx="5"/>
         <text x="72" y="380" class="m"><tspan class="cy">$ </tspan>hwf run ship</text>
         <text x="72" y="404" class="mm">  --input reviewer=claude</text>
       </g>
 
-      <rect class="a p75 card" style="--d:21.2s" x="300" y="176" width="600" height="280" rx="6"/>
-      <g class="a v70" style="--d:21.4s">
+      <rect class="a p104 card" style="--d:27.2s" x="300" y="176" width="600" height="280" rx="6"/>
+      <g class="a v100" style="--d:27.4s">
         <line x1="300" y1="240" x2="900" y2="240" stroke="#434c5e"/>
         <text x="324" y="216" class="mm cy">›</text>
       </g>
       <g clip-path="url(#t7)"><text x="344" y="216" class="m">ship</text></g>
-      <g class="a v52" style="--d:22.4s"><rect class="blink" x="404" y="202" width="8" height="18" fill="#88c0d0"/></g>
+      <g class="a v52" style="--d:28.4s"><rect class="blink" x="404" y="202" width="8" height="18" fill="#88c0d0"/></g>
 
-      <g class="a v14" style="--d:21.4s">
+      <g class="a v14" style="--d:27.4s">
         <g>
           <text x="324" y="281" class="m">handoff</text><text x="876" y="281" class="k" text-anchor="end">global</text>
           <text x="324" y="325" class="m">pr</text><text x="876" y="325" class="k" text-anchor="end">local</text>
@@ -308,24 +395,24 @@
           <text x="324" y="413" class="m">worktree</text><text x="876" y="413" class="k" text-anchor="end">global</text>
         </g>
       </g>
-      <g class="a v55" style="--d:23.0s">
+      <g class="a v85" style="--d:29s">
         <rect x="316" y="258" width="568" height="34" rx="3" fill="#88c0d0" fill-opacity=".14"/>
         <text x="324" y="281" class="m cy">ship</text>
         <text x="876" y="281" class="k cy" text-anchor="end">local</text>
       </g>
 
-      <g class="a v50" style="--d:23.8s">
+      <g class="a v78" style="--d:29.8s">
         <rect class="well" x="316" y="308" width="568" height="120" rx="5"/>
         <text x="336" y="334" class="k">THIS WORKFLOW ASKS FOR</text>
         <text x="336" y="368" class="mm">reviewer</text><text x="470" y="368" class="m cy">claude</text>
         <text x="336" y="398" class="mm">focus</text><text x="470" y="398" class="m">auth refactor</text>
       </g>
-      <g class="a p30" style="--d:25.6s">
+      <g class="a p60" style="--d:31.6s">
         <rect x="782" y="374" width="84" height="32" rx="4" fill="#a3be8c" fill-opacity=".18" stroke="#a3be8c"/>
         <text x="798" y="396" class="m gr">⏎ run</text>
       </g>
 
-      <text style="--d:26.4s" x="56" y="608" class="a v20 p">The picker collects the inputs, then hands off to the runner. Nothing runs from the browser.</text>
+      <text style="--d:32.4s" x="56" y="608" class="a v50 p">The picker collects the inputs, then hands off to the runner. Nothing runs from the browser.</text>
     </g>
 
     <!-- ── 4 · watch it run ───────────────────────────────────────────── -->
@@ -333,67 +420,67 @@
       <text x="56" y="96" class="k">CHAPTER FOUR — WATCH IT GO</text>
 
       <g class="m">
-        <g class="a v135" style="--d:29.3s">
+        <g class="a v163" style="--d:38.3s">
           <rect class="card" x="56" y="140" width="304" height="64" rx="5"/>
           <text x="80" y="168" class="mm">1 · <tspan class="gr">run</tspan></text><text x="80" y="190" class="m">git diff --staged</text>
         </g>
-        <g class="a v130" style="--d:29.5s">
+        <g class="a v160" style="--d:38.5s">
           <rect class="card" x="56" y="216" width="304" height="64" rx="5"/>
           <text x="80" y="244" class="mm">2 · <tspan class="cy">agent</tspan></text><text x="80" y="266" class="m">review the diff</text>
         </g>
-        <g class="a v130" style="--d:29.7s">
+        <g class="a v159" style="--d:38.7s">
           <rect class="card" x="56" y="292" width="304" height="64" rx="5"/>
           <text x="80" y="320" class="mm">3 · <tspan class="yl">herdr</tspan></text><text x="80" y="342" class="m">notification.show</text>
         </g>
-        <g class="a v125" style="--d:29.9s">
+        <g class="a v155" style="--d:38.9s">
           <rect class="card" x="56" y="368" width="304" height="64" rx="5"/>
           <text x="80" y="396" class="mm">4 · <tspan class="gr">run</tspan></text><text x="80" y="418" class="m">lazygit</text>
         </g>
       </g>
       <!-- running pulse, then a green tick -->
-      <g class="a v14" style="--d:30.2s"><circle class="beat" cx="332" cy="172" r="4" fill="#88c0d0"/></g>
-      <g class="a v34" style="--d:33.0s"><circle class="beat" cx="332" cy="248" r="4" fill="#88c0d0"/></g>
-      <g class="a v10" style="--d:36.6s"><circle class="beat" cx="332" cy="324" r="4" fill="#88c0d0"/></g>
-      <g class="a v10" style="--d:37.8s"><circle class="beat" cx="332" cy="400" r="4" fill="#88c0d0"/></g>
+      <g class="a v14" style="--d:39.2s"><circle class="beat" cx="332" cy="172" r="4" fill="#88c0d0"/></g>
+      <g class="a v34" style="--d:42s"><circle class="beat" cx="332" cy="248" r="4" fill="#88c0d0"/></g>
+      <g class="a v10" style="--d:45.6s"><circle class="beat" cx="332" cy="324" r="4" fill="#88c0d0"/></g>
+      <g class="a v10" style="--d:46.8s"><circle class="beat" cx="332" cy="400" r="4" fill="#88c0d0"/></g>
       <g class="gr" font-size="15">
-        <text class="a p110" style="--d:31.6s" x="324" y="178">✓</text>
-        <text class="a p60" style="--d:36.4s" x="324" y="254">✓</text>
-        <text class="a p50" style="--d:37.6s" x="324" y="330">✓</text>
-        <text class="a p40" style="--d:38.8s" x="324" y="406">✓</text>
+        <text class="a p140" style="--d:40.6s" x="324" y="178">✓</text>
+        <text class="a p90" style="--d:45.4s" x="324" y="254">✓</text>
+        <text class="a p80" style="--d:46.6s" x="324" y="330">✓</text>
+        <text class="a p68" style="--d:47.8s" x="324" y="406">✓</text>
       </g>
 
       <!-- herdr window -->
-      <g class="a v130" style="--d:29.4s">
+      <g class="a v160" style="--d:38.4s">
         <rect class="well" x="400" y="140" width="744" height="416" rx="6"/>
         <line x1="400" y1="176" x2="1144" y2="176" stroke="#434c5e"/>
         <text x="424" y="164" class="k">editor</text>
       </g>
-      <g class="a v45" style="--d:38.2s">
+      <g class="a v74" style="--d:47.2s">
         <rect x="488" y="140" width="98" height="36" fill="#343b49"/>
         <text x="506" y="164" class="k cy">lazygit</text>
       </g>
-      <g style="--d:30.2s" class="a v125 mm" font-size="12.5">
+      <g style="--d:39.2s" class="a v154 mm" font-size="12.5">
         <text x="424" y="212" class="mm">- const ok = check(u)</text>
         <text x="424" y="234" class="mm">+ const ok = check(u, ctx)</text>
         <text x="424" y="256" class="mm">  return ok ? next() : deny()</text>
       </g>
-      <g class="a s95" style="--d:33.2s">
+      <g class="a s124" style="--d:42.2s">
         <line x1="772" y1="176" x2="772" y2="556" stroke="#434c5e"/>
         <rect x="772" y="176" width="372" height="380" fill="#2b313c"/>
         <text x="796" y="208" class="k cy">claude · pane opened beside</text>
       </g>
       <g font-size="12.5">
-        <text style="--d:33.8s" x="796" y="244" class="a v90 mm">reading 1 file, 42 lines…</text>
-        <text style="--d:34.4s" x="796" y="272" class="a v80 m">1 blocking issue:</text>
-        <text style="--d:35.0s" x="796" y="298" class="a v75 m">ctx is unvalidated on the</text>
-        <text style="--d:35.0s" x="796" y="318" class="a v75 m">deny() path.</text>
+        <text style="--d:42.8s" x="796" y="244" class="a v118 mm">reading 1 file, 42 lines…</text>
+        <text style="--d:43.4s" x="796" y="272" class="a v110 m">1 blocking issue:</text>
+        <text style="--d:44s" x="796" y="298" class="a v105 m">ctx is unvalidated on the</text>
+        <text style="--d:44s" x="796" y="318" class="a v105 m">deny() path.</text>
       </g>
-      <g class="a s60" style="--d:36.8s">
+      <g class="a s88" style="--d:45.8s">
         <rect x="796" y="466" width="300" height="62" rx="5" fill="#343b49" stroke="#a3be8c" stroke-opacity=".6"/>
         <text x="818" y="494" class="m gr">review done</text>
         <text x="818" y="515" class="k">herdr · notification.show</text>
       </g>
-      <g class="a v40" style="--d:38.4s">
+      <g class="a v70" style="--d:47.4s">
         <rect x="424" y="330" width="324" height="200" rx="4" fill="#2b313c" stroke="#434c5e"/>
         <text x="444" y="358" class="k">lazygit — opened in a new tab</text>
         <rect x="444" y="376" width="180" height="8" rx="4" fill="#4c566a"/>
@@ -401,21 +488,21 @@
         <rect x="444" y="416" width="140" height="8" rx="4" fill="#434c5e"/>
       </g>
 
-      <g class="a pill" style="--d:31.6s">
+      <g class="a pill" style="--d:40.6s">
         <rect x="368" y="160" width="196" height="26" rx="13" fill="#ebcb8b" fill-opacity=".16" stroke="#ebcb8b" stroke-opacity=".55"/>
         <text x="384" y="178" font-size="12" class="yl">steps.diff.stdout →</text>
       </g>
 
-      <text style="--d:39.6s" x="56" y="580" class="a v30 p">Steps run in order. Each result is there for the next one.</text>
-      <text style="--d:40.6s" x="56" y="606" class="a v20 p">Panes, tabs and notifications stay herdr's job — the workflow just asks.</text>
+      <text style="--d:48.6s" x="56" y="580" class="a v60 p">Steps run in order. Each result is there for the next one.</text>
+      <text style="--d:49.6s" x="56" y="606" class="a v50 p">Panes, tabs and notifications stay herdr's job — the workflow just asks.</text>
     </g>
 
     <!-- ── 5 · share it ───────────────────────────────────────────────── -->
     <g class="a sc5">
       <text x="56" y="96" class="k">CHAPTER FIVE — HAND IT TO THE HERD</text>
-      <text style="--d:43.1s" x="56" y="150" class="a v65 h2">Build it in the workbench. Send it as one line.</text>
+      <text style="--d:55.1s" x="56" y="150" class="a v95 h2">Build it in the workbench. Send it as one line.</text>
 
-      <g class="a v65" style="--d:43.3s">
+      <g class="a v93" style="--d:55.3s">
         <rect class="well" x="56" y="186" width="420" height="272" rx="6"/>
         <line x1="56" y1="220" x2="476" y2="220" stroke="#434c5e"/>
         <text x="76" y="209" class="k">localhost:7645 · hwf web</text>
@@ -428,32 +515,32 @@
         <rect x="192" y="384" width="268" height="58" rx="4" fill="#343b49" stroke="#434c5e"/>
         <text x="208" y="418" class="mm"><tspan class="yl">herdr</tspan> · notification.show</text>
       </g>
-      <text style="--d:43.6s" x="56" y="484" class="a v60 mm">edit · validate · share — never runs</text>
+      <text style="--d:55.6s" x="56" y="484" class="a v90 mm">edit · validate · share — never runs</text>
 
-      <g class="a v55" style="--d:44.3s">
+      <g class="a v83" style="--d:56.3s">
         <rect x="504" y="298" width="192" height="44" rx="22" fill="#88c0d0" fill-opacity=".14" stroke="#88c0d0" stroke-opacity=".55"/>
         <text x="522" y="325" font-size="12" class="cy">hwf workflow import "…"</text>
         <path d="M516 362 H700" stroke="#434c5e" stroke-dasharray="4 5"/>
         <path d="M690 356 l10 6 -10 6" fill="none" stroke="#4c566a"/>
       </g>
 
-      <g class="a v45" style="--d:45.2s">
+      <g class="a v74" style="--d:57.2s">
         <rect class="well" x="724" y="186" width="420" height="272" rx="6"/>
         <line x1="724" y1="220" x2="1144" y2="220" stroke="#434c5e"/>
         <text x="744" y="209" class="k">teammate ~/acme-api</text>
       </g>
       <g font-size="13">
-        <g class="a v35" style="--d:46.2s"><rect x="748" y="248" width="372" height="52" rx="4" fill="#343b49" stroke="#434c5e"/><text x="768" y="279" class="mm"><tspan class="gr">run</tspan> · git diff --staged</text></g>
-        <g class="a v30" style="--d:46.5s"><rect x="748" y="316" width="372" height="52" rx="4" fill="#343b49" stroke="#434c5e"/><text x="768" y="347" class="mm"><tspan class="cy">agent</tspan> · review the diff</text></g>
-        <g class="a v30" style="--d:46.8s"><rect x="748" y="384" width="372" height="52" rx="4" fill="#343b49" stroke="#434c5e"/><text x="768" y="415" class="mm"><tspan class="yl">herdr</tspan> · notification.show</text></g>
+        <g class="a v64" style="--d:58.2s"><rect x="748" y="248" width="372" height="52" rx="4" fill="#343b49" stroke="#434c5e"/><text x="768" y="279" class="mm"><tspan class="gr">run</tspan> · git diff --staged</text></g>
+        <g class="a v60" style="--d:58.5s"><rect x="748" y="316" width="372" height="52" rx="4" fill="#343b49" stroke="#434c5e"/><text x="768" y="347" class="mm"><tspan class="cy">agent</tspan> · review the diff</text></g>
+        <g class="a v58" style="--d:58.8s"><rect x="748" y="384" width="372" height="52" rx="4" fill="#343b49" stroke="#434c5e"/><text x="768" y="415" class="mm"><tspan class="yl">herdr</tspan> · notification.show</text></g>
       </g>
-      <text style="--d:47.0s" x="724" y="484" class="a v25 mm">import prints the YAML and asks before writing</text>
+      <text style="--d:59s" x="724" y="484" class="a v55 mm">import prints the YAML and asks before writing</text>
 
-      <g class="a p20" style="--d:47.6s">
+      <g class="a p50" style="--d:59.6s">
         <rect x="56" y="536" width="616" height="52" rx="5" fill="#272d38" stroke="#88c0d0" stroke-opacity=".45"/>
         <text x="80" y="568" class="m"><tspan class="cy">$ </tspan>herdr plugin install aorumbayev/herdr-workflows</text>
       </g>
-      <text style="--d:48.2s" x="700" y="568" class="a v15 p">needs herdr ≥ 0.7.5 · MIT</text>
+      <text style="--d:60.2s" x="700" y="568" class="a v44 p">needs herdr ≥ 0.7.5 · MIT</text>
     </g>
 
     <!-- chapter nav -->
@@ -468,28 +555,28 @@
       <text x="76" y="698" class="k lbl">1 · the ritual</text>
       <g class="a on1"><circle cx="60" cy="693" r="3.5" fill="#88c0d0"/><text x="76" y="698" class="k" fill="#eceff4">1 · the ritual</text></g>
     </g>
-    <g class="nav" tabindex="0" role="button" aria-label="Chapter 2, write it once" data-t="9">
+    <g class="nav" tabindex="0" role="button" aria-label="Chapter 2, write it once" data-t="12">
       <rect class="ring" x="266" y="678" width="200" height="30" rx="4" fill="none" stroke="#88c0d0" opacity="0"/>
       <rect x="266" y="678" width="200" height="30" fill="transparent"/>
       <circle cx="280" cy="693" r="3.5" fill="#4c566a"/>
       <text x="296" y="698" class="k lbl">2 · write it once</text>
       <g class="a on2"><circle cx="280" cy="693" r="3.5" fill="#88c0d0"/><text x="296" y="698" class="k" fill="#eceff4">2 · write it once</text></g>
     </g>
-    <g class="nav" tabindex="0" role="button" aria-label="Chapter 3, pick it" data-t="20">
+    <g class="nav" tabindex="0" role="button" aria-label="Chapter 3, pick it" data-t="26">
       <rect class="ring" x="486" y="678" width="200" height="30" rx="4" fill="none" stroke="#88c0d0" opacity="0"/>
       <rect x="486" y="678" width="200" height="30" fill="transparent"/>
       <circle cx="500" cy="693" r="3.5" fill="#4c566a"/>
       <text x="516" y="698" class="k lbl">3 · pick it</text>
       <g class="a on3"><circle cx="500" cy="693" r="3.5" fill="#88c0d0"/><text x="516" y="698" class="k" fill="#eceff4">3 · pick it</text></g>
     </g>
-    <g class="nav" tabindex="0" role="button" aria-label="Chapter 4, watch it run" data-t="29">
+    <g class="nav" tabindex="0" role="button" aria-label="Chapter 4, watch it run" data-t="38">
       <rect class="ring" x="706" y="678" width="200" height="30" rx="4" fill="none" stroke="#88c0d0" opacity="0"/>
       <rect x="706" y="678" width="200" height="30" fill="transparent"/>
       <circle cx="720" cy="693" r="3.5" fill="#4c566a"/>
       <text x="736" y="698" class="k lbl">4 · watch it run</text>
       <g class="a on4"><circle cx="720" cy="693" r="3.5" fill="#88c0d0"/><text x="736" y="698" class="k" fill="#eceff4">4 · watch it run</text></g>
     </g>
-    <g class="nav" tabindex="0" role="button" aria-label="Chapter 5, share it" data-t="43">
+    <g class="nav" tabindex="0" role="button" aria-label="Chapter 5, share it" data-t="55">
       <rect class="ring" x="926" y="678" width="180" height="30" rx="4" fill="none" stroke="#88c0d0" opacity="0"/>
       <rect x="926" y="678" width="180" height="30" fill="transparent"/>
       <circle cx="940" cy="693" r="3.5" fill="#4c566a"/>
@@ -508,7 +595,7 @@
   <script><![CDATA[
     // Interactive only where scripts run (inline or <object>); as a plain <img> it just loops.
     (function () {
-      var svg = document.documentElement, LOOP = 50, delay = 0;
+      var svg = document.documentElement, LOOP = 65, delay = 0;
       var pausedAt = null, lost = 0;
       var now = function () { return performance.now() / 1000; };
       var clock = function () { return now() - lost - (pausedAt === null ? 0 : now() - pausedAt); };

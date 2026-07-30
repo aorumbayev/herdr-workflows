@@ -53,6 +53,16 @@ describe("web server security", () => {
     expect(res.status).toBe(403);
   });
 
+  test("favicon is public svg", async () => {
+    const root = await repo();
+    const { base } = await serve(root);
+    const res = await fetch(`${base}/favicon.svg`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("image/svg+xml");
+    const body = await res.text();
+    expect(body).toContain("<svg");
+  });
+
   test("valid token + host serves state", async () => {
     const root = await repo();
     const { base, token } = await serve(root);
