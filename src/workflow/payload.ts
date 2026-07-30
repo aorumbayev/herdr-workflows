@@ -6,6 +6,22 @@ import { WorkflowLoadError } from "./types";
 /** Same grammar as workbench deep-links / picker sources. */
 const WORKFLOW_NAME_RE = /^[a-z0-9][a-z0-9-_]*$/;
 
+/** Heuristic: body looks like workflow YAML rather than a base64 bundle. */
+export function looksLikeWorkflowYaml(text: string): boolean {
+  const t = text.trim();
+  if (!t || t.length > CAPTURE_BYTE_LIMIT) return false;
+  if (/^[A-Za-z0-9+/=\s]+$/.test(t) && !t.includes("\n") && t.length > 80) return false;
+  return /^version:\s*v1alpha1\b/m.test(t) && /^steps:\s*(?:$|\[)/m.test(t);
+}
+
+export function assertWorkflowName(name: string): string {
+  const n = name.trim();
+  if (!WORKFLOW_NAME_RE.test(n)) {
+    throw new WorkflowLoadError("workflow name must match [a-z0-9][a-z0-9-_]*");
+  }
+  return n;
+}
+
 const entrySchema = z
   .object({
     name: z.string().regex(WORKFLOW_NAME_RE, "workflow name must match [a-z0-9][a-z0-9-_]*"),

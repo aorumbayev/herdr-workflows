@@ -596,12 +596,16 @@ async function handleShare(repoRoot: string, url: URL): Promise<Response> {
   }
 }
 
+function importName(body: Record<string, unknown>): string | undefined {
+  return typeof body.name === "string" && body.name.trim() ? body.name.trim() : undefined;
+}
+
 async function handleImportPreview(
   repoRoot: string,
   body: Record<string, unknown>,
 ): Promise<Response> {
   try {
-    const bundle = checkPayload(String(body.text ?? ""));
+    const bundle = checkPayload(String(body.text ?? ""), { name: importName(body) });
     const preview = previewBundle(bundle);
     const home = process.env.HOME ?? homedir();
     const repoConflicts = await preflightConflicts(bundle, join(repoRoot, ".hwf", "workflows"));
@@ -634,6 +638,7 @@ async function handleImportWrite(
       repoRoot,
       scope,
       force: replaceAll,
+      name: importName(body),
     });
     if ("aborted" in outcome) return json({ ok: false, error: "aborted" }, 400);
     if (outcome.result.status === "conflicts") {

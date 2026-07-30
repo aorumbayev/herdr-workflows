@@ -29,6 +29,7 @@ import {
   encodePayload,
   extractPayload,
   formatImportCommand,
+  looksLikeWorkflowYaml,
 } from "../src/workflow/payload";
 import { WorkflowLoadError } from "../src/workflow/types";
 
@@ -132,6 +133,22 @@ describe("shared workflow payloads", () => {
     const yaml = "x".repeat(CAPTURE_BYTE_LIMIT);
     expect(() => encodePayload([{ name: "huge", yaml }])).toThrow(CaptureLimitError);
     expect(() => encodePayload([{ name: "huge", yaml }])).toThrow(/workflow bundle exceeded/);
+  });
+
+  test("checkPayload accepts raw YAML when a name is supplied", () => {
+    expect(looksLikeWorkflowYaml(exactBody)).toBe(true);
+    expect(checkPayload(exactBody, { name: "mine" })).toEqual([
+      { name: "mine", yaml: exactBody.trim() },
+    ]);
+    expect(() => checkPayload(exactBody)).toThrow(/requires a workflow name/);
+  });
+
+  test("checkPayload accepts raw YAML with an inline steps collection", () => {
+    const inline = "version: v1alpha1\nsteps: [{run: [echo, hello]}]\n";
+    expect(looksLikeWorkflowYaml(inline)).toBe(true);
+    expect(checkPayload(inline, { name: "inline" })).toEqual([
+      { name: "inline", yaml: inline.trim() },
+    ]);
   });
 
   test("checkPayload rejects non-v1alpha1 YAML with the ordinary load error", () => {

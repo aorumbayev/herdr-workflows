@@ -102,29 +102,32 @@ steps:
 
 ## Pick a surface
 
-| Where                     | Use it for                                                        |
-| ------------------------- | ----------------------------------------------------------------- |
-| `prefix+k` (picker)       | Run. List mode: `Ctrl+E` edits, `Ctrl+Y` shares, `Ctrl+O` imports |
-| `hwf run <name>`          | Run from a script or terminal, with `--input k=v`                 |
-| `hwf workflow inspect`    | Print input metadata. Optional `--resolve` for active dynamics    |
-| `hwf web` (or bare `hwf`) | Edit, share, review imports, browse the run log. Never executes   |
-| `hwf help [command]`      | Show generated command and option help                            |
-| `hwf --version`           | Show the installed plugin version                                 |
-| `hwf update`              | Install the latest published GitHub Release via Herdr             |
+| Where                     | Use it for                                                                     |
+| ------------------------- | ------------------------------------------------------------------------------ |
+| `prefix+k` (picker)       | Run. List mode: `Ctrl+K` opens actions (new/import/examples/open/share/delete) |
+| `hwf run <name>`          | Run from a script or terminal, with `--input k=v`                              |
+| `hwf workflow inspect`    | Print input metadata. Optional `--resolve` for active dynamics                 |
+| `hwf web` (or bare `hwf`) | Edit, share, review imports, browse the run log. Never executes                |
+| `hwf help [command]`      | Show generated command and option help                                         |
+| `hwf --version`           | Show the installed plugin version                                              |
+| `hwf update`              | Install the latest published GitHub Release via Herdr                          |
 
 Runs always go through the picker or `hwf run`. The workbench builds, shares, and imports workflows. It never executes them. Picker shortcuts and `hwf web` reuse one live authenticated workbench per repository, as long as the recorded endpoint still answers. An owned workbench also retires when the code it was built from changes.
 
 Root help labels `v1alpha1` as the workflow format. It is independent of the plugin version.
 
-### Picker workbench shortcuts
+### Picker actions palette
 
-In list mode, with the filter focused:
+In list mode, `Ctrl+K` opens the actions palette. A single letter fires the action (no Enter). Escape returns to the list.
 
-- `Ctrl+E` opens the selected workflow in the editor (`#w=<source>:<name>`).
-- `Ctrl+Y` shares the selected workflow and its connected children (`#share=<source>:<name>`).
-- `Ctrl+O` opens import review (`#import`). It needs no selection.
+- `n` — new workflow (`#new`)
+- `i` — import review (`#import`)
+- `e` — open the examples docs in the browser
+- `o` — open/edit the selected workflow (`#w=<source>:<name>`)
+- `s` — copy the selected workflow's `hwf workflow import "…"` command and show a herdr notification (picker stays open)
+- `d` — delete the selected workflow after `y`/`n` confirmation (picker stays open)
 
-Edit and share keep the exact repo or global provenance. They do nothing without a valid selection. The printable keys `e`, `y`, and `o` still enter the filter as text. The picker closes only after a successful detached handoff.
+Open, share, and delete need a valid selection. New, import, and examples do not. The picker closes after a successful workbench handoff for new, import, and open.
 
 ### Share and import
 
@@ -136,7 +139,7 @@ hwf workflow import "<bundle>"
 
 The bundle is a gzip-compressed, base64-encoded `{name, yaml}[]` array. It is never empty. It holds the exact selected source plus every `workflow:` child it references, transitively. Resolution checks the repo first, then the global scope, the same order runtime uses. Local provenance is display-only. The bundle does not encode it. A cycle or a missing child fails the export. The old single-workflow `{v, name, body}` payload no longer works. Re-export the workflow instead.
 
-Import, whether from the CLI or the workbench `#import` view, accepts that command or the raw encoded bundle. It rejects other shell text. It shows every YAML body and the aggregate sensitivity warnings. The CLI confirms the reviewed preview first, then asks for one `repo` or `global` destination. The workbench asks for destination scope, then confirms.
+The CLI import accepts that command or the raw encoded bundle only. The workbench `#import` view also accepts a single raw workflow YAML document (with an explicit name). Both surfaces reject unrelated shell text, show every YAML body and aggregate sensitivity warnings, and require one `repo` or `global` destination after review. The workbench list exposes Import next to New; a saved workflow's editor exposes Share into the share UI.
 
 If a bundled name already exists in that scope, import writes nothing. The workbench asks for an explicit replace-all confirmation. The CLI reports the conflicts and requires a rerun with `--force`. Share and import never run workflows.
 

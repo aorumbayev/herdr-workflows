@@ -2,10 +2,12 @@ const SCOPED_ROUTE_RE = /^(w|share)=(repo|global):([a-z0-9][a-z0-9-_]*)$/;
 
 export type WebRoute =
   | { kind: "w" | "share"; scope: "repo" | "global"; name: string; hash: string }
-  | { kind: "import"; hash: "import" };
+  | { kind: "import"; hash: "import" }
+  | { kind: "new"; hash: "new" };
 
 export function parseWebRoute(raw: string): WebRoute | undefined {
   if (raw === "import") return { kind: "import", hash: "import" };
+  if (raw === "new") return { kind: "new", hash: "new" };
   const m = SCOPED_ROUTE_RE.exec(raw);
   if (!m) return undefined;
   const kind = m[1] as "w" | "share";

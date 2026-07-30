@@ -11,9 +11,10 @@ import {
   pickerEscapeExitCode,
   selectedListEntry,
   startRun,
-  tryListWorkbenchShortcut,
+  tryOpenActionsPalette,
   type PickerState,
 } from "../src/tui/picker";
+import { resolvePaletteLetter } from "../src/tui/picker-actions";
 import { themeFromPalette } from "../src/tui/theme";
 import {
   buildInvocationEnv,
@@ -92,12 +93,17 @@ function pickerState(overrides: Partial<PickerState> = {}): PickerState {
       height: 6,
       options: [],
       getSelectedIndex: () => 0,
+      focus: () => undefined,
     },
-    status: { visible: false, flexGrow: 0, content: "" },
+    status: { visible: false, flexGrow: 0, content: "", fg: "", attributes: 0 },
     detail: { visible: false, content: "" },
     rule: { visible: false, content: "" },
-    promptInput: { visible: false },
+    promptInput: { visible: false, value: "" },
     footer: { content: "" },
+    inputDomains: {},
+    resolveGeneration: 0,
+    customChoice: false,
+    reloadEntries: async () => [],
     ...overrides,
   } as unknown as PickerState;
 }
@@ -636,9 +642,9 @@ describe("picker workbench handoff", () => {
       } as unknown as PickerState["list"],
     });
     expect(selectedListEntry(state)?.source).toBe("repo");
-    const k = key("e", true);
-    expect(tryListWorkbenchShortcut(state, k)).toBe(true);
-    expect(k.defaultPrevented).toBe(true);
+    const action = resolvePaletteLetter("o", selectedListEntry(state));
+    expect(action).toEqual({ id: "open", route: "w=repo:deploy" });
+    if (action && action.id === "open") launchWorkbenchRoute(state, action.route);
     expect(launched).toEqual([{ route: "w=repo:deploy", repoRoot: "/repo" }]);
     expect(state.exit?.code).toBe(0);
     expect(destroyed).toBe(true);
@@ -646,7 +652,9 @@ describe("picker workbench handoff", () => {
 
   test("failed launch keeps picker open with concise status", () => {
     let destroyed = false;
+    const entry = { name: "deploy", source: "repo" as const, file: "/r/deploy.yaml" };
     const state = pickerState({
+      entries: [entry],
       launchWeb: () => {
         throw new Error("spawn ENOENT");
       },
@@ -660,7 +668,7 @@ describe("picker workbench handoff", () => {
           {
             name: "Deploy · repo",
             description: "",
-            value: { entry: { name: "deploy", source: "repo", file: "/r/deploy.yaml" } },
+            value: { entry },
           },
         ],
         getSelectedIndex: () => 0,
@@ -685,7 +693,7 @@ describe("picker workbench handoff", () => {
     expect(selectedListEntry(state)?.name).toBe("deploy");
   });
 
-  test("ctrl+e with empty list is a safe no-op; ctrl+o still imports", () => {
+  test("palette open without selection is noop; import launches workbench", () => {
     const launched: LaunchWebRequest[] = [];
     let destroyed = false;
     const state = pickerState({
@@ -700,24 +708,20 @@ describe("picker workbench handoff", () => {
         getSelectedIndex: () => 0,
       } as unknown as PickerState["list"],
     });
-    const edit = key("e", true);
-    expect(tryListWorkbenchShortcut(state, edit)).toBe(true);
-    expect(edit.defaultPrevented).toBe(true);
+    expect(resolvePaletteLetter("o", undefined)).toBeUndefined();
     expect(launched).toEqual([]);
-    expect(state.exit).toBeUndefined();
     expect(destroyed).toBe(false);
 
-    const imp = key("o", true);
-    expect(tryListWorkbenchShortcut(state, imp)).toBe(true);
+    const imp = resolvePaletteLetter("i", undefined);
+    expect(imp).toEqual({ id: "import", route: "import" });
+    if (imp && imp.id === "import") launchWorkbenchRoute(state, imp.route);
     expect(launched).toEqual([{ route: "import", repoRoot: "/repo" }]);
     expect(state.exit?.code).toBe(0);
   });
 
-  test("shortcuts are list-mode only", () => {
-    const launched: LaunchWebRequest[] = [];
+  test("ctrl+k opens palette in list mode only", () => {
     const state = pickerState({
       mode: "input",
-      launchWeb: (req) => launched.push(req),
       list: {
         options: [
           {
@@ -729,10 +733,16 @@ describe("picker workbench handoff", () => {
         getSelectedIndex: () => 0,
       } as unknown as PickerState["list"],
     });
-    const k = key("e", true);
-    expect(tryListWorkbenchShortcut(state, k)).toBe(false);
+    const k = key("k", true);
+    expect(tryOpenActionsPalette(state, k)).toBe(false);
     expect(k.defaultPrevented).toBe(false);
-    expect(launched).toEqual([]);
+    expect(state.mode).toBe("input");
+
+    (state as { mode: PickerState["mode"] }).mode = "list";
+    const k2 = key("k", true);
+    expect(tryOpenActionsPalette(state, k2)).toBe(true);
+    expect(k2.defaultPrevented).toBe(true);
+    expect((state as { mode: string }).mode).toBe("palette");
   });
 
   test("launchWorkbenchRoute refuses invalid routes", () => {

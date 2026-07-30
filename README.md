@@ -79,7 +79,7 @@ Ready-made workflows live in [`examples/`](examples) and on the [Examples page](
 
 Import reviews every bundled YAML and flags sensitive parts. The CLI confirms the reviewed preview first, then asks for one repo or global destination before it writes. The workbench asks for destination scope, then confirms. On name conflicts, the workbench asks for replace-all. The CLI needs `--force` on a rerun. Old single-workflow payloads are unsupported.
 
-Press `prefix+k` to pick and run a workflow. In list mode, `Ctrl+E` edits, `Ctrl+Y` shares, and `Ctrl+O` opens import. Or use the CLI:
+Press `prefix+k` to pick and run a workflow. In list mode, `Ctrl+K` opens actions (new, import, examples, open, share-copy, delete). Or use the CLI:
 
 ```bash
 hwf run review      # run the workflow above, live progress in the terminal

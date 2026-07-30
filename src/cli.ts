@@ -317,7 +317,7 @@ async function cmdWeb(
   const route = routeRaw === undefined ? undefined : parseWebRoute(routeRaw);
   if (routeRaw !== undefined && !route) {
     die(
-      `web route expects w=<repo|global>:<name>, share=<repo|global>:<name>, or import, got '${routeRaw}'`,
+      `web route expects w=<repo|global>:<name>, share=<repo|global>:<name>, import, or new, got '${routeRaw}'`,
     );
   }
   const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot());
@@ -370,7 +370,6 @@ async function runPickerPopup(picker: typeof import("./tui/picker")): Promise<vo
   const releaseCheck = defaultPickerReleaseCheck();
   const config = await loadConfig(root);
   const entries = await listWorkflows(root, config);
-  if (!picker.hasVisibleEntries(entries)) die("no workflows found");
 
   ctx.cwd = root;
   const code = await picker.runPickerSession({
@@ -416,7 +415,7 @@ function buildProgram(): Command {
   workflow
     .command("import")
     .description("Import a shared workflow bundle")
-    .argument("<payload>", "base64 workflow bundle")
+    .argument("<payload>", "base64 workflow bundle or import command")
     .addOption(new Option("--to <scope>", "repo or global destination").choices(["repo", "global"]))
     .option("-y, --yes", "skip interactive confirmation")
     .option("--force", "replace conflicting workflows")
@@ -454,7 +453,7 @@ function buildProgram(): Command {
   program
     .command("web")
     .description("Start the browser workbench")
-    .argument("[route]", "optional w=|share=|import route")
+    .argument("[route]", "optional w=|share=|import|new route")
     .option("--port <integer>", "listen port", parsePort)
     .option("--no-open", "do not open a browser")
     .action(async (route: string | undefined, opts: { port?: number; open?: boolean }) => {

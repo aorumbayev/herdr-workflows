@@ -940,6 +940,11 @@ describe("web page share and import routes", () => {
     expect(html).toContain("no run");
     expect(html).toContain("confirmLeave()");
     expect(html).toContain('aria-label", "import command"');
+    expect(html).toContain('aria-label", "Import workflows"');
+    expect(html).toContain("openImport()");
+    expect(html).toContain('label: "share"');
+    expect(html).toContain("openShare(scope, name)");
+    expect(html).toContain('hash === "new"');
     expect(html).toContain("cmd.tabIndex = 0");
     expect(html).toContain("aria-readonly");
     expect(html).not.toMatch(/run imported|import and run|run this bundle/i);
