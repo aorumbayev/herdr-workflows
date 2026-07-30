@@ -565,13 +565,7 @@ function assertPaneOpenTemplate(
   pane: { target?: string; workspace?: string; size?: number },
   opts: TemplateOpts,
 ): void {
-  if (!isWholeValueTemplate(open)) {
-    bail(file, stepIndex, key, "pane.open templates must be whole-value");
-  }
-  const path = parseTemplatePath(open.slice(2, -2).trim());
-  if (!path) {
-    bail(file, stepIndex, key, "invalid whole-value template");
-  }
+  const path = parseTemplatePath(open.slice(2, -2).trim())!;
   if (path.root !== "inputs" || path.segments.length !== 1) {
     bail(
       file,
@@ -770,15 +764,9 @@ export function assertWorkflowReferences(
       proven: [],
     };
     if (workflow.returns.kind === "template") {
-      if (!isWholeValueTemplate(workflow.returns.template)) {
-        bail(file, undefined, "returns", "returns: must be a whole-value template");
-      }
       assertTemplates(file, undefined, "returns", workflow.returns.template, opts);
     } else {
       for (const [name, template] of Object.entries(workflow.returns.fields)) {
-        if (!isWholeValueTemplate(template)) {
-          bail(file, undefined, `returns.${name}`, "returns: must be a whole-value template");
-        }
         assertTemplates(file, undefined, `returns.${name}`, template, opts);
       }
     }

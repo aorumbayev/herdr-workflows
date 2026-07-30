@@ -8,6 +8,7 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import manifest from "../herdr-plugin.toml";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const schemaPath = join(root, "schemas", "herdr-api.schema.json");
@@ -461,7 +462,7 @@ function emitGenerated(
 // Source: schemas/herdr-api.schema.json (protocol ${protocol})
 
 export const HERDR_PROTOCOL = ${protocol} as const;
-export const MIN_HERDR_VERSION = "0.7.5";
+export const MIN_HERDR_VERSION = ${js(manifest.min_herdr_version)};
 
 export type ParamKind = "string" | "number" | "integer" | "boolean" | "object" | "array";
 

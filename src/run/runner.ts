@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { ensureLocalConfigGitignored } from "../init";
 import {
   agentStatus,
   herdrCall,
@@ -78,52 +79,6 @@ async function fail(
   const body = text.length > 500 ? `…${text.slice(-500)}` : text;
   await deps.notificationShow(`herdr-workflows: ${workflow} failed`, body).catch(() => undefined);
   return body;
-}
-
-type ResolvedInputs = { ok: true; values: Record<string, string> } | { ok: false; error: string };
-
-/** @deprecated Prefer collectWorkflowInputs — kept for focused unit tests of closed membership. */
-export function resolveInputValues(
-  specs: import("../workflow/types").InputSpec[],
-  provided: Record<string, string> = {},
-): ResolvedInputs {
-  const declared = new Set(specs.map((spec) => spec.name));
-  for (const name of Object.keys(provided)) {
-    if (!declared.has(name)) return { ok: false, error: `unknown input '${name}'` };
-  }
-  const values: Record<string, string> = Object.create(null) as Record<string, string>;
-  for (const spec of specs) {
-    if (spec.when && spec.when.length > 0) {
-      // Synchronous path cannot evaluate guards with dynamic deps; tests use unconditional specs.
-    }
-    if (spec.options !== undefined && spec.options.length === 0) {
-      return {
-        ok: false,
-        error:
-          spec.type === "profile"
-            ? `input '${spec.name}': no profiles configured; run \`hwf init\` or \`hwf init --global\``
-            : `input '${spec.name}': choice produced no options`,
-      };
-    }
-    const value = Object.hasOwn(provided, spec.name) ? provided[spec.name] : spec.default;
-    if (value === undefined) {
-      return { ok: false, error: `missing input '${spec.name}' (--input ${spec.name}=…)` };
-    }
-    if (spec.options && !spec.allowCustom && !spec.options.includes(value)) {
-      return {
-        ok: false,
-        error: `input '${spec.name}' must be one of: ${spec.options.join(", ")}`,
-      };
-    }
-    if (spec.minLength !== undefined && value.length < spec.minLength) {
-      return {
-        ok: false,
-        error: `input '${spec.name}' must be at least ${spec.minLength} characters`,
-      };
-    }
-    values[spec.name] = value;
-  }
-  return { ok: true, values };
 }
 
 function stepLabel(step: WorkflowStep): string {
@@ -418,9 +373,10 @@ async function invokingAgentTarget(args: PreflightArgs): Promise<string> {
 
 async function writeTranscriptFile(repoRoot: string, runId: string, text: string): Promise<string> {
   const dir = runScratchDir(repoRoot);
-  await mkdir(dir, { recursive: true });
+  await ensureLocalConfigGitignored(repoRoot);
+  await mkdir(dir, { recursive: true, mode: 0o700 });
   const path = join(dir, `${runId}-transcript.txt`);
-  await Bun.write(path, text);
+  await writeFile(path, text, { mode: 0o600 });
   return path;
 }
 
@@ -481,9 +437,7 @@ export type RunOptions = {
   onStderr?: (text: string) => void;
 };
 
-export type RunResult = StepsResult;
-
-export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
+export async function runWorkflow(opts: RunOptions): Promise<StepsResult> {
   const deps = { ...defaultDeps(), ...opts.deps };
   const runId = randomUUID().slice(0, 8);
   const workflow = opts.workflow ?? (await loadWorkflow(opts.name, opts.repoRoot, opts.config));
@@ -502,7 +456,7 @@ export async function runWorkflow(opts: RunOptions): Promise<RunResult> {
     ...(opts.onStderr ? { onStderr: opts.onStderr } : {}),
   };
 
-  const failPrecondition = async (detail: string): Promise<RunResult> => {
+  const failPrecondition = async (detail: string): Promise<StepsResult> => {
     const error = await fail(deps, workflow.name, 0, detail);
     await appendRunLog({
       ts: new Date().toISOString(),

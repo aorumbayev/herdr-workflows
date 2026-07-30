@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { TranscriptExtractor } from "./config";
 import { agentSessionInfo, HerdrError, type AgentSessionInfo } from "./herdr";
-import { assertUnderCaptureCap, CaptureLimitError } from "./limits";
+import { assertUnderCaptureCap, CAPTURE_BYTE_LIMIT, CaptureLimitError } from "./limits";
 import { spawnCapture } from "./run/steps/shell";
 
 const TRANSCRIPT_TIMEOUT_MS = 30_000;
@@ -54,6 +54,8 @@ export async function readClaudeTranscript(
     throw new HerdrError("transcript_file_missing", `transcript file not found: ${path}`);
   }
   try {
+    const size = file.size;
+    if (size > CAPTURE_BYTE_LIMIT) throw new CaptureLimitError("transcript", size);
     const text = extractSessionTranscript(await file.text());
     assertUnderCaptureCap("transcript", text);
     return text;

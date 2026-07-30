@@ -80,7 +80,7 @@ bun run docs:build
 openspec validate --all --strict
 ```
 
-Pre-commit runs `CI=1 npm run verify` only. It does not run tests. CI runs tests, then verify.
+Pre-commit runs `CI=1 npm run verify` only. It does not run tests. CI runs tests on Linux and macOS, then verify and the docs build on Linux. `openspec validate` runs locally only.
 
 Local `npm run verify` auto-fixes lint and format. Under `CI=1` it only checks.
 

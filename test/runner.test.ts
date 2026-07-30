@@ -5,7 +5,8 @@ import { join } from "node:path";
 import type { WorkflowsConfig } from "../src/config";
 import { HerdrError } from "../src/herdr";
 import { CAPTURE_BYTE_LIMIT, HWF_ENV_BYTE_LIMIT } from "../src/limits";
-import { AGENT_PROMPT_BYTE_LIMIT, type RunnerDeps } from "../src/run/context";
+import { AGENT_PROMPT_BYTE_LIMIT } from "../src/limits";
+import type { RunnerDeps } from "../src/run/context";
 import { runWorkflow } from "../src/run/runner";
 import { runLogPath, type RunLogEntry } from "../src/runlog";
 

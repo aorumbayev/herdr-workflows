@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { installCliCommands } from "../src/setup/cli-install";
 import { installKeybindings, stripDeadBindings } from "../src/setup/keybindings";
 import { readOwnership } from "../src/setup/ownership";
-import { resolveBinDir, resolveHerdrConfigPath } from "../src/setup/paths";
+import { PRODUCT_VERSION, resolveBinDir, resolveHerdrConfigPath } from "../src/setup/paths";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -82,7 +82,11 @@ describe("cli install", () => {
       ephemeral: false,
     });
     expect(second.messages.length).toBeGreaterThan(0);
-    expect(readOwnership(binDir).entries).toBeDefined();
+    expect(readOwnership(binDir).entries["herdr-workflows"]).toEqual({
+      kind: "symlink",
+      version: PRODUCT_VERSION,
+      source,
+    });
   });
 
   test("foreign entry is preserved and named", async () => {

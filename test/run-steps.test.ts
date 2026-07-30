@@ -1,18 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HerdrError } from "../src/herdr";
+import { CAPTURE_BYTE_LIMIT } from "../src/limits";
 import {
   CoordinationError,
   generateAgentName,
   isCoordinationError,
+  readManagedResponse,
   sizeToFirstRatio,
 } from "../src/run/context";
-import { resolveInputValues } from "../src/run/runner";
 import { assertFocusPolicy } from "../src/herdr-policy";
 import { buildHwfEnv, mergeStepEnv, runArgvStep, runShellStep } from "../src/run/steps/shell";
-import type { InputSpec } from "../src/workflow/types";
 
 async function tempDir(): Promise<string> {
   return mkdtemp(join(tmpdir(), "herdr-workflows-steps-"));
@@ -201,44 +201,20 @@ describe("agent naming and split size", () => {
     expect(sizeToFirstRatio(40)).toBeCloseTo(0.6);
     expect(sizeToFirstRatio(99)).toBeCloseTo(0.01);
   });
-});
 
-describe("resolveInputValues", () => {
-  const specs: InputSpec[] = [
-    { name: "branch", type: "text", default: "main" },
-    { name: "mode", type: "choice", options: ["fast", "full"] },
-  ];
-
-  test("defaults fill omitted values", () => {
-    expect(resolveInputValues(specs, { mode: "fast" })).toEqual({
-      ok: true,
-      values: { branch: "main", mode: "fast" },
-    });
-  });
-
-  test("unknown, missing, and out-of-domain values fail", () => {
-    expect(resolveInputValues(specs, { nope: "x" })).toEqual({
-      ok: false,
-      error: "unknown input 'nope'",
-    });
-    const missing = resolveInputValues(specs, {});
-    expect(missing.ok).toBe(false);
-    const bad = resolveInputValues(specs, { mode: "turbo" });
-    expect(bad).toEqual({ ok: false, error: "input 'mode' must be one of: fast, full" });
-  });
-
-  test("empty profile or choice options fail at collection", () => {
-    expect(
-      resolveInputValues([{ name: "target", type: "profile", options: [] }], { target: "claude" }),
-    ).toEqual({
-      ok: false,
-      error: "input 'target': no profiles configured; run `hwf init` or `hwf init --global`",
-    });
-    expect(
-      resolveInputValues([{ name: "pick", type: "choice", options: [] }], { pick: "a" }),
-    ).toEqual({
-      ok: false,
-      error: "input 'pick': choice produced no options",
-    });
+  test("oversized managed response fails before read with source and limit", async () => {
+    const dir = await tempDir();
+    try {
+      const path = join(dir, "big.txt");
+      await writeFile(path, Buffer.alloc(CAPTURE_BYTE_LIMIT + 1, 0x61));
+      await expect(readManagedResponse(path)).rejects.toMatchObject({
+        name: "CaptureLimitError",
+        source: "managed response",
+        limit: CAPTURE_BYTE_LIMIT,
+        bytes: CAPTURE_BYTE_LIMIT + 1,
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

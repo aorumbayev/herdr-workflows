@@ -98,7 +98,7 @@ export async function spawnCapture(
     stdin?: string;
     env?: NodeJS.ProcessEnv;
     timeoutMs?: number;
-    maxCaptureBytes?: { source: string; limit?: number };
+    maxCaptureBytes?: { source: string };
   },
 ): Promise<CaptureResult> {
   const timeoutMs = opts.timeoutMs ?? 0;
@@ -125,7 +125,7 @@ export async function spawnCapture(
   const budget = opts.maxCaptureBytes
     ? {
         source: opts.maxCaptureBytes.source,
-        limit: opts.maxCaptureBytes.limit ?? CAPTURE_BYTE_LIMIT,
+        limit: CAPTURE_BYTE_LIMIT,
         total: 0,
         onOverflow: () => killSpawn(proc),
       }

@@ -101,7 +101,7 @@ async function readPreservedTranscripts(path: string): Promise<WorkflowsConfig["
   }
 }
 
-async function ensureLocalConfigGitignored(repoRoot: string): Promise<void> {
+export async function ensureLocalConfigGitignored(repoRoot: string): Promise<void> {
   const hwfDir = dirname(repoConfigPath(repoRoot));
   const ignorePath = join(hwfDir, ".gitignore");
   const markers = [basename(repoLocalConfigPath(repoRoot)), "tmp/"];

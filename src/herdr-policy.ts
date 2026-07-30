@@ -73,11 +73,3 @@ export function assertFocusPolicy(method: string, params: Params | undefined): s
       return movePolicy(method, obj);
   }
 }
-
-/** Load-time alias: selector presence is key-based; template values do not waive it. */
-export function assertFocusPolicyAtLoad(
-  method: string,
-  params: Params | undefined,
-): string | undefined {
-  return assertFocusPolicy(method, params);
-}

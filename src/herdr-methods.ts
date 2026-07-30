@@ -6,6 +6,7 @@ import {
   RESULT_DOT_PATHS,
   type PropSpec,
 } from "./herdr-methods.generated";
+import { WHOLE_TEMPLATE_RE } from "./workflow/types";
 
 export { HERDR_PROTOCOL, METHOD_RESULT_VARIANTS, MIN_HERDR_VERSION, RESULT_DOT_PATHS };
 
@@ -47,12 +48,8 @@ function kindsMatch(spec: PropSpec, value: unknown): boolean {
   return false;
 }
 
-/** Must stay aligned with `isWholeValueTemplate` in workflow/parse.ts. */
-const WHOLE_VALUE_TEMPLATE_RE =
-  /^\{\{\s*(?:inputs|steps|context)(?:\.[a-zA-Z_][a-zA-Z0-9_]*)+\s*\}\}$/;
-
 function isWholeValueTemplateParam(value: unknown): boolean {
-  return typeof value === "string" && WHOLE_VALUE_TEMPLATE_RE.test(value);
+  return typeof value === "string" && WHOLE_TEMPLATE_RE.test(value);
 }
 
 /** Unknown / denied method, or params that violate the generated schema. */

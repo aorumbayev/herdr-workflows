@@ -110,7 +110,7 @@ pane:
 
 `open` is required. `beside` splits right, `below` splits down. Placement uses IDs captured when the workflow started, never current focus.
 
-herdr clamps the effective split ratio between 0.1 and 0.9, so an extreme `size` is approximated rather than refused.
+herdr decides the effective split, so an extreme `size` may be approximated rather than refused.
 
 Foreground panes take focus by default. Background panes don't. An agent step that omits the whole block gets a new tab in the invocation workspace.
 

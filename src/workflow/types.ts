@@ -31,6 +31,8 @@ type WorkflowFormat = typeof WORKFLOW_FORMAT;
 
 export const IDENT_RE = /^[a-z][a-z0-9_]{0,31}$/;
 export const DURATION_RE = /^([1-9]\d*)(ms|s|m|h)$/;
+export const TEMPLATE_INNER = "(?:inputs|steps|context)(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)+";
+export const WHOLE_TEMPLATE_RE = new RegExp(`^\\{\\{\\s*(${TEMPLATE_INNER})\\s*\\}\\}$`);
 
 export type ShellName = "sh" | "bash" | "zsh" | "pwsh" | "powershell" | "cmd";
 export type PaneOpen = "tab" | "beside" | "below";

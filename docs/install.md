@@ -115,8 +115,6 @@ What still works is treating it as a plain command:
 
 ```yaml
 - run: [my-agent, --prompt, "{{inputs.task}}"]
-  pane:
-    open: beside
 ```
 
 You get its output and exit code. You don't get a turn: no waiting for it to go idle, no `response` to pass along, no notification when it asks you something. Good enough for a tool that answers and exits. Not enough for a live conversation.
@@ -125,7 +123,7 @@ You get its output and exit code. You don't get a turn: no waiting for it to go 
 
 Three files merge, in this order:
 
-1. Global plugin config, at `$HERDR_PLUGIN_CONFIG_DIR/config.yaml`. Find the directory with `herdr plugin config-dir`.
+1. Global plugin config, at `$HERDR_PLUGIN_CONFIG_DIR/config.yaml`. Find the directory with `herdr plugin config-dir herdr-workflows`.
 2. `.hwf/config.yaml`, committed and shared.
 3. `.hwf/config.local.yaml`, gitignored and yours alone.
 

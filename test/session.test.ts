@@ -191,4 +191,21 @@ describe("transcript extractors", () => {
       ),
     ).rejects.toThrow(new RegExp(`exceeded ${CAPTURE_BYTE_LIMIT} byte limit`));
   });
+
+  test("oversized transcript file fails before read with source and limit", async () => {
+    const root = await mkdtemp(join(tmpdir(), "herdr-workflows-tover-"));
+    dirs.push(root);
+    const cwd = "/repo";
+    const sessionId = "big";
+    const dir = join(root, slug(cwd));
+    await mkdir(dir, { recursive: true });
+    const path = join(dir, `${sessionId}.jsonl`);
+    await writeFile(path, Buffer.alloc(CAPTURE_BYTE_LIMIT + 1, 0x61));
+    await expect(readClaudeTranscript(cwd, sessionId, root)).rejects.toMatchObject({
+      name: "CaptureLimitError",
+      source: "transcript",
+      limit: CAPTURE_BYTE_LIMIT,
+      bytes: CAPTURE_BYTE_LIMIT + 1,
+    });
+  });
 });

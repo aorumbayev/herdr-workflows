@@ -15,6 +15,7 @@ import {
 } from "./herdr";
 import { loadConfig, readInvocationContext, resolveRepoRoot } from "./config";
 import { EXAMPLES_URL, runInit } from "./init";
+import { openInBrowser } from "./tui/picker-actions";
 import { IMPORT_DISCLAIMER, parseImportScope, runImport } from "./workflow/import";
 import { listWorkflows, loadWorkflow, resolveDynamicChoices } from "./workflow/load";
 import { evaluateWhen } from "./workflow/conditions";
@@ -289,20 +290,6 @@ async function cmdRun(
   }
 }
 
-function openBrowser(url: string): void {
-  try {
-    const proc = Bun.spawn(process.platform === "darwin" ? ["open", url] : ["xdg-open", url], {
-      stdout: "ignore",
-      stderr: "ignore",
-      stdin: "ignore",
-      detached: true,
-    });
-    proc.unref();
-  } catch {
-    /* opener absence is nonfatal — the printed URL still reaches the caller */
-  }
-}
-
 function printWorkbenchUrl(url: string): void {
   try {
     process.stdout.write(`herdr-workflows web · ${url}\n`);
@@ -332,7 +319,7 @@ async function cmdWeb(
   const url = appendRouteHash(workbench.url, route);
   // Open before printing: a detached picker handoff can already have a dead
   // stdout, and SIGPIPE on write must not skip the browser.
-  if (opts.open !== false) openBrowser(url);
+  if (opts.open !== false) void openInBrowser(url);
   printWorkbenchUrl(url);
   if (!workbench.owned) return;
   const shutdown = () => {

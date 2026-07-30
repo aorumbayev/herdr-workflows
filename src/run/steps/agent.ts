@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
   configPathsHint,
@@ -8,12 +8,11 @@ import {
   type AgentProfile,
 } from "../../config";
 import { HerdrError } from "../../herdr";
-import { assertUnderCaptureCap } from "../../limits";
+import { AGENT_PROMPT_BYTE_LIMIT, assertUnderCaptureCap } from "../../limits";
 import { appendRunLog } from "../../runlog";
 import { substituteText } from "../../workflow/parse";
 import type { StepAction } from "../../workflow/types";
 import {
-  AGENT_PROMPT_BYTE_LIMIT,
   appendResponseInstruction,
   dispatchFailure,
   generateAgentName,
@@ -322,8 +321,8 @@ async function maybeSpillAgentPrompt(c: StepCtx, text: string): Promise<string> 
   if (bytes <= AGENT_PROMPT_BYTE_LIMIT) return text;
   assertUnderCaptureCap("agent prompt", text);
   const spill = managedPromptSpillPath(c.opts.runId, c.stepIndex, responseDirOf(c));
-  await mkdir(dirname(spill), { recursive: true });
-  await Bun.write(spill, text);
+  await mkdir(dirname(spill), { recursive: true, mode: 0o700 });
+  await writeFile(spill, text, { mode: 0o600 });
   c.opts.managedResponseFiles.push(spill);
   await appendRunLog({
     ts: new Date().toISOString(),

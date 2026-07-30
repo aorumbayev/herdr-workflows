@@ -18,6 +18,7 @@ import {
   assertWorkflowName,
   decodePayload,
   looksLikeWorkflowYaml,
+  withPinnedSchemaPointer,
   type WorkflowBundle,
 } from "./payload";
 import { parseRaw } from "./parse";
@@ -69,8 +70,7 @@ function bundleFromRawYaml(yaml: string, name: string): WorkflowBundle {
 }
 
 /**
- * Schema-only check. Deliberately not the full load path: that resolves child workflows and
- * runs `options:` shell commands, which would execute the payload before the user consents.
+ * Schema-only check. Deliberately not the full load path: that resolves child workflows from disk.
  * Accepts a shared bundle/command, or raw workflow YAML when `name` is supplied.
  */
 export function checkPayload(payload: string, opts?: { name?: string }): WorkflowBundle {
@@ -352,7 +352,7 @@ async function writeBundleAtomic(
     for (const entry of bundle) {
       const stagedPath = join(staging, `${entry.name}.yaml`);
       const finalPath = join(dir, `${entry.name}.yaml`);
-      await writeFile(stagedPath, entry.yaml, "utf8");
+      await writeFile(stagedPath, withPinnedSchemaPointer(entry.yaml), "utf8");
       results.push({ name: entry.name, path: finalPath });
       if (hooks?.afterPublish) {
         await hooks.afterPublish({ name: entry.name, path: stagedPath });

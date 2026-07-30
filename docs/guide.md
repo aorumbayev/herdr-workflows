@@ -93,7 +93,7 @@ Nothing is filled in for you. If a method needs to know which pane or tab to act
 - herdr: tab.rename
   params:
     tab_id: "{{context.tab}}"
-    name: review
+    label: review
 ```
 
 That's deliberate. An omitted target would otherwise fall through to whatever pane happens to have focus, which is a different pane by the time the step runs.

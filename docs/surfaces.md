@@ -31,7 +31,7 @@ In list mode, press `Ctrl+K`. A single letter fires the action, with no Enter. E
 | `s` | Copy the selected workflow's import command and show a herdr notification |
 | `d` | Delete the selected workflow, after a `y` or `n` confirmation             |
 
-`o`, `s`, and `d` need a selected workflow. `n`, `i`, and `e` don't. The picker closes after handing off to the workbench for `n`, `i`, and `o`, and stays open for `s` and `d`.
+`o`, `s`, and `d` need a selected valid workflow. `n`, `i`, and `e` don't. The picker closes after handing off to the workbench for `n`, `i`, and `o`, and stays open for `s` and `d`.
 
 Plain `k` still types into the filter.
 
@@ -101,7 +101,7 @@ hwf workflow import "<bundle>"
 
 Get it from the picker palette with `Ctrl+K` then `s`, or from **Share** in the editor's overflow menu.
 
-The bundle is a gzip-compressed, base64-encoded list of `{name, yaml}` entries. It holds the workflow you picked plus every `workflow:` child it reaches, found the same way a run finds them: repo first, then global. A missing child or a cycle fails the export rather than shipping something incomplete. The bundle carries names and YAML only — no version, no paths, no config, and no record of where the files came from.
+The bundle is a gzip-compressed, base64-encoded list of `{name, yaml}` entries. It holds the workflow you picked plus every `workflow:` child it reaches, found the same way a run finds them: repo first, then global. A missing child or a cycle fails the export rather than shipping something incomplete. The bundle carries names, YAML, and the `$schema` pointer the file was saved with — no local paths, no config, and no scope record. The importing build re-pins that pointer to its own contract.
 
 ## Import a workflow
 
