@@ -12,6 +12,7 @@ import {
   pluginPaneOpen,
   readLine,
   releaseStdinReader,
+  tolerateClosedStdio,
 } from "./herdr";
 import { loadConfig, readInvocationContext, resolveRepoRoot } from "./config";
 import { EXAMPLES_URL, runInit } from "./init";
@@ -290,14 +291,6 @@ async function cmdRun(
   }
 }
 
-function printWorkbenchUrl(url: string): void {
-  try {
-    process.stdout.write(`herdr-workflows web · ${url}\n`);
-  } catch {
-    /* EPIPE when a detached launcher's inherited PTY is already gone */
-  }
-}
-
 function registerOwnedWorkbenchShutdown(shutdown: () => void): void {
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
@@ -317,10 +310,9 @@ async function cmdWeb(
   const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot());
   const workbench = await ensureWorkbench({ repoRoot, port, build: buildIdentity() });
   const url = appendRouteHash(workbench.url, route);
-  // Open before printing: a detached picker handoff can already have a dead
-  // stdout, and SIGPIPE on write must not skip the browser.
+  // Open before printing: a detached picker handoff can already have a dead stdout.
   if (opts.open !== false) void openInBrowser(url);
-  printWorkbenchUrl(url);
+  process.stdout.write(`herdr-workflows web · ${url}\n`);
   if (!workbench.owned) return;
   const shutdown = () => {
     workbench.stop();
@@ -472,6 +464,7 @@ function buildProgram(): Command {
 }
 
 async function main(): Promise<void> {
+  tolerateClosedStdio();
   const program = buildProgram();
   // Bare TTY → web. A root `.action()` disables implicit `help` and turns unknown
   // tokens into excess-argument errors, so keep subcommand dispatch stock.
