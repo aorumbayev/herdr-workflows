@@ -165,6 +165,19 @@ export async function readLine(): Promise<PromptResult> {
   }
 }
 
+/** Drop the shared stdin lock so short-lived CLI commands can exit after prompts. */
+export async function releaseStdinReader(): Promise<void> {
+  const r = reader;
+  if (!r) return;
+  reader = undefined;
+  stdinBuf = "";
+  try {
+    await r.cancel();
+  } catch {
+    /* already closed */
+  }
+}
+
 export async function tabClose(tabId: string): Promise<void> {
   await herdrCall("tab.close", { tab_id: tabId });
 }

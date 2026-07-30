@@ -92,6 +92,13 @@ Commander MUST validate argv before command handlers run. After successful parsi
 - **WHEN** the user runs `hwf workflow import ./mine.yaml --yes --to=repo`
 - **THEN** the process exits nonzero as a non-bundle payload (raw YAML is workbench-only)
 
+### Requirement: Interactive import exits after prompts
+When `workflow import` uses interactive confirm/scope prompts, the CLI MUST release any stdin reader acquired for those prompts after the command finishes (successful write, conflict refusal, or abort). The process MUST exit without waiting for further stdin once import has written files or aborted.
+
+#### Scenario: TTY import exits after confirm and scope
+- **WHEN** a user runs `hwf workflow import "<payload>"` on a TTY, answers confirm with `y`, and chooses repo scope
+- **THEN** the process writes the workflow, prints the destination path, and exits without remaining blocked on stdin
+
 ### Requirement: Web route and browser control
 `web` MUST accept an optional route argument of the form `w=<repo|global>:<name>`, `share=<repo|global>:<name>`, `import`, or `new`. It MUST accept optional `--port <integer>` in `1..65535` and `--no-open`, including equals forms such as `--port=8080`. A Commander option processor MUST convert and validate the port with `InvalidArgumentError`. Invalid ports and invalid routes MUST fail before starting a server. Unless `--no-open` is present, the CLI MUST attempt to open the printed URL in the platform browser, using an opener that exists on the host platform. An owned workbench process MUST stop on the host platform's termination signals, covering `SIGINT` and `SIGTERM` where the platform delivers them.
 

@@ -11,6 +11,7 @@ import {
   notificationShow,
   pluginPaneOpen,
   readLine,
+  releaseStdinReader,
 } from "./herdr";
 import { loadConfig, readInvocationContext, resolveRepoRoot } from "./config";
 import { EXAMPLES_URL, runInit } from "./init";
@@ -48,17 +49,20 @@ function parsePort(value: string): number {
 async function cmdInit(opts: { force?: boolean; global?: boolean }): Promise<void> {
   const global = Boolean(opts.global);
   const repoRoot = await resolveRepoRoot();
+  let prompted = false;
   const result = await runInit(repoRoot, {
     force: Boolean(opts.force),
     global,
     confirm: async () => {
       if (!process.stdin.isTTY) return false;
+      prompted = true;
       const label = global ? "global plugin config" : ".hwf/config.yaml";
       process.stdout.write(`${label} exists — overwrite? [y/N] `);
       const line = await readLine();
       return line.kind === "line" && line.text.trim().toLowerCase() === "y";
     },
   });
+  if (prompted) await releaseStdinReader();
   if (result.kind === "exists") die(`${result.path} already exists (pass --force to overwrite)`);
   const profiles = result.profiles.length
     ? ` (${result.profiles.join(", ")})`
@@ -83,6 +87,7 @@ async function cmdWorkflowImport(
     die("not a tty: pass --yes and --to=repo|global to import without the review prompts");
   }
   const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot());
+  const interactive = !preapproved;
   try {
     const outcome = await runImport(payload, {
       repoRoot,
@@ -121,6 +126,8 @@ async function cmdWorkflowImport(
     if (error instanceof WorkflowLoadError || error instanceof CaptureLimitError)
       die(error.message);
     throw error;
+  } finally {
+    if (interactive) await releaseStdinReader();
   }
 }
 
