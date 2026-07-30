@@ -469,6 +469,7 @@ export async function runWorkflow(opts: RunOptions): Promise<StepsResult> {
   };
 
   let transcriptFile: string | undefined;
+  let succeeded = false;
   try {
     const inputs = await collectWorkflowInputs(workflow, {
       provided: opts.inputs,
@@ -498,12 +499,18 @@ export async function runWorkflow(opts: RunOptions): Promise<StepsResult> {
     transcriptFile = context.transcriptFile;
 
     const primary = await runSteps(workflow.steps, stepOpts, context.values);
-    return finalizeEntryRun(primary, workflow, stepOpts, context.values, runId);
+    const final = await finalizeEntryRun(primary, workflow, stepOpts, context.values, runId);
+    succeeded = final.ok;
+    return final;
   } finally {
     if (transcriptFile) await rm(transcriptFile, { force: true }).catch(() => undefined);
-    await Promise.all(
-      managedResponseFiles.map((path) => rm(path, { force: true }).catch(() => undefined)),
-    );
+    // A failed step leaves its agent still working, so its answer is the only
+    // artifact left to read. Keep it in gitignored .hwf/tmp for the user.
+    if (succeeded) {
+      await Promise.all(
+        managedResponseFiles.map((path) => rm(path, { force: true }).catch(() => undefined)),
+      );
+    }
     if (opts.ctx.paneId) {
       void deps.reportToken(opts.ctx.paneId, null).catch(() => undefined);
     }

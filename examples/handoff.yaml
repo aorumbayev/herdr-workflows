@@ -54,10 +54,14 @@ steps:
       Never invent decisions or context not present in the transcript; note
       unclear items as open questions.
 
-      Transcript file (read it; do not ask for its contents to be pasted):
+      Transcript file — read it before you write anything, because run cleanup
+      removes it when the run ends (do not ask for its contents to be pasted):
       {{context.transcript_file}}
+
+      Write the finished handoff to .hwf/tmp/handoff.md, relative to the repo
+      root, as well as returning it. That copy outlives the run.
     using: "{{inputs.target}}"
-    timeout: 15m
+    timeout: 30m
     pane:
       open: beside
       focus: false

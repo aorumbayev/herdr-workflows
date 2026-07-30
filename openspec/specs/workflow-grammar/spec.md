@@ -2,7 +2,6 @@
 
 ## Purpose
 v1alpha1 workflow document shape, four actions, namespaced templates, natural results, placement, and invocation context.
-
 ## Requirements
 ### Requirement: Alpha-versioned workflow document
 A workflow MUST declare string `version: v1alpha1` and a non-empty `steps:` list. The document MUST accept only `version`, `title`, `description`, `hidden`, `inputs`, `returns`, `on_failure`, and `steps` at top level. The parser MUST support no other format version. A later incompatible alpha format MUST use a new `v1alphaN` value.
@@ -131,11 +130,19 @@ A placed run MUST require exactly one of background or `ready_when: /regex/`. Re
 - **THEN** the step fails and preserves its pane
 
 ### Requirement: Canonical invocation context
-Context MUST expose stable `workspace`, `tab`, `pane`, `worktree`, `agent`, `selection`, and `platform`, plus plugin-produced `transcript` and `transcript_file`. Platform MUST be `macos`, `linux`, or `windows`. Selection MUST be empty when absent. Referencing unavailable identity or transcript values MUST fail preflight. Transcript values MUST have a hard size cap. They MUST never enter automatic shell env or run logs, and import/editing surfaces MUST mark them visibly sensitive. Run cleanup MUST remove the transcript file. `context.error` MUST exist only during recovery.
+Context MUST expose stable `workspace`, `tab`, `pane`, `worktree`, `agent`, `selection`, and `platform`, plus plugin-produced `transcript` and `transcript_file`. Platform MUST be `macos`, `linux`, or `windows`. Selection MUST be empty when absent. Referencing unavailable identity or transcript values MUST fail preflight. Transcript values MUST have a hard size cap. They MUST never enter automatic shell env or run logs, and import/editing surfaces MUST mark them visibly sensitive. Run cleanup MUST remove the transcript file on every path, and MUST start only after recovery completes. Run cleanup MUST remove managed response files only when the run succeeds, so a failed run keeps the agent output a step already wrote. `context.error` MUST exist only during recovery.
 
 #### Scenario: Explicit transcript handoff
 - **WHEN** reviewed YAML embeds `{{context.transcript}}` in a managed agent prompt
 - **THEN** capped transcript text is sent to that profile without an additional runtime confirmation
+
+#### Scenario: Failed run keeps managed output
+- **WHEN** an agent step fails and the agent has written its managed response file
+- **THEN** run cleanup removes the transcript file and keeps the managed response file on disk
+
+#### Scenario: Recovery reads the transcript
+- **WHEN** an `on_failure` step reads `{{context.transcript_file}}`
+- **THEN** the transcript file still exists, because cleanup waits for recovery to finish
 
 ### Requirement: Workflow metadata and portable support claim
 `title` and `description` MUST be optional text. Title MUST default from the humanized filename. `hidden: true` MUST suppress picker display but permit direct invocation. Documentation MUST describe v1alpha1 syntax and argv as portable across supported Linux and macOS hosts, with Windows users running both Herdr and the plugin inside WSL2.
@@ -206,3 +213,4 @@ A blocking local `run` MAY declare `success_codes` as a non-empty list of unique
 #### Scenario: Unexpected probe failure
 - **WHEN** the same probe exits two
 - **THEN** the workflow stops normally with the command's failure reason
+
