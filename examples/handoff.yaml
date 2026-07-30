@@ -1,3 +1,7 @@
+# Reads the transcript of the pane you launch this from, before step 1.
+# Works out of the box only when that pane runs claude with herdr's claude
+# integration installed. Any other agent kind needs a `transcripts:` extractor
+# in .hwf/config.yaml, or the run fails preflight. See /guide#hand-your-session-to-an-agent.
 version: v1alpha1
 title: Handoff
 description: Distil this session's transcript and hand it to a fresh agent

@@ -31,12 +31,15 @@ export default defineConfig({
   themeConfig: {
     siteTitle: "herdr-workflows",
     nav: [
+      { text: "Install", link: "/install" },
       { text: "Guide", link: "/guide" },
       { text: "Examples", link: "/examples" },
       { text: "Reference", link: "/reference" },
     ],
     sidebar: [
-      { text: "Guide", link: "/guide" },
+      { text: "Install", link: "/install" },
+      { text: "Write a workflow", link: "/guide" },
+      { text: "Run and manage", link: "/surfaces" },
       { text: "Examples", link: "/examples" },
       { text: "Reference", link: "/reference" },
     ],

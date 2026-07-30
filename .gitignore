@@ -52,3 +52,6 @@ docs/.vitepress/dist/
 
 # leftover untracked clone path from older layouts
 /references/
+
+# playwright MCP session artifacts
+/.playwright-mcp/

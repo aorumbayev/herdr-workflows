@@ -24,12 +24,12 @@ const initCmd = "hwf init";
         <p class="eyebrow"><span class="dot" aria-hidden="true" /> herdr plugin · linear yaml</p>
         <h1>Workflows for the herd.</h1>
         <p class="lede">
-          Short YAML that runs commands, managed agents, and explicit herdr calls. Use the picker,
-          the CLI, or the workbench.
+          Write the sequence you keep retyping as one short YAML file. Commands, coding agents, and
+          herdr itself, in order. Start it from a hotkey.
         </p>
         <div class="actions">
           <a class="btn btn-primary" href="#install">Quick start</a>
-          <a class="btn btn-secondary" :href="withBase('/guide')">Read the guide</a>
+          <a class="btn btn-secondary" :href="withBase('/examples')">Examples</a>
         </div>
         <p class="note">
           Needs
@@ -53,7 +53,10 @@ const initCmd = "hwf init";
     <section id="install" class="install">
       <p class="kicker">get running</p>
       <h2>Install, init, run</h2>
-      <p class="section-lede">Run three commands. Then <code>prefix+k</code> opens the picker.</p>
+      <p class="section-lede">
+        Two commands, one file. Then <code>prefix+k</code> (herdr's prefix key, then <code>k</code>)
+        runs it.
+      </p>
 
       <div class="install-stack">
         <div class="install-card">
@@ -72,8 +75,13 @@ const initCmd = "hwf init";
         </div>
       </div>
 
+      <p class="note">
+        <a :href="withBase('/install')">Install</a> has the requirements, the WSL2 note, and the
+        config.
+      </p>
+
       <div class="scratch">
-        <p class="scratch-label"><code>.hwf/workflows/scratch.yaml</code></p>
+        <p class="scratch-label">Save this as <code>.hwf/workflows/scratch.yaml</code></p>
         <pre class="scratch-code"><code>version: v1alpha1
 steps:
   - run: [lazygit]
@@ -81,8 +89,8 @@ steps:
       open: tab
     background: true</code></pre>
         <p class="scratch-hint">
-          Press <code>prefix+k</code>, pick <code>scratch</code>, then press enter. A lazygit tab
-          opens.
+          Press <code>prefix+k</code>, pick <code>scratch</code>, then press Enter. A lazygit tab
+          opens — swap <code>lazygit</code> for any command you have.
         </p>
       </div>
     </section>
@@ -94,17 +102,20 @@ steps:
         <article>
           <h3>prefix+k</h3>
           <p>
-            The picker runs workflows. In list mode, <code>Ctrl+K</code> opens actions: new, import,
-            examples, open, share-copy, and delete.
+            Pick a workflow and run it. <code>Ctrl+K</code> opens actions: create, import, edit,
+            share, delete.
           </p>
         </article>
         <article>
           <h3>hwf run</h3>
-          <p>Use the same runner from the terminal or scripts, with <code>--input k=v</code>.</p>
+          <p>The same runner from a terminal or a script, with <code>--input name=value</code>.</p>
         </article>
         <article>
           <h3>hwf web</h3>
-          <p>Use the browser workbench to build, validate, share, and import. It never executes.</p>
+          <p>
+            Edit as YAML or on a canvas, check your config, read past runs, share and import. Never
+            runs anything.
+          </p>
         </article>
       </div>
     </section>
@@ -114,12 +125,11 @@ steps:
       <h2>Ready-made workflows</h2>
       <p class="section-lede">
         <strong>branch-check</strong>, <strong>handoff</strong>, and
-        <strong>prompt-enhance</strong> ship in <code>examples/</code>. Each card copies a reviewed
-        <code>hwf workflow import</code> bundle command.
+        <strong>prompt-enhance</strong> ship with the plugin. Copy one command, read what it
+        contains, and it's yours.
       </p>
       <div class="actions">
         <a class="btn btn-primary" :href="withBase('/examples')">Browse examples</a>
-        <a class="btn btn-secondary" :href="withBase('/reference')">Reference</a>
       </div>
     </section>
   </div>
@@ -220,7 +230,7 @@ steps:
 
 .btn-primary:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .btn-secondary {
@@ -254,14 +264,14 @@ steps:
 .hero-shot {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background: #2e3440;
+  background: var(--nord0);
   box-shadow: var(--elev-shadow);
 }
 
 .hero-shot-inner {
   border-radius: calc(var(--radius-lg) - 1px);
   overflow: hidden;
-  background: #2e3440;
+  background: var(--nord0);
   line-height: 0;
 }
 
@@ -271,7 +281,7 @@ steps:
   width: 100%;
   aspect-ratio: 1200 / 720;
   height: auto;
-  background: #2e3440;
+  background: var(--nord0);
 }
 
 .install,

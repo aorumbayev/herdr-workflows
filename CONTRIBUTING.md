@@ -53,7 +53,7 @@ Use the OpenSpec slash commands in your agent harness when available:
 2. `/opsx:propose` — create the change and fill proposal, design, tasks, and delta specs.
 3. Review the artifacts under `openspec/changes/<name>/`.
 4. `/opsx:apply` — implement against the tasks and the cited main specs.
-5. Run tests and checks (see below).
+5. Run tests and checks (see [Checks](#checks)).
 6. `/opsx:archive` — archive the change so delta specs merge into the main specs on the feature branch. Include the archive and main-spec updates in the pull request before merge.
 
 You can drive the same steps with the `openspec` CLI by hand. Keep the root `openspec/` layout.
@@ -66,7 +66,7 @@ openspec validate --all --strict
 
 ## Branch and pull requests
 
-1. Create a feature branch. Do not commit on `main` or `master`.
+1. Create a feature branch. Do not commit to `main`.
 2. Keep the change focused.
 3. Open a pull request. Name every affected capability under `openspec/specs/` in the description.
 4. Wait for CI. Fix failures before merge.

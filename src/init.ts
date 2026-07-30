@@ -12,10 +12,35 @@ import {
 
 export const EXAMPLES_URL = "https://aorumbayev.github.io/herdr-workflows/examples";
 
-const KNOWN_KINDS: { name: string; bin: string }[] = [
+/** Kinds `herdr agent start --kind` accepts (herdr 0.7.5 cli-reference). Native start stays authoritative. */
+export const HERDR_AGENT_KINDS = [
+  "pi",
+  "claude",
+  "codex",
+  "gemini",
+  "cursor",
+  "devin",
+  "agy",
+  "cline",
+  "omp",
+  "mastracode",
+  "opencode",
+  "copilot",
+  "kimi",
+  "kiro",
+  "droid",
+  "amp",
+  "grok",
+  "hermes",
+  "kilo",
+  "qodercli",
+  "maki",
+] as const;
+
+/** Probe subset: kinds above whose canonical executable name is known. */
+const KNOWN_KINDS: { name: (typeof HERDR_AGENT_KINDS)[number]; bin: string }[] = [
   { name: "claude", bin: "claude" },
   { name: "codex", bin: "codex" },
-  { name: "aider", bin: "aider" },
   { name: "cursor", bin: "cursor" },
   { name: "opencode", bin: "opencode" },
 ];
