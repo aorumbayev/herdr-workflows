@@ -109,8 +109,12 @@ async function herdrCli(
  * part-way through the workflow. The write is async, so a try/catch at the call site never sees it.
  */
 export function tolerateClosedStdio(): void {
-  process.stdout.on("error", () => undefined);
-  process.stderr.on("error", () => undefined);
+  process.stdout.on("error", tolerateClosedPipe);
+  process.stderr.on("error", tolerateClosedPipe);
+}
+
+function tolerateClosedPipe(error: NodeJS.ErrnoException): void {
+  if (error.code !== "EPIPE") throw error;
 }
 
 export function die(message: string): never {

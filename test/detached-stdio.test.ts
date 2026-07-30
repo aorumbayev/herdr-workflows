@@ -38,4 +38,19 @@ steps:
       await rm(dir, { recursive: true, force: true });
     }
   }, 20_000);
+
+  test("a non-EPIPE standard-stream error remains fatal", async () => {
+    const herdr = join(import.meta.dir, "..", "src", "herdr.ts");
+    const script = `import { tolerateClosedStdio } from ${JSON.stringify(herdr)};
+tolerateClosedStdio();
+process.stdout.emit("error", Object.assign(new Error("stream failed"), { code: "EACCES" }));`;
+    const proc = Bun.spawn([process.execPath, "-e", script], {
+      stdout: "ignore",
+      stderr: "pipe",
+    });
+    const [stderr, exitCode] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
+
+    expect(exitCode).not.toBe(0);
+    expect(stderr).toContain("stream failed");
+  });
 });
