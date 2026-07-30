@@ -11,7 +11,7 @@ export function looksLikeWorkflowYaml(text: string): boolean {
   const t = text.trim();
   if (!t || t.length > CAPTURE_BYTE_LIMIT) return false;
   if (/^[A-Za-z0-9+/=\s]+$/.test(t) && !t.includes("\n") && t.length > 80) return false;
-  return /^version:\s*v1alpha1\b/m.test(t) && /^steps:\s*$/m.test(t);
+  return /^version:\s*v1alpha1\b/m.test(t) && /^steps:\s*(?:$|\[)/m.test(t);
 }
 
 export function assertWorkflowName(name: string): string {

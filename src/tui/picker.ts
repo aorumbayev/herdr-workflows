@@ -241,6 +241,8 @@ export type PickerState = {
   entries: WorkflowListEntry[];
   pending?: WorkflowListEntry;
   deleteTarget?: WorkflowListEntry;
+  /** True while a confirmed delete is in flight — further y/n/esc are ignored. */
+  deleteInFlight?: boolean;
   inputQueue: InputSpec[];
   inputIndex: number;
   inputValues: Record<string, string>;
@@ -522,6 +524,8 @@ function focusTextField(state: PickerState, placeholder: string, value: string):
 function setListMode(state: PickerState): void {
   state.mode = "list";
   state.pending = undefined;
+  state.deleteTarget = undefined;
+  state.deleteInFlight = false;
   state.workflow = undefined;
   state.inputQueue = [];
   state.inputIndex = 0;
@@ -742,6 +746,7 @@ export function launchWorkbenchRoute(state: PickerState, route: string): void {
 function openActionsPalette(state: PickerState): void {
   state.mode = "palette";
   state.deleteTarget = undefined;
+  state.deleteInFlight = false;
   hideBrowserChrome(state);
   hideListChrome(state);
   showStatus(state, formatPaletteBody(selectedListEntry(state)), { flexGrow: 1 });
@@ -751,12 +756,26 @@ function openActionsPalette(state: PickerState): void {
 function openDeleteConfirm(state: PickerState, entry: WorkflowListEntry): void {
   state.mode = "delete-confirm";
   state.deleteTarget = entry;
+  state.deleteInFlight = false;
   hideBrowserChrome(state);
   hideListChrome(state);
   showStatus(state, `Delete ${entry.name} (${entry.source})?\ny  yes, delete\nn  no`, {
     flexGrow: 1,
   });
   state.footer.content = DELETE_CONFIRM_HINT;
+}
+
+/** Claim the confirmed delete target; a second call while in flight returns undefined. */
+export function beginConfirmedDelete(state: {
+  deleteTarget?: WorkflowListEntry;
+  deleteInFlight?: boolean;
+}): WorkflowListEntry | undefined {
+  if (state.deleteInFlight) return undefined;
+  const entry = state.deleteTarget;
+  if (!entry) return undefined;
+  state.deleteTarget = undefined;
+  state.deleteInFlight = true;
+  return entry;
 }
 
 function failPalette(state: PickerState, label: string, error: unknown): void {
@@ -808,6 +827,10 @@ function handlePaletteKey(state: PickerState, key: KeyEvent): void {
 }
 
 function handleDeleteConfirmKey(state: PickerState, key: KeyEvent): void {
+  if (state.deleteInFlight) {
+    key.preventDefault();
+    return;
+  }
   if (key.name === "escape" || (key.sequence.length === 1 && key.sequence.toLowerCase() === "n")) {
     key.preventDefault();
     openActionsPalette(state);
@@ -815,20 +838,21 @@ function handleDeleteConfirmKey(state: PickerState, key: KeyEvent): void {
   }
   if (!(key.sequence.length === 1 && key.sequence.toLowerCase() === "y")) return;
   key.preventDefault();
-  const entry = state.deleteTarget;
-  if (!entry) {
-    setListMode(state);
-    return;
-  }
+  const entry = beginConfirmedDelete(state);
+  if (!entry) return;
+  showStatus(state, `Deleting ${entry.name}…`, { flexGrow: 1 });
+  state.footer.content = DELETE_CONFIRM_HINT;
   void (async () => {
     try {
       await deleteWorkflowFile(entry);
       state.entries = await state.reloadEntries();
       setListMode(state);
     } catch (error) {
+      state.deleteInFlight = false;
       const detail = truncate(error instanceof Error ? error.message : String(error), 60);
+      setListMode(state);
       showStatus(state, `delete failed${CHROME_SEP}${detail}`);
-      state.footer.content = DELETE_CONFIRM_HINT;
+      updateListFooter(state);
     }
   })();
 }

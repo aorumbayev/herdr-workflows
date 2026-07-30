@@ -143,6 +143,14 @@ describe("shared workflow payloads", () => {
     expect(() => checkPayload(exactBody)).toThrow(/requires a workflow name/);
   });
 
+  test("checkPayload accepts raw YAML with an inline steps collection", () => {
+    const inline = "version: v1alpha1\nsteps: [{run: [echo, hello]}]\n";
+    expect(looksLikeWorkflowYaml(inline)).toBe(true);
+    expect(checkPayload(inline, { name: "inline" })).toEqual([
+      { name: "inline", yaml: inline.trim() },
+    ]);
+  });
+
   test("checkPayload rejects non-v1alpha1 YAML with the ordinary load error", () => {
     expect(() => checkPayload(encodePayload([{ name: "bad", yaml: "nope: 1\n" }]))).toThrow(
       /version is required|steps is required|unsupported workflow format/,

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { InputSpec, WorkflowListEntry } from "../src/workflow/types";
 import {
+  beginConfirmedDelete,
   buildInvalidOptions,
   buildPickerOptions,
   commitResolvedOptions,
@@ -512,6 +513,16 @@ describe("actions palette letters", () => {
       "No workflows matching xyz",
     );
     expect(hasVisibleEntries([])).toBe(false);
+  });
+
+  test("beginConfirmedDelete claims the target once so a second y cannot race", () => {
+    const entry = entries[1]!;
+    const state = { deleteTarget: entry as WorkflowListEntry | undefined, deleteInFlight: false };
+    expect(beginConfirmedDelete(state)).toBe(entry);
+    expect(state.deleteTarget).toBeUndefined();
+    expect(state.deleteInFlight).toBe(true);
+    expect(beginConfirmedDelete(state)).toBeUndefined();
+    expect(beginConfirmedDelete({ deleteTarget: entry, deleteInFlight: true })).toBeUndefined();
   });
 });
 
