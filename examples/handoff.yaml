@@ -10,6 +10,11 @@ inputs:
   focus:
     type: text
     default: ""
+  placement:
+    type: choice
+    description: where the fresh agent opens — beside and below share this tab, so close_source would take them with it
+    options: [tab, beside, below]
+    default: tab
   close_source:
     type: choice
     options: [keep, close]
@@ -59,7 +64,11 @@ steps:
       {{context.transcript_file}}
 
       Write the finished handoff to .hwf/tmp/handoff.md, relative to the repo
-      root, as well as returning it. That copy outlives the run.
+      root, as well as to the file you are asked to write below. That copy
+      outlives the run.
+
+      Do not print the handoff in the chat. Printing it again costs a second
+      full render for no reader. Reply with one word: Done.
     using: "{{inputs.target}}"
     timeout: 30m
     pane:
@@ -70,7 +79,7 @@ steps:
   - herdr: notification.show
     params:
       title: handoff ready
-      body: "opening {{inputs.target}}"
+      body: "opening {{inputs.target}} in {{inputs.placement}}"
       sound: done
 
   - agent: |
@@ -80,7 +89,7 @@ steps:
     using: "{{inputs.target}}"
     background: true
     pane:
-      open: tab
+      open: "{{inputs.placement}}"
 
   - herdr: tab.close
     params:
