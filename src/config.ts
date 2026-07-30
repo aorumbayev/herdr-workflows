@@ -219,12 +219,12 @@ export function resolveProfile(config: WorkflowsConfig, name: string): AgentProf
   return config.profiles[name];
 }
 
-/** herdr-style platform name for context.platform. */
-export function platformName(platform: string = process.platform): string {
-  if (platform === "darwin") return "macos";
-  if (platform === "linux") return "linux";
-  if (platform === "win32") return "windows";
-  return platform;
+/**
+ * context: native platforms are Linux and macOS. Windows runs under WSL2, where
+ * process.platform is already "linux", so no win32 branch can be reached.
+ */
+export function platformName(platform: string = process.platform): PlatformName {
+  return platform === "darwin" ? "macos" : "linux";
 }
 
 /** Walk up from cwd looking for `.git` or `.hwf`. */
@@ -287,12 +287,6 @@ export function readInvocationContext(): InvocationContext {
   };
 }
 
-function platformValue(): PlatformName {
-  const p = platformName();
-  if (p === "macos" || p === "linux" || p === "windows") return p;
-  return "linux";
-}
-
 export function buildTemplateNamespace(opts: {
   ctx: InvocationContext;
   inputs?: Record<string, string>;
@@ -311,7 +305,7 @@ export function buildTemplateNamespace(opts: {
       worktree: opts.ctx.worktreePath ?? "",
       agent: opts.agent ?? "",
       selection: sanitizeDisplay(opts.ctx.selection),
-      platform: platformValue(),
+      platform: platformName(),
       ...(opts.transcript !== undefined ? { transcript: opts.transcript } : {}),
       ...(opts.transcriptFile !== undefined ? { transcript_file: opts.transcriptFile } : {}),
     },

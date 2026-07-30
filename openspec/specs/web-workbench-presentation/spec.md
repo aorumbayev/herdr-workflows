@@ -116,7 +116,7 @@ The workflow editor MUST present its document chrome as one horizontal bar above
 - **THEN** every control remains reachable, with the folded ones available from the overflow menu
 
 ### Requirement: Canvas view controls live on the canvas
-Canvas view controls MUST occupy two clusters inside the canvas: zoom out, a zoom-level readout, and zoom in in one cluster; add step, fit, expand, and a shortcuts toggle in the other. The readout MUST state the current zoom level as a percentage and MUST reset the zoom to 1:1 when activated. No canvas control MUST render as a free-floating box outside those clusters. Each control MUST carry an accessible name, a visible `:focus-visible` ring, hover and active states, and a hit target of at least 32px in the smaller dimension.
+Canvas view controls MUST occupy two clusters inside the canvas: zoom out, a zoom-level readout, and zoom in in one cluster. Add step, fit, expand, and a shortcuts toggle in the other. The readout MUST state the current zoom level as a percentage and MUST reset the zoom to 1:1 when activated. No canvas control MUST render as a free-floating box outside those clusters. Each control MUST carry an accessible name, a visible `:focus-visible` ring, hover and active states, and a hit target of at least 32px in the smaller dimension.
 
 #### Scenario: Zoom readout doubles as reset
 - **WHEN** a user zooms in and then activates the zoom readout

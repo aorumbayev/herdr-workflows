@@ -162,7 +162,7 @@ inputs:
     when: '{{inputs.mode}} == "branch"'
 ```
 
-The picker asks for these in order, before step 1. Only the workflow you started asks; children take their values from the parent.
+The picker asks for these in order, before step 1. Only the workflow you started asks. Children take their values from the parent.
 
 - **`type: text`** takes any text. **`type: choice`** offers a list. **`type: profile`** offers your profile names.
 - **Options can be a command.** `{run: [...]}` runs from your repo root and turns each output line into an option.

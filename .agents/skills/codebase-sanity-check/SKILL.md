@@ -1,9 +1,9 @@
 ---
 name: codebase-sanity-check
-description: Whole-repository overhaul review for herdr-workflows. Runs the real gates first, then dispatches three review sub-agents — code and tests, truth and enforcement, risk and regression — and one dedicated adversarial judge. Every finding cites file and line. Every recommendation that adds anything must survive three why questions or it is discarded. Use when asked to audit, clean up, overhaul, or sanity check this codebase, to raise code quality or engineering standards, to make the repository easier to read or contribute to, to check the docs against the code, or to review a branch before a pull request. For development of this herdr-workflows repository.
+description: Whole-repository overhaul review for herdr-workflows. Runs the real gates first, then dispatches three review sub-agents — code and tests, truth and enforcement, risk and regression — and one dedicated adversarial judge. Every finding cites file and line. Every recommendation that adds anything must survive three why questions or it is discarded. Use when asked to audit, clean up, overhaul, or `sanity check` this codebase, to raise code quality or engineering standards, to make the repository easier to read or contribute to, to check the docs against the code, or to review a branch before a pull request. For development of this herdr-workflows repository.
 ---
 
-# Codebase sanity check
+# Codebase review
 
 One maintainer reads this repository. The review exists to keep it readable by one person, honest
 about its own contract, and cheap to contribute to. It is not a style audit.
@@ -24,8 +24,10 @@ evidence that nothing depends on the thing. A recommendation to add a file, depe
 abstraction, doc section, test, or config key goes through Phase 3 and dies there unless it earns
 its place.
 
-**3. No finding without `file:line`.** No line number means no finding. When a finding claims a
-command behaves a certain way, quote the shortest decisive line of real output.
+**3. No finding without `file:line`.** No line number means no finding. The one exception is a DELETE
+of a whole file or directory, which cites the path alone — there is no meaningful line in a file that
+should not exist. When a finding claims a command behaves a certain way, quote the shortest decisive
+line of real output.
 
 **4. Never weaken a check to clear a finding.** Raising a threshold, adding a `verify.config.json`
 ignore, skipping a test, or widening a type to make the gate green is itself a critical finding.
@@ -43,9 +45,10 @@ evidence. If the checkout is absent, follow `.agents/references/AGENTS.md` first
 file to lower a complexity score is a defect, not a cleanup. See
 [criteria-code.md](criteria-code.md) before proposing any new file.
 
-**8. Four sub-agents per run. No exceptions.** 23,000 lines and three runtime dependencies do not
-need a fleet. Three agents review, one judges. The judge is dedicated and reads no criteria file, so
-it arrives cold and owns none of the findings it kills.
+**8. At most four sub-agents per run.** Three review, plus the judge when any group raised an ADD.
+23,000 lines and three runtime dependencies do not need a fleet. The judge is dedicated and reads no
+criteria file, so it arrives cold and owns none of the findings it kills. A run with no ADD findings
+correctly uses three.
 
 ## Phase 0: Establish the oracles
 
@@ -53,7 +56,8 @@ Entry: invocation received.
 Exit: gate output and shape metrics captured, red gates recorded as findings.
 
 Run `git status --porcelain` before anything else and read it. Another agent or an unfinished edit
-may own this working tree. This review leaves no file modified.
+may own this working tree. This review leaves no file modified, and no git ref, remote, branch, or
+stash changed. A clean `git status` is not proof of that — a fetch moves a ref and prints nothing.
 
 Then run these from the repository root. Capture output to the scratchpad. Do not skip a command
 because it "should pass" — the point is measurement. All four are read-only: `CI=1` makes verify
@@ -75,8 +79,9 @@ git diff --stat -- docs/workflow.schema.json docs/.vitepress/theme/examples.gene
 git checkout -- docs/workflow.schema.json docs/.vitepress/theme/examples.generated.ts
 ```
 
-Skip this check and report "Not measured" when the first command prints anything. A tree that is
-already dirty makes the diff meaningless. Otherwise a non-empty diff means a generated artifact was
+Skip this check and report "Not measured" when that scoped `git status` — the one limited to those two
+paths — prints anything. A generated file that was already modified makes the diff meaningless.
+Untracked files elsewhere in the tree are normal and do not skip the check. Otherwise a non-empty diff means a generated artifact was
 hand-edited or a source drifted. That is a finding in Group B, the diff is the evidence, and the
 final `git checkout` restores the tree either way.
 
@@ -104,11 +109,22 @@ Any other words in the invocation narrow the review rather than changing it. Pas
 all three agents. Narrowing never removes an agent — a group with nothing to say returns nothing,
 which costs less than deciding in advance that it had nothing to say.
 
+**Pick the scope deliberately.** A bare run measured $10 against a branch run's $6, on fewer findings,
+because the whole repository has more to read. It is also the only invocation that audits standing
+risk: an unpinned GitHub Action, an unlinked doc page, or a dead spec capability sits in unchanged
+files, so no `branch` run will ever surface it. Use `branch` before a pull request. Use bare when you
+want the standing state, and expect to pay for it.
+
 For `branch`: resolve the default branch with
 `gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name' 2>/dev/null || echo main`. If
 already on it, say so and review the whole repository instead. Capture both `--name-only` and the
 unified diff, and pass the diff to sub-agents so they do not re-derive changed lines. Report only on
 changed lines, except where a change breaks unchanged code.
+
+**Read the base ref as it stands.** `git fetch`, `git remote update`, and `git pull` are forbidden for
+the whole run. A fetch force-updates `origin/<default>` and silently rewrites the review scope, so the
+report then describes a diff the maintainer never asked about. A stale base ref is the correct input.
+Say so in the report when `origin/<default>` is behind.
 
 Narrowing prioritizes findings inside a group's criteria. It never licenses skipping the criteria of
 a group that is running.
@@ -131,9 +147,10 @@ Each group's brief is wide on purpose. Three review agents is the cap, so covera
 inside a brief rather than from more briefs. Tell each agent to work its sections in order and not
 stop early.
 
-Do not load criteria files into the orchestrator context. Pass the path. Each agent reads its own.
+Build all three prompts from the template below. Do not load a criteria file into your own context.
+Pass the path. Each agent reads its own.
 
-Launch all agents in a single message. Prompt template:
+Prompt template:
 
 ```
 You review the herdr-workflows repository for **{GROUP_NAME}**.

@@ -281,7 +281,7 @@ steps:
   - run: "true"
     when: "{{inputs.x}}"
   - run: "true"
-    when: '{{context.platform}} == "windows"'
+    when: '{{context.platform}} == "macos"'
   - run: "true"
     when: '{{context.platform}} != "linux"'
 `);
@@ -290,7 +290,7 @@ steps:
       {
         kind: "eq",
         path: "context.platform",
-        value: "windows",
+        value: "macos",
         negate: false,
       },
     ]);

@@ -35,7 +35,7 @@ export const DURATION_RE = /^([1-9]\d*)(ms|s|m|h)$/;
 export type ShellName = "sh" | "bash" | "zsh" | "pwsh" | "powershell" | "cmd";
 export type PaneOpen = "tab" | "beside" | "below";
 type PaneClose = "success" | "always";
-export type PlatformName = "macos" | "linux" | "windows";
+export type PlatformName = "macos" | "linux";
 
 export type PaneSpec = {
   open: PaneOpen | string;

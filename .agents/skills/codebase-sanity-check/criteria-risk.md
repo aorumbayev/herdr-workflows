@@ -169,8 +169,11 @@ judge it.
 
 ### Not a finding
 
-- A disable with a specific justification naming the rule and why it does not apply
+- A disable with a specific justification naming the rule and why it does not apply. A justification
+  that suppresses an error the line itself manufactures is not a justification
 - A cap change that an OpenSpec change explains
+- An ignore covering a generated file whose generator is itself checked. Group B section 10 owns that
+  judgment. Defer to it rather than flagging the ignore twice with opposite verdicts
 
 ## 8. Scope escape (branch only)
 

@@ -34,7 +34,7 @@ Callers outside the repository must substitute an absolute path to the checkout 
 4. Runs `bun run install:dev` against that instance (**shared binary mutation**).
 5. Runs `hwf init`, then proves the chain with a `sandbox-selfcheck` workflow.
 
-Other actions: `sandbox.sh status`, `sandbox.sh down` (stops the server, kills the `hwf-sandbox` tmux session only when its socket matches, deletes `/tmp/hwf-sandbox` only when the sentinel is present), `sandbox.sh guard-check` (non-destructive ownership and kill-guard checks; never starts Herdr).
+Other actions: `sandbox.sh status`, `sandbox.sh down` (stops the server, kills the `hwf-sandbox` tmux session only when its socket matches, deletes `/tmp/hwf-sandbox` only when the sentinel is present), `sandbox.sh guard-check` (non-destructive ownership and kill-guard checks. Never starts Herdr).
 
 Inherited `HERDR_CONFIG_PATH` / `HERDR_BIN_PATH` / `HERDR_SOCKET_*` / plugin-dir overrides are unset before sandbox commands. A poisoned caller env cannot retarget the live instance.
 

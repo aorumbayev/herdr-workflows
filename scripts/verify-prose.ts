@@ -2,8 +2,8 @@ import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
-const FILES = ["README.md", "CONTRIBUTING.md"];
-const DIRS = ["docs"];
+const FILES = ["README.md", "CONTRIBUTING.md", "AGENTS.md"];
+const DIRS = ["docs", "openspec", ".agents/skills"];
 const SKIP_DIRS = new Set([".vitepress", "node_modules"]);
 
 type Rule = { re: RegExp; use: string; why: string };
@@ -116,6 +116,9 @@ const RULES: Rule[] = [
     why: "",
   },
   { re: /\bemail address\b/gi, use: "email", why: "`address` is redundant" },
+
+  // Punctuation CONTRIBUTING.md bans outright
+  { re: /[a-z]; [a-z]/g, use: "two sentences", why: "no semicolons in prose" },
 ];
 
 /** Replace code spans, fences, and link targets with spaces so offsets survive. */

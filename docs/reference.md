@@ -34,18 +34,18 @@ Result: `{stdout, stderr, exit_code, failed}`.
 
 Other fields: `shell`, `cwd`, `env`, `pane`, `background`, `ready_when`, `timeout`, `retry`, `success_codes`.
 
-- `shell` accepts `sh`, `bash`, `zsh`, `pwsh`, `powershell`, and `cmd`. The Windows values stay valid syntax for compatibility; native Windows execution isn't supported. `shell` is invalid on the list form.
+- `shell` accepts `sh`, `bash`, `zsh`, `pwsh`, `powershell`, and `cmd`. The Windows values stay valid syntax for compatibility. Native Windows execution isn't supported. `shell` is invalid on the list form.
 - `cwd` defaults to the directory the workflow was started from.
 - `env` values accept templates. Keys can't start with `HWF_`, in any case, because the runner owns that prefix. Runner values win over inherited ones.
 - Inputs arrive as `HWF_<name>` variables. Step results don't — pass those through `env:`.
-- `timeout` accepts `<integer><ms|s|m|h>`. Omitting it means no workflow deadline; the command still has to finish. A timeout kills the command and its children. `timeout` is invalid with `background`.
+- `timeout` accepts `<integer><ms|s|m|h>`. Omitting it means no workflow deadline. The command still has to finish. A timeout kills the command and its children. `timeout` is invalid with `background`.
 - `success_codes` is a non-empty list of unique integers, and defaults to `[0]`. Blocking local commands only. `failed` reports against this rule.
 
 A placed command with `open: beside` or `open: below` keeps the pane it split from: the runner calls `pane.split`, then sends the argv as one shell-quoted line through `pane.send_input`. herdr has no `pane.run` method, and `layout.apply` replaces a whole tab without keeping live processes. `open: tab` launches the argv directly through `layout.apply`.
 
 ### `agent:`
 
-The value is the prompt. `using:` starts a new agent from a profile. `target:` prompts one that's already running. They're mutually exclusive; omitting both uses `default_profile`.
+The value is the prompt. `using:` starts a new agent from a profile. `target:` prompts one that's already running. They're mutually exclusive. Omitting both uses `default_profile`.
 
 | Mode      | What happens                                                  |
 | --------- | ------------------------------------------------------------- |
@@ -112,7 +112,7 @@ pane:
 
 herdr clamps the effective split ratio between 0.1 and 0.9, so an extreme `size` is approximated rather than refused.
 
-Foreground panes take focus by default; background panes don't. An agent step that omits the whole block gets a new tab in the invocation workspace.
+Foreground panes take focus by default. Background panes don't. An agent step that omits the whole block gets a new tab in the invocation workspace.
 
 `close` applies only to agent panes this step created. `success` closes after the turn settles and the response is captured; `always` closes after any outcome. Omit it to keep the pane, which is what you want for diagnosis. `close` is invalid on commands and on background steps.
 
@@ -138,19 +138,19 @@ The loader rejects duplicate step IDs, unknown paths, forward references, and re
 
 ### Context
 
-| Key                                             | Holds                                                         |
-| ----------------------------------------------- | ------------------------------------------------------------- |
-| `workspace`, `tab`, `pane`, `worktree`, `agent` | Where the workflow started                                    |
-| `selection`                                     | Selected text. Empty when there's none                        |
-| `platform`                                      | `macos`, `linux`, or `windows`                                |
-| `transcript`, `transcript_file`                 | Session transcript. Sensitive; fails preflight if unavailable |
-| `error`                                         | Recovery only, inside `on_failure`                            |
+| Key                                             | Holds                                                                |
+| ----------------------------------------------- | -------------------------------------------------------------------- |
+| `workspace`, `tab`, `pane`, `worktree`, `agent` | Where the workflow started                                           |
+| `selection`                                     | Selected text. Empty when there's none                               |
+| `platform`                                      | `macos` or `linux`. Windows is WSL2 only, where the value is `linux` |
+| `transcript`, `transcript_file`                 | Session transcript. Sensitive. Fails preflight if unavailable        |
+| `error`                                         | Recovery only, inside `on_failure`                                   |
 
 Identity values are captured at the start and don't follow your focus. Referencing an identity or transcript value that isn't available fails preflight, before step 1.
 
 Transcripts never enter the automatic `HWF_` environment or the run log, and every review surface marks them. The transcript file is removed when the run ends.
 
-`context.error` carries `message`, `workflow`, `action`, `step_number`, `workflow_path`, `details`, and `step_id` when the step had one. A child failure names the child's own failing action and local step number. `details` holds what applies: `stdout`, `stderr`, and `exit_code` for commands; pane, tab, and workspace IDs for placed steps; profile, kind or target, and pane IDs for agents; `method` and reason for herdr calls; the child name for workflow steps.
+`context.error` carries `message`, `workflow`, `action`, `step_number`, `workflow_path`, `details`, and `step_id` when the step had one. A child failure names the child's own failing action and local step number. `details` holds what applies: `stdout`, `stderr`, and `exit_code` for commands. Pane, tab, and workspace IDs for placed steps. Profile, kind or target, and pane IDs for agents. `method` and reason for herdr calls. The child name for workflow steps.
 
 ## Inputs
 
@@ -170,7 +170,7 @@ Names match `[a-z][a-z0-9_]{0,31}`. A declared input nothing references is a loa
 
 **Guards.** An inactive input doesn't prompt, doesn't resolve, doesn't apply its default, doesn't enter the input namespace, and doesn't export an `HWF_` value. Supplying a value for one fails collection — scripted `hwf run` callers must leave the flag off entirely, including `--input branch=`. Referencing a guarded input is a load error unless the reading site carries every clause that guards it.
 
-**Dynamic options.** `{run: argv}` runs from the repo root with the invoking environment and no partial input exports, and its argv can't contain templates or depend on earlier answers. Output splits on newlines, trims, drops empty lines, and deduplicates while keeping first-seen order. Nonzero exit, empty output, more than 1,000 options, or crossing the capture cap fails collection. Loading and listing validate the declaration without running it; entry collection runs each active one once. A picker launch carries the resolved options to the detached run so they aren't looked up twice. Treat these commands as read-only.
+**Dynamic options.** `{run: argv}` runs from the repo root with the invoking environment and no partial input exports, and its argv can't contain templates or depend on earlier answers. Output splits on newlines, trims, drops empty lines, and deduplicates while keeping first-seen order. Nonzero exit, empty output, more than 1,000 options, or crossing the capture cap fails collection. Loading and listing validate the declaration without running it. Entry collection runs each active one once. A picker launch carries the resolved options to the detached run so they aren't looked up twice. Treat these commands as read-only.
 
 **Prompts.** The picker states the input name, your `description`, the position in the sequence, and how to answer: how many options a resolved closed domain has, whether a custom value is accepted, and a text input's default and `min_length`. Answers so far stay listed below the prompt.
 
@@ -193,7 +193,7 @@ Without `--resolve`, dynamic argv is printed, not run. With it, only active dyna
 | `on_failure`        | One action, once, after the first non-tolerated failure anywhere in the run                       |
 | Connection loss     | Stop, keep panes, skip recovery, report that the step may still be running                        |
 
-A condition is a whole-value template read for truthiness, or a comparison of one whole-value template with a quoted string using `==` or `!=`. Empty string, `0`, `false`, and null are false; every other scalar is true. Comparison uses the value's canonical text form. Shell commands, arbitrary expressions, OR, parentheses, and structured values are load errors.
+A condition is a whole-value template read for truthiness, or a comparison of one whole-value template with a quoted string using `==` or `!=`. Empty string, `0`, `false`, and null are false. Every other scalar is true. Comparison uses the value's canonical text form. Shell commands, arbitrary expressions, OR, parentheses, and structured values are load errors.
 
 `continue_on_error` can't be used to make a result readable after a failure on `agent`, `herdr`, `workflow`, placed, readiness, or background steps, because those can fail without producing one. Spawn and runner failures stay hard failures.
 
@@ -243,7 +243,7 @@ A workflow file is code you're choosing to run. There's no sandbox. A `run:` ste
 
 Opening a repository never runs a workflow. The picker and workbench label repo or global provenance, and mark commands, transcript references, and sensitive herdr methods. Neither surface claims a per-run confirmation or a sandbox.
 
-**Denied methods.** Every `server.*` and `plugin.*` method, plus `events.subscribe`, `session.snapshot`, `popup.close`, every `pane.graphics.*` method, `pane.report_agent`, `pane.report_agent_session`, `pane.clear_agent_authority`, `pane.release_agent`, `agent.view.set`, and `agent.view.clear`. Each denial states the rule it protects. Beyond those, only `workspace.*`, `tab.*`, `pane.*`, `worktree.*`, `agent.*`, `layout.*`, `notification.show`, `client.window_title.*`, and `ping` are allowed; anything newly generated outside them is denied until policy admits it. This is a rail against accidental misuse, not a security boundary.
+**Denied methods.** Every `server.*` and `plugin.*` method, plus `events.subscribe`, `session.snapshot`, `popup.close`, every `pane.graphics.*` method, `pane.report_agent`, `pane.report_agent_session`, `pane.clear_agent_authority`, `pane.release_agent`, `agent.view.set`, and `agent.view.clear`. Each denial states the rule it protects. Beyond those, only `workspace.*`, `tab.*`, `pane.*`, `worktree.*`, `agent.*`, `layout.*`, `notification.show`, `client.window_title.*`, and `ping` are allowed. Anything newly generated outside them is denied until policy admits it. This is a rail against accidental misuse, not a security boundary.
 
 **Bundles.** Sharing produces `hwf workflow import "<bundle>"`, where the bundle is a gzip-compressed, base64-encoded `{name, yaml}[]` list. It starts from the exact file you selected and walks `workflow:` children with the same repo-first resolution a run uses. It carries no version, root, source, or config metadata. A cycle or a missing child fails the export.
 

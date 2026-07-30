@@ -43,7 +43,7 @@ never propose a split to raise a score.
 
 ### Not a finding
 
-- A file that `verify:complexity` actually fails on. Shrinking it is required, and shrinking may mean
+- A file that `verify:complexity` fails on today. Shrinking it is required, and shrinking may mean
   deleting rather than splitting
 - A long but linear function or file, such as a parser or a schema. Length alone is ungated by design
 
