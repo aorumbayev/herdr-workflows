@@ -12,7 +12,7 @@ inputs:
     default: ""
   placement:
     type: choice
-    description: where the fresh agent opens — beside and below share this tab, so close_source would take them with it
+    description: where the fresh agent opens
     options: [tab, beside, below]
     default: tab
   close_source:
@@ -94,5 +94,15 @@ steps:
   - herdr: tab.close
     params:
       tab_id: "{{context.tab}}"
-    when: '{{inputs.close_source}} == "close"'
+    when:
+      - '{{inputs.close_source}} == "close"'
+      - '{{inputs.placement}} == "tab"'
+    continue_on_error: true
+
+  - herdr: pane.close
+    params:
+      pane_id: "{{context.pane}}"
+    when:
+      - '{{inputs.close_source}} == "close"'
+      - '{{inputs.placement}} != "tab"'
     continue_on_error: true
