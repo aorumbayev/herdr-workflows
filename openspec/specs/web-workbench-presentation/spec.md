@@ -157,14 +157,14 @@ The page MUST remain usable at phone widths. Below a narrow-viewport breakpoint 
 - **THEN** edge-anchored canvas controls sit inside the safe area
 
 ### Requirement: The workflow list can be collapsed
-The header MUST provide a single control that hides and shows the workflow list, available only while the workflows tab is showing a workflow rather than a share or import view. The control MUST state which action it performs, expose its expanded state to assistive technology, and be keyboard reachable. Opening or creating a workflow on a narrow viewport MUST collapse the list so the editor gets the width.
+The workflow list chrome MUST provide a control that hides the list, available only while the workflows tab is showing a workflow rather than a share or import view. When the list is hidden, a restore control MUST appear as a rail beside the editor (not in the page header). Each control MUST state which action it performs, expose the list's expanded state to assistive technology, and be keyboard reachable. Opening or creating a workflow on a narrow viewport MUST collapse the list so the editor gets the width.
 
 #### Scenario: Collapse and restore
-- **WHEN** a user activates the list control
-- **THEN** the list is hidden, the editor spans the full width, and the control now offers to show the list again
+- **WHEN** a user activates hide in the list chrome
+- **THEN** the list is hidden, the editor spans the remaining width, and a show-list rail offers to restore it
 
 #### Scenario: State is exposed
-- **WHEN** the control receives keyboard focus
+- **WHEN** a list visibility control receives keyboard focus
 - **THEN** it shows a focus ring and its accessible name and expanded state describe the list's current visibility
 
 #### Scenario: Narrow viewport opens straight into the editor
@@ -173,10 +173,10 @@ The header MUST provide a single control that hides and shows the workflow list,
 
 #### Scenario: Not offered where it does not apply
 - **WHEN** the config tab, the runs tab, or a share or import view is showing
-- **THEN** the list control is absent
+- **THEN** neither the hide control nor the show-list rail is offered
 
 ### Requirement: Default workflows view exposes import and share
-The workflows list in the default workbench view MUST provide an Import control that opens the same import route UI as `#import`, without requiring a picker deep link. When a saved workflow (non-empty name) is open in the editor, the workbench MUST provide a Share control in the command-bar overflow menu that opens the same share route UI as `#share=<scope>:<name>` for that workflow's current scope. These controls MUST be keyboard reachable with the same baseline affordances as other workbench buttons.
+The workflows list chrome MUST present New and Import as equal peer controls in one row. Import MUST open the same import route UI as `#import`, without requiring a picker deep link. When a saved workflow (non-empty name) is open in the editor, the workbench MUST provide a Share control in the command-bar overflow menu that opens the same share route UI as `#share=<scope>:<name>` for that workflow's current scope. These controls MUST be keyboard reachable with the same baseline affordances as other workbench buttons.
 
 #### Scenario: Import from the list
 - **WHEN** a user activates Import in the workflows list

@@ -367,12 +367,18 @@ describe("web workbench presentation", () => {
     expect(page).toMatch(/@media\s*\(max-width:\s*480px\)/);
     expect(page).toContain("flex: 1 0 100%");
     expect(page).toContain("grid-template-columns: minmax(0, 1fr)");
-    expect(page).toContain('id="list-btn"');
+    expect(page).toContain('id="list-rail"');
+    expect(page).toContain('hide.id = "list-hide"');
     expect(page).toContain("function setListCollapsed(");
     expect(page).toContain("function narrowViewport(");
-    expect(page).toContain('aria-label="Hide workflow list"');
-    // Collapsing routes through `.hide`, which outranks the narrow-viewport `aside` rules.
+    expect(page).toContain('aria-label", "Hide workflow list"');
+    expect(page).toContain('aria-label="Show workflow list"');
+    expect(page).toContain('className = "list-actions"');
+    expect(page).toContain('className = "list-chrome"');
+    expect(page).not.toContain('id="list-btn"');
+    // Collapsing routes through `.hide` / `.list-collapsed`, which outrank narrow-viewport `aside` rules.
     expect(page).toContain('$("list").classList.toggle("hide", !showList)');
+    expect(page).toContain('main.classList.toggle("list-collapsed"');
     expect(page).toMatch(/\.hide\s*\{\s*display:\s*none\s*!important/);
     // `⋯` is not an accessible name, and an outside click must not pull focus back to the trigger.
     expect(page).toContain('"More actions"');

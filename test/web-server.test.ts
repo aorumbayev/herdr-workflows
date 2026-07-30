@@ -940,7 +940,7 @@ describe("web page share and import routes", () => {
     expect(html).toContain("no run");
     expect(html).toContain("confirmLeave()");
     expect(html).toContain('aria-label", "import command"');
-    expect(html).toContain('aria-label", "import workflows"');
+    expect(html).toContain('aria-label", "Import workflows"');
     expect(html).toContain("openImport()");
     expect(html).toContain('label: "share"');
     expect(html).toContain("openShare(scope, name)");

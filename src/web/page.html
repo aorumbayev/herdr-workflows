@@ -330,18 +330,83 @@
         display: flex;
         flex-direction: column;
         gap: 0.3rem;
+        min-width: 0;
       }
-      aside > .new {
+      .list-chrome {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        flex: 0 0 auto;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        padding-bottom: 0.45rem;
+        margin-bottom: 0.2rem;
+        background: var(--bg);
+        border-bottom: 1px solid var(--line);
+      }
+      .list-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr auto;
+        gap: 0.35rem;
         width: 100%;
+        align-items: stretch;
       }
-      header .list-toggle {
+      .list-actions > button {
+        width: 100%;
+        min-width: 0;
+        min-height: 32px;
+        margin: 0;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: lowercase;
+      }
+      .list-actions > .list-collapse {
+        width: 32px;
+        min-width: 32px;
+        padding: 0;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0;
+        color: var(--muted);
+        border-color: var(--line-strong);
+      }
+      .list-actions > .list-collapse:hover:not(:disabled) {
+        color: var(--ink);
+        border-color: var(--accent);
+        background: var(--accent-soft);
+      }
+      .list-rail {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
         min-width: 32px;
         min-height: 32px;
-        padding: 0.35rem 0.65rem;
+        padding: 0.75rem 0.2rem;
         font-size: 11px;
         font-weight: 600;
-        letter-spacing: 0.04em;
+        letter-spacing: 0.06em;
         text-transform: lowercase;
+        border-radius: 0;
+        border-top: none;
+        border-bottom: none;
+        border-left: none;
+        color: var(--muted);
+      }
+      main.list-collapsed {
+        grid-template-columns: auto minmax(0, 1fr);
+      }
+      main.list-collapsed .list-rail {
+        display: inline-flex;
+      }
+      main.list-collapsed #list {
+        display: none !important;
+      }
+      .list-rail:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: -2px;
       }
       aside .row {
         width: 100%;
@@ -1284,16 +1349,40 @@
           gap: 0.35rem;
           -webkit-overflow-scrolling: touch;
         }
-        aside .row,
-        aside > .new,
-        aside > button {
+        aside .row {
           width: auto;
           flex: 0 0 auto;
           min-width: 7.5rem;
           max-width: 12rem;
         }
-        header .list-toggle {
-          order: 2;
+        aside .list-chrome {
+          position: static;
+          flex: 0 0 auto;
+          width: auto;
+          min-width: 12rem;
+          max-width: 15rem;
+          border-bottom: none;
+          border-right: 1px solid var(--line);
+          padding: 0 0.5rem 0 0;
+          margin: 0 0.15rem 0 0;
+          background: transparent;
+        }
+        aside .list-actions {
+          grid-template-columns: 1fr 1fr auto;
+        }
+        main.list-collapsed {
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: auto minmax(0, 1fr);
+        }
+        main.list-collapsed .list-rail {
+          writing-mode: horizontal-tb;
+          transform: none;
+          width: 100%;
+          justify-content: center;
+          border: 1px solid var(--line-strong);
+          border-radius: var(--radius);
+          min-height: 32px;
+          padding: 0.35rem 0.65rem;
         }
         section {
           padding: 0.65rem 0.75rem;
@@ -1374,21 +1463,22 @@
         <button class="tab" data-tab="config">Config</button>
         <button class="tab" data-tab="runs">Runs</button>
       </nav>
-      <button
-        type="button"
-        class="list-toggle"
-        id="list-btn"
-        aria-controls="list"
-        aria-expanded="true"
-        aria-pressed="false"
-        aria-label="Hide workflow list"
-      >
-        hide list
-      </button>
       <button type="button" class="theme" id="theme-btn" aria-label="Theme: system">system</button>
       <span id="repo" class="repo"></span>
     </header>
     <main>
+      <button
+        type="button"
+        class="list-rail"
+        id="list-rail"
+        aria-controls="list"
+        aria-expanded="false"
+        aria-pressed="true"
+        aria-label="Show workflow list"
+        hidden
+      >
+        show list
+      </button>
       <aside id="list"></aside>
       <section id="pane"></section>
     </main>
@@ -1516,22 +1606,30 @@
       }
 
       function syncListToggle() {
-        const btn = $("list-btn");
-        if (!btn) return;
+        const rail = $("list-rail");
+        const hideBtn = $("list-hide");
         const usable = tab === "workflows" && !routeView;
-        btn.classList.toggle("hide", !usable);
-        if (!usable) return;
-        const name = listCollapsed ? "Show workflow list" : "Hide workflow list";
-        btn.textContent = listCollapsed ? "show list" : "hide list";
-        btn.setAttribute("aria-label", name);
-        btn.setAttribute("aria-expanded", listCollapsed ? "false" : "true");
-        btn.setAttribute("aria-pressed", listCollapsed ? "true" : "false");
-        btn.title = name;
+        const showRail = usable && listCollapsed;
+        if (rail) {
+          rail.hidden = !showRail;
+          rail.setAttribute("aria-expanded", listCollapsed ? "false" : "true");
+          rail.setAttribute("aria-pressed", listCollapsed ? "true" : "false");
+          rail.title = "Show workflow list";
+        }
+        if (hideBtn) {
+          hideBtn.hidden = !usable || listCollapsed;
+          hideBtn.setAttribute("aria-expanded", listCollapsed ? "false" : "true");
+          hideBtn.setAttribute("aria-pressed", listCollapsed ? "true" : "false");
+          hideBtn.title = "Hide workflow list";
+        }
       }
 
       function syncWorkflowLayout() {
-        const showList = tab === "workflows" && !routeView && !listCollapsed;
-        document.querySelector("main").classList.toggle("full", !showList);
+        const workflows = tab === "workflows" && !routeView;
+        const showList = workflows && !listCollapsed;
+        const main = document.querySelector("main");
+        main.classList.toggle("full", !workflows);
+        main.classList.toggle("list-collapsed", workflows && listCollapsed);
         $("list").classList.toggle("hide", !showList);
         syncListToggle();
       }
@@ -1556,26 +1654,37 @@
         syncWorkflowLayout();
         const list = $("list");
         list.innerHTML = "";
+        const chrome = document.createElement("div");
+        chrome.className = "list-chrome";
         const actions = document.createElement("div");
-        actions.className = "bar";
-        actions.style.flexDirection = "column";
-        actions.style.gap = "4px";
-        actions.style.width = "100%";
+        actions.className = "list-actions";
         const nu = document.createElement("button");
         nu.type = "button";
-        nu.textContent = "+ new";
-        nu.className = "tab new";
+        nu.textContent = "new";
+        nu.setAttribute("aria-label", "New workflow");
         nu.onclick = newWorkflow;
         const imp = document.createElement("button");
+        imp.type = "button";
         imp.textContent = "import";
-        imp.className = "tab";
-        imp.style.width = "100%";
-        imp.setAttribute("aria-label", "import workflows");
+        imp.setAttribute("aria-label", "Import workflows");
         imp.onclick = () => {
           if (confirmLeave()) openImport();
         };
         actions.append(nu, imp);
-        list.appendChild(actions);
+        const hide = document.createElement("button");
+        hide.type = "button";
+        hide.id = "list-hide";
+        hide.className = "list-collapse";
+        hide.textContent = "«";
+        hide.setAttribute("aria-controls", "list");
+        hide.setAttribute("aria-expanded", "true");
+        hide.setAttribute("aria-pressed", "false");
+        hide.setAttribute("aria-label", "Hide workflow list");
+        hide.title = "Hide workflow list";
+        hide.onclick = () => setListCollapsed(true);
+        actions.append(hide);
+        chrome.append(actions);
+        list.appendChild(chrome);
         const addRow = (e) => {
           const row = document.createElement("button");
           row.type = "button";
@@ -1618,6 +1727,7 @@
         }
         if (!current && !routeView)
           $("pane").innerHTML = "<p class=hint>Select a workflow, create one, or import.</p>";
+        syncListToggle();
       }
 
       async function openWorkflow(name, scope) {
@@ -4858,7 +4968,7 @@
       }
 
       $("theme-btn").addEventListener("click", cycleTheme);
-      $("list-btn").addEventListener("click", () => setListCollapsed(!listCollapsed));
+      $("list-rail").addEventListener("click", () => setListCollapsed(false));
       syncThemeControl();
       syncListToggle();
       try {
