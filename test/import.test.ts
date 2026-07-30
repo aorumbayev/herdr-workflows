@@ -30,8 +30,11 @@ import {
   extractPayload,
   formatImportCommand,
   looksLikeWorkflowYaml,
+  schemaPointer,
+  withPinnedSchemaPointer,
 } from "../src/workflow/payload";
 import { WorkflowLoadError } from "../src/workflow/types";
+import { PRODUCT_VERSION } from "../src/setup/paths";
 
 const dirs: string[] = [];
 const prevHome = process.env.HOME;
@@ -242,7 +245,30 @@ describe("hwf workflow import", () => {
     if ("aborted" in outcome) throw new Error("unreachable");
     expect(outcome.result.status).toBe("written");
     if (outcome.result.status !== "written") throw new Error("unreachable");
-    expect(await readFile(outcome.result.results[0]!.path, "utf8")).toBe(odd);
+    expect(await readFile(outcome.result.results[0]!.path, "utf8")).toBe(
+      withPinnedSchemaPointer(odd),
+    );
+  });
+
+  test("import re-pins a foreign schema pointer to this build", async () => {
+    const { root, home } = await scratch();
+    const foreign = `# yaml-language-server: $schema=https://raw.githubusercontent.com/aorumbayev/herdr-workflows/v0.1.0/docs/workflow.schema.json
+version: v1alpha1
+steps:
+  - run: [echo, hi]
+`;
+    const outcome = await runImport(encodePayload([{ name: "pinned", yaml: foreign }]), {
+      repoRoot: root,
+      home,
+      scope: "repo",
+    });
+    if ("aborted" in outcome) throw new Error("unreachable");
+    expect(outcome.result.status).toBe("written");
+    if (outcome.result.status !== "written") throw new Error("unreachable");
+    const onDisk = await readFile(outcome.result.results[0]!.path, "utf8");
+    expect(onDisk.startsWith(schemaPointer())).toBe(true);
+    expect(onDisk).toContain(`v${PRODUCT_VERSION}`);
+    expect(onDisk).not.toContain("v0.1.0");
   });
 
   test("conflicts write nothing until replace-all", async () => {
@@ -268,7 +294,9 @@ describe("hwf workflow import", () => {
     if ("aborted" in forced) throw new Error("unreachable");
     expect(forced.result.status).toBe("written");
     if (forced.result.status !== "written") throw new Error("unreachable");
-    expect(await readFile(forced.result.results[0]!.path, "utf8")).toBe(exactBody);
+    expect(await readFile(forced.result.results[0]!.path, "utf8")).toBe(
+      withPinnedSchemaPointer(exactBody),
+    );
   });
 
   test("bundle conflict on any name preserves the whole existing set", async () => {
@@ -312,8 +340,12 @@ describe("hwf workflow import", () => {
     });
     if ("aborted" in outcome) throw new Error("unreachable");
     expect(outcome.result.status).toBe("written");
-    expect(await readFile(join(root, ".hwf", "workflows", "a.yaml"), "utf8")).toBe(exactBody);
-    expect(await readFile(join(root, ".hwf", "workflows", "b.yaml"), "utf8")).toBe(exactBody);
+    expect(await readFile(join(root, ".hwf", "workflows", "a.yaml"), "utf8")).toBe(
+      withPinnedSchemaPointer(exactBody),
+    );
+    expect(await readFile(join(root, ".hwf", "workflows", "b.yaml"), "utf8")).toBe(
+      withPinnedSchemaPointer(exactBody),
+    );
   });
 
   test("concurrent non-replace imports do not clobber a racing destination", async () => {
@@ -328,7 +360,9 @@ describe("hwf workflow import", () => {
     const statuses = outcomes.map((o) => ("aborted" in o ? "aborted" : o.result.status));
     expect(statuses.filter((s) => s === "written")).toHaveLength(1);
     expect(statuses.filter((s) => s === "conflicts")).toHaveLength(1);
-    expect(await readFile(join(root, ".hwf", "workflows", "race.yaml"), "utf8")).toBe(exactBody);
+    expect(await readFile(join(root, ".hwf", "workflows", "race.yaml"), "utf8")).toBe(
+      withPinnedSchemaPointer(exactBody),
+    );
   });
 
   test("staging failure leaves the scope wholly pre-import with no litter", async () => {
@@ -446,7 +480,8 @@ describe("hwf workflow import", () => {
     const a = await readFile(join(dir, "a.yaml"), "utf8");
     const b = await readFile(join(dir, "b.yaml"), "utf8");
     const whollyOld = a === oldA && b === oldB;
-    const whollyNew = a === exactBody && b === exactBody;
+    const pinned = withPinnedSchemaPointer(exactBody);
+    const whollyNew = a === pinned && b === pinned;
     expect(whollyOld || whollyNew).toBe(true);
     const parent = await readdir(dirname(dir));
     expect(parent.filter((n) => n.includes(".staging") || n.includes(".prev"))).toEqual([]);

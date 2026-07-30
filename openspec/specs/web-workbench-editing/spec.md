@@ -23,7 +23,7 @@ The workbench MUST consider a workflow unsaved when its name, selected scope, or
 - **THEN** the failure is reported and the workflow is not presented as deleted
 
 ### Requirement: Workbench-written workflows carry a build-pinned schema pointer
-A workflow the workbench writes MUST begin with a schema pointer that resolves to the workflow contract this build implements, and MUST NOT reference a ref whose content can change independently of the build. A pointer already present MUST be replaced wherever it appears rather than duplicated. The rest of the text, including the format version line and the author's formatting, MUST be preserved, and the save baseline the workbench reports MUST identify the bytes actually written. Resolving the pointer MUST NOT require a network call at save time.
+A workflow the workbench writes MUST begin with a schema pointer that resolves to the workflow contract this build implements, and MUST NOT reference a ref whose content can change independently of the build. A pointer already present MUST be replaced wherever it appears rather than duplicated. The rest of the text, including the format version line and the author's formatting, MUST be preserved, and the save baseline the workbench reports MUST identify the bytes written. Resolving the pointer MUST NOT require a network call at save time.
 
 #### Scenario: No schema pointer present
 - **WHEN** the workbench saves workflow text carrying no schema pointer
@@ -145,7 +145,7 @@ reported as carried over from YAML.
 
 The node parameters form MUST present fields in named sections ordered by the question the author is
 answering: what the step does, where it runs, when it runs, and what happens if it fails. A section
-whose fields are all unset MUST collapse to a single line summarising its state, and MUST expand on
+whose fields are all unset MUST collapse to a single line summarizing its state, and MUST expand on
 demand. Every field the form renders MUST belong to exactly one section, and a field the page has no
 section assignment for MUST appear in a trailing section rather than be omitted.
 
@@ -154,7 +154,7 @@ section assignment for MUST appear in a trailing section rather than be omitted.
 - **WHEN** a step sets no failure-handling field
 - **THEN** that section shows a one-line summary instead of its fields, and expands when activated
 
-#### Scenario: Set section summarises its values
+#### Scenario: Set section summarizes its values
 
 - **WHEN** a step sets a timeout and a retry
 - **THEN** the failure-handling section's summary states those values

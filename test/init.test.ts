@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../src/config";
-import { detectProfiles, formatProfilesYaml, runInit } from "../src/init";
+import { detectProfiles, formatProfilesYaml, HERDR_AGENT_KINDS, runInit } from "../src/init";
 
 const dirs: string[] = [];
 const prevPluginDir = process.env.HERDR_PLUGIN_CONFIG_DIR;
@@ -23,6 +23,14 @@ async function withPluginEnv(): Promise<{ root: string; plugin: string }> {
 }
 
 describe("herdr-workflows init", () => {
+  test("detected profiles only name kinds native agent.start accepts", async () => {
+    const detected = await detectProfiles();
+    const kinds = new Set<string>(HERDR_AGENT_KINDS);
+    for (const profile of Object.values(detected)) {
+      expect(kinds.has(profile.kind)).toBe(true);
+    }
+  });
+
   test("fresh init writes profiles config and gitignores local", async () => {
     const { root } = await withPluginEnv();
     const detected = await detectProfiles();

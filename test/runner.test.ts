@@ -5,7 +5,8 @@ import { join } from "node:path";
 import type { WorkflowsConfig } from "../src/config";
 import { HerdrError } from "../src/herdr";
 import { CAPTURE_BYTE_LIMIT, HWF_ENV_BYTE_LIMIT } from "../src/limits";
-import { AGENT_PROMPT_BYTE_LIMIT, type RunnerDeps } from "../src/run/context";
+import { AGENT_PROMPT_BYTE_LIMIT } from "../src/limits";
+import type { RunnerDeps } from "../src/run/context";
 import { runWorkflow } from "../src/run/runner";
 import { runLogPath, type RunLogEntry } from "../src/runlog";
 
@@ -1300,6 +1301,80 @@ steps:
     expect(leftover).toEqual([]);
     const logText = await readFile(runLogPath(), "utf8");
     expect(logText).not.toContain("TRANSCRIPT");
+  });
+
+  test("failed run keeps the managed response and still removes the transcript", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: brief
+    agent: "see {{context.transcript}}"
+    using: claude
+  - run: [sh, -c, "exit 3"]
+`,
+    });
+    const scratch = join(root, ".hwf", "tmp");
+    const { deps } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: { ...deps, ...fastClock() },
+    });
+    expect(result.ok).toBe(false);
+    const kept = await Array.fromAsync(
+      new Bun.Glob("*-step-1.txt").scan({ cwd: scratch, absolute: true }),
+    );
+    expect(kept).toHaveLength(1);
+    expect(await Bun.file(kept[0]!).text()).toBe("managed answer\n");
+    const transcripts = await Array.fromAsync(new Bun.Glob("*-transcript.txt").scan(scratch));
+    expect(transcripts).toEqual([]);
+  });
+
+  test("successful run removes the managed response and the transcript", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: brief
+    agent: "see {{context.transcript}}"
+    using: claude
+`,
+    });
+    const scratch = join(root, ".hwf", "tmp");
+    const { deps } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: { ...deps, ...fastClock() },
+    });
+    expect(result.ok).toBe(true);
+    const leftover = await Array.fromAsync(new Bun.Glob("*.txt").scan(scratch));
+    expect(leftover).toEqual([]);
+  });
+
+  test("recovery reads the transcript file before cleanup removes it", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+on_failure:
+  run: [test, -f, "{{context.transcript_file}}"]
+steps:
+  - agent: "see {{context.transcript}}"
+    using: claude
+  - run: [sh, -c, "exit 3"]
+`,
+    });
+    const { deps } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: { ...deps, ...fastClock() },
+    });
+    expect(failed(result).error).not.toContain("on_failure failed");
   });
 
   test("close always closes the pane when agent.start fails after placement", async () => {

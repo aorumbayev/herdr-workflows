@@ -70,7 +70,8 @@ describe("update indicator", () => {
       embeddedVersion: "0.1.0",
       onNewer: () => failures.push("older"),
     });
-    await new Promise((r) => setTimeout(r, 20));
+    await Promise.resolve();
+    await Promise.resolve();
     expect(failures).toEqual([]);
   });
 

@@ -15,7 +15,14 @@ import {
   runImport,
 } from "../workflow/import";
 import { listWorkflows, parseWorkflowText, workflowPath } from "../workflow/load";
-import { parseRaw, rawWorkflowSchema, type RawStep, type RawWorkflowDoc } from "../workflow/parse";
+import {
+  parseRaw,
+  parseRawWithDoc,
+  rawWorkflowSchema,
+  type RawStep,
+  type RawWorkflowDoc,
+} from "../workflow/parse";
+import { schemaPointer, withPinnedSchemaPointer } from "../workflow/payload";
 import { analyzeYamlTree, sensitivityLabels, workflowDisplayTitle } from "../workflow/trust";
 import pageHtml from "./page.html" with { type: "text" };
 import logoSvg from "../../docs/assets/logo.svg" with { type: "text" };
@@ -64,26 +71,6 @@ async function claimFile(file: string, text: string, taken: string): Promise<Res
 
 function scopeOf(v: unknown): Scope | undefined {
   return v === "repo" || v === "global" ? v : undefined;
-}
-
-const SCHEMA_POINTER_RE = /^#\s*yaml-language-server:\s*\$schema=\S+\s*$/;
-
-function schemaPointer(): string {
-  return `# yaml-language-server: $schema=${workflowSchemaUrl()}`;
-}
-
-/**
- * Give workflow text a schema pointer for the contract this build implements. Any pointer already
- * present is replaced wherever it sits, so a file authored against another version cannot end up
- * carrying two contradictory pointers. Text already pinned is returned byte-identical.
- */
-function withPinnedSchemaPointer(text: string): string {
-  const pointer = schemaPointer();
-  if (text.length === 0) return `${pointer}\n`;
-  const lines = text.split("\n");
-  const kept = lines.filter((line) => !SCHEMA_POINTER_RE.test(line));
-  if (kept.length === lines.length - 1 && lines[0] === pointer) return text;
-  return [pointer, ...kept].join("\n");
 }
 
 /**
@@ -306,18 +293,8 @@ async function getState(repoRoot: string): Promise<Response> {
 function handleParse(body: Record<string, unknown>): Response {
   try {
     const text = String(body.text ?? "");
-    parseRaw("buffer.yaml", text);
-    let data: unknown;
-    try {
-      data = Bun.YAML.parse(text);
-    } catch (error) {
-      return json({ ok: false, error: errText(error) }, 400);
-    }
-    const parsed = rawWorkflowSchema.safeParse(data);
-    if (!parsed.success) {
-      return json({ ok: false, error: parsed.error.issues.map((i) => i.message).join("; ") }, 400);
-    }
-    return json({ ok: true, doc: parsed.data });
+    const { doc } = parseRawWithDoc("buffer.yaml", text);
+    return json({ ok: true, doc });
   } catch (error) {
     return json({ ok: false, error: errText(error) }, 400);
   }
@@ -524,29 +501,6 @@ async function handleWorkflow(
   return new Response("method not allowed", { status: 405 });
 }
 
-async function handlePromote(repoRoot: string, body: Record<string, unknown>): Promise<Response> {
-  const name = String(body.name ?? "");
-  const fromChecked = requireNameScope(name, scopeOf(body.from));
-  if (!fromChecked.ok) return fromChecked.response;
-  const toChecked = requireNameScope(name, scopeOf(body.to));
-  if (!toChecked.ok) return toChecked.response;
-  const src = Bun.file(workflowPath(fromChecked.scope, repoRoot, name));
-  if (!(await src.exists())) return json({ ok: false, error: "source not found" }, 404);
-  const dstPath = workflowPath(toChecked.scope, repoRoot, name);
-  const text = await src.text();
-  if (body.force !== true) {
-    const claimed = await claimFile(
-      dstPath,
-      text,
-      `'${name}' already exists in ${toChecked.scope}`,
-    );
-    return claimed ?? json({ ok: true });
-  }
-  await mkdir(dirname(dstPath), { recursive: true });
-  await Bun.write(dstPath, text);
-  return json({ ok: true });
-}
-
 async function handleConfig(
   repoRoot: string,
   req: Request,
@@ -707,8 +661,6 @@ function createHandler(
       if (url.pathname === "/api/format" && req.method === "POST") return handleFormat(body);
       if (url.pathname === "/api/validate" && req.method === "POST")
         return handleValidate(repoRoot, body);
-      if (url.pathname === "/api/promote" && req.method === "POST")
-        return handlePromote(repoRoot, body);
       if (url.pathname === "/api/config") return handleConfig(repoRoot, req, url, body);
       if (url.pathname === "/api/runs" && req.method === "GET") return handleRuns();
       if (url.pathname === "/api/share" && req.method === "GET") return handleShare(repoRoot, url);

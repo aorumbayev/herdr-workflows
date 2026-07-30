@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import type { InvocationContext, TranscriptExtractor, WorkflowsConfig } from "../config";
 import { HerdrError } from "../herdr";
-import { assertUnderCaptureCap } from "../limits";
+import { assertUnderCaptureCap, CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../limits";
 import type { TemplateNamespace, WorkflowStep } from "../workflow/types";
 
 export type StepFailure = {
@@ -160,12 +160,6 @@ export function managedPromptSpillPath(
   return join(responseDir, `${runId}-step-${stepIndex}-prompt.txt`);
 }
 
-/**
- * herdr agent.prompt silently drops ~21KB+ bodies; stay under this with a margin.
- * Oversized prompts are written to a run-owned file and replaced by a short pointer.
- */
-export const AGENT_PROMPT_BYTE_LIMIT = 16 * 1024;
-
 export function appendResponseInstruction(prompt: string, path: string): string {
   return `${prompt}\n\nRequired: use your file-write tool to write your full answer as plain UTF-8 text to the absolute path ${path}, overwriting whatever is there. Do not finish until that file exists with your answer. Write nothing else to that path and do not create other files for it. Printing the answer in chat is not enough.`;
 }
@@ -182,6 +176,8 @@ export async function readManagedResponse(path: string): Promise<string> {
       `managed response file was not written: ${path}`,
     );
   }
+  const size = file.size;
+  if (size > CAPTURE_BYTE_LIMIT) throw new CaptureLimitError("managed response", size);
   const text = await file.text();
   assertUnderCaptureCap("managed response", text);
   if (!text.trim()) {

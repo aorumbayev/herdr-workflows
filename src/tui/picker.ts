@@ -129,7 +129,7 @@ export function truncate(text: string, max: number): string {
   return `${takeColumns(text, max - ellipsisCols)}${ELLIPSIS}`;
 }
 
-export function pickerContentWidth(rendererWidth: number): number {
+function pickerContentWidth(rendererWidth: number): number {
   return Math.max(0, rendererWidth - 2);
 }
 
@@ -320,7 +320,7 @@ export function formatListFooter(
   contentWidth: number,
   selectedIndex: number,
   total: number,
-  hint: string = LIST_HINT,
+  hint: string,
 ): string {
   if (total === 0) return truncate(hint, contentWidth);
   const counter = `${selectedIndex + 1}/${total}`;

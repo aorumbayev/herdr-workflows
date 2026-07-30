@@ -165,7 +165,7 @@ Escape from an input prompt MUST move to the previous active input and restore i
 An input prompt MUST render the input name, the author description when one is declared, and how the
 value is supplied. It MUST render the prompt's ordinal position, counted over the inputs already
 answered in the current collection. For a resolved closed domain it MUST report the number of
-available options; for a domain that is not yet resolved it MUST NOT state a count. It MUST report
+available options. For a domain that is not yet resolved it MUST NOT state a count. It MUST report
 when a value outside the listed options is accepted, and MUST report a text input's default and its
 minimum length when either is declared. The prompt MUST NOT change the workflow title row, the list
 viewport, or the footer key hints.

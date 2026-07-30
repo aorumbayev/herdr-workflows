@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { RGBA, type TerminalColors } from "@opentui/core";
-import { themeFromPalette } from "../src/tui/theme";
+import { resolveHostTheme, themeFromPalette } from "../src/tui/theme";
 
 function colors(partial: Partial<TerminalColors>): TerminalColors {
   return {
@@ -60,6 +60,81 @@ describe("themeFromPalette", () => {
     expect(selBg.intent).toBe("indexed");
     expect(selBg.slot).toBe(7);
     expect(selFg.slot).toBe(0);
+    expect((theme.text.fg as RGBA).intent).toBe("default");
+  });
+});
+
+describe("resolveHostTheme", () => {
+  const priorEntrypoint = process.env.HERDR_PLUGIN_ENTRYPOINT_ID;
+  const priorEnv = process.env.HERDR_ENV;
+  const priorPluginId = process.env.HERDR_PLUGIN_ID;
+  afterEach(() => {
+    if (priorEntrypoint === undefined) delete process.env.HERDR_PLUGIN_ENTRYPOINT_ID;
+    else process.env.HERDR_PLUGIN_ENTRYPOINT_ID = priorEntrypoint;
+    if (priorEnv === undefined) delete process.env.HERDR_ENV;
+    else process.env.HERDR_ENV = priorEnv;
+    if (priorPluginId === undefined) delete process.env.HERDR_PLUGIN_ID;
+    else process.env.HERDR_PLUGIN_ID = priorPluginId;
+  });
+
+  test("in a Herdr plugin pane, applies palette colors under the short timeout", async () => {
+    process.env.HERDR_PLUGIN_ENTRYPOINT_ID = "picker";
+    const calls: Array<{ size?: number; timeout?: number }> = [];
+    const theme = await resolveHostTheme({
+      getPalette: async (opts: { size?: number; timeout?: number }) => {
+        calls.push(opts);
+        return colors({
+          defaultForeground: "#c0caf5",
+          defaultBackground: "#1a1b26",
+          palette: Array.from({ length: 16 }, (_, i) => (i === 8 ? "#666666" : null)),
+        });
+      },
+    } as never);
+    expect(calls).toEqual([{ size: 16, timeout: 1 }]);
+    expect(hexOf(theme.select.selectedBackgroundColor as RGBA)).toBe("#c0caf5");
+    expect(hexOf(theme.select.descriptionColor as RGBA)).toBe("#666666");
+  });
+
+  test("standalone waits longer and still applies a useful palette answer", async () => {
+    delete process.env.HERDR_PLUGIN_ENTRYPOINT_ID;
+    const calls: Array<{ size?: number; timeout?: number }> = [];
+    const theme = await resolveHostTheme({
+      getPalette: async (opts: { size?: number; timeout?: number }) => {
+        calls.push(opts);
+        return colors({
+          defaultForeground: "#c0caf5",
+          defaultBackground: "#1a1b26",
+          palette: Array.from({ length: 16 }, (_, i) => (i === 8 ? "#6e7681" : null)),
+        });
+      },
+    } as never);
+    expect(calls).toEqual([{ size: 16, timeout: 400 }]);
+    expect(hexOf(theme.select.selectedBackgroundColor as RGBA)).toBe("#c0caf5");
+    expect(hexOf(theme.select.descriptionColor as RGBA)).toBe("#6e7681");
+  });
+
+  test("HERDR_ENV and HERDR_PLUGIN_ID alone keep the standalone timeout", async () => {
+    delete process.env.HERDR_PLUGIN_ENTRYPOINT_ID;
+    process.env.HERDR_ENV = "1";
+    process.env.HERDR_PLUGIN_ID = "herdr-workflows";
+    const calls: Array<{ size?: number; timeout?: number }> = [];
+    await resolveHostTheme({
+      getPalette: async (opts: { size?: number; timeout?: number }) => {
+        calls.push(opts);
+        return colors({});
+      },
+    } as never);
+    expect(calls).toEqual([{ size: 16, timeout: 400 }]);
+  });
+
+  test("falls back to indexed selection when getPalette rejects", async () => {
+    const theme = await resolveHostTheme({
+      getPalette: async () => {
+        throw new Error("no osc");
+      },
+    } as never);
+    expect((theme.select.selectedBackgroundColor as RGBA).slot).toBe(7);
+    expect((theme.select.selectedTextColor as RGBA).slot).toBe(0);
     expect((theme.text.fg as RGBA).intent).toBe("default");
   });
 });

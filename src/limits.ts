@@ -1,5 +1,10 @@
 export const CAPTURE_BYTE_LIMIT = 8 * 1024 * 1024;
 export const HWF_ENV_BYTE_LIMIT = 24 * 1024;
+/**
+ * herdr agent.prompt silently drops ~21KB+ bodies; stay under this with a margin.
+ * Oversized prompts are written to a run-owned file and replaced by a short pointer.
+ */
+export const AGENT_PROMPT_BYTE_LIMIT = 16 * 1024;
 
 export class CaptureLimitError extends Error {
   readonly source: string;

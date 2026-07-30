@@ -186,12 +186,15 @@ describe("plugin config directory", () => {
 });
 
 describe("platformName", () => {
-  test("maps process.platform to herdr platform names", () => {
+  test("maps process.platform to the two native platform names", () => {
     expect(platformName("darwin")).toBe("macos");
     expect(platformName("linux")).toBe("linux");
-    expect(platformName("win32")).toBe("windows");
-    expect(platformName("freebsd")).toBe("freebsd");
     expect(platformName()).toBe(platformName(process.platform));
+  });
+
+  test("anything that is not darwin resolves to linux", () => {
+    expect(platformName("win32")).toBe("linux");
+    expect(platformName("freebsd")).toBe("linux");
   });
 });
 

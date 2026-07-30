@@ -2,7 +2,6 @@
 
 ## Purpose
 v1alpha1 workflow document shape, four actions, namespaced templates, natural results, placement, and invocation context.
-
 ## Requirements
 ### Requirement: Alpha-versioned workflow document
 A workflow MUST declare string `version: v1alpha1` and a non-empty `steps:` list. The document MUST accept only `version`, `title`, `description`, `hidden`, `inputs`, `returns`, `on_failure`, and `steps` at top level. The parser MUST support no other format version. A later incompatible alpha format MUST use a new `v1alphaN` value.
@@ -56,7 +55,7 @@ A blocking managed agent turn MUST produce `{response, agent, pane_id}`, where `
 - **THEN** the agent step fails
 
 ### Requirement: Portable and shell run forms
-`run:` MUST accept a non-empty string or non-empty string list. List form MUST execute directly as argv on every supported platform and MUST allow templates per element. String form MUST execute as shell source, MUST reject templates, and MUST accept `shell:` values `sh`, `bash`, `zsh`, `pwsh`, `powershell`, and `cmd`. The Windows shell values remain valid workflow syntax for format compatibility, but native Windows execution is unsupported. Omitted shell MUST mean `sh` on supported macOS and Linux hosts. Each input MUST be exported as `HWF_<name>`. Prior results MUST enter shell environments only through explicit `env:` mappings. Runner-generated values MUST replace inherited collisions. Explicit env keys MUST reject reserved `HWF_` prefixes case-insensitively. The generated HWF environment block MUST have a 24 KiB cap. Captured command stdout plus stderr, managed agent response, transcript text, and dynamic-choice stdout MUST each have an 8 MiB cap. Crossing a cap MUST fail the step, naming the source and byte limit, rather than truncating output. Streaming commands MUST be terminated when their capture crosses the limit, and termination MUST stop the process actually producing the output, not only the shell that launched it.
+`run:` MUST accept a non-empty string or non-empty string list. List form MUST execute directly as argv on every supported platform and MUST allow templates per element. String form MUST execute as shell source, MUST reject templates, and MUST accept `shell:` values `sh`, `bash`, `zsh`, `pwsh`, `powershell`, and `cmd`. The Windows shell values remain valid workflow syntax for format compatibility, but native Windows execution is unsupported. Omitted shell MUST mean `sh` on supported macOS and Linux hosts. Each input MUST be exported as `HWF_<name>`. Prior results MUST enter shell environments only through explicit `env:` mappings. Runner-generated values MUST replace inherited collisions. Explicit env keys MUST reject reserved `HWF_` prefixes case-insensitively. The generated HWF environment block MUST have a 24 KiB cap. Captured command stdout plus stderr, managed agent response, transcript text, and dynamic-choice stdout MUST each have an 8 MiB cap. Crossing a cap MUST fail the step, naming the source and byte limit, rather than truncating output. Streaming commands MUST be terminated when their capture crosses the limit, and termination MUST stop the process producing the output, not only the shell that launched it.
 
 `shell` MUST be invalid on argv. `cwd` MUST be template-capable text. `env` MUST be a string map with template-capable values merged over inherited environment after reserved-key checks. Timeout on a local blocking run MUST terminate the command and its descendants and fail the step, using the host platform's mechanism for terminating a process tree. Timeout MUST be invalid on background. Omitted local-run `cwd` MUST use workflow invocation cwd. Omitted local-run timeout MUST mean no workflow timeout, though process completion still blocks the step.
 
@@ -131,11 +130,19 @@ A placed run MUST require exactly one of background or `ready_when: /regex/`. Re
 - **THEN** the step fails and preserves its pane
 
 ### Requirement: Canonical invocation context
-Context MUST expose stable `workspace`, `tab`, `pane`, `worktree`, `agent`, `selection`, and `platform`, plus plugin-produced `transcript` and `transcript_file`. Platform MUST be `macos`, `linux`, or `windows`. Selection MUST be empty when absent. Referencing unavailable identity or transcript values MUST fail preflight. Transcript values MUST have a hard size cap. They MUST never enter automatic shell env or run logs, and import/editing surfaces MUST mark them visibly sensitive. Run cleanup MUST remove the transcript file. `context.error` MUST exist only during recovery.
+Context MUST expose stable `workspace`, `tab`, `pane`, `worktree`, `agent`, `selection`, and `platform`, plus plugin-produced `transcript` and `transcript_file`. Platform MUST be `macos`, `linux`, or `windows`. Selection MUST be empty when absent. Referencing unavailable identity or transcript values MUST fail preflight. Transcript values MUST have a hard size cap. They MUST never enter automatic shell env or run logs, and import/editing surfaces MUST mark them visibly sensitive. Run cleanup MUST remove the transcript file on every path, and MUST start only after recovery completes. Run cleanup MUST remove managed response files only when the run succeeds, so a failed run keeps the agent output a step already wrote. `context.error` MUST exist only during recovery.
 
 #### Scenario: Explicit transcript handoff
 - **WHEN** reviewed YAML embeds `{{context.transcript}}` in a managed agent prompt
 - **THEN** capped transcript text is sent to that profile without an additional runtime confirmation
+
+#### Scenario: Failed run keeps managed output
+- **WHEN** an agent step fails and the agent has written its managed response file
+- **THEN** run cleanup removes the transcript file and keeps the managed response file on disk
+
+#### Scenario: Recovery reads the transcript
+- **WHEN** an `on_failure` step reads `{{context.transcript_file}}`
+- **THEN** the transcript file still exists, because cleanup waits for recovery to finish
 
 ### Requirement: Workflow metadata and portable support claim
 `title` and `description` MUST be optional text. Title MUST default from the humanized filename. `hidden: true` MUST suppress picker display but permit direct invocation. Documentation MUST describe v1alpha1 syntax and argv as portable across supported Linux and macOS hosts, with Windows users running both Herdr and the plugin inside WSL2.
@@ -206,3 +213,4 @@ A blocking local `run` MAY declare `success_codes` as a non-empty list of unique
 #### Scenario: Unexpected probe failure
 - **WHEN** the same probe exits two
 - **THEN** the workflow stops normally with the command's failure reason
+

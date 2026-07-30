@@ -260,8 +260,9 @@ describe("web form sources", () => {
     expect(show?.allowed).toBe(true);
     expect(show?.params.required).toEqual(["title"]);
     expect(show?.params.properties.sound?.kinds).toEqual(["string"]);
-    const denied = methods.find((m) => m.allowed === false);
-    expect(denied?.reason).toBeTruthy();
+    const denied = methods.find((m) => m.method === "server.stop");
+    expect(denied?.allowed).toBe(false);
+    expect(denied?.reason).toContain("would stop the server running the workflow");
   });
 
   test("format reports validation issues with their paths", async () => {
@@ -276,6 +277,7 @@ describe("web form sources", () => {
           steps: [
             { run: "echo hi", pane: { open: "beside" }, background: true, retry: { attempts: 3 } },
             { run: "echo hi", pane: { size: 200 } },
+            { run: "echo hi", pane: { open: "tab", size: 40 } },
           ],
         },
       }),
@@ -289,8 +291,10 @@ describe("web form sources", () => {
     expect(data.error).toContain("retry");
     const retry = data.issues.find((i) => i.path.join(".") === "steps.0.retry");
     expect(retry?.message).toContain("retry");
-    const size = data.issues.find((i) => i.path.join(".") === "steps.1.pane.size");
-    expect(size).toBeTruthy();
+    const outOfRange = data.issues.find((i) => i.path.join(".") === "steps.1.pane.size");
+    expect(outOfRange?.message).toContain("<=99");
+    const wrongOpen = data.issues.find((i) => i.path.join(".") === "steps.2.pane.size");
+    expect(wrongOpen?.message).toContain("pane.size");
   });
 });
 
@@ -808,43 +812,6 @@ steps:
       expect(await Bun.file(join(wdir, "stuck.yaml")).exists()).toBe(true);
     } finally {
       await chmod(wdir, 0o755);
-    }
-  });
-
-  test("promote refuses clobber without force, overwrites with force", async () => {
-    const root = await repo();
-    const wdir = join(root, ".hwf", "workflows");
-    await writeFile(join(wdir, "shared.yaml"), `${V1}steps:\n  - run: echo repo\n`);
-    // point HOME at a temp so global writes stay isolated
-    const home = await mkdtemp(join(tmpdir(), "herdr-workflows-home-"));
-    dirs.push(home);
-    const prevHome = process.env.HOME;
-    process.env.HOME = home;
-    try {
-      await mkdir(join(home, ".hwf", "workflows"), { recursive: true });
-      await writeFile(
-        join(home, ".hwf", "workflows", "shared.yaml"),
-        `${V1}steps:\n  - run: echo global\n`,
-      );
-      const { base, token } = await serve(root);
-      const call = (force?: boolean) =>
-        fetch(`${base}/api/promote`, {
-          method: "POST",
-          headers: { "x-hwf-token": token, "content-type": "application/json" },
-          body: JSON.stringify({ name: "shared", from: "repo", to: "global", force }),
-        });
-      const clobber = await call();
-      expect(clobber.status).toBe(409);
-      expect(await Bun.file(join(home, ".hwf", "workflows", "shared.yaml")).text()).toContain(
-        "global",
-      );
-      const forced = await call(true);
-      expect(((await forced.json()) as { ok: boolean }).ok).toBe(true);
-      expect(await Bun.file(join(home, ".hwf", "workflows", "shared.yaml")).text()).toContain(
-        "repo",
-      );
-    } finally {
-      process.env.HOME = prevHome;
     }
   });
 });

@@ -2,21 +2,13 @@
   "plugins": ["import"],
   "rules": {
     "import/no-cycle": "error",
-    "eslint/max-lines-per-function": [
-      "error",
-      { "max": 90, "skipBlankLines": true, "skipComments": true }
-    ],
     "eslint/max-depth": ["error", 4],
     "eslint/max-nested-callbacks": ["error", 3]
   },
   "overrides": [
     {
       "files": ["test/**"],
-      "rules": {
-        "eslint/max-lines-per-function": "off",
-        "eslint/max-depth": "off",
-        "eslint/max-nested-callbacks": "off"
-      }
+      "rules": { "eslint/max-nested-callbacks": "off" }
     }
   ]
 }

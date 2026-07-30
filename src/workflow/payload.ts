@@ -1,10 +1,31 @@
 import { gunzipSync } from "node:zlib";
 import { z } from "zod";
 import { CAPTURE_BYTE_LIMIT, CaptureLimitError, assertUnderCaptureCap } from "../limits";
+import { workflowSchemaUrl } from "../setup/paths";
 import { WorkflowLoadError } from "./types";
 
 /** Same grammar as workbench deep-links / picker sources. */
 const WORKFLOW_NAME_RE = /^[a-z0-9][a-z0-9-_]*$/;
+
+const SCHEMA_POINTER_RE = /^#\s*yaml-language-server:\s*\$schema=\S+\s*$/;
+
+export function schemaPointer(): string {
+  return `# yaml-language-server: $schema=${workflowSchemaUrl()}`;
+}
+
+/**
+ * Give workflow text a schema pointer for the contract this build implements. Any pointer already
+ * present is replaced wherever it sits, so a file authored against another version cannot end up
+ * carrying two contradictory pointers. Text already pinned is returned byte-identical.
+ */
+export function withPinnedSchemaPointer(text: string): string {
+  const pointer = schemaPointer();
+  if (text.length === 0) return `${pointer}\n`;
+  const lines = text.split("\n");
+  const kept = lines.filter((line) => !SCHEMA_POINTER_RE.test(line));
+  if (kept.length === lines.length - 1 && lines[0] === pointer) return text;
+  return [pointer, ...kept].join("\n");
+}
 
 /** Heuristic: body looks like workflow YAML rather than a base64 bundle. */
 export function looksLikeWorkflowYaml(text: string): boolean {

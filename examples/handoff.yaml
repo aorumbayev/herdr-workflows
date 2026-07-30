@@ -1,3 +1,7 @@
+# Reads the transcript of the pane you launch this from, before step 1.
+# Works out of the box only when that pane runs claude with herdr's claude
+# integration installed. Any other agent kind needs a `transcripts:` extractor
+# in .hwf/config.yaml, or the run fails preflight. See /guide#hand-your-session-to-an-agent.
 version: v1alpha1
 title: Handoff
 description: Distil this session's transcript and hand it to a fresh agent
@@ -6,6 +10,11 @@ inputs:
   focus:
     type: text
     default: ""
+  placement:
+    type: choice
+    description: where the fresh agent opens — beside and below share this tab, so close_source would take them with it
+    options: [tab, beside, below]
+    default: tab
   close_source:
     type: choice
     options: [keep, close]
@@ -50,10 +59,18 @@ steps:
       Never invent decisions or context not present in the transcript; note
       unclear items as open questions.
 
-      Transcript file (read it; do not ask for its contents to be pasted):
+      Transcript file — read it before you write anything, because run cleanup
+      removes it when the run ends (do not ask for its contents to be pasted):
       {{context.transcript_file}}
+
+      Write the finished handoff to .hwf/tmp/handoff.md, relative to the repo
+      root, as well as to the file you are asked to write below. That copy
+      outlives the run.
+
+      Do not print the handoff in the chat. Printing it again costs a second
+      full render for no reader. Reply with one word: Done.
     using: "{{inputs.target}}"
-    timeout: 15m
+    timeout: 30m
     pane:
       open: beside
       focus: false
@@ -62,7 +79,7 @@ steps:
   - herdr: notification.show
     params:
       title: handoff ready
-      body: "opening {{inputs.target}}"
+      body: "opening {{inputs.target}} in {{inputs.placement}}"
       sound: done
 
   - agent: |
@@ -72,7 +89,7 @@ steps:
     using: "{{inputs.target}}"
     background: true
     pane:
-      open: tab
+      open: "{{inputs.placement}}"
 
   - herdr: tab.close
     params:

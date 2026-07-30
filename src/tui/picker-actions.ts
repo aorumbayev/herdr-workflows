@@ -74,14 +74,23 @@ async function copyTextToClipboard(text: string): Promise<void> {
   throw new Error("no clipboard command (pbcopy, wl-copy, or xclip)");
 }
 
-export async function openExamplesInBrowser(): Promise<void> {
-  const cmd = process.platform === "darwin" ? ["open", EXAMPLES_URL] : ["xdg-open", EXAMPLES_URL];
+export async function openInBrowser(url: string): Promise<void> {
+  const cmd = process.platform === "darwin" ? ["open", url] : ["xdg-open", url];
   try {
-    const proc = Bun.spawn(cmd, { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
-    await proc.exited;
+    const proc = Bun.spawn(cmd, {
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "ignore",
+      detached: true,
+    });
+    proc.unref();
   } catch {
     /* opener absence is nonfatal */
   }
+}
+
+export async function openExamplesInBrowser(): Promise<void> {
+  await openInBrowser(EXAMPLES_URL);
 }
 
 export async function shareWorkflowCopy(opts: {

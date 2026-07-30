@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { InputSpec, WorkflowListEntry } from "../src/workflow/types";
+import type { InputSpec, LoadedWorkflow, WorkflowListEntry } from "../src/workflow/types";
 import {
+  acceptWorkflow,
   beginConfirmedDelete,
   buildInvalidOptions,
   buildPickerOptions,
@@ -21,9 +22,16 @@ import {
   PICKER_CHROME_STRINGS,
   shouldDropStdinLeakSequence,
   shouldRestoreCustomChoiceText,
+  startRun,
   truncate,
+  type PickerState,
 } from "../src/tui/picker";
-import { EMPTY_CATALOG_MESSAGE, resolvePaletteLetter } from "../src/tui/picker-actions";
+import {
+  EMPTY_CATALOG_MESSAGE,
+  EMPTY_LIST_HINT,
+  resolvePaletteLetter,
+} from "../src/tui/picker-actions";
+import { themeFromPalette } from "../src/tui/theme";
 import { humanizeWorkflowName, workflowDisplayTitle } from "../src/workflow/trust";
 
 const entries: WorkflowListEntry[] = [
@@ -378,21 +386,25 @@ describe("truncate", () => {
 
 describe("formatListFooter", () => {
   test("hint fits usable width and counter reads index/total", () => {
-    const footer = formatListFooter(60, 0, 2);
+    const footer = formatListFooter(60, 0, 2, LIST_HINT);
     expect(footer).toContain(LIST_HINT);
     expect(footer.endsWith("1/2")).toBe(true);
     expect(footer.length).toBe(60);
   });
 
   test("position counter uses filtered match count", () => {
-    expect(formatListFooter(60, 0, 2).endsWith("1/2")).toBe(true);
-    expect(formatListFooter(60, 1, 2).endsWith("2/2")).toBe(true);
+    expect(formatListFooter(60, 0, 2, LIST_HINT).endsWith("1/2")).toBe(true);
+    expect(formatListFooter(60, 1, 2, LIST_HINT).endsWith("2/2")).toBe(true);
   });
 
   test("narrow width still does not exceed content width", () => {
-    const footer = formatListFooter(20, 0, 8);
+    const footer = formatListFooter(20, 0, 8, LIST_HINT);
     expect(Bun.stringWidth(footer)).toBeLessThanOrEqual(20);
     expect(footer.endsWith("1/8")).toBe(true);
+  });
+
+  test("empty catalog hint replaces the run hint", () => {
+    expect(formatListFooter(60, 0, 0, EMPTY_LIST_HINT)).toBe(EMPTY_LIST_HINT);
   });
 });
 
@@ -479,7 +491,7 @@ describe("picker column layout", () => {
     expect(cjk.slice(-10)).toBe(ascii.slice(-10));
     expect(emoji.slice(-10)).toBe(ascii.slice(-10));
     expect(Bun.stringWidth(cjk)).toBeLessThanOrEqual(width);
-    expect(Bun.stringWidth(formatListFooter(width, 0, 2))).toBeLessThanOrEqual(width);
+    expect(Bun.stringWidth(formatListFooter(width, 0, 2, LIST_HINT))).toBeLessThanOrEqual(width);
   });
 });
 
@@ -563,5 +575,84 @@ describe("adaptive picker helpers", () => {
     expect(state.inputDomains).toEqual({});
     expect(commitResolvedOptions(state, 1, "branch", ["fresh"])).toBe(true);
     expect(state.inputDomains).toEqual({ branch: ["fresh"] });
+  });
+});
+
+function pickerState(): PickerState {
+  return {
+    mode: "list",
+    entries: [],
+    inputQueue: [],
+    inputIndex: 0,
+    inputValues: {},
+    choiceOptions: [],
+    running: false,
+    progressLines: [],
+    repoRoot: "/repo",
+    config: { profiles: {}, transcripts: {} },
+    ctx: { selection: "", cwd: "/repo" },
+    loadWorkflow: async () => {
+      throw new Error("reload failed");
+    },
+    contentWidth: 80,
+    theme: themeFromPalette(null),
+    renderer: { destroy: () => undefined },
+    filterRow: { visible: true },
+    filter: { visible: true },
+    updateHint: { visible: false, content: "" },
+    listBlock: { visible: true },
+    list: {
+      visible: true,
+      flexGrow: 0,
+      height: 6,
+      options: [],
+      getSelectedIndex: () => 0,
+    },
+    status: { visible: false, flexGrow: 0, content: "" },
+    detail: { visible: false, content: "" },
+    rule: { visible: false, content: "" },
+    promptInput: { visible: false },
+    footer: { content: "" },
+  } as unknown as PickerState;
+}
+
+describe("picker run handoff", () => {
+  test("picker renders loader errors as terminal failures", async () => {
+    const state = pickerState();
+    await startRun(state, { name: "broken", source: "global", file: "/global/broken.yaml" });
+
+    expect(state.running).toBe(false);
+    expect(String(state.status.content)).toContain("Failed | reload failed");
+    expect(String(state.footer.content)).toBe("enter/esc close");
+  });
+
+  test("picker loads selected workflows without a second confirmation gate", async () => {
+    const state = pickerState();
+    let loads = 0;
+    state.loadWorkflow = async (entry) => {
+      loads += 1;
+      const workflow: LoadedWorkflow = {
+        name: entry.name,
+        file: entry.file,
+        version: "v1alpha1",
+        hidden: false,
+        steps: [{ action: { kind: "run", payload: { form: "argv", argv: ["true"] } } }],
+        inputs: [],
+        repoOwned: entry.source === "repo",
+        needsTranscript: false,
+      };
+      return workflow;
+    };
+
+    acceptWorkflow(state, {
+      name: "global-entry",
+      source: "global",
+      file: "/global/entry.yaml",
+      repoOwned: false,
+    });
+
+    await Bun.sleep(0);
+    expect(loads).toBe(1);
+    expect(state.mode).not.toBe("list");
   });
 });

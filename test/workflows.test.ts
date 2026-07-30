@@ -3,7 +3,12 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { WorkflowsConfig } from "../src/config";
-import { loadWorkflow, parseWorkflowText } from "../src/workflow/load";
+import {
+  listWorkflows,
+  loadWorkflow,
+  loadWorkflowEntry,
+  parseWorkflowText,
+} from "../src/workflow/load";
 import {
   isWholeValueTemplate,
   parseDurationMs,
@@ -281,7 +286,7 @@ steps:
   - run: "true"
     when: "{{inputs.x}}"
   - run: "true"
-    when: '{{context.platform}} == "windows"'
+    when: '{{context.platform}} == "macos"'
   - run: "true"
     when: '{{context.platform}} != "linux"'
 `);
@@ -290,7 +295,7 @@ steps:
       {
         kind: "eq",
         path: "context.platform",
-        value: "windows",
+        value: "macos",
         negate: false,
       },
     ]);
@@ -962,5 +967,40 @@ steps:
 `,
       ),
     ).resolves.toBeTruthy();
+  });
+});
+
+describe("listing and entry load", () => {
+  test("listing marks dynamic choice inputs without executing them", async () => {
+    const { root } = await repoWith({
+      dynamic: `version: v1alpha1
+inputs:
+  target:
+    type: choice
+    options:
+      run: [printf, main]
+steps:
+  - run: [echo, "{{inputs.target}}"]
+`,
+    });
+
+    const entries = await listWorkflows(root, { profiles: {}, transcripts: {} });
+    expect(entries.find((e) => e.name === "dynamic")?.dynamicOptions).toBe(true);
+  });
+
+  test("exact global entry file is preserved during load", async () => {
+    const { root } = await repoWith({
+      entry: `version: v1alpha1\nsteps:\n  - run: "true"\n`,
+    });
+    const globalFile = join(root, "global-entry.yaml");
+    await writeFile(globalFile, `version: v1alpha1\nsteps:\n  - run: "true"\n`);
+
+    const workflow = await loadWorkflowEntry(
+      { name: "entry", source: "global", file: globalFile },
+      root,
+      { profiles: {}, transcripts: {} },
+    );
+    expect(workflow.file).toBe(globalFile);
+    expect(workflow.repoOwned).toBe(false);
   });
 });

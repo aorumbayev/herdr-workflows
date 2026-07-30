@@ -346,6 +346,50 @@ steps:
     void runs;
   });
 
+  test("collectInputValues rejects unknown missing empty options and closed membership", async () => {
+    const root = await tempRepo();
+    const base = {
+      config: { profiles: {}, transcripts: {} },
+      repoRoot: root,
+      file: "x.yaml",
+    };
+    expect(
+      await collectInputValues({
+        ...base,
+        specs: [{ name: "mode", type: "choice", options: ["fast", "full"] }],
+        provided: { nope: "x" },
+      }),
+    ).toEqual({ ok: false, error: "unknown input 'nope'" });
+
+    const missing = await collectInputValues({
+      ...base,
+      specs: [{ name: "mode", type: "choice", options: ["fast", "full"] }],
+      provided: {},
+    });
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) expect(missing.error).toContain("missing input 'mode'");
+
+    expect(
+      await collectInputValues({
+        ...base,
+        specs: [{ name: "mode", type: "choice", options: ["fast", "full"] }],
+        provided: { mode: "turbo" },
+      }),
+    ).toEqual({ ok: false, error: "input 'mode' must be one of: fast, full" });
+
+    // empty profile options: already covered in config.test.ts against collectWorkflowInputs
+    expect(
+      await collectInputValues({
+        ...base,
+        specs: [{ name: "pick", type: "choice", options: [] }],
+        provided: { pick: "a" },
+      }),
+    ).toEqual({
+      ok: false,
+      error: "input 'pick': choice produced no options",
+    });
+  });
+
   test("launch payload domains reuse snapshot and reject mismatches", async () => {
     const payload = buildLaunchPayload("w", { branch: "one" }, { branch: ["one", "two"] });
     expect(JSON.stringify(payload)).not.toContain("argv");

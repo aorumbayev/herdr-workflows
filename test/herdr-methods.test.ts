@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import manifest from "../herdr-plugin.toml";
 import {
   checkHerdrStartup,
   HERDR_PROTOCOL,
@@ -101,7 +102,7 @@ describe("herdr method validators", () => {
 
   test("per-method result paths stay method-scoped", () => {
     expect(HERDR_PROTOCOL).toBe(17);
-    expect(MIN_HERDR_VERSION).toBe("0.7.5");
+    expect(MIN_HERDR_VERSION).toBe(manifest.min_herdr_version);
     const notify = METHOD_RESULT_VARIANTS.get("notification.show");
     expect(notify?.map((v) => v.type)).toEqual(["notification_show"]);
     expect(isMethodResultDotPath("notification.show", "shown")).toBe(true);

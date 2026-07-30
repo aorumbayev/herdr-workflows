@@ -110,13 +110,13 @@ function toggle(name) {
   background: var(--accent-soft, var(--vp-c-brand-soft));
 }
 .hwf-copy {
-  background: var(--ink, #fff);
-  color: var(--bg, #2e3440);
+  background: var(--ink);
+  color: var(--bg);
   border-color: transparent;
 }
 .hwf-copy:hover {
   background: var(--accent, var(--vp-c-brand-1));
-  color: #fff;
+  color: var(--on-accent);
   border-color: transparent;
 }
 .hwf-yaml {

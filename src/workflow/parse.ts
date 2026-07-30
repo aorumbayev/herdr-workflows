@@ -1,11 +1,13 @@
 import { z } from "zod";
-import { assertFocusPolicyAtLoad } from "../herdr-policy";
+import { assertFocusPolicy } from "../herdr-policy";
 import { validateMethodParams } from "../herdr-methods";
 import {
   bail,
   DURATION_RE,
   IDENT_RE,
   positioned,
+  TEMPLATE_INNER,
+  WHOLE_TEMPLATE_RE,
   WORKFLOW_FORMAT,
   WorkflowLoadError,
   type PaneSpec,
@@ -26,10 +28,8 @@ import {
 const SHELLS = ["sh", "bash", "zsh", "pwsh", "powershell", "cmd"] as const;
 const ACTION_KEYS = ["agent", "run", "herdr", "workflow"] as const;
 const PATH_SEGMENT_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
-const TEMPLATE_INNER = "(?:inputs|steps|context)(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)+";
 const TEMPLATE_PATH_RE = new RegExp(`^${TEMPLATE_INNER}$`);
 const TEMPLATE_FIND_RE = new RegExp(`\\{\\{\\s*(${TEMPLATE_INNER})\\s*\\}\\}`, "g");
-const WHOLE_TEMPLATE_RE = new RegExp(`^\\{\\{\\s*(${TEMPLATE_INNER})\\s*\\}\\}$`);
 const WHEN_EQ_RE = new RegExp(
   `^\\{\\{\\s*(${TEMPLATE_INNER})\\s*\\}\\}\\s*(==|!=)\\s*(?:"([^"]*)"|'([^']*)')$`,
 );
@@ -1161,7 +1161,8 @@ function toAction(
     const params = step.params;
     const err = validateMethodParams(step.herdr, params);
     if (err) bail(file, stepIndex, keyPrefix ? `${keyPrefix}.herdr` : "herdr", err);
-    const policy = assertFocusPolicyAtLoad(step.herdr, params);
+    // Selector presence is key-based; template values do not waive it.
+    const policy = assertFocusPolicy(step.herdr, params);
     if (policy) bail(file, stepIndex, keyPrefix ? `${keyPrefix}.herdr` : "herdr", policy);
     return {
       kind: "herdr",
@@ -1196,6 +1197,13 @@ function toRecovery(file: string, step: z.infer<typeof recoveryStepSchema>): Rec
 }
 
 export function parseRaw(file: string, text: string): RawWorkflow {
+  return parseRawWithDoc(file, text).workflow;
+}
+
+export function parseRawWithDoc(
+  file: string,
+  text: string,
+): { workflow: RawWorkflow; doc: RawWorkflowDoc } {
   let data: unknown;
   try {
     data = Bun.YAML.parse(text);
@@ -1223,14 +1231,17 @@ export function parseRaw(file: string, text: string): RawWorkflow {
   }
   const raw = result.data;
   return {
-    version: WORKFLOW_FORMAT,
-    ...(raw.title !== undefined ? { title: raw.title } : {}),
-    ...(raw.description !== undefined ? { description: raw.description } : {}),
-    ...(raw.hidden !== undefined ? { hidden: raw.hidden } : {}),
-    ...(raw.inputs !== undefined ? { inputs: raw.inputs as Record<string, RawInputValue> } : {}),
-    ...(raw.returns !== undefined ? { returns: parseReturns(file, raw.returns) } : {}),
-    ...(raw.on_failure !== undefined ? { onFailure: toRecovery(file, raw.on_failure) } : {}),
-    steps: raw.steps.map((step, i) => toStep(file, i + 1, step)),
+    doc: raw,
+    workflow: {
+      version: WORKFLOW_FORMAT,
+      ...(raw.title !== undefined ? { title: raw.title } : {}),
+      ...(raw.description !== undefined ? { description: raw.description } : {}),
+      ...(raw.hidden !== undefined ? { hidden: raw.hidden } : {}),
+      ...(raw.inputs !== undefined ? { inputs: raw.inputs as Record<string, RawInputValue> } : {}),
+      ...(raw.returns !== undefined ? { returns: parseReturns(file, raw.returns) } : {}),
+      ...(raw.on_failure !== undefined ? { onFailure: toRecovery(file, raw.on_failure) } : {}),
+      steps: raw.steps.map((step, i) => toStep(file, i + 1, step)),
+    },
   };
 }
 

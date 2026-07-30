@@ -24,6 +24,7 @@
   --line-strong: #c3cbd9;
   --accent: var(--nord10);
   --accent-soft: #dde4ed;
+  --on-accent: #fff;
   --green: #5d6c50;
   --yellow: #756545;
   --red: #94535d;
@@ -67,8 +68,8 @@
   --vp-button-brand-border: transparent;
   --vp-button-brand-hover-border: transparent;
   --vp-button-brand-text: var(--bg);
-  --vp-button-brand-hover-text: #fff;
-  --vp-button-brand-active-text: #fff;
+  --vp-button-brand-hover-text: var(--on-accent);
+  --vp-button-brand-active-text: var(--on-accent);
 
   --vp-button-alt-bg: transparent;
   --vp-button-alt-hover-bg: var(--accent-soft);

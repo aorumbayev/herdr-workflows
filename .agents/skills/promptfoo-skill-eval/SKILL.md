@@ -1,13 +1,13 @@
 ---
 name: promptfoo-skill-eval
-description: Measures whether a user-facing agent skill in this repository actually works, by running real agent sessions against two skill versions side by side and scoring the YAML they produce through the real hwf loader instead of an LLM judge. Use when asked to test, evaluate, benchmark, or improve a skill under skills/ — for example herdr-workflow-create — or to check whether a skill is still accurate after the loader, grammar, or herdr policy changed. For development of this herdr-workflows repository.
+description: Measures whether an agent skill in this repository works, by running real agent sessions against two skill versions side by side and scoring the result objectively instead of with an LLM judge. Workflow-authoring skills score through the real hwf loader. Skills that emit a review or prose score through seeded-defect recall, pre-registered decoys, and the contracts the skill states about itself. Use when asked to test, evaluate, benchmark, or improve a skill under skills/ or .agents/skills/ — for example herdr-workflow-create or codebase-sanity-check — or to check whether a skill is still accurate after the loader, grammar, or herdr policy changed. For development of this herdr-workflows repository.
 ---
 
 # Evaluate a user-facing skill with promptfoo
 
 `skills/herdr-workflow-create/` teaches an agent to write workflow YAML. Whether it _works_ is a
 measurable question: run the same tasks against two versions of the skill text, and check whether
-the YAML each produced actually loads.
+the YAML each produced loads.
 
 This skill belongs to the herdr-workflows repository. From any cwd inside it, derive the root with
 `git rev-parse --show-toplevel`. Do not assume a fixed absolute path.
@@ -20,7 +20,7 @@ resolve. A workflow either loads or it does not. Do not replace this with an LLM
 point is that this repository can answer the question objectively.
 
 **Establish the noise floor before believing any delta.** Run iteration 1 with the two fixtures
-holding _identical_ skill text. The spread you get is the noise floor; on this repo it measured
+holding _identical_ skill text. The spread you get is the noise floor. On this repo it measured
 ±0.02. A later improvement smaller than that is not an improvement. Skipping this step is how an
 eval starts producing confident nonsense.
 
@@ -31,6 +31,44 @@ hides that. Report cost and turns alongside it.
 **A win you tuned toward is not a measurement.** If you edit the skill _after_ seeing the final
 number, the number no longer describes that text. Either re-run, or state plainly that the edit is
 unmeasured.
+
+**A saturated score has no noise floor.** When both arms hit 1.000, the spread is 0.000 and it means
+nothing — it is a ceiling artifact, not a floor. Say so rather than reporting it as a clean floor, and
+move the reading to the metrics that still move. On `codebase-sanity-check` those were turns (4 vs 2),
+cost ($9.08 vs $3.85), and one contract the skill broke in only some runs.
+
+## Skills that do not emit YAML
+
+The loader oracle only works when the skill's output is a workflow. A skill that emits a review, a
+plan, or prose has no loader, and the eval skill's first rule still holds: no LLM judge. Build
+objective oracles instead. These worked on `codebase-sanity-check`:
+
+**Seeded-defect recall is the loader analog.** Clone the repository into a fixture, inject a defect
+set recorded in a manifest _before_ the run, and score which defects come back cited. Found or not
+found is as objective as loads or does not load. Split the set by tier — with a gate behind it, and
+without — and report recall per tier, because gate-backed defects flatter the score.
+
+**Score the contracts the skill states about itself.** Each of these is a scriptable pass or fail:
+every `path:line` in the output resolves to a real line, the sub-agent count matches the stated cap,
+`git status --porcelain` and the reflog are unchanged before and after, and a quoted gate result
+matches the gate you ran yourself. Parse the raw `stream-json`, not the prose: a report saying it did
+something is not evidence that it did.
+
+**Precision needs the correct silence pre-registered.** Seed decoys the criteria explicitly call "not
+a finding", record them before the run, and score how many were correctly ignored. Reporting a decoy
+is objectively wrong, no judge required.
+
+**Budget more for the decoys than for the defects.** Measured twice on this repo: 5 of 6 decoys were
+invalid because each landed inside some _other_ flagging clause the author had not read closely. A
+valid decoy is harder to build than a defect. Audit every candidate decoy against every criteria file
+before the run, not only the one it was drawn from — otherwise precision stays unmeasured while
+looking measured.
+
+**Grade your own oracle before you trust its number.** Both iterations produced false failures from
+the grader, never the skill: a citation regex that rejected `**path:line**` bold form, a table parser
+reading the whole row instead of the result cell, and a token list too narrow for a correct answer
+phrased differently. Re-score offline from saved streams when you fix one. Never re-run the agent to
+fix your own arithmetic.
 
 ## Layout
 

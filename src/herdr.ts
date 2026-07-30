@@ -103,6 +103,20 @@ async function herdrCli(
   return { stdout, stderr, exitCode };
 }
 
+/**
+ * Survive a reader that left. A detached `hwf run` outlives the picker holding the read end of its
+ * pipes; without a listener the EPIPE surfaces as an uncaught stream error and kills the run
+ * part-way through the workflow. The write is async, so a try/catch at the call site never sees it.
+ */
+export function tolerateClosedStdio(): void {
+  process.stdout.on("error", tolerateClosedPipe);
+  process.stderr.on("error", tolerateClosedPipe);
+}
+
+function tolerateClosedPipe(error: NodeJS.ErrnoException): void {
+  if (error.code !== "EPIPE") throw error;
+}
+
 export function die(message: string): never {
   process.stderr.write(`${message}\n`);
   process.exit(1);

@@ -12,9 +12,11 @@ import {
   pluginPaneOpen,
   readLine,
   releaseStdinReader,
+  tolerateClosedStdio,
 } from "./herdr";
 import { loadConfig, readInvocationContext, resolveRepoRoot } from "./config";
 import { EXAMPLES_URL, runInit } from "./init";
+import { openInBrowser } from "./tui/picker-actions";
 import { IMPORT_DISCLAIMER, parseImportScope, runImport } from "./workflow/import";
 import { listWorkflows, loadWorkflow, resolveDynamicChoices } from "./workflow/load";
 import { evaluateWhen } from "./workflow/conditions";
@@ -221,7 +223,7 @@ async function cmdWorkflowInspect(
 
 async function cmdLaunch(): Promise<void> {
   await ensureHerdrProtocol();
-  // Picker popup is rooted at the plugin dir; forward the invoking repo and context.
+  // Picker popup cwd is the plugin dir; forward invocation repo + context.
   const ctx = readInvocationContext();
   const repoRoot = await resolveRepoRoot(ctx.cwd);
   const env: Record<string, string> = { HERDR_WORKFLOWS_REPO_ROOT: repoRoot };
@@ -289,28 +291,6 @@ async function cmdRun(
   }
 }
 
-function openBrowser(url: string): void {
-  try {
-    const proc = Bun.spawn(process.platform === "darwin" ? ["open", url] : ["xdg-open", url], {
-      stdout: "ignore",
-      stderr: "ignore",
-      stdin: "ignore",
-      detached: true,
-    });
-    proc.unref();
-  } catch {
-    /* opener absence is nonfatal — the printed URL still reaches the caller */
-  }
-}
-
-function printWorkbenchUrl(url: string): void {
-  try {
-    process.stdout.write(`herdr-workflows web · ${url}\n`);
-  } catch {
-    /* EPIPE when a detached launcher's inherited PTY is already gone */
-  }
-}
-
 function registerOwnedWorkbenchShutdown(shutdown: () => void): void {
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
@@ -330,10 +310,9 @@ async function cmdWeb(
   const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot());
   const workbench = await ensureWorkbench({ repoRoot, port, build: buildIdentity() });
   const url = appendRouteHash(workbench.url, route);
-  // Open before printing: a detached picker handoff can already have a dead
-  // stdout, and SIGPIPE on write must not skip the browser.
-  if (opts.open !== false) openBrowser(url);
-  printWorkbenchUrl(url);
+  // Open before printing: a detached picker handoff can already have a dead stdout.
+  if (opts.open !== false) void openInBrowser(url);
+  process.stdout.write(`herdr-workflows web · ${url}\n`);
   if (!workbench.owned) return;
   const shutdown = () => {
     workbench.stop();
@@ -367,16 +346,25 @@ function preferOnDiskOpentuiLib(): void {
   }
 }
 
-async function runPickerPopup(picker: typeof import("./tui/picker")): Promise<void> {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) die("picker requires a tty");
-
+async function runPickerPopup(
+  pickerImport: Promise<typeof import("./tui/picker")>,
+  protocolReady: Promise<void>,
+): Promise<void> {
   const ctx = readInvocationContext();
-  const root = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot(ctx.cwd));
-  // Concurrent with config/workflow loading — never awaited before mount.
-  const { defaultPickerReleaseCheck } = await import("./tui/update-indicator");
-  const releaseCheck = defaultPickerReleaseCheck();
-  const config = await loadConfig(root);
-  const entries = await listWorkflows(root, config);
+  const loading = (async () => {
+    const root = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot(ctx.cwd));
+    const { defaultPickerReleaseCheck } = await import("./tui/update-indicator");
+    const releaseCheck = defaultPickerReleaseCheck();
+    const config = await loadConfig(root);
+    const entries = await listWorkflows(root, config);
+    return { releaseCheck, config, entries, root };
+  })();
+  void loading.catch(() => {});
+
+  await protocolReady;
+  if (!process.stdin.isTTY || !process.stdout.isTTY) die("picker requires a tty");
+  const picker = await pickerImport;
+  const { releaseCheck, config, entries, root } = await loading;
 
   ctx.cwd = root;
   const code = await picker.runPickerSession({
@@ -452,9 +440,12 @@ function buildProgram(): Command {
     .command("picker")
     .description("Run the picker TUI (plugin popup entrypoint)")
     .action(async () => {
-      await ensureHerdrProtocol();
       preferOnDiskOpentuiLib();
-      await runPickerPopup(await import("./tui/picker"));
+      const protocolReady = ensureHerdrProtocol();
+      const pickerImport = import("./tui/picker");
+      void protocolReady.catch(() => {});
+      void pickerImport.catch(() => {});
+      await runPickerPopup(pickerImport, protocolReady);
     });
 
   program
@@ -485,6 +476,7 @@ function buildProgram(): Command {
 }
 
 async function main(): Promise<void> {
+  tolerateClosedStdio();
   const program = buildProgram();
   // Bare TTY → web. A root `.action()` disables implicit `help` and turns unknown
   // tokens into excess-argument errors, so keep subcommand dispatch stock.

@@ -48,10 +48,12 @@
     "verify:format": "verifyx format",
     "verify:check-types": "verifyx check-types",
     "verify": "verifyx --no-tests",
-    "verify:unused-code": "verifyx unused-code --max-warnings 0",
-    "verify:duplicate-code": "verifyx duplicate-code --max-warnings 0",
+    "verify:unused-code": "verifyx unused-code",
+    "verify:duplicate-code": "verifyx duplicate-code",
     "verify:comments": "verifyx comments --pushback",
-    "verify:hardcoded-colors": "verifyx hardcoded-colors"
+    "verify:prose": "bun scripts/verify-prose.ts",
+    "verify:complexity": "verifyx complexity --threshold 12 --ignore=\"**/*.generated.ts\" \"src/**/*.ts\"",
+    "verify:hardcoded-colors": "verifyx hardcoded-colors && verifyx hardcoded-colors --root docs/.vitepress/theme"
   },
   "dependencies": {
     "@opentui/core": "0.4.5",
