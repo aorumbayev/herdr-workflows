@@ -1,33 +1,25 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { allocateRunId, RunHistorySession, getRunDetail } from "../src/history/store";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { formatRunRow, formatRunListEmpty } from "../src/history/format";
-import { allocateRunId, RunHistorySession } from "../src/history/store";
-import type { RunListItem } from "../src/history/types";
-import { runWorkbenchRoute } from "../src/web/route";
 import {
-  applyRunsListViewport,
+  formatRunRow,
+  formatRunListEmpty,
   detailLines,
-  loadRunDetailView,
   loadRunsBrowser,
+} from "../src/tui/run-history";
+import type { RunListItem } from "../src/history/types";
+import { runWorkbenchRoute } from "../src/web/endpoint";
+import {
+  createRunsBrowser,
+  RUNS_LIST_VIEWPORT,
   runsSelectedIndex,
   scrollDetailLines,
-} from "../src/tui/run-history-view";
-import {
-  beginDetailPollRequest,
-  detailPollResponseCurrent,
-  openRunDetail,
-  refreshRunsBrowser,
-  setRunsMode,
-  stopDetailPoll,
-  type RunsChrome,
-} from "../src/tui/picker-runs";
-import {
-  pickerEscapeExitCode,
-  shouldDropStdinLeakSequence,
-  type PickerState,
-} from "../src/tui/picker";
+  type RunsBrowser,
+  type RunsBrowserDeps,
+} from "../src/tui/runs-browser";
+import { pickerEscapeExitCode, shouldDropStdinLeakSequence } from "../src/tui/picker";
 
 const dirs: string[] = [];
 let prevState: string | undefined;
@@ -57,84 +49,96 @@ function item(partial: Partial<RunListItem> & Pick<RunListItem, "id" | "workflow
   };
 }
 
-function mockRunsState(repoRoot: string): PickerState {
+type FakeList = {
+  height: number;
+  options: { name: string; description: string; value: { run: RunListItem } }[];
+  getSelectedIndex: () => number;
+  setSelectedIndex: (i: number) => void;
+  focus: () => void;
+};
+
+function fakeList(): FakeList {
   let selected = 0;
-  let options: { name: string; description: string; value: { run: RunListItem } }[] = [];
+  let options: FakeList["options"] = [];
   return {
-    mode: "runs",
-    entries: [],
-    inputQueue: [],
-    inputIndex: 0,
-    inputValues: {},
-    inputDomains: {},
-    resolveGeneration: 0,
-    choiceOptions: [],
-    customChoice: false,
-    running: false,
-    progressLines: [],
-    repoRoot,
-    config: { profiles: {}, default_profile: "", transcripts: {} },
-    ctx: { selection: "", cwd: repoRoot },
-    loadWorkflow: async () => {
-      throw new Error("unused");
+    height: 99,
+    get options() {
+      return options;
     },
-    reloadEntries: async () => [],
-    contentWidth: 80,
-    theme: {} as PickerState["theme"],
-    renderer: {} as PickerState["renderer"],
-    filterRow: { visible: true } as PickerState["filterRow"],
-    filter: {
-      value: "",
-      placeholder: "",
-      visible: true,
-      focus: () => undefined,
-    } as PickerState["filter"],
-    updateHint: {} as PickerState["updateHint"],
-    listBlock: {} as PickerState["listBlock"],
-    list: {
-      // Deliberately wrong — production refresh must apply the viewport seam.
-      height: 99,
-      get options() {
-        return options;
-      },
-      set options(next) {
-        options = next as typeof options;
-      },
-      getSelectedIndex: () => selected,
-      setSelectedIndex: (i: number) => {
-        selected = i;
-      },
-      focus: () => undefined,
-    } as PickerState["list"],
-    status: { visible: false, content: "", flexGrow: 0 } as unknown as PickerState["status"],
-    detail: { content: "" } as unknown as PickerState["detail"],
-    rule: { content: "" } as unknown as PickerState["rule"],
-    promptInput: { value: "" } as unknown as PickerState["promptInput"],
-    footer: { content: "" } as unknown as PickerState["footer"],
-    runsScope: "current",
-    savedWorkflowFilter: "",
-    savedRunsFilter: "",
-    runDetailScroll: 0,
+    set options(next) {
+      options = next;
+    },
+    getSelectedIndex: () => selected,
+    setSelectedIndex: (i: number) => {
+      selected = i;
+    },
+    focus: () => undefined,
   };
 }
 
-function chromeStub(): RunsChrome {
+function fakeText(content = ""): { content: string; visible: boolean } {
+  return { content, visible: true };
+}
+
+function fakeFilter(): {
+  value: string;
+  placeholder: string;
+  visible: boolean;
+  focus: () => void;
+} {
   return {
-    truncate: (t) => t,
-    formatDetailLines: (t) => t,
-    setListOptions: (state, options) => {
-      state.list.options = options;
-    },
-    showBrowserChrome: (state) => {
-      applyRunsListViewport(state.list);
+    value: "",
+    placeholder: "",
+    visible: true,
+    focus: () => undefined,
+  };
+}
+
+function createTestRuns(repoRoot: string): {
+  runs: RunsBrowser;
+  list: FakeList;
+  mode: { current: string };
+  status: { content: string };
+  footer: { content: string };
+} {
+  const list = fakeList();
+  const detail = fakeText();
+  const footer = fakeText();
+  const filter = fakeFilter();
+  const filterRow = { visible: true };
+  const mode = { current: "runs" };
+  const status = { content: "" };
+  const deps: RunsBrowserDeps = {
+    repoRoot,
+    getContentWidth: () => 80,
+    list,
+    detail,
+    footer,
+    filter,
+    filterRow,
+    showBrowserChrome: () => {
+      list.height = RUNS_LIST_VIEWPORT;
     },
     showListChrome: () => undefined,
     hideBrowserChrome: () => undefined,
     hideListChrome: () => undefined,
     hideUpdateHint: () => undefined,
-    showStatus: () => undefined,
+    showStatus: (content) => {
+      status.content = content;
+    },
+    hideStatus: () => undefined,
+    setListOptions: (options) => {
+      list.options = options as FakeList["options"];
+    },
+    formatDetailLines: (t) => t,
+    truncate: (t) => t,
     launchWorkbenchRoute: () => undefined,
+    setMode: (next) => {
+      mode.current = next;
+    },
+    getMode: () => mode.current,
   };
+  return { runs: createRunsBrowser(deps), list, mode, status, footer };
 }
 
 describe("picker run history formatting", () => {
@@ -156,62 +160,48 @@ describe("picker run history formatting", () => {
       session.dispose();
     }
     const keep = ids[7]!;
-    const state = mockRunsState(root);
-    expect(state.list.height).toBe(99);
-    state.runsState = {
-      scope: "current",
-      filter: "",
-      items: [],
-      selectedId: keep,
-      hasMachineRuns: true,
-      unavailable: false,
-    };
-    await refreshRunsBrowser(state, chromeStub());
-    const applied = applyRunsListViewport({ height: 0 });
-    expect(state.list.height).toBe(applied);
-    expect(state.list.options.length).toBe(8);
-    const idx = runsSelectedIndex(
-      state.list.options.map((o) => o.value.run),
+    const { runs, list } = createTestRuns(root);
+    expect(list.height).toBe(99);
+    await runs.refresh();
+    expect(list.height).toBe(RUNS_LIST_VIEWPORT);
+    const keepIdx = runsSelectedIndex(
+      list.options.map((o) => o.value.run),
       keep,
     );
-    expect(state.list.getSelectedIndex()).toBe(idx);
-    expect(state.list.options[idx]!.value.run.id).toBe(keep);
-    expect(state.runsState?.selectedId).toBe(keep);
+    list.setSelectedIndex(keepIdx);
+    runs.onSelectionChanged();
+    await runs.refresh();
+    expect(list.options.length).toBe(8);
+    const idx = runsSelectedIndex(
+      list.options.map((o) => o.value.run),
+      keep,
+    );
+    expect(list.getSelectedIndex()).toBe(idx);
+    expect(list.options[idx]!.value.run.id).toBe(keep);
   });
 
-  test("overlapping detail poll generations reject older responses", async () => {
+  test("overlapping detail opens keep the latest status content", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-pick-gen-"));
     dirs.push(root);
-    const session = new RunHistorySession();
-    await session.claim({ workflow: "live", source: "repo", checkout_root: root });
-    const id = session.id!;
-    // Keep non-terminal so detail is pollable.
-    const state = mockRunsState(root);
-    state.mode = "run-detail";
-    state.activeRunId = id;
-    state.runDetailView = {
-      kind: "detail",
-      detail: {
-        kind: "snapshot",
-        id,
-        display_id: id.slice(0, 8),
-        workflow: "live",
-        source: "repo",
-        checkout_root: root,
-        status: "running",
-        started_at: new Date().toISOString(),
-        heartbeat_at: new Date().toISOString(),
-        elapsed_ms: 0,
-        steps: [],
-      },
-    };
-    const first = beginDetailPollRequest(state);
-    expect(first).toEqual({ id, gen: 1 });
-    const second = beginDetailPollRequest(state);
-    expect(second).toEqual({ id, gen: 2 });
-    expect(detailPollResponseCurrent(state, first!.id, first!.gen)).toBe(false);
-    expect(detailPollResponseCurrent(state, second!.id, second!.gen)).toBe(true);
-    session.dispose();
+    const first = new RunHistorySession();
+    await first.claim({ workflow: "one", source: "repo", checkout_root: root });
+    await first.finalize("succeeded");
+    const firstId = first.id!;
+    first.dispose();
+    await Bun.sleep(5);
+    const second = new RunHistorySession();
+    await second.claim({ workflow: "two", source: "repo", checkout_root: root });
+    await second.finalize("succeeded");
+    const secondId = second.id!;
+    second.dispose();
+    const { runs, mode, status } = createTestRuns(root);
+    mode.current = "run-detail";
+    const older = runs.openDetail(firstId);
+    await runs.openDetail(secondId);
+    await older;
+    expect(String(status.content)).toContain("two");
+    expect(String(status.content)).not.toContain("one");
+    runs.dispose();
   });
 
   test("empty states distinguish current, machine, and filter miss", () => {
@@ -296,13 +286,11 @@ describe("picker run history formatting", () => {
   });
 
   test("non-UUID detail ids are invalid not legacy summaries", async () => {
-    const view = await loadRunDetailView("not-a-uuid");
-    expect(view.kind).toBe("detail");
-    if (view.kind !== "detail") return;
-    expect(view.detail.kind).toBe("invalid");
+    const detail = await getRunDetail("not-a-uuid");
+    expect(detail.kind).toBe("invalid");
   });
 
-  test("return to runs clears activeRunId and preserves selectedId", async () => {
+  test("return to runs preserves list selection from the open detail", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-pick-active-"));
     dirs.push(root);
     const session = new RunHistorySession();
@@ -310,17 +298,17 @@ describe("picker run history formatting", () => {
     await session.finalize("succeeded");
     const keep = session.id!;
     session.dispose();
-    const state = mockRunsState(root);
-    await refreshRunsBrowser(state, chromeStub());
-    state.activeRunId = keep;
-    state.mode = "run-detail";
-    await setRunsMode(state, chromeStub());
-    expect(state.mode as string).toBe("runs");
-    expect(state.activeRunId).toBeUndefined();
-    expect(state.runsState?.selectedId).toBe(keep);
+    const { runs, mode, list } = createTestRuns(root);
+    await runs.refresh();
+    mode.current = "run-detail";
+    await runs.openDetail(keep);
+    await runs.enter();
+    expect(mode.current).toBe("runs");
+    const idx = list.getSelectedIndex();
+    expect(list.options[idx]!.value.run.id).toBe(keep);
   });
 
-  test("detail poll stops for terminal snapshots", async () => {
+  test("terminal detail shows succeeded without further poll updates", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-pick-poll-"));
     dirs.push(root);
     const session = new RunHistorySession();
@@ -328,11 +316,14 @@ describe("picker run history formatting", () => {
     await session.finalize("succeeded");
     const id = session.id!;
     session.dispose();
-    const state = mockRunsState(root);
-    await refreshRunsBrowser(state, chromeStub());
-    await openRunDetail(state, id, chromeStub());
-    expect(state.runDetailPoll).toBeUndefined();
-    stopDetailPoll(state);
+    const { runs, status } = createTestRuns(root);
+    await runs.refresh();
+    await runs.openDetail(id);
+    const first = String(status.content);
+    expect(first).toContain("SUCCEEDED");
+    await Bun.sleep(10);
+    expect(String(status.content)).toBe(first);
+    runs.dispose();
   });
 
   test("starting detail lines are distinct from failure", () => {

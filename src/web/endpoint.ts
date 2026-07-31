@@ -11,16 +11,14 @@ import {
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pluginStateDir } from "../config";
-import { canonicalRepoRoot } from "../repo-root";
+import { RUN_UUID_PATTERN } from "../history/types";
+import { canonicalRepoRoot } from "../history/store";
 import {
   assertCredentialStoreSafe,
   assertPrivateCredentialFile,
   assertPrivateCredentialFileSync,
-  tightenPrivateDir,
-} from "./credential-store";
+} from "../fs-private";
 import { startWebServer, type WebServer } from "./server";
-
-export { canonicalRepoRoot } from "../repo-root";
 
 export type EndpointRecord = {
   repoRoot: string;
@@ -87,7 +85,7 @@ function ownedLockPath(base: string, token: string): string {
 
 async function ensurePrivateDir(stateDir: string): Promise<void> {
   await assertCredentialStoreSafe(stateDir);
-  await tightenPrivateDir(endpointsDir(stateDir));
+  await assertCredentialStoreSafe(endpointsDir(stateDir));
 }
 
 async function writePrivateFile(path: string, body: string): Promise<void> {
@@ -458,4 +456,39 @@ export async function ensureWorkbench(
   }
 
   throw new Error("timed out waiting for repository workbench endpoint");
+}
+
+const SCOPED_ROUTE_RE = /^(w|share)=(repo|global):([a-z0-9][a-z0-9-_]*)$/;
+const RUN_ROUTE_RE = new RegExp(`^run=(${RUN_UUID_PATTERN})$`, "i");
+
+export type WebRoute =
+  | { kind: "w" | "share"; scope: "repo" | "global"; name: string; hash: string }
+  | { kind: "import"; hash: "import" }
+  | { kind: "new"; hash: "new" }
+  | { kind: "run"; id: string; hash: string };
+
+export function parseWebRoute(raw: string): WebRoute | undefined {
+  if (raw === "import") return { kind: "import", hash: "import" };
+  if (raw === "new") return { kind: "new", hash: "new" };
+  const run = RUN_ROUTE_RE.exec(raw);
+  if (run) {
+    const id = run[1]!.toLowerCase();
+    return { kind: "run", id, hash: `run=${id}` };
+  }
+  if (raw.startsWith("run=")) return undefined;
+  const m = SCOPED_ROUTE_RE.exec(raw);
+  if (!m) return undefined;
+  const kind = m[1] as "w" | "share";
+  const scope = m[2] as "repo" | "global";
+  const name = m[3]!;
+  return { kind, scope, name, hash: `${kind}=${scope}:${name}` };
+}
+
+export function appendRouteHash(url: string, route: WebRoute | undefined): string {
+  if (!route) return url;
+  return `${url}#${route.hash}`;
+}
+
+export function runWorkbenchRoute(id: string): string {
+  return `run=${id.toLowerCase()}`;
 }

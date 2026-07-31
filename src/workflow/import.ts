@@ -20,7 +20,7 @@ import {
   looksLikeWorkflowYaml,
   withPinnedSchemaPointer,
   type WorkflowBundle,
-} from "./payload";
+} from "./share";
 import { parseRaw } from "./parse";
 import {
   analyzeRawWorkflow,

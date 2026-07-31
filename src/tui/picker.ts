@@ -22,7 +22,7 @@ import { listWorkflows, loadWorkflowEntry, resolveDynamicChoices } from "../work
 import { nextActiveInput } from "../workflow/inputs";
 import { analyzeResolvedSensitivity, workflowDisplayTitle } from "../workflow/trust";
 import type { InputSpec, LoadedWorkflow, WorkflowListEntry } from "../workflow/types";
-import { parseWebRoute } from "../web/route";
+import { parseWebRoute } from "../web/endpoint";
 import {
   deleteWorkflowFile,
   EMPTY_CATALOG_MESSAGE,
@@ -35,17 +35,6 @@ import {
   shareWorkflowCopy,
   type ResolvedPaletteAction,
 } from "./picker-actions";
-import {
-  handleRunDetailKey,
-  openRunDetail,
-  refreshRunsBrowser,
-  renderRunDetail,
-  setRunsMode,
-  startRun as startRunImpl,
-  toggleRunsScope,
-  updateRunsSelectionChrome,
-  type RunsChrome,
-} from "./picker-runs";
 import {
   CHROME_SEP,
   buildInvalidOptions,
@@ -60,13 +49,7 @@ import {
   stripFilePrefix,
   truncate,
 } from "./picker-rows";
-import {
-  applyRunsListViewport,
-  RUNS_LIST_VIEWPORT,
-  type RunDetailView,
-  type RunsBrowserState,
-  type RunsScope,
-} from "./run-history-view";
+import { createRunsBrowser, RUNS_LIST_VIEWPORT, type RunsBrowser } from "./runs-browser";
 import {
   launchDetachedWeb,
   type DetachedRunHandle,
@@ -81,19 +64,7 @@ import {
   leaveManagedCheckout,
   startPickerUpdateCheck,
 } from "./update-indicator";
-
-export {
-  buildInvalidOptions,
-  buildPickerOptions,
-  entrySensitivity,
-  filterChoiceOptions,
-  formatDetailLines,
-  formatListFooter,
-  formatPickerRowName,
-  formatRule,
-  formatRunProgress,
-  truncate,
-} from "./picker-rows";
+import { latest } from "../latest";
 
 export type CustomChoiceValue = { kind: "custom" };
 
@@ -112,14 +83,14 @@ export function shouldRestoreCustomChoiceText(
   return hasAnswer && allowCustom && !options.includes(answer ?? "");
 }
 
-/** Apply async dynamic/profile options only when the resolve generation still matches. */
+/** Apply async dynamic/profile options only when the resolve token still matches. */
 export function commitResolvedOptions(
-  state: { resolveGeneration: number; inputDomains: Record<string, string[]> },
-  startedGeneration: number,
+  state: { resolveToken: ReturnType<typeof latest>; inputDomains: Record<string, string[]> },
+  startedToken: number,
   name: string,
   options: string[],
 ): boolean {
-  if (startedGeneration !== state.resolveGeneration) return false;
+  if (!state.resolveToken.current(startedToken)) return false;
   state.inputDomains[name] = options;
   return true;
 }
@@ -171,7 +142,7 @@ export type PickerState = {
   inputValues: Record<string, string>;
   inputDomains: Record<string, string[]>;
   /** Bumped on Escape/backtrack so late async option resolves are ignored. */
-  resolveGeneration: number;
+  resolveToken: ReturnType<typeof latest>;
   choiceOptions: string[];
   customChoice: boolean;
   exit?: { code: number };
@@ -188,7 +159,6 @@ export type PickerState = {
   launchRun?: (req: LaunchRunRequest) => DetachedRunHandle;
   launchWeb?: (req: LaunchWebRequest) => void;
   reloadEntries: () => Promise<WorkflowListEntry[]>;
-  runHandle?: DetachedRunHandle;
   workflow?: LoadedWorkflow;
   contentWidth: number;
   theme: HostTheme;
@@ -205,16 +175,8 @@ export type PickerState = {
   footer: TextRenderable;
   /** Set when a newer published release is known; drives list-mode filter-row hint. */
   newerReleaseVersion?: string;
-  runsScope: RunsScope;
-  runsState?: RunsBrowserState;
-  runsRefreshGeneration?: number;
   savedWorkflowFilter: string;
-  savedRunsFilter: string;
-  runDetailView?: RunDetailView;
-  runDetailScroll: number;
-  runDetailPoll?: ReturnType<typeof setInterval>;
-  runDetailGeneration?: number;
-  activeRunId?: string;
+  runs: RunsBrowser;
 };
 
 export const LIST_HINT = `tab runs${CHROME_SEP}enter run${CHROME_SEP}ctrl+k${CHROME_SEP}esc`;
@@ -356,7 +318,7 @@ function showBrowserChrome(state: PickerState): void {
   state.listBlock.visible = true;
   state.list.visible = true;
   state.list.flexGrow = 0;
-  applyRunsListViewport(state.list);
+  state.list.height = RUNS_LIST_VIEWPORT;
   refreshUpdateHint(state);
 }
 
@@ -412,18 +374,17 @@ function focusTextField(state: PickerState, placeholder: string, value: string):
 }
 
 function setListMode(state: PickerState): void {
+  state.runs.leave();
   state.mode = "list";
   state.pending = undefined;
   state.deleteTarget = undefined;
   state.deleteInFlight = false;
   state.workflow = undefined;
-  state.runDetailView = undefined;
-  state.activeRunId = undefined;
   state.inputQueue = [];
   state.inputIndex = 0;
   state.inputValues = {};
   state.inputDomains = {};
-  state.resolveGeneration += 1;
+  state.resolveToken.bump();
   state.choiceOptions = [];
   state.customChoice = false;
   state.progressLines = [];
@@ -439,19 +400,51 @@ function setListMode(state: PickerState): void {
   else state.list.focus();
 }
 
-function runsChrome(): RunsChrome {
-  return {
-    truncate,
+function hideStatus(state: PickerState): void {
+  state.status.visible = false;
+  state.status.content = "";
+  state.status.flexGrow = 0;
+}
+
+/** Attach a runs browser bound to this picker's chrome. Call after UI fields exist. */
+export function attachRunsBrowser(state: PickerState): void {
+  state.runs = createRunsBrowser({
+    repoRoot: state.repoRoot,
+    getContentWidth: () => state.contentWidth,
+    list: state.list,
+    detail: state.detail,
+    footer: state.footer,
+    filter: state.filter,
+    filterRow: state.filterRow,
+    showBrowserChrome: () => showBrowserChrome(state),
+    showListChrome: () => showListChrome(state),
+    hideBrowserChrome: () => hideBrowserChrome(state),
+    hideListChrome: () => hideListChrome(state),
+    hideUpdateHint: () => hideUpdateHint(state),
+    showStatus: (content, options) => showStatus(state, content, options),
+    hideStatus: () => hideStatus(state),
+    setListOptions: (options) => setListOptions(state, options),
     formatDetailLines,
-    setListOptions,
-    showBrowserChrome,
-    showListChrome,
-    hideBrowserChrome,
-    hideListChrome,
-    hideUpdateHint,
-    showStatus,
-    launchWorkbenchRoute,
-  };
+    truncate,
+    launchWorkbenchRoute: (route) => launchWorkbenchRoute(state, route),
+    setMode: (mode) => {
+      state.mode = mode;
+    },
+    getMode: () => state.mode,
+  });
+}
+
+function launchFromPicker(state: PickerState, entry: WorkflowListEntry): Promise<void> {
+  return state.runs.startRun(entry, {
+    ctx: state.ctx,
+    config: state.config,
+    inputValues: state.inputValues,
+    inputDomains: state.inputDomains,
+    workflow: state.workflow,
+    loadWorkflow: state.loadWorkflow,
+    launchRun: state.launchRun,
+    getExit: () => state.exit,
+  });
 }
 
 /**
@@ -577,9 +570,8 @@ function setRunMode(state: PickerState, entry: WorkflowListEntry): void {
 }
 
 function finish(state: PickerState, code: number): void {
-  state.resolveGeneration += 1;
-  state.runHandle?.detach();
-  state.runHandle = undefined;
+  state.resolveToken.bump();
+  state.runs.dispose();
   state.exit = { code };
   state.renderer.destroy();
 }
@@ -798,7 +790,7 @@ function backtrackInput(state: PickerState): void {
     setListMode(state);
     return;
   }
-  state.resolveGeneration += 1;
+  state.resolveToken.bump();
   for (const spec of state.inputQueue.slice(prev + 1)) {
     delete state.inputValues[spec.name];
     delete state.inputDomains[spec.name];
@@ -809,7 +801,10 @@ function backtrackInput(state: PickerState): void {
 
 function handlePickerKey(state: PickerState, key: KeyEvent): void {
   if (state.mode === "run") return handleRunKey(state, key);
-  if (state.mode === "run-detail") return handleRunDetailKey(state, key, runsChrome());
+  if (state.mode === "run-detail") {
+    state.runs.handleKey(key);
+    return;
+  }
   if (state.mode === "palette") return handlePaletteKey(state, key);
   if (state.mode === "delete-confirm") return handleDeleteConfirmKey(state, key);
   if (key.name === "escape") {
@@ -828,28 +823,18 @@ function handlePickerKey(state: PickerState, key: KeyEvent): void {
     key.preventDefault();
     if (state.mode === "list") {
       state.savedWorkflowFilter = state.filter.value;
-      void setRunsMode(state, runsChrome());
+      state.pending = undefined;
+      state.workflow = undefined;
+      void state.runs.enter();
     } else {
-      state.savedRunsFilter = state.filter.value;
       setListMode(state);
     }
     return;
   }
-  if (state.mode === "runs" && key.ctrl && (key.name === "g" || key.sequence === "\x07")) {
-    key.preventDefault();
-    toggleRunsScope(state, runsChrome());
-    return;
-  }
+  if (state.mode === "runs" && state.runs.handleKey(key)) return;
   if (state.mode === "input") return handleInputKey(state, key);
   if (tryOpenActionsPalette(state, key)) return;
   if (state.mode === "runs") {
-    if (key.name === "return" || key.name === "linefeed") {
-      key.preventDefault();
-      const option = state.list.options[state.list.getSelectedIndex()];
-      const run = (option?.value as { run?: { id: string } } | undefined)?.run;
-      if (run) void openRunDetail(state, run.id, runsChrome());
-      return;
-    }
     navigateSelectList(state, key);
     return;
   }
@@ -899,12 +884,12 @@ function showFailure(state: PickerState, entry: WorkflowListEntry, error: unknow
 async function advanceInput(state: PickerState, entry: WorkflowListEntry): Promise<void> {
   const next = nextActiveInput(state.inputQueue, state.inputValues, state.inputIndex);
   if (!next) {
-    void startRun(state, entry);
+    void launchFromPicker(state, entry);
     return;
   }
   state.inputIndex = next.index;
   const spec = next.spec;
-  const startedGeneration = state.resolveGeneration;
+  const startedToken = state.resolveToken.begin();
   if (spec.type === "choice" && spec.dynamicOptions && !spec.options) {
     state.mode = "input";
     try {
@@ -912,18 +897,18 @@ async function advanceInput(state: PickerState, entry: WorkflowListEntry): Promi
       const options =
         cached ??
         (await resolveDynamicChoices(entry.file, spec.name, spec.dynamicOptions, state.repoRoot));
-      if (!commitResolvedOptions(state, startedGeneration, spec.name, options)) return;
+      if (!commitResolvedOptions(state, startedToken, spec.name, options)) return;
       setInputMode(state, entry, { ...spec, options });
       return;
     } catch (error) {
-      if (startedGeneration !== state.resolveGeneration) return;
+      if (!state.resolveToken.current(startedToken)) return;
       showFailure(state, entry, error);
       return;
     }
   }
   if (spec.type === "profile" && !spec.options) {
     const options = profileNames(state.config);
-    if (startedGeneration !== state.resolveGeneration) return;
+    if (!state.resolveToken.current(startedToken)) return;
     setInputMode(state, entry, { ...spec, options });
     return;
   }
@@ -1006,7 +991,7 @@ async function prepareWorkflow(state: PickerState, entry: WorkflowListEntry): Pr
     state.inputIndex = 0;
     state.inputValues = {};
     state.inputDomains = {};
-    state.resolveGeneration += 1;
+    state.resolveToken.bump();
     state.running = false;
     if (flags.length > 0) {
       showStatus(
@@ -1019,10 +1004,6 @@ async function prepareWorkflow(state: PickerState, entry: WorkflowListEntry): Pr
   } catch (error) {
     showFailure(state, entry, error);
   }
-}
-
-export async function startRun(state: PickerState, entry: WorkflowListEntry): Promise<void> {
-  return startRunImpl(state, entry, runsChrome());
 }
 
 function buildPickerBrowserChrome(theme: HostTheme) {
@@ -1125,8 +1106,7 @@ function bindPickerEvents(state: PickerState): void {
       return;
     }
     if (state.mode === "runs") {
-      const run = (option.value as { run?: { id: string } } | undefined)?.run;
-      if (run) void openRunDetail(state, run.id, runsChrome());
+      state.runs.openSelected();
       return;
     }
     if (state.mode !== "list") return;
@@ -1136,14 +1116,12 @@ function bindPickerEvents(state: PickerState): void {
   });
   state.list.on(SelectRenderableEvents.SELECTION_CHANGED, () => {
     if (state.mode === "list") refreshListChrome(state);
-    else if (state.mode === "runs") updateRunsSelectionChrome(state, runsChrome());
+    else if (state.mode === "runs") state.runs.onSelectionChanged();
   });
   state.filter.on(InputRenderableEvents.INPUT, () => {
     if (state.mode === "list") applyFilter(state);
-    else if (state.mode === "runs") {
-      state.savedRunsFilter = state.filter.value;
-      void refreshRunsBrowser(state, runsChrome());
-    } else if (state.mode === "input" && state.choiceOptions.length > 0) applyChoiceFilter(state);
+    else if (state.mode === "runs") state.runs.onFilterInput();
+    else if (state.mode === "input" && state.choiceOptions.length > 0) applyChoiceFilter(state);
   });
   state.promptInput.on(InputRenderableEvents.ENTER, (value) => submitInputText(state, value));
   state.renderer.keyInput.on("keypress", (key) => handlePickerKey(state, key));
@@ -1153,8 +1131,9 @@ function bindPickerEvents(state: PickerState): void {
     if (state.mode === "list") {
       applyFilter(state);
       refreshUpdateHint(state);
-    } else if (state.mode === "runs") void refreshRunsBrowser(state, runsChrome());
-    else if (state.mode === "run-detail") renderRunDetail(state, runsChrome());
+    } else {
+      state.runs.onResize();
+    }
   });
 }
 
@@ -1194,6 +1173,31 @@ export async function runPickerSession(opts: PickerSessionOpts): Promise<number>
   const theme = await resolveHostTheme(renderer);
   const ui = mountPickerUi(renderer, theme);
 
+  const holder: { state?: PickerState } = {};
+  const runs = createRunsBrowser({
+    repoRoot: opts.repoRoot,
+    getContentWidth: () => holder.state!.contentWidth,
+    list: ui.list,
+    detail: ui.detail,
+    footer: ui.footer,
+    filter: ui.filter,
+    filterRow: ui.filterRow,
+    showBrowserChrome: () => showBrowserChrome(holder.state!),
+    showListChrome: () => showListChrome(holder.state!),
+    hideBrowserChrome: () => hideBrowserChrome(holder.state!),
+    hideListChrome: () => hideListChrome(holder.state!),
+    hideUpdateHint: () => hideUpdateHint(holder.state!),
+    showStatus: (content, options) => showStatus(holder.state!, content, options),
+    hideStatus: () => hideStatus(holder.state!),
+    setListOptions: (options) => setListOptions(holder.state!, options),
+    formatDetailLines,
+    truncate,
+    launchWorkbenchRoute: (route) => launchWorkbenchRoute(holder.state!, route),
+    setMode: (mode) => {
+      holder.state!.mode = mode;
+    },
+    getMode: () => holder.state!.mode,
+  });
   const state: PickerState = {
     mode: "list",
     entries: opts.entries,
@@ -1201,7 +1205,7 @@ export async function runPickerSession(opts: PickerSessionOpts): Promise<number>
     inputIndex: 0,
     inputValues: {},
     inputDomains: {},
-    resolveGeneration: 0,
+    resolveToken: latest(),
     choiceOptions: [],
     customChoice: false,
     running: false,
@@ -1217,12 +1221,11 @@ export async function runPickerSession(opts: PickerSessionOpts): Promise<number>
     },
     contentWidth: pickerContentWidth(renderer.width),
     theme,
-    runsScope: "current",
     savedWorkflowFilter: "",
-    savedRunsFilter: "",
-    runDetailScroll: 0,
+    runs,
     ...ui,
   };
+  holder.state = state;
 
   applyNewer = (version) => {
     state.newerReleaseVersion = version;

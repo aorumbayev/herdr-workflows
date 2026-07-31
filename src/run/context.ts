@@ -1,8 +1,10 @@
 import { join } from "node:path";
 import type { InvocationContext, TranscriptExtractor, WorkflowsConfig } from "../config";
+import { validateHerdrInvocation } from "../herdr-methods";
 import type { RunHistorySession } from "../history/store";
 import { HerdrError } from "../herdr";
 import { assertUnderCaptureCap, CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../limits";
+import { substituteParams } from "../workflow/parse";
 import type { TemplateNamespace, WorkflowStep } from "../workflow/types";
 
 export type StepFailure = {
@@ -188,4 +190,19 @@ export async function readManagedResponse(path: string): Promise<string> {
     throw new HerdrError("managed_response_empty", `managed response file is empty: ${path}`);
   }
   return text;
+}
+
+export async function herdrStep(c: StepCtx): Promise<StepOutcome> {
+  const action = c.step.action;
+  if (action.kind !== "herdr") return { ok: false, error: "internal: not a herdr step" };
+  const params = substituteParams(action.params, c.values) ?? {};
+  const invalid = validateHerdrInvocation(action.method, params);
+  if (invalid) return { ok: false, error: invalid, details: { method: action.method } };
+  try {
+    const result = await c.opts.deps.herdrCall(action.method, params);
+    return { ok: true, result };
+  } catch (error) {
+    const failure = dispatchFailure(`herdr ${action.method}`, error);
+    return failure.ok ? failure : { ...failure, details: { method: action.method } };
+  }
 }

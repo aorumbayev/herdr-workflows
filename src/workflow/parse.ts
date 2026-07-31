@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { assertFocusPolicy } from "../herdr-policy";
-import { validateMethodParams } from "../herdr-methods";
+import { validateHerdrInvocation } from "../herdr-methods";
 import {
   bail,
   DURATION_RE,
@@ -814,6 +813,8 @@ export const rawWorkflowSchema = z
 
 export type RawStep = z.infer<typeof rawStepSchema>;
 export type RawWorkflowDoc = z.infer<typeof rawWorkflowSchema>;
+/** Schema field order for dump — derived from `rawStepSchema.shape`. */
+export const rawStepKeyOrder = Object.keys(rawStepSchema.shape);
 
 export type RawWorkflow = {
   version: typeof WORKFLOW_FORMAT;
@@ -914,25 +915,34 @@ function assertValidTemplates(
   bail(file, step, key, `invalid template '${bad}' — expected {{inputs|steps|context.<path>}}`);
 }
 
+/** Recurse string/array/object leaves; visit may map or assert. */
+export function walkValueStrings(
+  value: unknown,
+  key: string,
+  visit: (text: string, key: string) => unknown,
+): unknown {
+  if (typeof value === "string") return visit(value, key);
+  if (Array.isArray(value)) {
+    return value.map((item, i) => walkValueStrings(item, `${key}[${i}]`, visit));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([k, item]) => [k, walkValueStrings(item, `${key}.${k}`, visit)]),
+    );
+  }
+  return value;
+}
+
 function assertTemplatesInValue(
   file: string,
   step: number | undefined,
   key: string,
   value: unknown,
 ): void {
-  if (typeof value === "string") {
-    assertValidTemplates(file, step, key, value);
-    return;
-  }
-  if (Array.isArray(value)) {
-    value.forEach((item, i) => assertTemplatesInValue(file, step, `${key}[${i}]`, item));
-    return;
-  }
-  if (value && typeof value === "object") {
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      assertTemplatesInValue(file, step, `${key}.${k}`, v);
-    }
-  }
+  walkValueStrings(value, key, (text, path) => {
+    assertValidTemplates(file, step, path, text);
+    return text;
+  });
 }
 
 function resolvePath(ns: TemplateNamespace, path: TemplatePath): unknown {
@@ -973,23 +983,15 @@ export function substituteValue(template: string, ns: TemplateNamespace): unknow
   return substituteText(template, ns);
 }
 
-function walkParams(value: unknown, mapText: (text: string) => unknown): unknown {
-  if (typeof value === "string") return mapText(value);
-  if (Array.isArray(value)) return value.map((item) => walkParams(item, mapText));
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, walkParams(item, mapText)]),
-    );
-  }
-  return value;
-}
-
 export function substituteParams(
   params: Record<string, unknown> | undefined,
   ns: TemplateNamespace,
 ): Record<string, unknown> | undefined {
   if (!params) return undefined;
-  return walkParams(params, (text) => substituteValue(text, ns)) as Record<string, unknown>;
+  return walkValueStrings(params, "", (text) => substituteValue(text, ns)) as Record<
+    string,
+    unknown
+  >;
 }
 
 export function parseWhenClause(
@@ -1159,11 +1161,9 @@ function toAction(
   }
   if (step.herdr !== undefined) {
     const params = step.params;
-    const err = validateMethodParams(step.herdr, params);
-    if (err) bail(file, stepIndex, keyPrefix ? `${keyPrefix}.herdr` : "herdr", err);
     // Selector presence is key-based; template values do not waive it.
-    const policy = assertFocusPolicy(step.herdr, params);
-    if (policy) bail(file, stepIndex, keyPrefix ? `${keyPrefix}.herdr` : "herdr", policy);
+    const err = validateHerdrInvocation(step.herdr, params);
+    if (err) bail(file, stepIndex, keyPrefix ? `${keyPrefix}.herdr` : "herdr", err);
     return {
       kind: "herdr",
       method: step.herdr,

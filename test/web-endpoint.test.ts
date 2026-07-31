@@ -3,9 +3,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { canonicalRepoRoot } from "../src/history/store";
 import {
   acquireEndpointLockSync,
-  canonicalRepoRoot,
   ensureWorkbench,
   endpointLockPath,
   endpointRecordPath,
@@ -14,7 +14,7 @@ import {
   releaseEndpointLockSync,
   writeEndpointRecord,
 } from "../src/web/endpoint";
-import { appendRouteHash, parseWebRoute } from "../src/web/route";
+import { appendRouteHash, parseWebRoute } from "../src/web/endpoint";
 import { startWebServer, type WebServer } from "../src/web/server";
 
 const dirs: string[] = [];

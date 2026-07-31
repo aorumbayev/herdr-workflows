@@ -14,7 +14,6 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../src/limits";
-import { exportWorkflowBundle } from "../src/workflow/export";
 import {
   checkPayload,
   importJournalPath,
@@ -27,14 +26,15 @@ import {
 import {
   decodePayload,
   encodePayload,
+  exportWorkflowBundle,
   extractPayload,
   formatImportCommand,
   looksLikeWorkflowYaml,
   schemaPointer,
   withPinnedSchemaPointer,
-} from "../src/workflow/payload";
+} from "../src/workflow/share";
 import { WorkflowLoadError } from "../src/workflow/types";
-import { PRODUCT_VERSION } from "../src/setup/paths";
+import { PRODUCT_VERSION } from "../src/setup";
 
 const dirs: string[] = [];
 const prevHome = process.env.HOME;
@@ -443,7 +443,7 @@ steps:
         "-e",
         `
         import { runImport } from ${JSON.stringify(join(import.meta.dir, "../src/workflow/import.ts"))};
-        import { encodePayload } from ${JSON.stringify(join(import.meta.dir, "../src/workflow/payload.ts"))};
+        import { encodePayload } from ${JSON.stringify(join(import.meta.dir, "../src/workflow/share.ts"))};
         import { writeFile } from "node:fs/promises";
         const exactBody = ${JSON.stringify(exactBody)};
         await runImport(encodePayload([

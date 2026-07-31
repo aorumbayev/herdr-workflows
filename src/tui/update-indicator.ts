@@ -1,5 +1,5 @@
-import { compareSemver, fetchLatestPublishedRelease } from "../release-check";
-import { PRODUCT_VERSION } from "../setup/paths";
+import { compareSemver, fetchLatestPublishedRelease } from "../update";
+import { PRODUCT_VERSION } from "../setup";
 
 /** Width-bounded list-mode filter-row hint (printable ASCII only). */
 export const UPDATE_INDICATOR = "[run hwf update]";

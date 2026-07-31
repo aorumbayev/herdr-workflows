@@ -1,18 +1,18 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { chmod, mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pluginStateDir } from "../config";
-import { canonicalRepoRoot, requireCanonicalRepoRoot } from "../repo-root";
 import {
   assertCredentialStoreSafe,
   assertPrivateCredentialFile,
   CredentialStoreError,
-} from "../web/credential-store";
+} from "../fs-private";
 import { filterSortLimit, normalizeRunUuid, toDetail, toListItem } from "./project";
 import {
   RUN_HISTORY_HEARTBEAT_MS,
   RUN_HISTORY_RETENTION_BYTES,
   RUN_HISTORY_VERSION,
+  isSnapshot,
   type HistoryClaimResult,
   type RunCurrentStep,
   type RunDetail,
@@ -23,7 +23,56 @@ import {
   type RunTerminalStatus,
   type RunWorkflowSource,
 } from "./types";
-import { isSnapshot } from "./validate";
+
+/** Machine-readable launch acknowledgements on the observed stdout channel. */
+
+export type HistoryAck =
+  | { state: "claimed"; id: string }
+  | { state: "unavailable"; id?: string }
+  | { state: "rejected"; error: string; id?: string };
+
+const ACK_RE = /^@hwf-history:(claimed|unavailable|rejected)(?:\s+(\S+))?(?:\s+(.*))?$/;
+
+export function formatHistoryAck(ack: HistoryAck): string {
+  if (ack.state === "claimed") return `@hwf-history:claimed ${ack.id}`;
+  if (ack.state === "unavailable") {
+    return ack.id ? `@hwf-history:unavailable ${ack.id}` : "@hwf-history:unavailable";
+  }
+  return ack.id
+    ? `@hwf-history:rejected ${ack.id} ${ack.error}`
+    : `@hwf-history:rejected ${ack.error}`;
+}
+
+export function parseHistoryAck(line: string): HistoryAck | undefined {
+  const m = ACK_RE.exec(line.trim());
+  if (!m) return undefined;
+  const state = m[1] as HistoryAck["state"];
+  const second = m[2];
+  const rest = m[3];
+  if (state === "claimed") {
+    if (!second) return undefined;
+    return { state, id: second.toLowerCase() };
+  }
+  if (state === "unavailable") {
+    return { state, ...(second ? { id: second.toLowerCase() } : {}) };
+  }
+  if (second && rest) {
+    return { state: "rejected", id: second.toLowerCase(), error: rest };
+  }
+  return { state: "rejected", error: second ?? rest ?? "launch rejected" };
+}
+
+/**
+ * Soft canonicalization for display and Current-scope lookups when a checkout may
+ * already be deleted. Falls back to the input path when realpath fails.
+ */
+export async function canonicalRepoRoot(repoRoot: string): Promise<string> {
+  try {
+    return await realpath(repoRoot);
+  } catch {
+    return repoRoot;
+  }
+}
 
 class HistoryUnavailableError extends Error {
   constructor(message = "run history storage is unavailable") {
@@ -228,7 +277,7 @@ export class RunHistorySession {
     const started = meta.started_at ?? new Date().toISOString();
     let checkout_root: string;
     try {
-      checkout_root = await requireCanonicalRepoRoot(meta.checkout_root);
+      checkout_root = await realpath(meta.checkout_root);
     } catch {
       return { ok: true, state: "unavailable", id: runId };
     }
@@ -374,29 +423,29 @@ export class RunHistorySession {
 export async function listRunHistory(
   filter: RunListFilter = {},
   env: NodeJS.ProcessEnv = process.env,
-): Promise<{ ok: true; runs: RunListItem[] } | { ok: false; unavailable: true }> {
+): Promise<
+  { ok: true; runs: RunListItem[]; checkout_roots: string[] } | { ok: false; unavailable: true }
+> {
   try {
     await ensureRunsDir(env);
     const now = filter.now ?? Date.now();
-    const items: RunListItem[] = (await loadAllSnapshots(env)).map((s) => toListItem(s, now));
+    const snapshots = await loadAllSnapshots(env);
+    const items: RunListItem[] = snapshots.map((s) => toListItem(s, now));
     const checkout_root =
       typeof filter.checkout_root === "string"
         ? await canonicalRepoRoot(filter.checkout_root)
         : filter.checkout_root;
-    return { ok: true, runs: filterSortLimit(items, { ...filter, checkout_root, now }) };
-  } catch (error) {
-    if (historyUnavailable(error)) return { ok: false, unavailable: true };
+    const runs = filterSortLimit(items, { ...filter, checkout_root, now });
+    const checkout_roots = [...new Set(snapshots.map((s) => s.checkout_root))].sort();
+    return { ok: true, runs, checkout_roots };
+  } catch {
     return { ok: false, unavailable: true };
   }
 }
 
 export async function getRunDetail(
   id: string,
-  opts: {
-    now?: number;
-    openWorkflow?: { name: string; source: RunWorkflowSource };
-    env?: NodeJS.ProcessEnv;
-  } = {},
+  opts: { now?: number; env?: NodeJS.ProcessEnv } = {},
 ): Promise<RunDetail> {
   const env = opts.env ?? process.env;
   const normalized = normalizeRunUuid(id);
@@ -413,14 +462,8 @@ export async function getRunDetail(
       }
       return { kind: "missing", id: normalized, message: "run record not found" };
     }
-    return toDetail(snapshot, {
-      now: opts.now,
-      ...(opts.openWorkflow !== undefined ? { openWorkflow: opts.openWorkflow } : {}),
-    });
-  } catch (error) {
-    if (historyUnavailable(error)) {
-      return { kind: "unavailable", id: normalized, message: "run history storage is unavailable" };
-    }
+    return toDetail(snapshot, { now: opts.now });
+  } catch {
     return { kind: "unavailable", id: normalized, message: "run history storage is unavailable" };
   }
 }

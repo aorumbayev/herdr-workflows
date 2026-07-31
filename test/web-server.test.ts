@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { workflowSchemaUrl } from "../src/setup/paths";
+import { workflowSchemaUrl } from "../src/setup";
 import { dropSource, startWebServer, type WebServer } from "../src/web/server";
 
 const dirs: string[] = [];
@@ -844,7 +844,7 @@ describe("web share and import APIs", () => {
   test("import preview accepts command text and rejects old payloads", async () => {
     const root = await repo();
     const { base, token } = await serve(root);
-    const { encodePayload, formatImportCommand } = await import("../src/workflow/payload");
+    const { encodePayload, formatImportCommand } = await import("../src/workflow/share");
     const payload = encodePayload([{ name: "demo", yaml: `${V1}steps:\n  - run: x\n` }]);
     const ok = await fetch(`${base}/api/import/preview`, {
       method: "POST",
@@ -880,7 +880,7 @@ describe("web share and import APIs", () => {
     const root = await repo();
     await writeFile(join(root, ".hwf", "workflows", "demo.yaml"), `${V1}steps:\n  - run: mine\n`);
     const { base, token } = await serve(root);
-    const { encodePayload } = await import("../src/workflow/payload");
+    const { encodePayload } = await import("../src/workflow/share");
     const text = encodePayload([{ name: "demo", yaml: `${V1}steps:\n  - run: new\n` }]);
     const conflict = await fetch(`${base}/api/import`, {
       method: "POST",

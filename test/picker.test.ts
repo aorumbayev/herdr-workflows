@@ -2,28 +2,18 @@ import { describe, expect, test } from "bun:test";
 import type { InputSpec, LoadedWorkflow, WorkflowListEntry } from "../src/workflow/types";
 import {
   acceptWorkflow,
+  attachRunsBrowser,
   beginConfirmedDelete,
-  buildInvalidOptions,
-  buildPickerOptions,
   commitResolvedOptions,
-  entrySensitivity,
-  filterChoiceOptions,
   filterWorkflowEntries,
-  formatDetailLines,
   formatInputAnswers,
   formatInputPrompt,
-  formatListFooter,
-  formatPickerRowName,
-  formatRule,
-  formatRunProgress,
   hasVisibleEntries,
   isCustomChoiceValue,
   LIST_HINT,
   PICKER_CHROME_STRINGS,
   shouldDropStdinLeakSequence,
   shouldRestoreCustomChoiceText,
-  startRun,
-  truncate,
   type PickerState,
 } from "../src/tui/picker";
 import {
@@ -31,8 +21,21 @@ import {
   EMPTY_LIST_HINT,
   resolvePaletteLetter,
 } from "../src/tui/picker-actions";
+import {
+  buildInvalidOptions,
+  buildPickerOptions,
+  entrySensitivity,
+  filterChoiceOptions,
+  formatDetailLines,
+  formatListFooter,
+  formatPickerRowName,
+  formatRule,
+  formatRunProgress,
+  truncate,
+} from "../src/tui/picker-rows";
 import { themeFromPalette } from "../src/tui/theme";
 import { humanizeWorkflowName, workflowDisplayTitle } from "../src/workflow/trust";
+import { latest } from "../src/latest";
 
 const entries: WorkflowListEntry[] = [
   {
@@ -572,22 +575,29 @@ describe("adaptive picker helpers", () => {
   });
 
   test("stale async option completion is ignored after generation bump", () => {
-    const state = { resolveGeneration: 1, inputDomains: {} as Record<string, string[]> };
-    expect(commitResolvedOptions(state, 0, "branch", ["stale"])).toBe(false);
+    const resolveToken = latest();
+    const stale = resolveToken.begin();
+    resolveToken.bump();
+    const state = { resolveToken, inputDomains: {} as Record<string, string[]> };
+    expect(commitResolvedOptions(state, stale, "branch", ["stale"])).toBe(false);
     expect(state.inputDomains).toEqual({});
-    expect(commitResolvedOptions(state, 1, "branch", ["fresh"])).toBe(true);
+    const fresh = resolveToken.begin();
+    expect(commitResolvedOptions(state, fresh, "branch", ["fresh"])).toBe(true);
     expect(state.inputDomains).toEqual({ branch: ["fresh"] });
   });
 });
 
 function pickerState(): PickerState {
-  return {
+  const state = {
     mode: "list",
     entries: [],
     inputQueue: [],
     inputIndex: 0,
     inputValues: {},
+    inputDomains: {},
+    resolveToken: latest(),
     choiceOptions: [],
+    customChoice: false,
     running: false,
     progressLines: [],
     repoRoot: "/repo",
@@ -596,11 +606,12 @@ function pickerState(): PickerState {
     loadWorkflow: async () => {
       throw new Error("reload failed");
     },
+    reloadEntries: async () => [],
     contentWidth: 80,
     theme: themeFromPalette(null),
     renderer: { destroy: () => undefined },
     filterRow: { visible: true },
-    filter: { visible: true },
+    filter: { visible: true, value: "", placeholder: "", focus: () => undefined },
     updateHint: { visible: false, content: "" },
     listBlock: { visible: true },
     list: {
@@ -609,25 +620,36 @@ function pickerState(): PickerState {
       height: 6,
       options: [],
       getSelectedIndex: () => 0,
+      setSelectedIndex: () => undefined,
+      focus: () => undefined,
     },
     status: { visible: false, flexGrow: 0, content: "" },
     detail: { visible: false, content: "" },
     rule: { visible: false, content: "" },
     promptInput: { visible: false },
     footer: { content: "" },
-    runsScope: "current",
     savedWorkflowFilter: "",
-    savedRunsFilter: "",
-    runDetailScroll: 0,
   } as unknown as PickerState;
+  attachRunsBrowser(state);
+  return state;
 }
 
 describe("picker run handoff", () => {
   test("picker renders loader errors as terminal failures", async () => {
     const state = pickerState();
-    await startRun(state, { name: "broken", source: "global", file: "/global/broken.yaml" });
+    await state.runs.startRun(
+      { name: "broken", source: "global", file: "/global/broken.yaml" },
+      {
+        ctx: state.ctx,
+        config: state.config,
+        inputValues: state.inputValues,
+        inputDomains: state.inputDomains,
+        loadWorkflow: state.loadWorkflow,
+        getExit: () => state.exit,
+      },
+    );
 
-    expect(state.running).toBe(false);
+    expect(state.runs.running).toBe(false);
     expect(state.mode).toBe("run-detail");
     expect(String(state.status.content)).toContain("LAUNCH FAILED");
     expect(String(state.status.content)).toContain("reload failed");

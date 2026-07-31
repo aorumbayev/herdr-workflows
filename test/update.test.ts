@@ -5,7 +5,7 @@ import {
   fetchLatestPublishedRelease,
   parseReleaseTag,
   ReleaseCheckError,
-} from "../src/release-check";
+} from "../src/update";
 import { leavePluginRoot, parsePluginListSource, runUpdate } from "../src/update";
 
 function fail(message: string): never {

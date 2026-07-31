@@ -83,7 +83,7 @@ is a data-integrity defect, not a graceful degradation.
 - For any credential file, require restrictive creation mode and a refusal to follow symlinks:
   `rg -n "0o600|O_NOFOLLOW|chmod|mode:" src`. A credential file created with default mode is a
   finding
-- Read `src/workflow/export.ts`, `src/workflow/import.ts`, and `src/workflow/payload.ts` and name
+- Read `src/workflow/share.ts` and `src/workflow/import.ts` and name
   exactly what a shared, exported, or `--launch-payload` workflow carries. Do not grep for `import`
   here — it matches every ES import in the tree
 

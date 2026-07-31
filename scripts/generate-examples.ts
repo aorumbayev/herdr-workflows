@@ -1,6 +1,6 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { encodePayload } from "../src/workflow/payload";
+import { encodePayload } from "../src/workflow/share";
 import { parseRaw } from "../src/workflow/parse";
 
 const EXAMPLES_DIR = join(import.meta.dir, "..", "examples");

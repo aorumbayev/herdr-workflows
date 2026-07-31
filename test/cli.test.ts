@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import manifest from "../herdr-plugin.toml";
 import { HERDR_PROTOCOL, MIN_HERDR_VERSION } from "../src/herdr-methods";
-import { encodePayload } from "../src/workflow/payload";
+import { encodePayload } from "../src/workflow/share";
 
 const dirs: string[] = [];
 afterEach(async () => {

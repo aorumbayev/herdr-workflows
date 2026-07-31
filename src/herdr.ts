@@ -331,3 +331,18 @@ export async function ensureHerdrProtocol(): Promise<void> {
   if (!check.ok) throw new HerdrError("protocol_mismatch", check.error);
   checked = true;
 }
+
+export async function openInBrowser(url: string): Promise<void> {
+  const cmd = process.platform === "darwin" ? ["open", url] : ["xdg-open", url];
+  try {
+    const proc = Bun.spawn(cmd, {
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "ignore",
+      detached: true,
+    });
+    proc.unref();
+  } catch {
+    /* opener absence is nonfatal */
+  }
+}

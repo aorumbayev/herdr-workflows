@@ -10,6 +10,7 @@ import {
   type RunProjectedStatus,
   type RunSnapshot,
   type RunStepRecord,
+  type RunWorkflowSource,
 } from "./types";
 
 export function normalizeRunUuid(raw: string): string | undefined {
@@ -115,22 +116,11 @@ function remainingCount(snapshot: RunSnapshot): number | undefined {
 }
 
 function detailStepFromRecord(step: RunStepRecord): RunDetailStep {
-  return {
-    phase: step.phase,
-    workflow: step.workflow,
-    workflow_path: step.workflow_path,
-    ordinal: step.ordinal,
-    total: step.total,
-    ...(step.parent_ordinal !== undefined ? { parent_ordinal: step.parent_ordinal } : {}),
-    ...(step.step_id !== undefined ? { step_id: step.step_id } : {}),
-    action: step.action,
-    label: step.label,
-    ...(step.started_at !== undefined ? { started_at: step.started_at } : {}),
-    finished_at: step.finished_at,
-    outcome: step.outcome,
-    ...(step.failure !== undefined ? { failure: step.failure } : {}),
-    ...(step.explanation !== undefined ? { explanation: step.explanation } : {}),
-  };
+  return { ...step };
+}
+
+function detailStepFromCurrent(step: NonNullable<RunSnapshot["current_step"]>): RunDetailStep {
+  return { ...step, active: true };
 }
 
 function isNestedUnder(parentPath: string[], childPath: string[]): boolean {
@@ -186,36 +176,12 @@ function orderDetailSteps(steps: RunDetailStep[]): RunDetailStep[] {
   return out;
 }
 
-export function toDetail(
-  snapshot: RunSnapshot,
-  opts: {
-    now?: number;
-    openWorkflow?: { name: string; source: "repo" | "global" };
-  } = {},
-): RunDetail {
+export function toDetail(snapshot: RunSnapshot, opts: { now?: number } = {}): RunDetail {
   const now = opts.now ?? Date.now();
   const status = projectStatus(snapshot, now);
   const steps = orderDetailSteps(snapshot.steps.map(detailStepFromRecord));
   const current =
-    snapshot.current_step !== undefined
-      ? ({
-          phase: snapshot.current_step.phase,
-          workflow: snapshot.current_step.workflow,
-          workflow_path: snapshot.current_step.workflow_path,
-          ordinal: snapshot.current_step.ordinal,
-          total: snapshot.current_step.total,
-          ...(snapshot.current_step.parent_ordinal !== undefined
-            ? { parent_ordinal: snapshot.current_step.parent_ordinal }
-            : {}),
-          ...(snapshot.current_step.step_id !== undefined
-            ? { step_id: snapshot.current_step.step_id }
-            : {}),
-          action: snapshot.current_step.action,
-          label: snapshot.current_step.label,
-          started_at: snapshot.current_step.started_at,
-          active: true,
-        } satisfies RunDetailStep)
-      : undefined;
+    snapshot.current_step !== undefined ? detailStepFromCurrent(snapshot.current_step) : undefined;
   let failure_explanation: string | undefined;
   for (let i = snapshot.steps.length - 1; i >= 0; i--) {
     const step = snapshot.steps[i]!;
@@ -233,7 +199,6 @@ export function toDetail(
     steps,
     ...(remaining !== undefined ? { remaining } : {}),
     ...(failure_explanation !== undefined ? { failure_explanation } : {}),
-    ...(opts.openWorkflow !== undefined ? { open_workflow: opts.openWorkflow } : {}),
   };
 }
 
@@ -295,4 +260,119 @@ export function statusLabel(status: RunProjectedStatus): string {
   if (status === "failed") return "FAILED";
   if (status === "interrupted") return "INTERRUPTED";
   return "STARTING";
+}
+
+export type RunDetailBlock =
+  | { kind: "head"; status: string; title: string; display_id: string; elapsed: string }
+  | { kind: "note"; text: string }
+  | {
+      kind: "step";
+      depth: number;
+      ordinal: number;
+      total: number;
+      label: string;
+      outcome: string;
+      explanation?: string;
+    }
+  | { kind: "error"; text: string };
+
+export function formatElapsed(ms: number): string {
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m${sec % 60 ? `${sec % 60}s` : ""}`;
+  const hr = Math.floor(min / 60);
+  return `${hr}h${min % 60 ? `${min % 60}m` : ""}`;
+}
+
+/** Synthetic snapshot for the picker between history claim and the first poll. */
+export function optimisticRunningDetail(opts: {
+  id: string;
+  workflow: string;
+  source: RunWorkflowSource;
+  checkout_root: string;
+}): Extract<RunDetail, { kind: "snapshot" }> {
+  const now = new Date().toISOString();
+  return {
+    kind: "snapshot",
+    id: opts.id,
+    display_id: opts.id.slice(0, 8),
+    workflow: opts.workflow,
+    source: opts.source,
+    checkout_root: opts.checkout_root,
+    status: "running",
+    started_at: now,
+    heartbeat_at: now,
+    elapsed_ms: 0,
+    steps: [],
+  };
+}
+
+export function presentRunDetail(detail: RunDetail): RunDetailBlock[] {
+  if (detail.kind === "invalid") {
+    return [{ kind: "error", text: detail.message ?? "invalid run" }];
+  }
+  if (detail.kind === "missing") {
+    return [{ kind: "error", text: detail.message ?? "run not found" }];
+  }
+  if (detail.kind === "expired") {
+    return [{ kind: "error", text: detail.message ?? "run expired" }];
+  }
+  if (detail.kind === "unavailable") {
+    return [{ kind: "error", text: detail.message ?? "history unavailable" }];
+  }
+
+  const blocks: RunDetailBlock[] = [];
+  blocks.push({
+    kind: "head",
+    status: statusLabel(detail.status),
+    title: detail.title || detail.workflow,
+    display_id: detail.display_id,
+    elapsed: formatElapsed(detail.elapsed_ms),
+  });
+  blocks.push({ kind: "note", text: detail.checkout_root });
+  if (detail.status === "stale") {
+    blocks.push({ kind: "note", text: "writer heartbeat stale — not a failure" });
+  }
+  const hasSteps = detail.steps.length > 0 || Boolean(detail.current_step?.active);
+  const hasRemaining = detail.remaining !== undefined && detail.remaining > 0;
+  const hasFailure =
+    Boolean(detail.failure_explanation) && !detail.steps.some((s) => s.explanation);
+  for (const step of detail.steps) {
+    const depth = Math.max(0, step.workflow_path.length - 1);
+    const outcome = step.outcome ?? (step.active ? "running" : "");
+    blocks.push({
+      kind: "step",
+      depth,
+      ordinal: step.ordinal,
+      total: step.total,
+      label: step.label,
+      outcome,
+      ...(step.explanation !== undefined ? { explanation: step.explanation } : {}),
+    });
+  }
+  if (detail.current_step?.active) {
+    const step = detail.current_step;
+    blocks.push({
+      kind: "step",
+      depth: Math.max(0, step.workflow_path.length - 1),
+      ordinal: step.ordinal,
+      total: step.total,
+      label: step.label,
+      outcome: "running",
+    });
+  }
+  if (hasRemaining) {
+    blocks.push({
+      kind: "note",
+      text: `${detail.remaining} step${detail.remaining === 1 ? "" : "s"} not run`,
+    });
+  }
+  if (hasFailure && detail.failure_explanation) {
+    blocks.push({ kind: "error", text: detail.failure_explanation });
+  }
+  if (!hasSteps && !hasRemaining && !hasFailure) {
+    blocks.push({ kind: "note", text: "no step outcomes yet" });
+  }
+  return blocks;
 }

@@ -9,6 +9,7 @@ import {
   ensureHerdrProtocol,
   HerdrError,
   notificationShow,
+  openInBrowser,
   pluginPaneOpen,
   readLine,
   releaseStdinReader,
@@ -16,7 +17,6 @@ import {
 } from "./herdr";
 import { loadConfig, readInvocationContext, resolveRepoRoot } from "./config";
 import { EXAMPLES_URL, runInit } from "./init";
-import { openInBrowser } from "./tui/picker-actions";
 import { IMPORT_DISCLAIMER, parseImportScope, runImport } from "./workflow/import";
 import { listWorkflows, loadWorkflow, resolveDynamicChoices } from "./workflow/load";
 import { evaluateWhen } from "./workflow/conditions";
@@ -30,8 +30,8 @@ import { CaptureLimitError } from "./limits";
 import { runWorkflow } from "./run/runner";
 import { buildIdentity, parseLaunchPayload, retireOnCodeChange } from "./tui/run-launch";
 import { ensureWorkbench } from "./web/endpoint";
-import { appendRouteHash, parseWebRoute } from "./web/route";
-import { runSetup } from "./setup/run";
+import { appendRouteHash, parseWebRoute } from "./web/endpoint";
+import { runSetup } from "./setup";
 import { runUpdate } from "./update";
 
 function collectInput(value: string, previous: Record<string, string>): Record<string, string> {

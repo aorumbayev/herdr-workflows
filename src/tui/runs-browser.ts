@@ -1,0 +1,598 @@
+import type { KeyEvent, SelectOption } from "@opentui/core";
+import type { InvocationContext, WorkflowsConfig } from "../config";
+import { optimisticRunningDetail, normalizeRunUuid } from "../history/project";
+import { allocateRunId, canonicalRepoRoot, getRunDetail, parseHistoryAck } from "../history/store";
+import { sanitizeDisplay } from "../herdr";
+import { latest } from "../latest";
+import type { LoadedWorkflow, WorkflowListEntry } from "../workflow/types";
+import { runWorkbenchRoute } from "../web/endpoint";
+import {
+  detailLines,
+  formatRunListEmpty,
+  formatRunSummary,
+  formatRunsOptions,
+  loadRunsBrowser,
+  runDetailFooter,
+  runsFooter,
+  viewAllowsWorkbench,
+  type RunDetailView,
+  type RunsBrowserState,
+  type RunsScope,
+} from "./run-history";
+import { launchDetachedRun, type DetachedRunHandle, type LaunchRunRequest } from "./run-launch";
+
+/** Shared with picker Select height — six visible rows, scroll for the rest. */
+export const RUNS_LIST_VIEWPORT = 6;
+
+export function runsSelectedIndex(
+  items: readonly { id: string }[],
+  selectedId: string | undefined,
+): number {
+  const idx = items.findIndex((item) => item.id === selectedId);
+  return Math.max(0, idx);
+}
+
+export function scrollDetailLines(
+  lines: string[],
+  scroll: number,
+  viewport: number,
+): { visible: string[]; scroll: number } {
+  const maxScroll = Math.max(0, lines.length - viewport);
+  const next = Math.min(Math.max(0, scroll), maxScroll);
+  return { visible: lines.slice(next, next + viewport), scroll: next };
+}
+
+type ListLike = {
+  height: number;
+  options: SelectOption[];
+  getSelectedIndex: () => number;
+  setSelectedIndex: (i: number) => void;
+  focus: () => void;
+};
+
+type TextLike = { content: unknown; visible?: boolean };
+
+type FilterLike = {
+  value: string;
+  placeholder: string;
+  visible: boolean;
+  focus: () => void;
+};
+
+type StartRunLaunch = {
+  ctx: InvocationContext;
+  config: WorkflowsConfig;
+  inputValues: Record<string, string>;
+  inputDomains: Record<string, string[]>;
+  workflow?: LoadedWorkflow;
+  loadWorkflow: (
+    entry: WorkflowListEntry,
+    repoRoot: string,
+    config: WorkflowsConfig,
+  ) => Promise<LoadedWorkflow>;
+  launchRun?: (req: LaunchRunRequest) => DetachedRunHandle;
+  getExit: () => { code: number } | undefined;
+};
+
+export type RunsBrowserDeps = {
+  repoRoot: string;
+  getContentWidth: () => number;
+  list: ListLike;
+  detail: TextLike;
+  footer: TextLike;
+  filter: FilterLike;
+  filterRow: { visible: boolean };
+  showBrowserChrome: () => void;
+  showListChrome: () => void;
+  hideBrowserChrome: () => void;
+  hideListChrome: () => void;
+  hideUpdateHint: () => void;
+  showStatus: (content: string, options?: { flexGrow?: number; warn?: boolean }) => void;
+  hideStatus: () => void;
+  setListOptions: (options: SelectOption[]) => void;
+  formatDetailLines: (description: string, contentWidth: number) => string;
+  truncate: (text: string, max: number) => string;
+  launchWorkbenchRoute: (route: string) => void;
+  setMode: (mode: "runs" | "run-detail") => void;
+  getMode: () => string;
+};
+
+type RunsBrowserSession = {
+  deps: RunsBrowserDeps;
+  scope: RunsScope;
+  browserState?: RunsBrowserState;
+  refreshToken: ReturnType<typeof latest>;
+  detailView?: RunDetailView;
+  detailScroll: number;
+  detailPoll?: ReturnType<typeof setInterval>;
+  detailToken: ReturnType<typeof latest>;
+  activeRunId?: string;
+  savedFilter: string;
+  running: boolean;
+  progressLines: string[];
+  workflow?: LoadedWorkflow;
+  runHandle?: DetachedRunHandle;
+};
+
+export type RunsBrowser = {
+  enter(): Promise<void>;
+  leave(): void;
+  handleKey(key: KeyEvent): boolean;
+  dispose(): void;
+  refresh(): Promise<void>;
+  onSelectionChanged(): void;
+  onFilterInput(): void;
+  onResize(): void;
+  startRun(entry: WorkflowListEntry, launch: StartRunLaunch): Promise<void>;
+  openDetail(id: string): Promise<void>;
+  openSelected(): void;
+  readonly running: boolean;
+};
+
+function stopDetailPoll(session: RunsBrowserSession): void {
+  if (session.detailPoll !== undefined) {
+    clearInterval(session.detailPoll);
+    session.detailPoll = undefined;
+  }
+}
+
+function detachRun(session: RunsBrowserSession): void {
+  session.runHandle?.detach();
+  session.runHandle = undefined;
+  session.running = false;
+}
+
+function detailIsPollable(session: RunsBrowserSession): boolean {
+  if (session.deps.getMode() !== "run-detail") return false;
+  if (!session.activeRunId || !normalizeRunUuid(session.activeRunId)) return false;
+  if (!session.detailView || session.detailView.kind !== "detail") return false;
+  if (session.detailView.detail.kind !== "snapshot") return false;
+  return (
+    session.detailView.detail.status === "running" || session.detailView.detail.status === "stale"
+  );
+}
+
+function beginDetailPollRequest(
+  session: RunsBrowserSession,
+): { id: string; gen: number } | undefined {
+  if (!detailIsPollable(session)) return undefined;
+  const id = session.activeRunId!;
+  return { id, gen: session.detailToken.begin() };
+}
+
+function detailPollResponseCurrent(session: RunsBrowserSession, id: string, gen: number): boolean {
+  return (
+    session.deps.getMode() === "run-detail" &&
+    session.activeRunId === id &&
+    session.detailToken.current(gen)
+  );
+}
+
+function selectedRunSummary(session: RunsBrowserSession): string {
+  const selected = session.browserState?.items[session.deps.list.getSelectedIndex()];
+  if (!selected) return "";
+  return formatRunSummary(selected);
+}
+
+function paintRunsSelection(session: RunsBrowserSession, total: number): void {
+  session.deps.detail.content = session.deps.formatDetailLines(
+    selectedRunSummary(session),
+    session.deps.getContentWidth(),
+  );
+  session.deps.footer.content = runsFooter(
+    session.scope,
+    session.deps.list.getSelectedIndex(),
+    total,
+  );
+}
+
+function preserveSelectionId(session: RunsBrowserSession): string | undefined {
+  return (
+    session.browserState?.selectedId ??
+    session.browserState?.items[session.deps.list.getSelectedIndex()]?.id ??
+    session.activeRunId
+  );
+}
+
+function renderDetail(session: RunsBrowserSession): void {
+  if (!session.detailView) return;
+  const lines = detailLines(session.detailView, session.deps.getContentWidth());
+  const { visible, scroll } = scrollDetailLines(lines, session.detailScroll, 10);
+  session.detailScroll = scroll;
+  session.deps.hideBrowserChrome();
+  session.deps.hideListChrome();
+  session.deps.showStatus(visible.join("\n"), { flexGrow: 1 });
+  session.deps.footer.content = runDetailFooter({
+    allowWorkbench: viewAllowsWorkbench(session.detailView),
+  });
+}
+
+async function refreshOpenDetail(session: RunsBrowserSession): Promise<void> {
+  const req = beginDetailPollRequest(session);
+  if (!req) {
+    stopDetailPoll(session);
+    return;
+  }
+  const detail = await getRunDetail(req.id);
+  if (!detailPollResponseCurrent(session, req.id, req.gen)) return;
+  session.detailView = { kind: "detail", detail };
+  renderDetail(session);
+  if (!detailIsPollable(session)) stopDetailPoll(session);
+}
+
+function startDetailPoll(session: RunsBrowserSession): void {
+  stopDetailPoll(session);
+  if (!detailIsPollable(session)) return;
+  const timer = setInterval(() => {
+    void refreshOpenDetail(session);
+  }, 3000);
+  timer.unref?.();
+  session.detailPoll = timer;
+}
+
+async function refresh(session: RunsBrowserSession): Promise<void> {
+  const gen = session.refreshToken.begin();
+  const currentScope = session.scope;
+  const filter = session.deps.filter.value;
+  const mode = session.deps.getMode();
+  const preserveId = preserveSelectionId(session);
+  const browser = await loadRunsBrowser(session.deps.repoRoot, currentScope, filter, preserveId);
+  if (
+    !session.refreshToken.current(gen) ||
+    session.deps.getMode() !== mode ||
+    session.scope !== currentScope ||
+    session.deps.filter.value !== filter
+  ) {
+    return;
+  }
+  session.browserState = browser;
+  session.deps.list.height = RUNS_LIST_VIEWPORT;
+  if (browser.unavailable || browser.items.length === 0) {
+    session.deps.setListOptions([]);
+    session.deps.detail.content = session.deps.formatDetailLines(
+      formatRunListEmpty({
+        scope: browser.scope,
+        hasMachineRuns: browser.hasMachineRuns,
+        filterActive: browser.filter.trim().length > 0,
+        unavailable: browser.unavailable,
+      }),
+      session.deps.getContentWidth(),
+    );
+    session.deps.footer.content = runsFooter(session.scope, 0, 0);
+    return;
+  }
+  const options = formatRunsOptions(browser.items, session.deps.getContentWidth(), session.scope);
+  session.deps.setListOptions(options);
+  const idx = runsSelectedIndex(browser.items, browser.selectedId);
+  session.deps.list.setSelectedIndex(idx);
+  session.browserState.selectedId = browser.items[idx]?.id;
+  paintRunsSelection(session, options.length);
+}
+
+async function enter(session: RunsBrowserSession): Promise<void> {
+  stopDetailPoll(session);
+  const preserveFromDetail = session.activeRunId;
+  session.running = false;
+  session.progressLines = [];
+  session.workflow = undefined;
+  session.deps.setMode("runs");
+  session.detailView = undefined;
+  if (preserveFromDetail && session.browserState) {
+    session.browserState.selectedId = preserveFromDetail;
+  }
+  session.activeRunId = undefined;
+  session.deps.showBrowserChrome();
+  session.deps.filter.placeholder = "filter runs...";
+  session.deps.filter.value = session.savedFilter;
+  session.deps.filterRow.visible = true;
+  session.deps.filter.visible = true;
+  session.deps.showListChrome();
+  session.deps.hideStatus();
+  session.deps.hideUpdateHint();
+  await refresh(session);
+  session.deps.filter.focus();
+}
+
+function leave(session: RunsBrowserSession): void {
+  stopDetailPoll(session);
+  session.detailView = undefined;
+  session.activeRunId = undefined;
+}
+
+async function openDetail(session: RunsBrowserSession, id: string): Promise<void> {
+  session.deps.setMode("run-detail");
+  session.activeRunId = id;
+  session.detailScroll = 0;
+  const gen = session.detailToken.begin();
+  const detail = await getRunDetail(id);
+  if (
+    session.deps.getMode() !== "run-detail" ||
+    session.activeRunId !== id ||
+    !session.detailToken.current(gen)
+  ) {
+    return;
+  }
+  session.detailView = { kind: "detail", detail };
+  renderDetail(session);
+  startDetailPoll(session);
+}
+
+function openSelected(session: RunsBrowserSession): void {
+  const selected = session.browserState?.items[session.deps.list.getSelectedIndex()];
+  if (selected) void openDetail(session, selected.id);
+}
+
+function toggleScope(session: RunsBrowserSession): void {
+  if (session.deps.getMode() !== "runs") return;
+  session.scope = session.scope === "current" ? "all" : "current";
+  void refresh(session);
+}
+
+function onSelectionChanged(session: RunsBrowserSession): void {
+  if (session.deps.getMode() !== "runs" || !session.browserState) return;
+  const selected = session.browserState.items[session.deps.list.getSelectedIndex()];
+  if (selected) session.browserState.selectedId = selected.id;
+  session.activeRunId = undefined;
+  paintRunsSelection(session, session.deps.list.options.length);
+}
+
+function onFilterInput(session: RunsBrowserSession): void {
+  session.savedFilter = session.deps.filter.value;
+  void refresh(session);
+}
+
+function onResize(session: RunsBrowserSession): void {
+  const mode = session.deps.getMode();
+  if (mode === "runs") void refresh(session);
+  else if (mode === "run-detail") renderDetail(session);
+}
+
+function handleDetailKey(session: RunsBrowserSession, key: KeyEvent): boolean {
+  if (key.name === "escape") {
+    key.preventDefault();
+    detachRun(session);
+    stopDetailPoll(session);
+    void enter(session);
+    return true;
+  }
+  if (key.name === "up") {
+    key.preventDefault();
+    session.detailScroll = Math.max(0, session.detailScroll - 1);
+    renderDetail(session);
+    return true;
+  }
+  if (key.name === "down") {
+    key.preventDefault();
+    session.detailScroll += 1;
+    renderDetail(session);
+    return true;
+  }
+  if (key.name === "w" && !key.ctrl && !key.meta) {
+    key.preventDefault();
+    const id = session.activeRunId;
+    if (!id || !normalizeRunUuid(id)) return true;
+    if (!session.detailView || !viewAllowsWorkbench(session.detailView)) return true;
+    stopDetailPoll(session);
+    session.deps.launchWorkbenchRoute(runWorkbenchRoute(id));
+    session.deps.footer.content = runDetailFooter();
+    return true;
+  }
+  return true;
+}
+
+function handleKey(session: RunsBrowserSession, key: KeyEvent): boolean {
+  if (session.deps.getMode() === "run-detail") return handleDetailKey(session, key);
+  if (session.deps.getMode() !== "runs") return false;
+  if (key.ctrl && (key.name === "g" || key.sequence === "\x07")) {
+    key.preventDefault();
+    toggleScope(session);
+    return true;
+  }
+  if (key.name === "return" || key.name === "linefeed") {
+    key.preventDefault();
+    openSelected(session);
+    return true;
+  }
+  return false;
+}
+
+function setStartingDetail(
+  session: RunsBrowserSession,
+  entry: WorkflowListEntry,
+  runId: string,
+): void {
+  stopDetailPoll(session);
+  session.deps.setMode("run-detail");
+  session.running = true;
+  session.activeRunId = runId;
+  session.detailScroll = 0;
+  session.progressLines = [];
+  session.detailToken.begin();
+  session.detailView = { kind: "starting", id: runId, workflow: entry.name };
+  renderDetail(session);
+}
+
+function runningDetailView(
+  runId: string,
+  entry: WorkflowListEntry,
+  checkoutRoot: string,
+  progress: string[],
+): RunDetailView {
+  return {
+    kind: "detail",
+    detail: optimisticRunningDetail({
+      id: runId,
+      workflow: entry.name,
+      source: entry.source,
+      checkout_root: checkoutRoot,
+    }),
+    progress,
+  };
+}
+
+function launchCancelled(
+  session: RunsBrowserSession,
+  launch: StartRunLaunch,
+  runId: string,
+): boolean {
+  return (
+    Boolean(launch.getExit()) ||
+    session.deps.getMode() !== "run-detail" ||
+    session.activeRunId !== runId
+  );
+}
+
+function withProgress(
+  session: RunsBrowserSession,
+  runId: string,
+  entry: WorkflowListEntry,
+  checkoutRoot: string,
+  historyState: "pending" | "claimed" | "unavailable",
+): void {
+  if (session.detailView?.kind === "detail" || session.detailView?.kind === "history-unavailable") {
+    session.detailView = { ...session.detailView, progress: session.progressLines };
+  } else if (session.detailView?.kind === "starting" && historyState === "claimed") {
+    session.detailView = runningDetailView(runId, entry, checkoutRoot, session.progressLines);
+  }
+}
+
+async function startRun(
+  session: RunsBrowserSession,
+  entry: WorkflowListEntry,
+  launch: StartRunLaunch,
+): Promise<void> {
+  const inputs = Object.fromEntries(
+    Object.entries(launch.inputValues).map(([key, value]) => [key, sanitizeDisplay(value)]),
+  );
+  const runId = allocateRunId();
+  const checkoutRoot = await canonicalRepoRoot(session.deps.repoRoot);
+  setStartingDetail(session, entry, runId);
+  try {
+    session.workflow =
+      launch.workflow ??
+      session.workflow ??
+      (await launch.loadWorkflow(entry, session.deps.repoRoot, launch.config));
+    const launchFn = launch.launchRun ?? launchDetachedRun;
+    const history = { state: "pending" as "pending" | "claimed" | "unavailable" };
+    const handle = launchFn({
+      name: entry.name,
+      repoRoot: session.deps.repoRoot,
+      ctx: launch.ctx,
+      inputs,
+      domains: launch.inputDomains,
+      runId,
+      onHistoryAck: (line) => {
+        if (launchCancelled(session, launch, runId)) return;
+        const ack = parseHistoryAck(line);
+        if (!ack) return;
+        if (ack.state === "claimed" && ack.id === runId) {
+          history.state = "claimed";
+          session.detailView = runningDetailView(runId, entry, checkoutRoot, session.progressLines);
+          renderDetail(session);
+          startDetailPoll(session);
+          return;
+        }
+        if (ack.state === "unavailable") {
+          history.state = "unavailable";
+          stopDetailPoll(session);
+          session.detailView = {
+            kind: "history-unavailable",
+            id: runId,
+            workflow: entry.name,
+            progress: session.progressLines,
+          };
+          renderDetail(session);
+        }
+      },
+      onProgressLine: (line) => {
+        if (launchCancelled(session, launch, runId)) return;
+        session.progressLines.push(session.deps.truncate(line, session.deps.getContentWidth()));
+        withProgress(session, runId, entry, checkoutRoot, history.state);
+        renderDetail(session);
+      },
+    });
+    session.runHandle = handle;
+    const result = await handle.result;
+    if (launchCancelled(session, launch, runId)) return;
+    session.runHandle = undefined;
+    session.running = false;
+    stopDetailPoll(session);
+    if (history.state === "pending" && !result.ok) {
+      session.detailView = {
+        kind: "local-failure",
+        id: runId,
+        workflow: entry.name,
+        message: result.detail || "launch failed",
+      };
+      renderDetail(session);
+      return;
+    }
+    if (history.state === "unavailable") {
+      session.detailView = {
+        kind: "history-unavailable",
+        id: runId,
+        workflow: entry.name,
+        progress: session.progressLines,
+        finished: result.ok ? "succeeded" : "failed",
+        ...(result.ok ? {} : { message: result.detail }),
+      };
+      renderDetail(session);
+      return;
+    }
+    const gen = session.detailToken.begin();
+    const detail = await getRunDetail(runId);
+    if (
+      session.deps.getMode() !== "run-detail" ||
+      session.activeRunId !== runId ||
+      !session.detailToken.current(gen)
+    ) {
+      return;
+    }
+    session.detailView = { kind: "detail", detail };
+    renderDetail(session);
+    startDetailPoll(session);
+  } catch (error) {
+    session.runHandle = undefined;
+    session.running = false;
+    stopDetailPoll(session);
+    session.detailView = {
+      kind: "local-failure",
+      id: runId,
+      workflow: entry.name,
+      message: error instanceof Error ? error.message : String(error),
+    };
+    renderDetail(session);
+  }
+}
+
+export function createRunsBrowser(deps: RunsBrowserDeps): RunsBrowser {
+  const session: RunsBrowserSession = {
+    deps,
+    scope: "current",
+    refreshToken: latest(),
+    detailScroll: 0,
+    detailToken: latest(),
+    savedFilter: "",
+    running: false,
+    progressLines: [],
+  };
+  return {
+    enter: () => enter(session),
+    leave: () => leave(session),
+    handleKey: (key) => handleKey(session, key),
+    dispose: () => {
+      detachRun(session);
+      stopDetailPoll(session);
+    },
+    refresh: () => refresh(session),
+    onSelectionChanged: () => onSelectionChanged(session),
+    onFilterInput: () => onFilterInput(session),
+    onResize: () => onResize(session),
+    startRun: (entry, launch) => startRun(session, entry, launch),
+    openDetail: (id) => openDetail(session, id),
+    openSelected: () => openSelected(session),
+    get running() {
+      return session.running;
+    },
+  };
+}

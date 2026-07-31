@@ -1,12 +1,15 @@
 /** Versioned private run snapshot and allowlisted projections. */
 
+import { z } from "zod";
+
 export const RUN_HISTORY_VERSION = 1 as const;
 export const RUN_HISTORY_HEARTBEAT_MS = 5_000;
 export const RUN_HISTORY_STALE_MS = 15_000;
 export const RUN_HISTORY_RETENTION_BYTES = 512_000;
 export const RUN_HISTORY_LIST_LIMIT = 40;
 
-export const RUN_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export const RUN_UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+export const RUN_UUID_RE = new RegExp(`^${RUN_UUID_PATTERN}$`);
 
 export type RunWorkflowSource = "repo" | "global";
 export type RunStepPhase = "main" | "recovery";
@@ -28,60 +31,122 @@ export type RunProjectedStatus =
   | "interrupted"
   | "starting";
 
-export type RunFailureFact = {
-  action: RunActionKind;
-  exit_code?: number;
-  method?: string;
-  coordination?: string;
-  step_id?: string;
-};
+const isoTimestamp = z.string().refine((s) => Number.isFinite(Date.parse(s)));
 
-export type RunStepRecord = {
-  phase: RunStepPhase;
-  workflow: string;
-  workflow_path: string[];
-  ordinal: number;
-  total: number;
-  /** Invoking workflow: step ordinal at the parent path — disambiguates sequential wrappers. */
-  parent_ordinal?: number;
-  step_id?: string;
-  action: RunActionKind;
-  label: string;
-  started_at?: string;
-  finished_at: string;
-  outcome: RunStepOutcomeKind;
-  failure?: RunFailureFact;
-  explanation?: string;
-};
+const failureFactSchema = z.object({
+  action: z.enum(["agent", "run", "herdr", "workflow"]),
+  exit_code: z.number().optional(),
+  method: z.string().optional(),
+  coordination: z.string().optional(),
+  step_id: z.string().optional(),
+});
 
-export type RunCurrentStep = {
-  phase: RunStepPhase;
-  workflow: string;
-  workflow_path: string[];
-  ordinal: number;
-  total: number;
-  parent_ordinal?: number;
-  step_id?: string;
-  action: RunActionKind;
-  label: string;
-  started_at: string;
-};
+const stepIdentitySchema = z
+  .object({
+    phase: z.enum(["main", "recovery"]),
+    workflow: z.string().min(1),
+    workflow_path: z.array(z.string()),
+    ordinal: z.number().int().min(1),
+    total: z.number().int().min(1),
+    parent_ordinal: z.number().int().min(1).optional(),
+    step_id: z.string().optional(),
+    action: z.enum(["agent", "run", "herdr", "workflow"]),
+    label: z.string(),
+  })
+  .refine((row) => row.ordinal <= row.total, { message: "ordinal exceeds total" })
+  .superRefine((row, ctx) => {
+    const nested = row.workflow_path.length > 1;
+    if (nested && row.parent_ordinal === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "nested step requires parent_ordinal",
+        path: ["parent_ordinal"],
+      });
+    }
+    if (!nested && row.parent_ordinal !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "top-level step must omit parent_ordinal",
+        path: ["parent_ordinal"],
+      });
+    }
+  });
 
-export type RunSnapshot = {
-  version: typeof RUN_HISTORY_VERSION;
-  id: string;
-  workflow: string;
-  title?: string;
-  source: RunWorkflowSource;
-  checkout_root: string;
-  started_at: string;
-  heartbeat_at: string;
-  finished_at?: string;
-  current_step?: RunCurrentStep;
-  steps: RunStepRecord[];
-  status?: RunTerminalStatus;
-  returns?: unknown;
-};
+const runStepRecordSchema = stepIdentitySchema.and(
+  z.object({
+    started_at: isoTimestamp.optional(),
+    finished_at: isoTimestamp,
+    outcome: z.enum([
+      "succeeded",
+      "skipped",
+      "launched",
+      "failed_continued",
+      "failed",
+      "interrupted",
+    ]),
+    failure: failureFactSchema.optional(),
+    explanation: z.string().optional(),
+  }),
+);
+
+const runCurrentStepSchema = stepIdentitySchema.and(
+  z.object({
+    started_at: isoTimestamp,
+  }),
+);
+
+const runSnapshotSchema = z
+  .object({
+    version: z.literal(RUN_HISTORY_VERSION),
+    id: z.string().refine((id) => RUN_UUID_RE.test(id.trim().toLowerCase())),
+    workflow: z.string().min(1),
+    title: z.string().optional(),
+    source: z.enum(["repo", "global"]),
+    checkout_root: z.string().min(1),
+    started_at: isoTimestamp,
+    heartbeat_at: isoTimestamp,
+    finished_at: isoTimestamp.optional(),
+    current_step: runCurrentStepSchema.optional(),
+    steps: z.array(runStepRecordSchema),
+    status: z.enum(["succeeded", "failed", "interrupted"]).optional(),
+    returns: z.unknown().optional(),
+  })
+  .superRefine((row, ctx) => {
+    const hasStatus = row.status !== undefined;
+    const hasFinished = row.finished_at !== undefined;
+    if (hasStatus) {
+      if (!hasFinished) {
+        ctx.addIssue({
+          code: "custom",
+          message: "terminal status requires finished_at",
+          path: ["finished_at"],
+        });
+      }
+      if (row.current_step !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: "terminal status forbids current_step",
+          path: ["current_step"],
+        });
+      }
+    } else if (hasFinished) {
+      ctx.addIssue({
+        code: "custom",
+        message: "finished_at requires status",
+        path: ["status"],
+      });
+    }
+  });
+
+export type RunFailureFact = z.infer<typeof failureFactSchema>;
+export type RunStepRecord = z.infer<typeof runStepRecordSchema>;
+export type RunCurrentStep = z.infer<typeof runCurrentStepSchema>;
+export type RunSnapshot = z.infer<typeof runSnapshotSchema>;
+
+/** Structural guard for on-disk snapshots — reject before projection. */
+export function isSnapshot(value: unknown): value is RunSnapshot {
+  return runSnapshotSchema.safeParse(value).success;
+}
 
 export type RunListItem = {
   id: string;
@@ -101,22 +166,10 @@ export type RunListItem = {
   failure?: RunFailureFact;
 };
 
-export type RunDetailStep = {
-  phase: RunStepPhase;
-  workflow: string;
-  workflow_path: string[];
-  ordinal: number;
-  total: number;
-  parent_ordinal?: number;
-  step_id?: string;
-  action: RunActionKind;
-  label: string;
-  started_at?: string;
+export type RunDetailStep = Omit<RunStepRecord, "finished_at" | "outcome"> & {
   finished_at?: string;
   outcome?: RunStepOutcomeKind;
   active?: boolean;
-  failure?: RunFailureFact;
-  explanation?: string;
 };
 
 export type RunDetail =
@@ -153,5 +206,5 @@ export type RunListFilter = {
 
 export type HistoryClaimResult =
   | { ok: true; state: "claimed"; id: string }
-  | { ok: true; state: "unavailable"; id?: string }
+  | { ok: true; state: "unavailable"; id: string }
   | { ok: false; state: "rejected"; error: string; id?: string };

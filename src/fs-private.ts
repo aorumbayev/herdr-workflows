@@ -188,14 +188,6 @@ export async function assertCredentialStoreSafe(
   await ensurePrivateDir(stateDir, 0o700, opts);
 }
 
-/** Tighten and verify a directory is private to the current user. */
-export async function tightenPrivateDir(
-  dir: string,
-  opts: CredentialStoreAssertOpts = {},
-): Promise<void> {
-  await ensurePrivateDir(dir, 0o700, opts);
-}
-
 /** Tighten and verify a credential file is private to the current user. */
 export async function assertPrivateCredentialFile(
   path: string,

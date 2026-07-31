@@ -3,10 +3,15 @@ import { lstatSync, readlinkSync, symlinkSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { installCliCommands } from "../src/setup/cli-install";
-import { installKeybindings, stripDeadBindings } from "../src/setup/keybindings";
-import { readOwnership } from "../src/setup/ownership";
-import { PRODUCT_VERSION, resolveBinDir, resolveHerdrConfigPath } from "../src/setup/paths";
+import {
+  installCliCommands,
+  installKeybindings,
+  stripDeadBindings,
+  readOwnership,
+  PRODUCT_VERSION,
+  resolveBinDir,
+  resolveHerdrConfigPath,
+} from "../src/setup";
 
 const dirs: string[] = [];
 afterEach(async () => {

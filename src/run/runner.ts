@@ -10,8 +10,7 @@ import {
   tabClose,
 } from "../herdr";
 import { buildTemplateNamespace, type InvocationContext, type WorkflowsConfig } from "../config";
-import { formatHistoryAck } from "../history/ack";
-import { allocateRunId, RunHistorySession } from "../history/store";
+import { formatHistoryAck, RunHistorySession } from "../history/store";
 import type {
   RunActionKind,
   RunFailureFact,
@@ -32,6 +31,7 @@ import type {
 import { loadWorkflow } from "../workflow/load";
 import {
   errorText,
+  herdrStep,
   runScratchDir,
   type RunnerDeps,
   type StepCtx,
@@ -42,7 +42,6 @@ import {
 } from "./context";
 import { agentStep } from "./steps/agent";
 import { bindIncludeRunSteps, evaluateReturns, workflowStep } from "./steps/include";
-import { herdrStep } from "./steps/primitive";
 import { shellStep } from "./steps/shell";
 
 type StepRunner = (c: StepCtx) => Promise<StepOutcome>;
@@ -544,17 +543,12 @@ export async function runWorkflow(opts: RunOptions): Promise<StepsResult> {
     return { ok: false, error: claim.error };
   }
   if (claim.state === "unavailable") {
-    emitAck(
-      formatHistoryAck({
-        state: "unavailable",
-        ...(claim.id !== undefined ? { id: claim.id } : {}),
-      }),
-    );
+    emitAck(formatHistoryAck({ state: "unavailable", id: claim.id }));
   } else {
     emitAck(formatHistoryAck({ state: "claimed", id: claim.id }));
   }
 
-  const runId = claim.id ?? opts.runId ?? allocateRunId();
+  const runId = claim.id;
   const managedResponseFiles: string[] = [];
   const stepOpts: StepRunOpts = {
     name: workflow.name,

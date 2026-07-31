@@ -3,12 +3,11 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { globalConfigPath, loadConfig, parseConfigText, repoConfigPath } from "../config";
-import { workflowSchemaUrl } from "../setup/paths";
+import { workflowSchemaUrl } from "../setup";
 import { HERDR_METHOD_BY_NAME } from "../herdr-methods.generated";
-import { getRunDetail, listRunHistory, loadAllSnapshots } from "../history/store";
-import { normalizeRunUuid } from "../history/project";
+import { canonicalRepoRoot, getRunDetail, listRunHistory } from "../history/store";
+import { normalizeRunUuid, presentRunDetail } from "../history/project";
 import type { RunProjectedStatus, RunWorkflowSource } from "../history/types";
-import { exportWorkflowBundle } from "../workflow/export";
 import {
   checkPayload,
   parseImportScope,
@@ -17,22 +16,15 @@ import {
   runImport,
 } from "../workflow/import";
 import { listWorkflows, parseWorkflowText, workflowPath } from "../workflow/load";
-import {
-  parseRaw,
-  parseRawWithDoc,
-  rawWorkflowSchema,
-  type RawStep,
-  type RawWorkflowDoc,
-} from "../workflow/parse";
-import { schemaPointer, withPinnedSchemaPointer } from "../workflow/payload";
+import { dumpWorkflow } from "../workflow/dump";
+import { parseRaw, parseRawWithDoc, rawWorkflowSchema } from "../workflow/parse";
+import { exportWorkflowBundle, withPinnedSchemaPointer } from "../workflow/share";
 import { analyzeYamlTree, sensitivityLabels, workflowDisplayTitle } from "../workflow/trust";
-import { canonicalRepoRoot } from "../repo-root";
 import pageHtml from "./page.html" with { type: "text" };
 import logoSvg from "../../docs/assets/logo.svg" with { type: "text" };
 
 const PAGE = pageHtml as unknown as string;
 const LOGO = logoSvg as unknown as string;
-const IND = "  ";
 const WORKFLOW_NAME_RE = /^[a-z0-9][a-z0-9-_]*$/;
 // Same call `scripts/generate-schema.ts` commits, so the served copy cannot go stale.
 const WORKFLOW_JSON_SCHEMA = z.toJSONSchema(rawWorkflowSchema);
@@ -94,152 +86,6 @@ async function diskToken(file: string): Promise<string | undefined> {
     .text()
     .catch(() => undefined);
   return text === undefined ? undefined : contentToken(text);
-}
-
-function scalar(v: string): string {
-  return Bun.YAML.stringify(v);
-}
-
-function blockSafe(v: string): boolean {
-  return v.split("\n").every((ln) => ln === ln.trim() || ln === "");
-}
-
-function field(lines: string[], indent: string, key: string, v: string): void {
-  if (v.includes("\n")) {
-    if (!v.endsWith("\n") && blockSafe(v)) {
-      lines.push(`${indent}${key}: |-`);
-      for (const ln of v.split("\n")) lines.push(`${indent}${IND}${ln}`);
-      return;
-    }
-    lines.push(`${indent}${key}: ${scalar(v)}`);
-    return;
-  }
-  lines.push(`${indent}${key}: ${scalar(v)}`);
-}
-
-const DUMPED_KEYS = new Set([
-  "agent",
-  "run",
-  "herdr",
-  "workflow",
-  "id",
-  "using",
-  "target",
-  "shell",
-  "params",
-  "inputs",
-  "cwd",
-  "env",
-  "pane",
-  "background",
-  "ready_when",
-  "timeout",
-  "retry",
-  "when",
-  "continue_on_error",
-]);
-
-function dumpStep(step: RawStep): string[] {
-  const m: string[] = [];
-  const I = IND + IND;
-  if (typeof step.agent === "string") {
-    field(m, I, "agent", step.agent);
-  } else if (typeof step.run === "string") {
-    field(m, I, "run", step.run);
-  } else if (Array.isArray(step.run)) {
-    m.push(`${I}run: ${JSON.stringify(step.run)}`);
-  } else if (typeof step.herdr === "string") {
-    field(m, I, "herdr", step.herdr);
-    if (step.params && typeof step.params === "object") {
-      m.push(`${I}params: ${JSON.stringify(step.params)}`);
-    }
-  } else if (typeof step.workflow === "string") {
-    field(m, I, "workflow", step.workflow);
-  } else {
-    m.push(`${I}run: ""`);
-  }
-  for (const [key, value] of Object.entries(step)) {
-    if (DUMPED_KEYS.has(key) && !["agent", "run", "herdr", "workflow", "params"].includes(key)) {
-      if (typeof value === "string") field(m, I, key, value);
-      else if (value !== undefined) m.push(`${I}${key}: ${JSON.stringify(value)}`);
-    } else if (!DUMPED_KEYS.has(key) && value !== undefined) {
-      if (typeof value === "string") field(m, I, key, value);
-      else m.push(`${I}${key}: ${JSON.stringify(value)}`);
-    }
-  }
-  if (m.length === 0) m.push(`${I}run: ""`);
-  m[0] = `${IND}- ${m[0]!.slice(I.length)}`;
-  return m;
-}
-
-function dumpInputs(lines: string[], inputs: NonNullable<RawWorkflowDoc["inputs"]>): void {
-  lines.push("inputs:");
-  for (const [name, inp] of Object.entries(inputs)) {
-    if (typeof inp === "string") {
-      lines.push(`${IND}${scalar(name)}: ${scalar(inp)}`);
-      continue;
-    }
-    if (Array.isArray(inp)) {
-      lines.push(`${IND}${scalar(name)}: ${JSON.stringify(inp)}`);
-      continue;
-    }
-    lines.push(`${IND}${scalar(name)}:`);
-    if (inp.type !== undefined) lines.push(`${IND}${IND}type: ${inp.type}`);
-    if (inp.description !== undefined)
-      lines.push(`${IND}${IND}description: ${scalar(inp.description)}`);
-    if (inp.options !== undefined) {
-      if (Array.isArray(inp.options)) {
-        lines.push(`${IND}${IND}options:`);
-        for (const o of inp.options) lines.push(`${IND}${IND}${IND}- ${scalar(o)}`);
-      } else {
-        lines.push(`${IND}${IND}options: ${JSON.stringify(inp.options)}`);
-      }
-    }
-    if (inp.default !== undefined) lines.push(`${IND}${IND}default: ${scalar(inp.default)}`);
-    if (inp.when !== undefined) lines.push(`${IND}${IND}when: ${JSON.stringify(inp.when)}`);
-    if (inp.allow_custom !== undefined) {
-      lines.push(`${IND}${IND}allow_custom: ${String(inp.allow_custom)}`);
-    }
-    if (inp.min_length !== undefined) lines.push(`${IND}${IND}min_length: ${inp.min_length}`);
-  }
-}
-
-export function dumpWorkflow(doc: RawWorkflowDoc): string {
-  const lines: string[] = [];
-  lines.push(schemaPointer());
-  lines.push(`version: ${scalar(doc.version)}`);
-  if (doc.title) {
-    field(lines, "", "title", doc.title);
-  }
-  if (doc.description) {
-    field(lines, "", "description", doc.description);
-  }
-  if (doc.hidden === true) lines.push("hidden: true");
-  if (doc.inputs && Object.keys(doc.inputs).length > 0) {
-    lines.push("");
-    dumpInputs(lines, doc.inputs);
-  }
-  if (doc.returns !== undefined) {
-    lines.push("");
-    if (typeof doc.returns === "string") field(lines, "", "returns", doc.returns);
-    else lines.push(`returns: ${JSON.stringify(doc.returns)}`);
-  }
-  lines.push("");
-  lines.push("steps:");
-  doc.steps.forEach((step, i) => {
-    if (i > 0) lines.push("");
-    lines.push(...dumpStep(step));
-  });
-  if (doc.on_failure) {
-    lines.push("");
-    lines.push("on_failure:");
-    // dumpStep emits a list item; on_failure is a mapping — drop the marker and one indent level.
-    const recovery = dumpStep(doc.on_failure as RawStep).map((ln) =>
-      ln.startsWith(`${IND}- `) ? `${IND}${ln.slice(IND.length + 2)}` : ln.slice(IND.length),
-    );
-    lines.push(...recovery);
-  }
-  return `${lines.join("\n")}\n`;
 }
 
 /** Home-relative path for display (`~/…`). */
@@ -361,35 +207,46 @@ async function resolveOpenWorkflow(
   return { name: match.name, source: match.source };
 }
 
+const RUN_STATUS_VALUES = new Set<string>([
+  "running",
+  "stale",
+  "succeeded",
+  "failed",
+  "interrupted",
+  "starting",
+]);
+
+function parseRunStatuses(statusParam: string | null): RunProjectedStatus[] | undefined {
+  if (!statusParam) return undefined;
+  const statuses = statusParam
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s): s is RunProjectedStatus => RUN_STATUS_VALUES.has(s));
+  return statuses.length > 0 ? statuses : undefined;
+}
+
 async function handleRuns(repoRoot: string, url: URL): Promise<Response> {
   const location = url.searchParams.get("location");
   const text = url.searchParams.get("q") ?? url.searchParams.get("text") ?? undefined;
-  const statusParam = url.searchParams.get("status");
   let checkout_root: string | null | undefined = repoRoot;
   if (location === "all" || location === "*") checkout_root = null;
   else if (location !== null && location !== "" && location !== "current") {
     checkout_root = location;
   }
-  const status = statusParam
-    ? (statusParam.split(",").filter(Boolean) as RunProjectedStatus[])
-    : undefined;
+  const status = parseRunStatuses(url.searchParams.get("status"));
   const listed = await listRunHistory({
     checkout_root,
     ...(text !== undefined ? { text } : {}),
-    ...(status !== undefined && status.length > 0 ? { status } : {}),
+    ...(status !== undefined ? { status } : {}),
   });
   if (!listed.ok) {
     return noStoreJson({ ok: false, unavailable: true, runs: [], locations: [] }, 503);
   }
-  const snapshots = await loadAllSnapshots().catch(() => []);
-  const roots = new Set<string>();
-  for (const snap of snapshots) roots.add(snap.checkout_root);
   const locations = [
     { id: "current", label: "Current", root: repoRoot },
     { id: "all", label: "All folders", root: null as string | null },
-    ...[...roots]
+    ...listed.checkout_roots
       .filter((root) => root !== repoRoot)
-      .sort()
       .map((root) => ({ id: root, label: root, root })),
   ];
   return noStoreJson({ ok: true, runs: listed.runs, locations, checkout_root: repoRoot });
@@ -398,29 +255,29 @@ async function handleRuns(repoRoot: string, url: URL): Promise<Response> {
 async function handleRunDetail(repoRoot: string, url: URL): Promise<Response> {
   const id = url.searchParams.get("id") ?? "";
   if (!normalizeRunUuid(id)) {
-    return noStoreJson(
-      { ok: false, detail: { kind: "invalid", message: "complete UUID required" } },
-      400,
-    );
+    const detail = { kind: "invalid" as const, message: "complete UUID required" };
+    return noStoreJson({ ok: false, detail, blocks: presentRunDetail(detail) }, 400);
   }
-  const preliminary = await getRunDetail(id);
-  if (preliminary.kind === "unavailable") {
-    return noStoreJson({ ok: false, detail: preliminary }, 503);
+  const detail = await getRunDetail(id);
+  if (detail.kind === "unavailable") {
+    return noStoreJson({ ok: false, detail, blocks: presentRunDetail(detail) }, 503);
   }
-  if (preliminary.kind !== "snapshot") {
-    const status = preliminary.kind === "expired" ? 410 : 404;
-    return noStoreJson({ ok: false, detail: preliminary }, status);
+  if (detail.kind !== "snapshot") {
+    const status = detail.kind === "expired" ? 410 : 404;
+    return noStoreJson({ ok: false, detail, blocks: presentRunDetail(detail) }, status);
   }
   const open_workflow = await resolveOpenWorkflow(
     repoRoot,
-    preliminary.checkout_root,
-    preliminary.workflow,
-    preliminary.source,
+    detail.checkout_root,
+    detail.workflow,
+    detail.source,
   );
-  const detail = await getRunDetail(id, {
-    ...(open_workflow !== undefined ? { openWorkflow: open_workflow } : {}),
+  const enriched = { ...detail, ...(open_workflow ? { open_workflow } : {}) };
+  return noStoreJson({
+    ok: true,
+    detail: enriched,
+    blocks: presentRunDetail(detail),
   });
-  return noStoreJson({ ok: true, detail });
 }
 
 function requireNameScope(

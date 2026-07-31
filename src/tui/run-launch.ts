@@ -1,5 +1,6 @@
 import { closeSync, mkdirSync, openSync, statSync, watch, type FSWatcher } from "node:fs";
 import { dirname, join } from "node:path";
+import { z } from "zod";
 import { pluginStateDir, type InvocationContext } from "../config";
 
 type DetachedRunResult = { ok: boolean; detail: string };
@@ -9,15 +10,15 @@ export type DetachedRunHandle = {
   detach: () => void;
 };
 
+const launchPayloadSchema = z.object({
+  name: z.string().min(1),
+  inputs: z.record(z.string(), z.string()).default({}),
+  domains: z.record(z.string(), z.array(z.string())).optional(),
+  runId: z.string().min(1).optional(),
+});
+
 /** Secrets for a detached `hwf run` — sent on stdin, never on argv. */
-export type LaunchPayload = {
-  name: string;
-  inputs: Record<string, string>;
-  /** Resolved dynamic choice domains keyed by input name. */
-  domains?: Record<string, string[]>;
-  /** Picker-allocated full run UUID exclusively claimed by the child. */
-  runId?: string;
-};
+export type LaunchPayload = z.infer<typeof launchPayloadSchema>;
 
 export type LaunchRunRequest = {
   name: string;
@@ -175,6 +176,20 @@ export function buildLaunchPayload(
   };
 }
 
+function launchPayloadError(error: z.ZodError): string {
+  const issue = error.issues[0];
+  if (!issue) return "launch payload is invalid";
+  const path = issue.path.map(String);
+  if (path.length === 0) return "launch payload must be a JSON object";
+  if (path[0] === "name") return "launch payload requires a string name";
+  if (path[0] === "inputs" && path.length === 1) return "launch payload inputs must be an object";
+  if (path[0] === "inputs") return `launch payload inputs.${path[1]} must be a string`;
+  if (path[0] === "domains" && path.length === 1) return "launch payload domains must be an object";
+  if (path[0] === "domains") return `launch payload domains.${path[1]} must be a string array`;
+  if (path[0] === "runId") return "launch payload runId must be a non-empty string";
+  return issue.message || "launch payload is invalid";
+}
+
 export function parseLaunchPayload(text: string): LaunchPayload {
   let parsed: unknown;
   try {
@@ -182,51 +197,9 @@ export function parseLaunchPayload(text: string): LaunchPayload {
   } catch {
     throw new Error("launch payload is not valid JSON");
   }
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("launch payload must be a JSON object");
-  }
-  const row = parsed as Record<string, unknown>;
-  if (typeof row.name !== "string" || !row.name) {
-    throw new Error("launch payload requires a string name");
-  }
-  const inputs: Record<string, string> = {};
-  if (row.inputs !== undefined) {
-    if (row.inputs === null || typeof row.inputs !== "object" || Array.isArray(row.inputs)) {
-      throw new Error("launch payload inputs must be an object");
-    }
-    for (const [key, value] of Object.entries(row.inputs as Record<string, unknown>)) {
-      if (typeof value !== "string") {
-        throw new Error(`launch payload inputs.${key} must be a string`);
-      }
-      inputs[key] = value;
-    }
-  }
-  let domains: Record<string, string[]> | undefined;
-  if (row.domains !== undefined) {
-    if (row.domains === null || typeof row.domains !== "object" || Array.isArray(row.domains)) {
-      throw new Error("launch payload domains must be an object");
-    }
-    domains = {};
-    for (const [key, value] of Object.entries(row.domains as Record<string, unknown>)) {
-      if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
-        throw new Error(`launch payload domains.${key} must be a string array`);
-      }
-      domains[key] = value as string[];
-    }
-  }
-  let runId: string | undefined;
-  if (row.runId !== undefined) {
-    if (typeof row.runId !== "string" || !row.runId) {
-      throw new Error("launch payload runId must be a non-empty string");
-    }
-    runId = row.runId;
-  }
-  return {
-    name: row.name,
-    inputs,
-    ...(domains !== undefined ? { domains } : {}),
-    ...(runId !== undefined ? { runId } : {}),
-  };
+  const result = launchPayloadSchema.safeParse(parsed);
+  if (!result.success) throw new Error(launchPayloadError(result.error));
+  return result.data;
 }
 
 function decodeLines(

@@ -11,7 +11,7 @@ import {
   readManagedResponse,
   sizeToFirstRatio,
 } from "../src/run/context";
-import { assertFocusPolicy } from "../src/herdr-policy";
+import { assertFocusPolicy } from "../src/herdr-methods";
 import { buildHwfEnv, mergeStepEnv, runArgvStep, runShellStep } from "../src/run/steps/shell";
 
 async function tempDir(): Promise<string> {

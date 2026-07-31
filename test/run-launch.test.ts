@@ -5,16 +5,17 @@ import { join } from "node:path";
 import type { KeyEvent } from "@opentui/core";
 import type { InvocationContext } from "../src/config";
 import {
+  attachRunsBrowser,
   launchWorkbenchRoute,
   LIST_HINT,
   pickerEscapeExitCode,
   selectedListEntry,
-  startRun,
   tryOpenActionsPalette,
   type PickerState,
 } from "../src/tui/picker";
 import { resolvePaletteLetter } from "../src/tui/picker-actions";
 import { themeFromPalette } from "../src/tui/theme";
+import { latest } from "../src/latest";
 import {
   buildInvocationEnv,
   buildLaunchPayload,
@@ -50,7 +51,7 @@ afterEach(async () => {
 });
 
 function pickerState(overrides: Partial<PickerState> = {}): PickerState {
-  return {
+  const state = {
     mode: "list",
     entries: [],
     inputQueue: [],
@@ -83,7 +84,7 @@ function pickerState(overrides: Partial<PickerState> = {}): PickerState {
     theme: themeFromPalette(null),
     renderer: { destroy: () => undefined },
     filterRow: { visible: true },
-    filter: { visible: true },
+    filter: { visible: true, value: "", placeholder: "", focus: () => undefined },
     updateHint: { visible: false, content: "" },
     listBlock: { visible: true },
     list: {
@@ -92,6 +93,7 @@ function pickerState(overrides: Partial<PickerState> = {}): PickerState {
       height: 6,
       options: [],
       getSelectedIndex: () => 0,
+      setSelectedIndex: () => undefined,
       focus: () => undefined,
     },
     status: { visible: false, flexGrow: 0, content: "", fg: "", attributes: 0 },
@@ -100,15 +102,27 @@ function pickerState(overrides: Partial<PickerState> = {}): PickerState {
     promptInput: { visible: false, value: "" },
     footer: { content: "" },
     inputDomains: {},
-    resolveGeneration: 0,
+    resolveToken: latest(),
     customChoice: false,
     reloadEntries: async () => [],
-    runsScope: "current",
     savedWorkflowFilter: "",
-    savedRunsFilter: "",
-    runDetailScroll: 0,
     ...overrides,
   } as unknown as PickerState;
+  if (!overrides.runs) attachRunsBrowser(state);
+  return state;
+}
+
+function startPickerRun(state: PickerState, entry: Parameters<PickerState["runs"]["startRun"]>[0]) {
+  return state.runs.startRun(entry, {
+    ctx: state.ctx,
+    config: state.config,
+    inputValues: state.inputValues,
+    inputDomains: state.inputDomains,
+    workflow: state.workflow,
+    loadWorkflow: state.loadWorkflow,
+    launchRun: state.launchRun,
+    getExit: () => state.exit,
+  });
 }
 
 describe("buildInvocationEnv", () => {
@@ -189,6 +203,27 @@ describe("run argv", () => {
     expect(JSON.stringify(payload)).not.toContain("argv");
     expect(parseLaunchPayload(JSON.stringify(payload))).toEqual(payload);
   });
+
+  test("parseLaunchPayload rejects invalid shapes with stable messages", () => {
+    expect(() => parseLaunchPayload("{")).toThrow("launch payload is not valid JSON");
+    expect(() => parseLaunchPayload("[]")).toThrow("launch payload must be a JSON object");
+    expect(() => parseLaunchPayload("{}")).toThrow("launch payload requires a string name");
+    expect(() => parseLaunchPayload(JSON.stringify({ name: "x", inputs: [] }))).toThrow(
+      "launch payload inputs must be an object",
+    );
+    expect(() => parseLaunchPayload(JSON.stringify({ name: "x", inputs: { a: 1 } }))).toThrow(
+      "launch payload inputs.a must be a string",
+    );
+    expect(() => parseLaunchPayload(JSON.stringify({ name: "x", domains: [] }))).toThrow(
+      "launch payload domains must be an object",
+    );
+    expect(() => parseLaunchPayload(JSON.stringify({ name: "x", domains: { a: [1] } }))).toThrow(
+      "launch payload domains.a must be a string array",
+    );
+    expect(() => parseLaunchPayload(JSON.stringify({ name: "x", runId: "" }))).toThrow(
+      "launch payload runId must be a non-empty string",
+    );
+  });
 });
 
 describe("picker detached run", () => {
@@ -224,17 +259,17 @@ describe("picker detached run", () => {
     };
 
     const state = pickerState({ launchRun });
-    const running = startRun(state, {
+    const running = startPickerRun(state, {
       name: "sleepy",
       source: "repo",
       file: "/repo/.hwf/workflows/sleepy.yaml",
     });
     await Bun.sleep(10);
-    expect(state.running).toBe(true);
+    expect(state.runs.running).toBe(true);
     expect(state.mode).toBe("run-detail");
     expect(String(state.footer.content)).toContain("esc back");
 
-    state.runHandle?.detach();
+    state.runs.dispose();
     state.exit = { code: 0 };
     state.renderer.destroy();
 
@@ -263,7 +298,7 @@ describe("picker detached run", () => {
         workspaceId: "wOrig",
       },
     });
-    await startRun(state, {
+    await startPickerRun(state, {
       name: "quick",
       source: "repo",
       file: "/repo/.hwf/workflows/quick.yaml",
@@ -276,24 +311,26 @@ describe("picker detached run", () => {
   });
 
   test("a single-step local workflow still reports its outcome through the picker", async () => {
-    const launchRun = (req: LaunchRunRequest): DetachedRunHandle => ({
-      result: (async () => {
-        req.onHistoryAck?.(`@hwf-history:claimed ${req.runId}`);
-        req.onProgressLine("[1/1] run: true");
-        return { ok: true, detail: "" };
-      })(),
-      detach: () => undefined,
+    const state = pickerState({
+      launchRun: (req) => ({
+        result: (async () => {
+          req.onHistoryAck?.("@hwf-history:unavailable");
+          req.onProgressLine("[1/1] run: true");
+          return { ok: true, detail: "" };
+        })(),
+        detach: () => undefined,
+      }),
     });
-    const state = pickerState({ launchRun });
-    await startRun(state, {
+    await startPickerRun(state, {
       name: "quick",
       source: "repo",
       file: "/repo/.hwf/workflows/quick.yaml",
     });
-    expect(state.progressLines.some((line) => line.includes("[1/1]"))).toBe(true);
+    expect(String(state.status.content)).toContain("[1/1]");
+    expect(String(state.status.content)).toContain("HISTORY UNAVAILABLE");
     expect(state.mode).toBe("run-detail");
     expect(state.exit).toBeUndefined();
-    expect(state.running).toBe(false);
+    expect(state.runs.running).toBe(false);
   });
 
   test("failed run stays in detail and forwards domains on launch", async () => {
@@ -309,17 +346,17 @@ describe("picker detached run", () => {
         };
       },
     });
-    await startRun(state, {
+    await startPickerRun(state, {
       name: "dyn",
       source: "repo",
       file: "/repo/.hwf/workflows/dyn.yaml",
     });
     expect(seen?.domains).toEqual({ branch: ["one", "two"] });
     expect(seen?.runId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
-    expect(state.running).toBe(false);
+    expect(state.runs.running).toBe(false);
     expect(state.mode).toBe("run-detail");
     expect(String(state.status.content)).toMatch(/LAUNCH FAILED|FAILED|boom/);
-    expect(pickerEscapeExitCode(state.mode, state.running)).toBe(1);
+    expect(pickerEscapeExitCode(state.mode, state.runs.running)).toBe(1);
   });
 });
 

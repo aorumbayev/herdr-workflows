@@ -1,6 +1,6 @@
 import { isMethodResultDotPath, RESULT_DOT_PATHS } from "../herdr-methods";
 import { clausesContain, evaluateWhen } from "./conditions";
-import { isWholeValueTemplate, parseTemplatePath, textTemplates } from "./parse";
+import { isWholeValueTemplate, parseTemplatePath, textTemplates, walkValueStrings } from "./parse";
 import {
   bail,
   IDENT_RE,
@@ -500,19 +500,10 @@ function assertValueTemplates(
   value: unknown,
   opts: TemplateOpts,
 ): void {
-  if (typeof value === "string") {
-    assertTemplates(file, stepIndex, key, value, opts);
-    return;
-  }
-  if (Array.isArray(value)) {
-    value.forEach((item, i) => assertValueTemplates(file, stepIndex, `${key}[${i}]`, item, opts));
-    return;
-  }
-  if (value && typeof value === "object") {
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      assertValueTemplates(file, stepIndex, `${key}.${k}`, v, opts);
-    }
-  }
+  walkValueStrings(value, key, (text, path) => {
+    assertTemplates(file, stepIndex, path, text, opts);
+    return text;
+  });
 }
 
 function assertUsingProfile(

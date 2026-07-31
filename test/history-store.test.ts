@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { chmod, mkdir, mkdtemp, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { tmpdir, platform } from "node:os";
 import { join } from "node:path";
-import { platform } from "node:os";
+import { pluginStateDir, type WorkflowsConfig } from "../src/config";
+import { toListItem } from "../src/history/project";
 import {
   allocateRunId,
   getRunDetail,
@@ -13,44 +14,41 @@ import {
   runsDir,
   snapshotPath,
 } from "../src/history/store";
-import {
-  RUN_HISTORY_RETENTION_BYTES,
-  RUN_HISTORY_STALE_MS,
-  type RunSnapshot,
-} from "../src/history/types";
-import { isSnapshot } from "../src/history/validate";
-import { projectStatus, toDetail, toListItem } from "../src/history/project";
-import { pluginStateDir } from "../src/config";
-import { assertCredentialStoreSafe } from "../src/web/credential-store";
-
-let stateDir: string;
-let checkoutRoot: string;
-let prevState: string | undefined;
-
-beforeEach(async () => {
-  stateDir = await mkdtemp(join(tmpdir(), "hwf-history-"));
-  checkoutRoot = await mkdtemp(join(tmpdir(), "hwf-checkout-"));
-  prevState = process.env.HERDR_PLUGIN_STATE_DIR;
-  process.env.HERDR_PLUGIN_STATE_DIR = stateDir;
-});
-
-afterEach(async () => {
-  if (prevState === undefined) delete process.env.HERDR_PLUGIN_STATE_DIR;
-  else process.env.HERDR_PLUGIN_STATE_DIR = prevState;
-  await rm(stateDir, { recursive: true, force: true });
-  await rm(checkoutRoot, { recursive: true, force: true });
-});
-
-function baseMeta(id?: string) {
-  return {
-    ...(id !== undefined ? { id } : {}),
-    workflow: "demo",
-    source: "repo" as const,
-    checkout_root: checkoutRoot,
-  };
-}
+import { RUN_HISTORY_RETENTION_BYTES } from "../src/history/types";
+import type { RunnerDeps } from "../src/run/context";
+import { runWorkflow } from "../src/run/runner";
+import { assertCredentialStoreSafe } from "../src/fs-private";
+import { parseWebRoute, runWorkbenchRoute } from "../src/web/endpoint";
+import { startWebServer } from "../src/web/server";
 
 describe("run history store", () => {
+  let stateDir: string;
+  let checkoutRoot: string;
+  let prevState: string | undefined;
+
+  beforeEach(async () => {
+    stateDir = await mkdtemp(join(tmpdir(), "hwf-history-"));
+    checkoutRoot = await mkdtemp(join(tmpdir(), "hwf-checkout-"));
+    prevState = process.env.HERDR_PLUGIN_STATE_DIR;
+    process.env.HERDR_PLUGIN_STATE_DIR = stateDir;
+  });
+
+  afterEach(async () => {
+    if (prevState === undefined) delete process.env.HERDR_PLUGIN_STATE_DIR;
+    else process.env.HERDR_PLUGIN_STATE_DIR = prevState;
+    await rm(stateDir, { recursive: true, force: true });
+    await rm(checkoutRoot, { recursive: true, force: true });
+  });
+
+  function baseMeta(id?: string) {
+    return {
+      ...(id !== undefined ? { id } : {}),
+      workflow: "demo",
+      source: "repo" as const,
+      checkout_root: checkoutRoot,
+    };
+  }
+
   test("exclusive claims reject reused identity", async () => {
     const id = allocateRunId();
     const a = new RunHistorySession();
@@ -165,43 +163,6 @@ describe("run history store", () => {
     expect(snap?.steps).toHaveLength(1);
     expect(snap?.current_step).toBeUndefined();
     session.dispose();
-  });
-
-  test("heartbeat boundaries project running then stale then running", async () => {
-    const started = new Date(Date.now() - 1_000).toISOString();
-    const snap: RunSnapshot = {
-      version: 1,
-      id: allocateRunId(),
-      workflow: "demo",
-      source: "repo",
-      checkout_root: "/repo/a",
-      started_at: started,
-      heartbeat_at: started,
-      steps: [],
-    };
-    await mkdir(runsDir(), { recursive: true, mode: 0o700 });
-    await replaceSnapshotForTest(snap);
-    expect(projectStatus(snap, Date.parse(started) + 1_000)).toBe("running");
-    expect(projectStatus(snap, Date.parse(started) + RUN_HISTORY_STALE_MS)).toBe("stale");
-    const fresh = { ...snap, heartbeat_at: new Date().toISOString() };
-    expect(projectStatus(fresh, Date.now())).toBe("running");
-  });
-
-  test("terminal status precedes heartbeat age", async () => {
-    const old = new Date(Date.now() - 60_000).toISOString();
-    const snap: RunSnapshot = {
-      version: 1,
-      id: allocateRunId(),
-      workflow: "demo",
-      source: "repo",
-      checkout_root: "/repo/a",
-      started_at: old,
-      heartbeat_at: old,
-      finished_at: old,
-      status: "succeeded",
-      steps: [],
-    };
-    expect(projectStatus(snap, Date.now())).toBe("succeeded");
   });
 
   test("filters apply before forty-result limit", async () => {
@@ -334,242 +295,6 @@ describe("run history store", () => {
     expect(listed.ok).toBe(true);
     if (!listed.ok) return;
     expect(listed.runs.every((r) => r.id !== nestedMissingParent)).toBe(true);
-  });
-
-  test("malformed nested step fields are rejected by guard", () => {
-    const id = allocateRunId();
-    const now = new Date().toISOString();
-    expect(
-      isSnapshot({
-        version: 1,
-        id,
-        workflow: "demo",
-        source: "repo",
-        checkout_root: "/repo/a",
-        started_at: now,
-        heartbeat_at: now,
-        steps: [{ label: "broken" }],
-      }),
-    ).toBe(false);
-    expect(
-      isSnapshot({
-        version: 1,
-        id,
-        workflow: "demo",
-        source: "repo",
-        checkout_root: "/repo/a",
-        started_at: "not-a-date",
-        heartbeat_at: now,
-        steps: [],
-      }),
-    ).toBe(false);
-    expect(
-      isSnapshot({
-        version: 1,
-        id,
-        workflow: "demo",
-        source: "repo",
-        checkout_root: "/repo/a",
-        started_at: now,
-        heartbeat_at: now,
-        status: "succeeded",
-        steps: [],
-      }),
-    ).toBe(false);
-    expect(
-      isSnapshot({
-        version: 1,
-        id,
-        workflow: "demo",
-        source: "repo",
-        checkout_root: "/repo/a",
-        started_at: now,
-        heartbeat_at: now,
-        finished_at: now,
-        status: "succeeded",
-        current_step: {
-          phase: "main",
-          workflow: "demo",
-          workflow_path: ["demo"],
-          ordinal: 1,
-          total: 1,
-          action: "run",
-          label: "x",
-          started_at: now,
-        },
-        steps: [],
-      }),
-    ).toBe(false);
-    expect(
-      isSnapshot({
-        version: 1,
-        id,
-        workflow: "demo",
-        source: "repo",
-        checkout_root: "/repo/a",
-        started_at: now,
-        heartbeat_at: now,
-        steps: [
-          {
-            phase: "main",
-            workflow: "demo",
-            workflow_path: ["demo"],
-            ordinal: 0,
-            total: 1,
-            action: "run",
-            label: "x",
-            finished_at: now,
-            outcome: "succeeded",
-          },
-        ],
-      }),
-    ).toBe(false);
-    expect(
-      isSnapshot({
-        version: 1,
-        id,
-        workflow: "demo",
-        source: "repo",
-        checkout_root: "/repo/a",
-        started_at: now,
-        heartbeat_at: now,
-        finished_at: now,
-        status: "succeeded",
-        steps: [
-          {
-            phase: "main",
-            workflow: "child",
-            workflow_path: ["demo", "child"],
-            ordinal: 1,
-            total: 1,
-            action: "run",
-            label: "inner",
-            finished_at: now,
-            outcome: "succeeded",
-          },
-        ],
-      }),
-    ).toBe(false);
-    expect(
-      isSnapshot({
-        version: 1,
-        id,
-        workflow: "demo",
-        source: "repo",
-        checkout_root: "/repo/a",
-        started_at: now,
-        heartbeat_at: now,
-        finished_at: now,
-        status: "succeeded",
-        steps: [
-          {
-            phase: "main",
-            workflow: "demo",
-            workflow_path: ["demo"],
-            ordinal: 1,
-            total: 1,
-            parent_ordinal: 1,
-            action: "run",
-            label: "top",
-            finished_at: now,
-            outcome: "succeeded",
-          },
-        ],
-      }),
-    ).toBe(false);
-    expect(
-      isSnapshot({
-        version: 1,
-        id,
-        workflow: "demo",
-        source: "repo",
-        checkout_root: "/repo/a",
-        started_at: now,
-        heartbeat_at: now,
-        current_step: {
-          phase: "main",
-          workflow: "child",
-          workflow_path: ["demo", "child"],
-          ordinal: 1,
-          total: 1,
-          action: "run",
-          label: "inner",
-          started_at: now,
-        },
-        steps: [],
-      }),
-    ).toBe(false);
-  });
-
-  test("projection groups nested steps only by parent_ordinal", async () => {
-    const id = allocateRunId();
-    const now = new Date().toISOString();
-    const snap: RunSnapshot = {
-      version: 1,
-      id,
-      workflow: "m",
-      source: "repo",
-      checkout_root: "/repo/a",
-      started_at: now,
-      heartbeat_at: now,
-      finished_at: now,
-      status: "succeeded",
-      steps: [
-        {
-          phase: "main",
-          workflow: "child1",
-          workflow_path: ["m", "child1"],
-          ordinal: 1,
-          total: 1,
-          parent_ordinal: 1,
-          action: "run",
-          label: "inner1",
-          finished_at: now,
-          outcome: "succeeded",
-        },
-        {
-          phase: "main",
-          workflow: "m",
-          workflow_path: ["m"],
-          ordinal: 1,
-          total: 2,
-          action: "workflow",
-          label: "wrap1",
-          finished_at: now,
-          outcome: "succeeded",
-        },
-        {
-          phase: "main",
-          workflow: "child2",
-          workflow_path: ["m", "child2"],
-          ordinal: 1,
-          total: 1,
-          parent_ordinal: 2,
-          action: "run",
-          label: "inner2",
-          finished_at: now,
-          outcome: "succeeded",
-        },
-        {
-          phase: "main",
-          workflow: "m",
-          workflow_path: ["m"],
-          ordinal: 2,
-          total: 2,
-          action: "workflow",
-          label: "wrap2",
-          finished_at: now,
-          outcome: "succeeded",
-        },
-      ],
-    };
-    expect(isSnapshot(snap)).toBe(true);
-    await mkdir(runsDir(), { recursive: true, mode: 0o700 });
-    await replaceSnapshotForTest(snap);
-    const detail = toDetail(snap);
-    expect(detail.kind).toBe("snapshot");
-    if (detail.kind !== "snapshot") return;
-    expect(detail.steps.map((s) => s.label)).toEqual(["wrap1", "inner1", "wrap2", "inner2"]);
   });
 
   test("unsafe snapshot file ACL is unavailable not missing", async () => {
@@ -752,5 +477,497 @@ describe("run history store", () => {
     expect(detail.failure_explanation).toBe("secret-token-xyz");
     expect(JSON.stringify(byExit.runs[0])).not.toContain("secret-token-xyz");
     session.dispose();
+  });
+});
+
+describe("history runner lifecycle", () => {
+  const dirs: string[] = [];
+  let prevState: string | undefined;
+
+  beforeEach(async () => {
+    const state = await mkdtemp(join(tmpdir(), "hwf-hist-run-"));
+    dirs.push(state);
+    prevState = process.env.HERDR_PLUGIN_STATE_DIR;
+    process.env.HERDR_PLUGIN_STATE_DIR = state;
+  });
+
+  afterEach(async () => {
+    if (prevState === undefined) delete process.env.HERDR_PLUGIN_STATE_DIR;
+    else process.env.HERDR_PLUGIN_STATE_DIR = prevState;
+    await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
+  });
+
+  const baseConfig: WorkflowsConfig = {
+    profiles: { claude: { kind: "claude" } },
+    default_profile: "claude",
+    transcripts: {},
+  };
+
+  async function repoWith(files: Record<string, string>): Promise<string> {
+    const root = await mkdtemp(join(tmpdir(), "hwf-hist-repo-"));
+    dirs.push(root);
+    const dir = join(root, ".hwf", "workflows");
+    await mkdir(dir, { recursive: true });
+    for (const [name, body] of Object.entries(files)) {
+      await writeFile(join(dir, `${name}.yaml`), body);
+    }
+    return root;
+  }
+
+  function mockDeps(): Partial<RunnerDeps> {
+    return {
+      herdrCall: async () => ({ type: "ok" }),
+      notificationShow: async () => undefined,
+      agentStatus: async () => "idle",
+      agentInfo: async () => ({}),
+      paneClose: async () => undefined,
+      tabClose: async () => undefined,
+      reportToken: async () => undefined,
+      transcriptText: async () => "",
+      sleep: async () => undefined,
+      now: () => Date.now(),
+    };
+  }
+
+  test("fast completion records every step", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: a
+    run: [printf, one]
+  - id: b
+    run: [printf, two]
+`,
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      deps: mockDeps(),
+    });
+    expect(result.ok).toBe(true);
+    const listed = await listRunHistory({ checkout_root: await realpath(root) });
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    expect(listed.runs[0]?.status).toBe("succeeded");
+    const detail = await getRunDetail(listed.runs[0]!.id);
+    expect(detail.kind).toBe("snapshot");
+    if (detail.kind !== "snapshot") return;
+    expect(detail.steps.map((s) => s.label)).toEqual(["a", "b"]);
+  });
+
+  test("failure before dispatch still finalizes", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+inputs:
+  need:
+    type: text
+steps:
+  - run: [printf, "{{inputs.need}}"]
+`,
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      deps: mockDeps(),
+    });
+    expect(result.ok).toBe(false);
+    const listed = await listRunHistory({ checkout_root: await realpath(root) });
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    expect(listed.runs[0]?.status).toBe("failed");
+    expect(listed.runs[0]?.progress).toBeUndefined();
+  });
+
+  test("nested workflow groups under parent and reports remaining", async () => {
+    const root = await repoWith({
+      child: `version: v1alpha1
+steps:
+  - id: inner
+    run: [sh, -c, "exit 3"]
+`,
+      m: `version: v1alpha1
+steps:
+  - id: before
+    run: [printf, first]
+  - id: wrap
+    workflow: child
+  - id: after
+    run: [printf, later]
+`,
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      deps: mockDeps(),
+    });
+    expect(result.ok).toBe(false);
+    const listed = await listRunHistory({ checkout_root: await realpath(root) });
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    const detail = await getRunDetail(listed.runs[0]!.id);
+    expect(detail.kind).toBe("snapshot");
+    if (detail.kind !== "snapshot") return;
+    expect(detail.steps.some((s) => s.workflow === "child")).toBe(true);
+    expect(detail.steps.some((s) => s.label === "wrap" && s.outcome === "failed")).toBe(true);
+    expect(detail.remaining).toBe(1);
+    expect(detail.failure_explanation).toBeTruthy();
+    expect(JSON.stringify(listed.runs[0])).not.toContain(detail.failure_explanation);
+    const explained = detail.steps.filter((s) => s.explanation);
+    expect(explained).toHaveLength(1);
+    expect(explained[0]?.workflow).toBe("child");
+    expect(detail.steps.find((s) => s.label === "wrap")?.explanation).toBeUndefined();
+    // Ordinary preceding step must not steal nested children from the workflow wrapper.
+    expect(detail.steps.map((s) => s.label)).toEqual(["before", "wrap", "inner"]);
+    expect(detail.steps[1]?.action).toBe("workflow");
+    expect(detail.steps[2]?.workflow).toBe("child");
+    expect(detail.steps[2]?.parent_ordinal).toBe(2);
+  });
+
+  test("sequential workflow wrappers keep distinct child groups", async () => {
+    const root = await repoWith({
+      child1: `version: v1alpha1
+steps:
+  - id: inner1
+    run: [printf, one]
+`,
+      child2: `version: v1alpha1
+steps:
+  - id: inner2
+    run: [printf, two]
+`,
+      m: `version: v1alpha1
+steps:
+  - id: wrap1
+    workflow: child1
+  - id: wrap2
+    workflow: child2
+`,
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      deps: mockDeps(),
+    });
+    expect(result.ok).toBe(true);
+    const listed = await listRunHistory({ checkout_root: await realpath(root) });
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    const detail = await getRunDetail(listed.runs[0]!.id);
+    expect(detail.kind).toBe("snapshot");
+    if (detail.kind !== "snapshot") return;
+    expect(detail.steps.map((s) => s.label)).toEqual(["wrap1", "inner1", "wrap2", "inner2"]);
+    expect(detail.steps[1]?.parent_ordinal).toBe(1);
+    expect(detail.steps[3]?.parent_ordinal).toBe(2);
+  });
+
+  test("snapshot collision rejects before steps", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - run: [printf, hi]
+`,
+    });
+    const id = allocateRunId();
+    const first = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      deps: mockDeps(),
+      runId: id,
+    });
+    expect(first.ok).toBe(true);
+    const second = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      deps: mockDeps(),
+      runId: id,
+    });
+    expect(second.ok).toBe(false);
+    if (!second.ok) expect(second.error).toMatch(/already claimed/);
+  });
+
+  test("unavailable storage does not fail the workflow", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - run: [printf, hi]
+`,
+    });
+    const state = process.env.HERDR_PLUGIN_STATE_DIR!;
+    await mkdir(state, { recursive: true });
+    await chmod(state, 0o755);
+    const acks: string[] = [];
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      deps: mockDeps(),
+      onHistoryAck: (line) => acks.push(line),
+    });
+    expect(result.ok).toBe(true);
+    expect(acks.some((line) => line.includes("unavailable"))).toBe(true);
+    const listed = await listRunHistory({ checkout_root: null });
+    expect(listed.ok === false || (listed.ok && listed.runs.length === 0)).toBe(true);
+  });
+
+  test("checkout root is realpath-canonicalized", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - run: [printf, hi]
+`,
+    });
+    const link = join(root, "..", `link-${Date.now()}`);
+    dirs.push(link);
+    await Bun.write(join(root, ".keep"), "");
+    await symlink(root, link);
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: link,
+      config: baseConfig,
+      ctx: { selection: "", cwd: link },
+      deps: mockDeps(),
+    });
+    expect(result.ok).toBe(true);
+    const listed = await listRunHistory({ checkout_root: null });
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    expect(listed.runs[0]?.checkout_root).toBe(await realpath(root));
+  });
+});
+
+describe("run history web API", () => {
+  const dirs: string[] = [];
+  let prevState: string | undefined;
+
+  beforeEach(async () => {
+    const state = await mkdtemp(join(tmpdir(), "hwf-hist-web-"));
+    dirs.push(state);
+    prevState = process.env.HERDR_PLUGIN_STATE_DIR;
+    process.env.HERDR_PLUGIN_STATE_DIR = state;
+  });
+
+  afterEach(async () => {
+    if (prevState === undefined) delete process.env.HERDR_PLUGIN_STATE_DIR;
+    else process.env.HERDR_PLUGIN_STATE_DIR = prevState;
+    await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
+  });
+
+  async function repo(): Promise<string> {
+    const root = await mkdtemp(join(tmpdir(), "hwf-hist-web-repo-"));
+    dirs.push(root);
+    await mkdir(join(root, ".hwf", "workflows"), { recursive: true });
+    await writeFile(
+      join(root, ".hwf", "workflows", "demo.yaml"),
+      "version: v1alpha1\nsteps:\n  - run: [printf, hi]\n",
+    );
+    return root;
+  }
+
+  function apiBase(server: { url: string }): string {
+    return new URL(server.url).origin;
+  }
+
+  test("unauthorized access is forbidden", async () => {
+    const root = await repo();
+    const server = await startWebServer({ repoRoot: root });
+    try {
+      const res = await fetch(`${apiBase(server)}/api/runs`);
+      expect(res.status).toBe(403);
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("list and detail use no-store and exclude private output", async () => {
+    const root = await repo();
+    const session = new RunHistorySession();
+    await session.claim({
+      workflow: "demo",
+      source: "repo",
+      checkout_root: root,
+    });
+    await session.recordStep({
+      phase: "main",
+      workflow: "demo",
+      workflow_path: ["demo"],
+      ordinal: 1,
+      total: 1,
+      action: "run",
+      label: "boom",
+      finished_at: new Date().toISOString(),
+      outcome: "failed",
+      failure: { action: "run", exit_code: 2 },
+      explanation: "secret-stdout-body",
+    });
+    await session.finalize("failed");
+    session.dispose();
+
+    const server = await startWebServer({ repoRoot: root });
+    try {
+      const list = await fetch(`${apiBase(server)}/api/runs`, {
+        headers: { "x-hwf-token": server.token },
+      });
+      expect(list.headers.get("cache-control")).toBe("no-store");
+      const listBody = (await list.json()) as {
+        ok: boolean;
+        runs: { id: string; failure?: { exit_code?: number } }[];
+      };
+      expect(listBody.ok).toBe(true);
+      expect(JSON.stringify(listBody)).not.toContain("secret-stdout-body");
+      expect(listBody.runs[0]?.failure?.exit_code).toBe(2);
+
+      const detail = await fetch(`${apiBase(server)}/api/run?id=${listBody.runs[0]!.id}`, {
+        headers: { "x-hwf-token": server.token },
+      });
+      expect(detail.headers.get("cache-control")).toBe("no-store");
+      const detailBody = (await detail.json()) as {
+        ok: boolean;
+        detail: { failure_explanation?: string; open_workflow?: { name: string } };
+      };
+      expect(detailBody.detail.failure_explanation).toBe("secret-stdout-body");
+      expect(detailBody.detail.open_workflow?.name).toBe("demo");
+
+      const page = await fetch(server.url);
+      expect(page.headers.get("cache-control")).toBe("no-store");
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("malformed UUID and foreign deep links", async () => {
+    const root = await repo();
+    const foreign = await mkdtemp(join(tmpdir(), "hwf-foreign-"));
+    dirs.push(foreign);
+    const session = new RunHistorySession();
+    await session.claim({
+      workflow: "other",
+      source: "global",
+      checkout_root: foreign,
+    });
+    await session.finalize("succeeded");
+    const id = session.id!;
+    session.dispose();
+
+    const server = await startWebServer({ repoRoot: root });
+    try {
+      const bad = await fetch(`${apiBase(server)}/api/run?id=550e8400`, {
+        headers: { "x-hwf-token": server.token },
+      });
+      expect(bad.status).toBe(400);
+      const body = (await bad.json()) as { detail: { kind: string } };
+      expect(body.detail.kind).toBe("invalid");
+
+      const foreignDetail = await fetch(`${apiBase(server)}/api/run?id=${id}`, {
+        headers: { "x-hwf-token": server.token },
+      });
+      const foreignBody = (await foreignDetail.json()) as {
+        ok: boolean;
+        detail: { checkout_root?: string; open_workflow?: unknown };
+      };
+      expect(foreignBody.ok).toBe(true);
+      expect(foreignBody.detail.checkout_root).toBe(await realpath(foreign));
+      expect(foreignBody.detail.open_workflow).toBeUndefined();
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("unsafe storage returns unavailable", async () => {
+    const root = await repo();
+    const state = process.env.HERDR_PLUGIN_STATE_DIR!;
+    await mkdir(state, { recursive: true });
+    await chmod(state, 0o755);
+    const server = await startWebServer({ repoRoot: root });
+    try {
+      const list = await fetch(`${apiBase(server)}/api/runs`, {
+        headers: { "x-hwf-token": server.token },
+      });
+      expect(list.status).toBe(503);
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("prior shared runs.jsonl does not appear in All", async () => {
+    const root = await repo();
+    const priorPath = join(pluginStateDir(), "runs.jsonl");
+    const body = `${JSON.stringify({
+      ts: "2020-01-01T00:00:00.000Z",
+      run: "abcd1234",
+      workflow: "old-log",
+      ok: true,
+    })}\n`;
+    await writeFile(priorPath, body, { mode: 0o600 });
+    const server = await startWebServer({ repoRoot: root });
+    try {
+      const base = apiBase(server);
+      const all = await fetch(`${base}/api/runs?location=all`, {
+        headers: { "x-hwf-token": server.token },
+      });
+      const allBody = (await all.json()) as { runs: { workflow: string }[] };
+      expect(allBody.runs.every((r) => r.workflow !== "old-log")).toBe(true);
+      expect(await Bun.file(priorPath).text()).toBe(body);
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("route parsing requires complete UUID", () => {
+    const id = allocateRunId();
+    const parsed = parseWebRoute(runWorkbenchRoute(id));
+    expect(parsed).toEqual({
+      kind: "run",
+      id,
+      hash: `run=${id}`,
+    });
+    expect(parseWebRoute("run=550e8400")).toBeUndefined();
+    const upper = parseWebRoute(`run=${id.toUpperCase()}`);
+    expect(upper?.kind === "run" ? upper.id : undefined).toBe(id);
+  });
+
+  test("deleted root remains inspectable without open action", async () => {
+    const root = await repo();
+    const gone = join(tmpdir(), `hwf-gone-${Date.now()}`);
+    await mkdir(gone, { recursive: true });
+    const canonicalGone = await realpath(gone);
+    const session = new RunHistorySession();
+    await session.claim({
+      workflow: "demo",
+      source: "repo",
+      checkout_root: gone,
+    });
+    await session.finalize("succeeded");
+    const id = session.id!;
+    session.dispose();
+    await rm(gone, { recursive: true, force: true });
+
+    const server = await startWebServer({ repoRoot: root });
+    try {
+      const detail = await fetch(`${apiBase(server)}/api/run?id=${id}`, {
+        headers: { "x-hwf-token": server.token },
+      });
+      const body = (await detail.json()) as {
+        ok: boolean;
+        detail: { checkout_root?: string; open_workflow?: unknown };
+      };
+      expect(body.ok).toBe(true);
+      expect(body.detail.checkout_root).toBe(canonicalGone);
+      expect(body.detail.open_workflow).toBeUndefined();
+    } finally {
+      server.stop();
+    }
   });
 });

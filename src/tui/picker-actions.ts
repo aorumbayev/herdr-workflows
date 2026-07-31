@@ -1,7 +1,7 @@
 import { unlink } from "node:fs/promises";
 import { EXAMPLES_URL } from "../init";
-import { notificationShow } from "../herdr";
-import { exportWorkflowBundle } from "../workflow/export";
+import { notificationShow, openInBrowser } from "../herdr";
+import { exportWorkflowBundle } from "../workflow/share";
 import type { WorkflowListEntry } from "../workflow/types";
 
 export const EMPTY_CATALOG_MESSAGE =
@@ -72,21 +72,6 @@ async function copyTextToClipboard(text: string): Promise<void> {
   if (await trySpawn(["wl-copy"])) return;
   if (await trySpawn(["xclip", "-selection", "clipboard"])) return;
   throw new Error("no clipboard command (pbcopy, wl-copy, or xclip)");
-}
-
-export async function openInBrowser(url: string): Promise<void> {
-  const cmd = process.platform === "darwin" ? ["open", url] : ["xdg-open", url];
-  try {
-    const proc = Bun.spawn(cmd, {
-      stdin: "ignore",
-      stdout: "ignore",
-      stderr: "ignore",
-      detached: true,
-    });
-    proc.unref();
-  } catch {
-    /* opener absence is nonfatal */
-  }
 }
 
 export async function openExamplesInBrowser(): Promise<void> {

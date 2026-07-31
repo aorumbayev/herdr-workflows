@@ -1233,9 +1233,6 @@
         border-radius: var(--radius);
         padding: 0.4rem 0.55rem;
       }
-      .runs-split {
-        display: contents;
-      }
       .runs-list-pane {
         min-height: 0;
         overflow: auto;
@@ -1569,6 +1566,16 @@
     </main>
     <div id="live" class="sr-live" aria-live="polite" aria-atomic="true"></div>
     <script>
+      /**
+       * Workbench page script — section map (approx. line ranges in this file):
+       *   state / helpers       ~1570–2080  (globals, api, list/tabs, open/new)
+       *   schema form engine    ~2080–2570  (step fields, encode/decode, summaries)
+       *   canvas editor         ~2570–3725  (makeCanvas, NDV, pan/zoom, palette)
+       *   YAML editor           ~3725–4610  (highlight, code editor, validate/sync)
+       *   run inspector         ~1610–1690, ~4610–4935  (pure state + list/detail paint)
+       *   import / share        ~4935–5280  (share payload, import preview/write)
+       *   boot                  ~5280–end   (hash routes, live tick, theme, listeners)
+       */
       const TOKEN = "__HWF_TOKEN__";
       const $ = (id) => document.getElementById(id);
       const THEME_KEY = "hwf-theme";
@@ -1576,7 +1583,6 @@
       let state = { entries: [], profiles: [], repoRoot: "" };
       let tab = "workflows";
       let current = null; // {name, scope}
-      let openSeq = 0; // last-click-wins token for openWorkflow
       let configDirty = false;
       let editorDirty = false;
       let editorFileText = ""; // open workflow as last read from disk — live reload compares to it
@@ -1588,11 +1594,27 @@
       let runsQuery = "";
       let runsSelectedId = null;
       let runsNarrowPane = "list";
-      let runsPollGen = 0;
-      let runsRouteGen = 0;
       let runsAbort = null;
       let runsSelectedStatusId = null;
       let runsSelectedStatus = null;
+
+      function latest() {
+        let gen = 0;
+        return {
+          begin() {
+            return ++gen;
+          },
+          current(token) {
+            return token === gen;
+          },
+          bump() {
+            return ++gen;
+          },
+        };
+      }
+      const openWorkflowToken = latest();
+      const runsPoll = latest();
+      const runsRoute = latest();
 
       /* ---------- runs inspector pure state ---------- */
       function runRowFocusId(id) {
@@ -1649,22 +1671,10 @@
         return null;
       }
 
-      function beginRunRouteLoad() {
-        return ++runsRouteGen;
-      }
-
-      function invalidateRunRoute() {
-        return ++runsRouteGen;
-      }
-
       /** Invalidate an in-flight run deep link, then clear route state. */
       function exitRouteView(view) {
-        if (view && view.kind === "run") invalidateRunRoute();
+        if (view && view.kind === "run") runsRoute.bump();
         return null;
-      }
-
-      function shouldApplyRouteLoad(routeGen, activeRouteGen) {
-        return routeGen === (activeRouteGen === undefined ? runsRouteGen : activeRouteGen);
       }
 
       function resolveRunsListSelection(runs, selectedId, forceList, hasRouteView) {
@@ -1927,7 +1937,7 @@
       }
 
       async function openWorkflow(name, scope) {
-        const seq = ++openSeq;
+        const seq = openWorkflowToken.begin();
         routeView = exitRouteView(routeView);
         current = { name, scope };
         wantOpen = null;
@@ -1938,7 +1948,7 @@
         const pane = $("pane");
         pane.innerHTML = "<p class=hint>loading…</p>";
         const r = await api("/api/workflow?name=" + encodeURIComponent(name) + "&scope=" + scope);
-        if (seq !== openSeq) return;
+        if (!openWorkflowToken.current(seq)) return;
         // A stored file that fails to parse still opens: the text came back, the error is pinned.
         if (r.status !== 200) {
           pane.innerHTML = "";
@@ -1960,7 +1970,7 @@
 
       function newWorkflow() {
         if (!confirmLeave()) return;
-        openSeq += 1; // cancel any in-flight openWorkflow
+        openWorkflowToken.bump(); // cancel any in-flight openWorkflow
         routeView = exitRouteView(routeView);
         routeView = { kind: "new" };
         current = { name: "", scope: "repo" };
@@ -4636,17 +4646,69 @@
         return "no workflow has run yet";
       }
 
-      function renderRunInspector(host, detail) {
+      function appendRunBlock(host, block) {
+        if (block.kind === "head") {
+          const head = document.createElement("div");
+          head.innerHTML =
+            "<strong>" +
+            esc(block.status) +
+            "</strong> · " +
+            esc(block.title || "") +
+            " · <code>" +
+            esc(block.display_id || "") +
+            "</code> · " +
+            esc(block.elapsed || "");
+          host.appendChild(head);
+          return;
+        }
+        if (block.kind === "note") {
+          const note = document.createElement("p");
+          note.className = "hint";
+          note.textContent = block.text;
+          host.appendChild(note);
+          return;
+        }
+        if (block.kind === "error") {
+          const err = document.createElement("p");
+          err.className = "err";
+          err.textContent = block.text;
+          host.appendChild(err);
+          return;
+        }
+        const row = document.createElement("div");
+        row.className = "step" + (block.depth > 0 ? " nested" : "");
+        row.style.paddingLeft = block.depth ? block.depth * 12 + "px" : "";
+        row.textContent =
+          block.ordinal +
+          "/" +
+          block.total +
+          " " +
+          block.label +
+          (block.outcome ? " · " + block.outcome : "");
+        host.appendChild(row);
+        if (block.explanation) {
+          const expl = document.createElement("p");
+          expl.className = "err";
+          expl.style.paddingLeft = (block.depth + 1) * 12 + "px";
+          expl.textContent = block.explanation;
+          host.appendChild(expl);
+        }
+      }
+
+      function renderRunInspector(host, detail, blocks) {
         host.innerHTML = "";
         if (!detail) {
           host.innerHTML = "<p class=hint>select a run</p>";
           return;
         }
         if (detail.kind === "invalid" || detail.kind === "missing" || detail.kind === "expired") {
-          const p = document.createElement("p");
-          p.className = "hint";
-          p.textContent = detail.message || detail.kind;
-          host.appendChild(p);
+          for (const block of blocks || []) appendRunBlock(host, block);
+          if (!blocks || !blocks.length) {
+            const p = document.createElement("p");
+            p.className = "hint";
+            p.textContent = detail.message || detail.kind;
+            host.appendChild(p);
+          }
           const back = document.createElement("button");
           back.type = "button";
           back.textContent = "Back to runs";
@@ -4662,77 +4724,13 @@
           return;
         }
         if (detail.kind === "unavailable") {
-          host.innerHTML = "<p class=hint>run history storage is unavailable</p>";
+          for (const block of blocks || []) appendRunBlock(host, block);
+          if (!blocks || !blocks.length) {
+            host.innerHTML = "<p class=hint>run history storage is unavailable</p>";
+          }
           return;
         }
-        const head = document.createElement("div");
-        head.innerHTML =
-          "<strong>" +
-          esc(statusText(detail.status)) +
-          "</strong> · " +
-          esc(detail.title || detail.workflow || "") +
-          " · <code>" +
-          esc(detail.display_id || detail.id || "") +
-          "</code>";
-        host.appendChild(head);
-        const root = document.createElement("p");
-        root.className = "hint";
-        root.textContent = detail.checkout_root;
-        host.appendChild(root);
-        if (detail.status === "stale") {
-          const stale = document.createElement("p");
-          stale.className = "hint";
-          stale.textContent = "writer heartbeat stale — not a failure";
-          host.appendChild(stale);
-        }
-        const timing = document.createElement("p");
-        timing.className = "hint";
-        timing.textContent = "elapsed " + Math.round(detail.elapsed_ms / 1000) + "s";
-        host.appendChild(timing);
-        for (const step of detail.steps) {
-          const row = document.createElement("div");
-          row.className =
-            "step" + (step.workflow_path && step.workflow_path.length > 1 ? " nested" : "");
-          row.textContent =
-            step.ordinal +
-            "/" +
-            step.total +
-            " " +
-            step.label +
-            (step.outcome ? " · " + step.outcome : step.active ? " · running" : "");
-          host.appendChild(row);
-          if (step.explanation) {
-            const expl = document.createElement("p");
-            expl.className = "err";
-            expl.textContent = step.explanation;
-            host.appendChild(expl);
-          }
-        }
-        if (detail.current_step && detail.current_step.active) {
-          const cur = document.createElement("div");
-          cur.className = "step";
-          cur.textContent =
-            detail.current_step.ordinal +
-            "/" +
-            detail.current_step.total +
-            " " +
-            detail.current_step.label +
-            " · running";
-          host.appendChild(cur);
-        }
-        if (detail.remaining > 0) {
-          const rem = document.createElement("p");
-          rem.className = "hint";
-          rem.textContent =
-            detail.remaining + " step" + (detail.remaining === 1 ? "" : "s") + " not run";
-          host.appendChild(rem);
-        }
-        if (detail.failure_explanation && !detail.steps.some((s) => s.explanation)) {
-          const expl = document.createElement("p");
-          expl.className = "err";
-          expl.textContent = detail.failure_explanation;
-          host.appendChild(expl);
-        }
+        for (const block of blocks || []) appendRunBlock(host, block);
         if (detail.open_workflow) {
           const open = document.createElement("button");
           open.type = "button";
@@ -4744,16 +4742,25 @@
 
       async function fetchRunDetail(id) {
         const r = await api("/api/run?id=" + encodeURIComponent(id));
-        return r.data && r.data.detail
-          ? r.data.detail
-          : { kind: "missing", message: "run not found" };
+        if (r.data && r.data.detail) {
+          return { detail: r.data.detail, blocks: r.data.blocks || [] };
+        }
+        const detail = {
+          kind: "unavailable",
+          id,
+          message: "run detail unavailable",
+        };
+        return {
+          detail,
+          blocks: [{ kind: "error", text: detail.message }],
+        };
       }
 
-      function paintInspectorBody(detail) {
+      function paintInspectorBody(payload) {
         const body = document.getElementById("runs-inspector-body");
         if (!body) return;
         const scroll = body.scrollTop;
-        renderRunInspector(body, detail);
+        renderRunInspector(body, payload && payload.detail, payload && payload.blocks);
         body.scrollTop = scroll;
       }
 
@@ -4762,7 +4769,7 @@
         if (runsAbort) runsAbort.abort();
         const ac = new AbortController();
         runsAbort = ac;
-        const gen = ++runsPollGen;
+        const gen = runsPoll.begin();
         const params = new URLSearchParams();
         params.set("location", runsLocation);
         if (runsQuery.trim()) params.set("q", runsQuery.trim());
@@ -4777,16 +4784,17 @@
           headers: { "x-hwf-token": TOKEN },
           signal: ac.signal,
         }).catch(() => null);
-        if (!listRes || gen !== runsPollGen || tab !== "runs") return;
+        if (!listRes || !runsPoll.current(gen) || tab !== "runs") return;
         const data = await listRes.json().catch(() => ({ runs: [] }));
-        if (gen !== runsPollGen || tab !== "runs") return;
+        if (!runsPoll.current(gen) || tab !== "runs") return;
         paintRuns(data, forceList, saved);
         if (runsSelectedId) {
           const selectedId = runsSelectedId;
-          const detail = await fetchRunDetail(selectedId);
-          if (gen !== runsPollGen || tab !== "runs" || runsSelectedId !== selectedId) return;
-          paintInspectorBody(detail);
-          const nextStatus = detail.status;
+          const payload = await fetchRunDetail(selectedId);
+          if (!runsPoll.current(gen) || tab !== "runs" || runsSelectedId !== selectedId) return;
+          paintInspectorBody(payload);
+          const detail = payload.detail;
+          const nextStatus = detail && detail.status;
           if (observeRunStatus(selectedId, nextStatus)) {
             announce((detail.workflow || "run") + " " + statusText(nextStatus));
           }
@@ -4934,12 +4942,12 @@
       async function renderShare(scope, name) {
         syncWorkflowLayout();
         const pane = $("pane");
-        const seq = ++openSeq;
+        const seq = openWorkflowToken.begin();
         pane.innerHTML = "<p class=hint>loading share…</p>";
         const r = await api(
           "/api/share?name=" + encodeURIComponent(name) + "&scope=" + encodeURIComponent(scope),
         );
-        if (seq !== openSeq) return;
+        if (!openWorkflowToken.current(seq)) return;
         if (!routeView || routeView.kind !== "share") return;
         pane.innerHTML = "";
         const head = document.createElement("div");
@@ -5237,7 +5245,7 @@
       }
 
       function openShare(scope, name) {
-        openSeq += 1;
+        openWorkflowToken.bump();
         routeView = exitRouteView(routeView);
         routeView = { kind: "share", scope, name };
         current = null;
@@ -5250,7 +5258,7 @@
       }
 
       function openImport() {
-        openSeq += 1;
+        openWorkflowToken.bump();
         routeView = exitRouteView(routeView);
         routeView = { kind: "import" };
         current = null;
@@ -5296,7 +5304,7 @@
             restoreRouteHash();
             return;
           }
-          openSeq += 1;
+          openWorkflowToken.bump();
           routeView = exitRouteView(routeView);
           current = null;
           wantOpen = null;
@@ -5346,7 +5354,7 @@
           const parsed = parseRunHash(hash);
           const id = parsed.id;
           const complete = parsed.complete === true;
-          const routeGen = beginRunRouteLoad();
+          const routeGen = runsRoute.begin();
           tab = "runs";
           routeView = { kind: "run", id, state: complete ? "ok" : "invalid" };
           runsSelectedId = complete ? id : null;
@@ -5357,7 +5365,7 @@
           syncWorkflowLayout();
           void (async () => {
             if (!complete) {
-              if (!shouldApplyRouteLoad(routeGen)) return;
+              if (!runsRoute.current(routeGen)) return;
               $("pane").innerHTML = "";
               const shell = document.createElement("div");
               shell.className = "runs-shell narrow-detail";
@@ -5379,21 +5387,23 @@
               inspector.appendChild(back);
               const body = document.createElement("div");
               body.id = "runs-inspector-body";
-              renderRunInspector(body, {
-                kind: "invalid",
-                message: "run link is not a complete UUID",
-              });
+              renderRunInspector(
+                body,
+                { kind: "invalid", message: "run link is not a complete UUID" },
+                [{ kind: "error", text: "run link is not a complete UUID" }],
+              );
               inspector.appendChild(body);
               shell.appendChild(inspector);
               $("pane").appendChild(shell);
               return;
             }
-            const detail = await fetchRunDetail(id);
-            if (!shouldApplyRouteLoad(routeGen)) return;
+            const payload = await fetchRunDetail(id);
+            if (!runsRoute.current(routeGen)) return;
+            const detail = payload.detail;
             if (detail.kind === "snapshot") runsLocation = detail.checkout_root;
             observeRunStatus(id, detail.status || null);
             await refreshRuns(false);
-            if (!shouldApplyRouteLoad(routeGen)) return;
+            if (!runsRoute.current(routeGen)) return;
           })();
           return;
         }

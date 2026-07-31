@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { parseRaw } from "../src/workflow/parse";
-import { dumpWorkflow } from "../src/web/server";
-import type { RawWorkflowDoc } from "../src/workflow/parse";
+import { dumpWorkflow } from "../src/workflow/dump";
+import { parseRaw, rawStepKeyOrder, type RawWorkflowDoc } from "../src/workflow/parse";
 
 function roundTrip(doc: RawWorkflowDoc) {
   return parseRaw("buf.yaml", dumpWorkflow(doc));
@@ -124,5 +123,62 @@ describe("dumpWorkflow round-trips through parseRaw", () => {
         sound: "request",
       },
     });
+  });
+
+  test("parse(dump(doc)) preserves every schema step key", () => {
+    expect(rawStepKeyOrder).toEqual(
+      expect.arrayContaining([
+        "id",
+        "when",
+        "continue_on_error",
+        "run",
+        "cwd",
+        "env",
+        "timeout",
+        "retry",
+        "success_codes",
+        "background",
+      ]),
+    );
+    const step = {
+      id: "shell",
+      run: ["echo", "hi"],
+      when: '{{inputs.mode}} == "go"',
+      continue_on_error: true,
+      cwd: "/tmp",
+      env: { FLAG: "1" },
+      timeout: "5s",
+      retry: { attempts: 2, delay: "1s" },
+      success_codes: [0, 2],
+    } satisfies RawWorkflowDoc["steps"][number];
+    const text = dumpWorkflow({
+      ...base,
+      inputs: { mode: ["go", "skip"] },
+      steps: [step],
+    });
+    for (const key of Object.keys(step)) {
+      expect(text).toContain(`${key}:`);
+    }
+    const doc = roundTrip({
+      ...base,
+      inputs: { mode: ["go", "skip"] },
+      steps: [step],
+    });
+    expect(doc.steps[0]).toMatchObject({
+      id: "shell",
+      continueOnError: true,
+      action: {
+        kind: "run",
+        payload: { form: "argv", argv: ["echo", "hi"] },
+        cwd: "/tmp",
+        env: { FLAG: "1" },
+        timeoutMs: 5000,
+        retry: { attempts: 2, delayMs: 1000 },
+        successCodes: [0, 2],
+      },
+    });
+    expect(doc.steps[0]!.when).toEqual([
+      { kind: "eq", negate: false, path: "inputs.mode", value: "go" },
+    ]);
   });
 });
