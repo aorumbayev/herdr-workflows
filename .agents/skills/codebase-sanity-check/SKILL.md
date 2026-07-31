@@ -1,6 +1,6 @@
 ---
 name: codebase-sanity-check
-description: Whole-repository overhaul review for herdr-workflows. Runs the real gates first, then dispatches three review sub-agents — code and tests, truth and enforcement, risk and regression — and one dedicated adversarial judge. Every finding cites file and line. Every recommendation that adds anything must survive three why questions or it is discarded. Use when asked to audit, clean up, overhaul, or `sanity check` this codebase, to raise code quality or engineering standards, to make the repository easier to read or contribute to, to check the docs against the code, or to review a branch before a pull request. For development of this herdr-workflows repository.
+description: Whole-repository overhaul review for herdr-workflows. Use when asked to audit, clean up, overhaul, or `sanity check` this codebase, to raise its engineering standards, to check the docs against the code, or to review a branch before a pull request. For development of this herdr-workflows repository.
 ---
 
 # Codebase review
@@ -45,10 +45,8 @@ evidence. If the checkout is absent, follow `.agents/references/AGENTS.md` first
 file to lower a complexity score is a defect, not a cleanup. See
 [criteria-code.md](criteria-code.md) before proposing any new file.
 
-**8. At most four sub-agents per run.** Three review, plus the judge when any group raised an ADD.
-23,000 lines and three runtime dependencies do not need a fleet. The judge is dedicated and reads no
-criteria file, so it arrives cold and owns none of the findings it kills. A run with no ADD findings
-correctly uses three.
+**8. At most four sub-agents per run.** Three review, plus a dedicated judge when any group raised
+an ADD. 23,000 lines and three runtime dependencies do not need a fleet.
 
 ## Phase 0: Establish the oracles
 
@@ -128,9 +126,6 @@ Say so in the report when `origin/<default>` is behind.
 
 Narrowing prioritizes findings inside a group's criteria. It never licenses skipping the criteria of
 a group that is running.
-
-There is no parallelism knob and no group count to tune. Three review agents, every run, plus the
-judge in Phase 3.
 
 ## Phase 2: Dispatch
 

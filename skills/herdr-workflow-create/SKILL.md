@@ -6,8 +6,9 @@ description: Creates or edits a herdr-workflows v1alpha1 YAML under .hwf/workflo
 # Create a herdr-workflows workflow
 
 Produces one YAML file that `hwf` (≡ `herdr-workflows`, a herdr plugin) runs as a linear
-sequence of steps. Format is `version: v1alpha1`. Everything needed is in this skill — do
-not invent legacy keys (`out:`, `wait:`, `use:`, dotted method actions, `{name}` placeholders).
+sequence of steps. Format is `version: v1alpha1`. Everything needed is in this skill and its
+reference files — a key not documented there does not exist in v1alpha1 (rule 13 lists the
+usual inventions).
 
 Where files go:
 
@@ -58,11 +59,9 @@ ls .hwf/workflows ~/.hwf/workflows 2>/dev/null
 `workflow:` + `inputs:` instead of duplicating steps.
 
 `herdr:` methods and their required selectors are listed in
-**[reference/herdr-api.md](reference/herdr-api.md)** — that list is complete, so use it and move on.
-This skill is installed outside the herdr-workflows checkout, so its `src/` and `schemas/` are
-**not readable**; do not try to read them. Only if a method is absent from that table, query the
-workbench started in step 3 (`GET /api/methods` with the `x-hwf-token` header) for its `allowed`
-flag and param schema.
+**[reference/herdr-api.md](reference/herdr-api.md)** — that list is complete, so use it and move
+on. It also names the runtime fallback for a method absent from the table. This skill is installed
+outside the herdr-workflows checkout, so its `src/` and `schemas/` are **not readable**.
 
 ### 3. Open the live canvas (background)
 

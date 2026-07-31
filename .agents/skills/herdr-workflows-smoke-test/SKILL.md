@@ -1,13 +1,13 @@
 ---
 name: herdr-workflows-smoke-test
-description: Brings up a throwaway Herdr instance in tmux with its own config, socket, and plugin registry, plus a disposable git repo under /tmp/hwf-sandbox. Installs the current herdr-workflows working tree with bun run install:dev (this mutates the shared checkout binary). Then runs user-directed end-to-end smoke tests. Use when the user asks to smoke-test the plugin, run e2e tests against a real Herdr, start a sandbox Herdr, or tear the sandbox down, without touching the user's live Herdr panes. For development of this herdr-workflows repository. The plugin binary is shared, not private.
+description: Throwaway Herdr instance in tmux for user-directed end-to-end smoke tests of this plugin, isolated from the user's live Herdr panes. Use when the user asks to smoke-test the plugin, run e2e tests against a real Herdr, start a sandbox Herdr, or tear the sandbox down. For development of this herdr-workflows repository.
 ---
 
 # herdr-workflows smoke-test sandbox
 
 Run the plugin against a second Herdr instance. A broken build, a bad keybinding, or a runaway workflow must not damage the Herdr panes the user is using.
 
-This skill belongs to the herdr-workflows repository. From any cwd inside this repository, derive the root with `git rev-parse --show-toplevel`. Callers outside the repository must use an absolute checkout path. Do not assume a fixed absolute repository location or a fixed working directory.
+This skill belongs to the herdr-workflows repository. Do not assume a fixed absolute repository location or a fixed working directory — "Bring it up" shows how the root is derived.
 
 **Shared binary limit:** `up` still runs `bun run install:dev` in this checkout. That rebuilds shared `bin/herdr-workflows`. The user's live Herdr picks up the same binary on its next plugin action. Config, socket, and panes are isolated. The plugin binary is not.
 
@@ -58,7 +58,7 @@ A bare `herdr` or `hwf` talks to the user's live instance. There is no warning a
 | socket, server process, panes, workspaces, sessions      | this checkout's working tree and git state                     |
 | `XDG_BIN_HOME` shims (go to `/tmp/hwf-sandbox/bin`)      | anything a workflow shells out to (network, `gh`, and similar) |
 
-So `up` rebuilding the binary means the user's live Herdr also picks up that build on its next plugin action. Say so if a test leaves the binary in a broken state.
+Say so in the report if a test leaves the shared binary in a broken state.
 
 ## Driving and observing
 
@@ -82,5 +82,4 @@ For YAML syntax, load errors, and the Herdr method allowlist, use the `herdr-wor
 - Herdr refuses to launch inside a Herdr-managed pane. The sandbox config sets `[experimental] allow_nested = true`. That is why `up` must not overwrite an existing `config.toml`.
 - `hwf run` needs the sandbox repo as cwd. Workflow lookup is repo-rooted.
 - `herdr server reload-config` needs the sandbox server already up. Never run `install:dev` before `sandbox.sh up` has started it.
-- A leftover `/tmp/hwf-sandbox` is reusable only with a valid ownership sentinel. Without one, `up` refuses rather than claiming unknown contents. Use `down` (sentinel required) for a cold start. Paths outside `/tmp/hwf-sandbox` are always refused.
-- `kill_sandbox_tmux` matches `HERDR_SOCKET_PATH` to the sandbox socket exactly. The sentinel never authorizes killing a same-named tmux session alone.
+- For a cold start over a leftover owned sandbox, run `down` first — `up` reuses an owned `/tmp/hwf-sandbox` as-is.

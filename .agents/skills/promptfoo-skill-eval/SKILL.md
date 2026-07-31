@@ -1,6 +1,6 @@
 ---
 name: promptfoo-skill-eval
-description: Measures whether an agent skill in this repository works, by running real agent sessions against two skill versions side by side and scoring the result objectively instead of with an LLM judge. Workflow-authoring skills score through the real hwf loader. Skills that emit a review or prose score through seeded-defect recall, pre-registered decoys, and the contracts the skill states about itself. Use when asked to test, evaluate, benchmark, or improve a skill under skills/ or .agents/skills/ — for example herdr-workflow-create or codebase-sanity-check — or to check whether a skill is still accurate after the loader, grammar, or herdr policy changed. For development of this herdr-workflows repository.
+description: Measures whether an agent skill in this repository works, by running real agent sessions against two skill versions side by side and scoring with objective oracles instead of an LLM judge. Use when asked to test, evaluate, benchmark, or improve a skill under skills/ or .agents/skills/ — for example herdr-workflow-create or codebase-sanity-check — or to check whether a skill is still accurate after the loader, grammar, or herdr policy changed. For development of this herdr-workflows repository.
 ---
 
 # Evaluate a user-facing skill with promptfoo
