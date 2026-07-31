@@ -1197,45 +1197,130 @@
       }
 
       /* runs */
-      #runs-list {
+      .runs-shell {
+        display: grid;
+        grid-template-columns: minmax(16rem, 22rem) 1fr;
+        grid-template-rows: auto minmax(0, 1fr);
+        gap: 1rem;
+        flex: 1;
+        min-height: 0;
+        align-self: stretch;
+      }
+      .runs-shell > .runs-controls {
+        grid-column: 1 / -1;
+      }
+      .runs-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.6rem;
+        align-self: start;
+      }
+      .runs-controls label {
         display: flex;
         flex-direction: column;
-        gap: 0.5rem;
+        gap: 0.25rem;
+        font-size: 0.8rem;
+        color: var(--muted);
+        min-width: 10rem;
+        flex: 1;
       }
-      .run {
-        display: flex;
-        align-items: center;
-        gap: 0.7rem;
+      .runs-controls select,
+      .runs-controls input {
+        font: inherit;
+        color: var(--text);
+        background: var(--bg-elevated);
         border: 1px solid var(--line);
         border-radius: var(--radius);
-        padding: 0.6rem 0.8rem;
+        padding: 0.4rem 0.55rem;
+      }
+      .runs-split {
+        display: contents;
+      }
+      .runs-list-pane {
+        min-height: 0;
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+      }
+      .runs-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        overflow: auto;
+        min-height: 0;
+        flex: 1;
+      }
+      .runs-list button.run-row {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 0.35rem 0.7rem;
+        text-align: left;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 0.55rem 0.7rem;
         background: var(--bg-elevated);
+        color: inherit;
+        cursor: pointer;
       }
-      .run .dot {
-        width: 0.55rem;
-        height: 0.55rem;
-        border-radius: 50%;
-        flex: none;
-        background: var(--muted);
+      .runs-list button.run-row:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
       }
-      .run .dot.ok {
-        background: var(--green);
+      .runs-list button.run-row.on {
+        border-color: var(--accent);
+        background: var(--accent-soft);
       }
-      .run .dot.bad {
-        background: var(--red);
+      .runs-list .run-status {
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
       }
-      .run .name {
-        font-weight: 600;
-      }
-      .run .when {
+      .runs-list .run-meta {
         color: var(--muted);
         font-size: 0.8rem;
-        margin-left: auto;
-        white-space: nowrap;
       }
-      .run .err {
-        color: var(--red);
-        font-size: 0.8rem;
+      .runs-inspector {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 0.8rem 1rem;
+        overflow: auto;
+        min-height: 0;
+        background: var(--bg-elevated);
+      }
+      .runs-inspector .step {
+        margin: 0.35rem 0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.85rem;
+      }
+      .runs-inspector .nested {
+        margin-left: 1rem;
+      }
+      .runs-narrow-only {
+        display: none;
+      }
+      @media (max-width: 820px) {
+        .runs-shell {
+          grid-template-columns: 1fr;
+        }
+        .runs-shell.narrow-detail .runs-list-pane {
+          display: none;
+        }
+        .runs-shell.narrow-list .runs-inspector {
+          display: none;
+        }
+        .runs-narrow-only {
+          display: inline-flex;
+        }
+      }
+      .sr-live {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        border: 0;
       }
 
       /* share / import routes */
@@ -1482,6 +1567,7 @@
       <aside id="list"></aside>
       <section id="pane"></section>
     </main>
+    <div id="live" class="sr-live" aria-live="polite" aria-atomic="true"></div>
     <script>
       const TOKEN = "__HWF_TOKEN__";
       const $ = (id) => document.getElementById(id);
@@ -1496,8 +1582,110 @@
       let editorFileText = ""; // open workflow as last read from disk — live reload compares to it
       let editorMode = "text"; // desired mode, kept across live reloads
       let wantOpen = null; // {name, scope} from the URL hash; opened as soon as the file exists
-      let routeView = null; // null | {kind:"share",scope,name} | {kind:"import"} | {kind:"new"}
+      let routeView = null; // null | {kind:"share",scope,name} | {kind:"import"} | {kind:"new"} | {kind:"run",id,state}
       let listCollapsed = false;
+      let runsLocation = "current";
+      let runsQuery = "";
+      let runsSelectedId = null;
+      let runsNarrowPane = "list";
+      let runsPollGen = 0;
+      let runsRouteGen = 0;
+      let runsAbort = null;
+      let runsSelectedStatusId = null;
+      let runsSelectedStatus = null;
+
+      /* ---------- runs inspector pure state ---------- */
+      function runRowFocusId(id) {
+        return "run-row-" + String(id || "");
+      }
+
+      function runsBackFocusId() {
+        return "runs-back";
+      }
+
+      function parseRunHash(hash) {
+        if (!String(hash || "").startsWith("run=")) return { kind: "absent" };
+        const id = String(hash).slice(4).trim().toLowerCase();
+        const complete = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id);
+        return { kind: "run", id: id, complete: complete };
+      }
+
+      function seedSelectedStatus(id, status) {
+        runsSelectedStatusId = id || null;
+        runsSelectedStatus = status || null;
+      }
+
+      function terminalAnnouncement(id, nextStatus) {
+        if (!id || !nextStatus) return null;
+        if (nextStatus !== "succeeded" && nextStatus !== "failed" && nextStatus !== "interrupted") {
+          return null;
+        }
+        if (runsSelectedStatusId !== id) {
+          seedSelectedStatus(id, nextStatus);
+          return null;
+        }
+        if (!runsSelectedStatus || runsSelectedStatus === nextStatus) {
+          runsSelectedStatus = nextStatus;
+          return null;
+        }
+        const prev = runsSelectedStatus;
+        runsSelectedStatus = nextStatus;
+        return prev;
+      }
+
+      /** Retain nonterminal observation; announce only after a known prior status. */
+      function observeRunStatus(id, status) {
+        if (!id || !status) return null;
+        if (status === "running" || status === "stale") {
+          seedSelectedStatus(id, status);
+          return null;
+        }
+        return terminalAnnouncement(id, status);
+      }
+
+      function resolveFocusAfterPaint(savedFocusId, selectedId) {
+        if (savedFocusId) return savedFocusId;
+        if (selectedId) return runRowFocusId(selectedId);
+        return null;
+      }
+
+      function beginRunRouteLoad() {
+        return ++runsRouteGen;
+      }
+
+      function invalidateRunRoute() {
+        return ++runsRouteGen;
+      }
+
+      /** Invalidate an in-flight run deep link, then clear route state. */
+      function exitRouteView(view) {
+        if (view && view.kind === "run") invalidateRunRoute();
+        return null;
+      }
+
+      function shouldApplyRouteLoad(routeGen, activeRouteGen) {
+        return routeGen === (activeRouteGen === undefined ? runsRouteGen : activeRouteGen);
+      }
+
+      function resolveRunsListSelection(runs, selectedId, forceList, hasRouteView) {
+        let next = selectedId;
+        if (next && !runs.some((r) => r.id === next) && !hasRouteView) {
+          next = runs[0] ? runs[0].id : null;
+        }
+        if (!next && runs[0] && !forceList) next = runs[0].id;
+        return next || null;
+      }
+
+      /** Adopt list selection and seed status when the selected id changes or is unobserved. */
+      function adoptRunsSelection(runs, selectedId, forceList, hasRouteView) {
+        const next = resolveRunsListSelection(runs, selectedId, forceList, hasRouteView);
+        if (next !== selectedId || (next && runsSelectedStatusId !== next)) {
+          const row = next ? runs.find((r) => r.id === next) : null;
+          seedSelectedStatus(next, row && row.status ? row.status : null);
+        }
+        return next;
+      }
+      /* ---------- end runs inspector pure state ---------- */
 
       function errMsg(e) {
         return (e && e.message) || String(e);
@@ -1584,16 +1772,20 @@
       }
 
       function clearRouteHash() {
-        if (!/^#(share=|import|new)/.test(location.hash)) return;
+        if (!/^#(share=|import|new|run=)/.test(location.hash)) return;
         history.replaceState(null, "", location.pathname + location.search);
       }
 
       function currentRouteHash() {
+        if (tab === "runs" && runsSelectedId) {
+          return "#run=" + runsSelectedId;
+        }
         if (tab !== "workflows") return "";
         if (routeView) {
           if (routeView.kind === "import") return "#import";
           if (routeView.kind === "new") return "#new";
           if (routeView.kind === "share") return "#share=" + routeView.scope + ":" + routeView.name;
+          if (routeView.kind === "run") return "#run=" + routeView.id;
         }
         if (current && current.name) return "#w=" + current.scope + ":" + current.name;
         return "";
@@ -1634,15 +1826,19 @@
         syncListToggle();
       }
 
+      function syncTabs() {
+        document
+          .querySelectorAll(".tab")
+          .forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+      }
+
       function setListCollapsed(on) {
         listCollapsed = !!on;
         syncWorkflowLayout();
       }
 
       function render() {
-        document
-          .querySelectorAll(".tab")
-          .forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+        syncTabs();
         syncWorkflowLayout();
         if (routeView) return;
         if (tab === "workflows") return renderWorkflows();
@@ -1732,7 +1928,7 @@
 
       async function openWorkflow(name, scope) {
         const seq = ++openSeq;
-        routeView = null;
+        routeView = exitRouteView(routeView);
         current = { name, scope };
         wantOpen = null;
         if (narrowViewport()) listCollapsed = true;
@@ -1765,6 +1961,7 @@
       function newWorkflow() {
         if (!confirmLeave()) return;
         openSeq += 1; // cancel any in-flight openWorkflow
+        routeView = exitRouteView(routeView);
         routeView = { kind: "new" };
         current = { name: "", scope: "repo" };
         setHash("new");
@@ -4420,43 +4617,319 @@
         });
       }
 
+      function announce(text) {
+        const live = $("live");
+        if (!live) return;
+        live.textContent = "";
+        live.textContent = text;
+      }
+
+      function statusText(status) {
+        return String(status || "").toUpperCase();
+      }
+
+      function runsEmptyCopy(data) {
+        if (data && data.unavailable) return "run history storage is unavailable";
+        const runs = (data && data.runs) || [];
+        if (runsQuery.trim()) return "no matching runs";
+        if (runsLocation === "current") return "no runs in this worktree — try All folders";
+        return "no workflow has run yet";
+      }
+
+      function renderRunInspector(host, detail) {
+        host.innerHTML = "";
+        if (!detail) {
+          host.innerHTML = "<p class=hint>select a run</p>";
+          return;
+        }
+        if (detail.kind === "invalid" || detail.kind === "missing" || detail.kind === "expired") {
+          const p = document.createElement("p");
+          p.className = "hint";
+          p.textContent = detail.message || detail.kind;
+          host.appendChild(p);
+          const back = document.createElement("button");
+          back.type = "button";
+          back.textContent = "Back to runs";
+          back.id = runsBackFocusId();
+          back.onclick = () => {
+            runsSelectedId = null;
+            routeView = exitRouteView(routeView);
+            runsNarrowPane = "list";
+            history.replaceState(null, "", location.pathname + location.search + "#");
+            void refreshRuns(true);
+          };
+          host.appendChild(back);
+          return;
+        }
+        if (detail.kind === "unavailable") {
+          host.innerHTML = "<p class=hint>run history storage is unavailable</p>";
+          return;
+        }
+        const head = document.createElement("div");
+        head.innerHTML =
+          "<strong>" +
+          esc(statusText(detail.status)) +
+          "</strong> · " +
+          esc(detail.title || detail.workflow || "") +
+          " · <code>" +
+          esc(detail.display_id || detail.id || "") +
+          "</code>";
+        host.appendChild(head);
+        const root = document.createElement("p");
+        root.className = "hint";
+        root.textContent = detail.checkout_root;
+        host.appendChild(root);
+        if (detail.status === "stale") {
+          const stale = document.createElement("p");
+          stale.className = "hint";
+          stale.textContent = "writer heartbeat stale — not a failure";
+          host.appendChild(stale);
+        }
+        const timing = document.createElement("p");
+        timing.className = "hint";
+        timing.textContent = "elapsed " + Math.round(detail.elapsed_ms / 1000) + "s";
+        host.appendChild(timing);
+        for (const step of detail.steps) {
+          const row = document.createElement("div");
+          row.className =
+            "step" + (step.workflow_path && step.workflow_path.length > 1 ? " nested" : "");
+          row.textContent =
+            step.ordinal +
+            "/" +
+            step.total +
+            " " +
+            step.label +
+            (step.outcome ? " · " + step.outcome : step.active ? " · running" : "");
+          host.appendChild(row);
+          if (step.explanation) {
+            const expl = document.createElement("p");
+            expl.className = "err";
+            expl.textContent = step.explanation;
+            host.appendChild(expl);
+          }
+        }
+        if (detail.current_step && detail.current_step.active) {
+          const cur = document.createElement("div");
+          cur.className = "step";
+          cur.textContent =
+            detail.current_step.ordinal +
+            "/" +
+            detail.current_step.total +
+            " " +
+            detail.current_step.label +
+            " · running";
+          host.appendChild(cur);
+        }
+        if (detail.remaining > 0) {
+          const rem = document.createElement("p");
+          rem.className = "hint";
+          rem.textContent =
+            detail.remaining + " step" + (detail.remaining === 1 ? "" : "s") + " not run";
+          host.appendChild(rem);
+        }
+        if (detail.failure_explanation && !detail.steps.some((s) => s.explanation)) {
+          const expl = document.createElement("p");
+          expl.className = "err";
+          expl.textContent = detail.failure_explanation;
+          host.appendChild(expl);
+        }
+        if (detail.open_workflow) {
+          const open = document.createElement("button");
+          open.type = "button";
+          open.textContent = "Open current workflow";
+          open.onclick = () => openWorkflow(detail.open_workflow.name, detail.open_workflow.source);
+          host.appendChild(open);
+        }
+      }
+
+      async function fetchRunDetail(id) {
+        const r = await api("/api/run?id=" + encodeURIComponent(id));
+        return r.data && r.data.detail
+          ? r.data.detail
+          : { kind: "missing", message: "run not found" };
+      }
+
+      function paintInspectorBody(detail) {
+        const body = document.getElementById("runs-inspector-body");
+        if (!body) return;
+        const scroll = body.scrollTop;
+        renderRunInspector(body, detail);
+        body.scrollTop = scroll;
+      }
+
+      async function refreshRuns(forceList) {
+        if (tab !== "runs" || document.hidden) return;
+        if (runsAbort) runsAbort.abort();
+        const ac = new AbortController();
+        runsAbort = ac;
+        const gen = ++runsPollGen;
+        const params = new URLSearchParams();
+        params.set("location", runsLocation);
+        if (runsQuery.trim()) params.set("q", runsQuery.trim());
+        const prevList = document.querySelector(".runs-list");
+        const prevBody = document.getElementById("runs-inspector-body");
+        const saved = {
+          listScrollTop: prevList ? prevList.scrollTop : 0,
+          inspectorScrollTop: prevBody ? prevBody.scrollTop : 0,
+          focusId: document.activeElement && document.activeElement.id,
+        };
+        const listRes = await fetch("/api/runs?" + params.toString(), {
+          headers: { "x-hwf-token": TOKEN },
+          signal: ac.signal,
+        }).catch(() => null);
+        if (!listRes || gen !== runsPollGen || tab !== "runs") return;
+        const data = await listRes.json().catch(() => ({ runs: [] }));
+        if (gen !== runsPollGen || tab !== "runs") return;
+        paintRuns(data, forceList, saved);
+        if (runsSelectedId) {
+          const selectedId = runsSelectedId;
+          const detail = await fetchRunDetail(selectedId);
+          if (gen !== runsPollGen || tab !== "runs" || runsSelectedId !== selectedId) return;
+          paintInspectorBody(detail);
+          const nextStatus = detail.status;
+          if (observeRunStatus(selectedId, nextStatus)) {
+            announce((detail.workflow || "run") + " " + statusText(nextStatus));
+          }
+        }
+      }
+
+      function paintRuns(data, forceList, saved) {
+        const pane = $("pane");
+        const focusId = resolveFocusAfterPaint(
+          (saved && saved.focusId) || (document.activeElement && document.activeElement.id),
+          runsSelectedId,
+        );
+        const locations = (data && data.locations) || [
+          { id: "current", label: "Current" },
+          { id: "all", label: "All folders" },
+        ];
+        const runs = (data && data.runs) || [];
+        runsSelectedId = adoptRunsSelection(runs, runsSelectedId, forceList, !!routeView);
+        const shell = document.createElement("div");
+        shell.className =
+          "runs-shell" + (runsNarrowPane === "detail" ? " narrow-detail" : " narrow-list");
+        const controls = document.createElement("div");
+        controls.className = "runs-controls";
+        const locLabel = document.createElement("label");
+        locLabel.textContent = "Location";
+        const loc = document.createElement("select");
+        loc.id = "runs-location";
+        for (const item of locations) {
+          const opt = document.createElement("option");
+          opt.value = item.id;
+          opt.textContent = item.label;
+          if (item.id === runsLocation) opt.selected = true;
+          loc.appendChild(opt);
+        }
+        loc.onchange = () => {
+          runsLocation = loc.value;
+          void refreshRuns(true);
+        };
+        locLabel.appendChild(loc);
+        const searchLabel = document.createElement("label");
+        searchLabel.textContent = "Search";
+        const search = document.createElement("input");
+        search.id = "runs-search";
+        search.type = "search";
+        search.value = runsQuery;
+        search.placeholder = "workflow, status, id…";
+        search.oninput = () => {
+          runsQuery = search.value;
+          void refreshRuns(true);
+        };
+        searchLabel.appendChild(search);
+        controls.appendChild(locLabel);
+        controls.appendChild(searchLabel);
+        shell.appendChild(controls);
+
+        const listPane = document.createElement("div");
+        listPane.className = "runs-list-pane";
+        const list = document.createElement("div");
+        list.className = "runs-list";
+        list.setAttribute("role", "listbox");
+        list.setAttribute("aria-label", "Runs");
+        if (!runs.length) {
+          const empty = document.createElement("p");
+          empty.className = "hint";
+          empty.textContent = runsEmptyCopy(data);
+          list.appendChild(empty);
+        } else {
+          for (const r of runs) {
+            const row = document.createElement("button");
+            row.type = "button";
+            row.id = runRowFocusId(r.id);
+            row.className = "run-row" + (r.id === runsSelectedId ? " on" : "");
+            row.setAttribute("role", "option");
+            row.setAttribute("aria-selected", r.id === runsSelectedId ? "true" : "false");
+            row.innerHTML =
+              '<span class="run-status">' +
+              esc(statusText(r.status)) +
+              "</span><span><strong>" +
+              esc(r.title || r.workflow) +
+              "</strong><div class=run-meta>" +
+              esc(r.display_id || "") +
+              (r.progress ? " · " + r.progress.done + "/" + r.progress.total : "") +
+              "</div></span><span class=run-meta>" +
+              esc(fmtWhen(r.started_at)) +
+              "</span>";
+            row.onclick = () => {
+              runsSelectedId = r.id;
+              seedSelectedStatus(r.id, r.status);
+              runsNarrowPane = "detail";
+              setHash("run=" + r.id);
+              void refreshRuns(false);
+            };
+            list.appendChild(row);
+          }
+        }
+        listPane.appendChild(list);
+        shell.appendChild(listPane);
+
+        const inspector = document.createElement("div");
+        inspector.className = "runs-inspector";
+        inspector.id = "runs-inspector";
+        const back = document.createElement("button");
+        back.type = "button";
+        back.id = runsBackFocusId();
+        back.className = "runs-narrow-only";
+        back.textContent = "Back to runs";
+        back.onclick = () => {
+          runsNarrowPane = "list";
+          paintRuns(data, true, {
+            listScrollTop: list.scrollTop,
+            inspectorScrollTop: 0,
+            focusId: "runs-search",
+          });
+        };
+        inspector.appendChild(back);
+        const body = document.createElement("div");
+        body.id = "runs-inspector-body";
+        if (!runsSelectedId) {
+          body.innerHTML = "<p class=hint>select a run</p>";
+        } else {
+          body.innerHTML = "<p class=hint>loading…</p>";
+        }
+        inspector.appendChild(body);
+        shell.appendChild(inspector);
+        pane.innerHTML = "";
+        pane.appendChild(shell);
+        if (saved) {
+          list.scrollTop = saved.listScrollTop || 0;
+          body.scrollTop = saved.inspectorScrollTop || 0;
+        }
+        if (focusId && $(focusId)) $(focusId).focus();
+      }
+
       async function renderRuns() {
         $("list").classList.add("hide");
         const pane = $("pane");
         pane.innerHTML = "<p class=hint>loading…</p>";
-        const { data } = await api("/api/runs");
-        const runs = data.runs || [];
-        pane.innerHTML = "";
-        if (!runs.length) {
-          pane.innerHTML = "<p class=hint>no runs yet</p>";
-          return;
-        }
-        const wrap = document.createElement("div");
-        wrap.id = "runs-list";
-        for (const r of runs) {
-          const row = document.createElement("div");
-          row.className = "run";
-          const status = r.ok ? "ok" : "failed";
-          row.innerHTML =
-            '<span class="dot ' +
-            (r.ok ? "ok" : "bad") +
-            '"></span>' +
-            '<span class="name">' +
-            esc(r.workflow) +
-            "</span>" +
-            '<span class="' +
-            (r.ok ? "hint" : "err") +
-            '">' +
-            esc(status) +
-            "</span>" +
-            (r.error ? '<span class="err">— ' + esc(r.error) + "</span>" : "") +
-            '<span class="when">' +
-            esc(fmtWhen(r.ts)) +
-            "</span>";
-          wrap.appendChild(row);
-        }
-        pane.appendChild(wrap);
+        await refreshRuns(runsNarrowPane === "list");
       }
+
+      setInterval(() => {
+        if (tab === "runs" && !document.hidden) void refreshRuns(false);
+      }, 3000);
 
       async function renderShare(scope, name) {
         syncWorkflowLayout();
@@ -4765,28 +5238,26 @@
 
       function openShare(scope, name) {
         openSeq += 1;
+        routeView = exitRouteView(routeView);
         routeView = { kind: "share", scope, name };
         current = null;
         wantOpen = null;
         tab = "workflows";
         setHash("share=" + scope + ":" + name);
-        document
-          .querySelectorAll(".tab")
-          .forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+        syncTabs();
         syncWorkflowLayout();
         void renderShare(scope, name);
       }
 
       function openImport() {
         openSeq += 1;
+        routeView = exitRouteView(routeView);
         routeView = { kind: "import" };
         current = null;
         wantOpen = null;
         tab = "workflows";
         setHash("import");
-        document
-          .querySelectorAll(".tab")
-          .forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+        syncTabs();
         syncWorkflowLayout();
         renderImport();
       }
@@ -4795,7 +5266,7 @@
         (b) =>
           (b.onclick = () => {
             if (!confirmLeave()) return;
-            routeView = null;
+            routeView = exitRouteView(routeView);
             clearRouteHash();
             tab = b.dataset.tab;
             if (tab === "workflows") current = null;
@@ -4826,10 +5297,11 @@
             return;
           }
           openSeq += 1;
-          routeView = null;
+          routeView = exitRouteView(routeView);
           current = null;
           wantOpen = null;
           tab = "workflows";
+          syncTabs();
           syncWorkflowLayout();
           renderWorkflows();
           return;
@@ -4870,6 +5342,61 @@
           openShare(scope, name);
           return;
         }
+        if (hash.startsWith("run=")) {
+          const parsed = parseRunHash(hash);
+          const id = parsed.id;
+          const complete = parsed.complete === true;
+          const routeGen = beginRunRouteLoad();
+          tab = "runs";
+          routeView = { kind: "run", id, state: complete ? "ok" : "invalid" };
+          runsSelectedId = complete ? id : null;
+          seedSelectedStatus(complete ? id : null, null);
+          runsNarrowPane = "detail";
+          runsLocation = "current";
+          syncTabs();
+          syncWorkflowLayout();
+          void (async () => {
+            if (!complete) {
+              if (!shouldApplyRouteLoad(routeGen)) return;
+              $("pane").innerHTML = "";
+              const shell = document.createElement("div");
+              shell.className = "runs-shell narrow-detail";
+              const inspector = document.createElement("div");
+              inspector.className = "runs-inspector";
+              inspector.id = "runs-inspector";
+              const back = document.createElement("button");
+              back.type = "button";
+              back.id = runsBackFocusId();
+              back.className = "runs-narrow-only";
+              back.textContent = "Back to runs";
+              back.onclick = () => {
+                runsSelectedId = null;
+                routeView = exitRouteView(routeView);
+                runsNarrowPane = "list";
+                history.replaceState(null, "", location.pathname + location.search + "#");
+                void refreshRuns(true);
+              };
+              inspector.appendChild(back);
+              const body = document.createElement("div");
+              body.id = "runs-inspector-body";
+              renderRunInspector(body, {
+                kind: "invalid",
+                message: "run link is not a complete UUID",
+              });
+              inspector.appendChild(body);
+              shell.appendChild(inspector);
+              $("pane").appendChild(shell);
+              return;
+            }
+            const detail = await fetchRunDetail(id);
+            if (!shouldApplyRouteLoad(routeGen)) return;
+            if (detail.kind === "snapshot") runsLocation = detail.checkout_root;
+            observeRunStatus(id, detail.status || null);
+            await refreshRuns(false);
+            if (!shouldApplyRouteLoad(routeGen)) return;
+          })();
+          return;
+        }
         const m = /^w=(repo|global):([a-z0-9][a-z0-9-_]*)$/.exec(hash);
         if (!m) return;
         const [, scope, name] = m;
@@ -4878,13 +5405,13 @@
           restoreRouteHash();
           return;
         }
-        routeView = null;
         tab = "workflows";
         const entry = state.entries.find((e) => e.name === name);
         if (entry) {
           const has = scope === "repo" ? entry.inRepo : entry.inGlobal;
           return openWorkflow(name, has ? scope : entry.source);
         }
+        routeView = exitRouteView(routeView);
         wantOpen = { name, scope }; // not written yet — liveTick opens it once it appears
         current = null;
         syncWorkflowLayout();

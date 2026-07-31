@@ -15,6 +15,8 @@ export type LaunchPayload = {
   inputs: Record<string, string>;
   /** Resolved dynamic choice domains keyed by input name. */
   domains?: Record<string, string[]>;
+  /** Picker-allocated full run UUID exclusively claimed by the child. */
+  runId?: string;
 };
 
 export type LaunchRunRequest = {
@@ -23,7 +25,9 @@ export type LaunchRunRequest = {
   ctx: InvocationContext;
   inputs: Record<string, string>;
   domains?: Record<string, string[]>;
+  runId?: string;
   onProgressLine: (line: string) => void;
+  onHistoryAck?: (line: string) => void;
   env?: NodeJS.ProcessEnv;
   spawn?: typeof Bun.spawn;
 };
@@ -161,11 +165,13 @@ export function buildLaunchPayload(
   name: string,
   inputs: Record<string, string>,
   domains?: Record<string, string[]>,
+  runId?: string,
 ): LaunchPayload {
   return {
     name,
     inputs,
     ...(domains !== undefined && Object.keys(domains).length > 0 ? { domains } : {}),
+    ...(runId !== undefined ? { runId } : {}),
   };
 }
 
@@ -208,7 +214,19 @@ export function parseLaunchPayload(text: string): LaunchPayload {
       domains[key] = value as string[];
     }
   }
-  return { name: row.name, inputs, ...(domains !== undefined ? { domains } : {}) };
+  let runId: string | undefined;
+  if (row.runId !== undefined) {
+    if (typeof row.runId !== "string" || !row.runId) {
+      throw new Error("launch payload runId must be a non-empty string");
+    }
+    runId = row.runId;
+  }
+  return {
+    name: row.name,
+    inputs,
+    ...(domains !== undefined ? { domains } : {}),
+    ...(runId !== undefined ? { runId } : {}),
+  };
 }
 
 function decodeLines(
@@ -244,7 +262,7 @@ function decodeLines(
 export function launchDetachedRun(req: LaunchRunRequest): DetachedRunHandle {
   const spawn = req.spawn ?? Bun.spawn.bind(Bun);
   const argv = selfRunArgv(buildRunArgs(req.name));
-  const payload = JSON.stringify(buildLaunchPayload(req.name, req.inputs, req.domains));
+  const payload = JSON.stringify(buildLaunchPayload(req.name, req.inputs, req.domains, req.runId));
   const env = {
     ...process.env,
     ...req.env,
@@ -282,6 +300,10 @@ export function launchDetachedRun(req: LaunchRunRequest): DetachedRunHandle {
     const onLine = (line: string) => {
       const trimmed = line.trimEnd();
       if (!trimmed) return;
+      if (trimmed.startsWith("@hwf-history:")) {
+        if (!detached) req.onHistoryAck?.(trimmed);
+        return;
+      }
       if (/^\[\d+\/\d+\]/.test(trimmed)) {
         lastProgress = trimmed;
         if (!detached) req.onProgressLine(trimmed);

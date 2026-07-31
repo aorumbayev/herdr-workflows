@@ -247,6 +247,7 @@ async function cmdRun(
   await ensureHerdrProtocol();
   let inputs: Record<string, string> = {};
   let domains: Record<string, string[]> | undefined;
+  let runId: string | undefined;
   if (opts.launchPayload) {
     let payload;
     try {
@@ -259,6 +260,7 @@ async function cmdRun(
     }
     inputs = payload.inputs;
     domains = payload.domains;
+    runId = payload.runId;
   }
   inputs = { ...inputs, ...opts.input };
   const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || resolveRepoRoot();
@@ -273,7 +275,11 @@ async function cmdRun(
       ctx,
       inputs,
       ...(domains !== undefined ? { domains } : {}),
+      ...(runId !== undefined ? { runId } : {}),
       ...(opts.launchPayload ? { resolveDynamic: false } : {}),
+      onHistoryAck: (line) => {
+        process.stdout.write(`${line}\n`);
+      },
       onProgress: (i, n, label, outcome = "ok") => {
         if (outcome === "start") {
           process.stdout.write(`[${i}/${n}] ${label}…\n`);
@@ -304,7 +310,7 @@ async function cmdWeb(
   const route = routeRaw === undefined ? undefined : parseWebRoute(routeRaw);
   if (routeRaw !== undefined && !route) {
     die(
-      `web route expects w=<repo|global>:<name>, share=<repo|global>:<name>, import, or new, got '${routeRaw}'`,
+      `web route expects w=<repo|global>:<name>, share=<repo|global>:<name>, run=<uuid>, import, or new, got '${routeRaw}'`,
     );
   }
   const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot());
@@ -451,7 +457,7 @@ function buildProgram(): Command {
   program
     .command("web")
     .description("Start the browser workbench")
-    .argument("[route]", "optional w=|share=|import|new route")
+    .argument("[route]", "optional w=|share=|run=<uuid>|import|new route")
     .option("--port <integer>", "listen port", parsePort)
     .option("--no-open", "do not open a browser")
     .action(async (route: string | undefined, opts: { port?: number; open?: boolean }) => {

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { InvocationContext, TranscriptExtractor, WorkflowsConfig } from "../config";
+import type { RunHistorySession } from "../history/store";
 import { HerdrError } from "../herdr";
 import { assertUnderCaptureCap, CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../limits";
 import type { TemplateNamespace, WorkflowStep } from "../workflow/types";
@@ -53,7 +54,10 @@ export type StepRunOpts = {
   runId: string;
   workflowPath: string[];
   isEntry: boolean;
+  /** Ordinal of the invoking workflow: step — persisted on nested history records. */
+  parentOrdinal?: number;
   managedResponseFiles: string[];
+  history?: RunHistorySession;
   onProgress?: (step: number, total: number, label: string, outcome?: string) => void;
   onStderr?: (text: string) => void;
 };

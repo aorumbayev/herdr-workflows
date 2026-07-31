@@ -932,7 +932,7 @@ describe("web page share and import routes", () => {
     const { base, token } = await serve(root);
     const html = await (await fetch(`${base}/?token=${encodeURIComponent(token)}`)).text();
     expect(html).toContain("function syncWorkflowLayout()");
-    expect(html).toMatch(/if \(!hash\) \{[\s\S]*?routeView = null/);
+    expect(html).toMatch(/if \(!hash\) \{[\s\S]*?routeView = exitRouteView\(routeView\)/);
     expect(html).toMatch(/if \(!hash\) \{[\s\S]*?confirmLeave\(\)/);
     expect(html).toContain("syncWorkflowLayout()");
     expect(html).toMatch(/openWorkflow[\s\S]*?syncWorkflowLayout\(\)/);
@@ -944,9 +944,9 @@ describe("web page share and import routes", () => {
     const html = await (await fetch(`${base}/?token=${encodeURIComponent(token)}`)).text();
     expect(html).toContain("function currentRouteHash()");
     expect(html).toContain("function restoreRouteHash()");
-    expect(html).toMatch(
-      /function currentRouteHash\(\) \{\s*if \(tab !== "workflows"\) return "";/,
-    );
+    expect(html).toMatch(/function currentRouteHash\(\) \{/);
+    expect(html).toContain('if (tab !== "workflows") return ""');
+    expect(html).toContain("#run=");
     expect(html).toMatch(
       /history\.replaceState\(null, "", location\.pathname \+ location\.search \+ want\)/,
     );
@@ -959,8 +959,9 @@ describe("web page share and import routes", () => {
       /if \(\s*!routeView &&\s*current &&\s*current\.name === name &&\s*current\.scope === scope\s*\)\s*return;/,
     );
     expect(html).toMatch(
-      /if \(!confirmLeave\(\)\) \{\s*restoreRouteHash\(\);\s*return;\s*\}\s*routeView = null;/,
+      /if \(!confirmLeave\(\)\) \{\s*restoreRouteHash\(\);\s*return;\s*\}\s*tab = "workflows";/,
     );
+    expect(html).toContain("routeView = exitRouteView(routeView)");
     expect(html).toContain("configDirty");
     expect(html).toContain("editorDirty");
     expect(html).toContain("discard unsaved config changes?");

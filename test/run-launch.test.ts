@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { KeyEvent } from "@opentui/core";
 import type { InvocationContext } from "../src/config";
-import { runLogPath, type RunLogEntry } from "../src/runlog";
 import {
   launchWorkbenchRoute,
   LIST_HINT,
@@ -104,6 +103,10 @@ function pickerState(overrides: Partial<PickerState> = {}): PickerState {
     resolveGeneration: 0,
     customChoice: false,
     reloadEntries: async () => [],
+    runsScope: "current",
+    savedWorkflowFilter: "",
+    savedRunsFilter: "",
+    runDetailScroll: 0,
     ...overrides,
   } as unknown as PickerState;
 }
@@ -189,7 +192,7 @@ describe("run argv", () => {
 });
 
 describe("picker detached run", () => {
-  test("dismissing the popup leaves the run to completion in the run log", async () => {
+  test("dismissing the popup leaves the run to completion", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "hwf-detach-state-"));
     dirs.push(stateDir);
     process.env.HERDR_PLUGIN_STATE_DIR = stateDir;
@@ -204,19 +207,11 @@ describe("picker detached run", () => {
       let detached = false;
       const result = (async () => {
         req.onProgressLine("[1/1] sleep");
+        req.onHistoryAck?.(
+          `@hwf-history:claimed ${req.runId ?? "00000000-0000-4000-8000-000000000001"}`,
+        );
         await slept;
         finished = true;
-        const entry: RunLogEntry = {
-          ts: new Date().toISOString(),
-          run: "detach01",
-          workflow: req.name,
-          step: 1,
-          total: 1,
-          label: "sleep",
-          ok: true,
-        };
-        await mkdir(stateDir, { recursive: true });
-        await Bun.write(runLogPath(), `${JSON.stringify(entry)}\n`);
         return { ok: true, detail: "" };
       })();
       return {
@@ -236,7 +231,8 @@ describe("picker detached run", () => {
     });
     await Bun.sleep(10);
     expect(state.running).toBe(true);
-    expect(String(state.footer.content)).toContain("dismiss");
+    expect(state.mode).toBe("run-detail");
+    expect(String(state.footer.content)).toContain("esc back");
 
     state.runHandle?.detach();
     state.exit = { code: 0 };
@@ -246,12 +242,6 @@ describe("picker detached run", () => {
     await running;
     expect(finished).toBe(true);
     expect(state.exit?.code).toBe(0);
-
-    const log = (await readFile(runLogPath(), "utf8"))
-      .trim()
-      .split("\n")
-      .map((line) => JSON.parse(line) as RunLogEntry);
-    expect(log.some((e) => e.workflow === "sleepy" && e.ok)).toBe(true);
   });
 
   test("detached launch receives the original invocation identity", async () => {
@@ -288,31 +278,25 @@ describe("picker detached run", () => {
   test("a single-step local workflow still reports its outcome through the picker", async () => {
     const launchRun = (req: LaunchRunRequest): DetachedRunHandle => ({
       result: (async () => {
+        req.onHistoryAck?.(`@hwf-history:claimed ${req.runId}`);
         req.onProgressLine("[1/1] run: true");
         return { ok: true, detail: "" };
       })(),
       detach: () => undefined,
     });
-    let destroyed = false;
-    const state = pickerState({
-      launchRun,
-      renderer: {
-        destroy: () => {
-          destroyed = true;
-        },
-      } as PickerState["renderer"],
-    });
+    const state = pickerState({ launchRun });
     await startRun(state, {
       name: "quick",
       source: "repo",
       file: "/repo/.hwf/workflows/quick.yaml",
     });
     expect(state.progressLines.some((line) => line.includes("[1/1]"))).toBe(true);
-    expect(state.exit?.code).toBe(0);
-    expect(destroyed).toBe(true);
+    expect(state.mode).toBe("run-detail");
+    expect(state.exit).toBeUndefined();
+    expect(state.running).toBe(false);
   });
 
-  test("failed run Escape dismisses nonzero and forwards domains on launch", async () => {
+  test("failed run stays in detail and forwards domains on launch", async () => {
     let seen: LaunchRunRequest | undefined;
     const state = pickerState({
       inputDomains: { branch: ["one", "two"] },
@@ -331,8 +315,10 @@ describe("picker detached run", () => {
       file: "/repo/.hwf/workflows/dyn.yaml",
     });
     expect(seen?.domains).toEqual({ branch: ["one", "two"] });
+    expect(seen?.runId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     expect(state.running).toBe(false);
-    expect(state.exit).toBeUndefined();
+    expect(state.mode).toBe("run-detail");
+    expect(String(state.status.content)).toMatch(/LAUNCH FAILED|FAILED|boom/);
     expect(pickerEscapeExitCode(state.mode, state.running)).toBe(1);
   });
 });

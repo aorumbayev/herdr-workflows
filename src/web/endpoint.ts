@@ -8,9 +8,10 @@ import {
   writeFileSync,
   type Stats,
 } from "node:fs";
-import { readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pluginStateDir } from "../config";
+import { canonicalRepoRoot } from "../repo-root";
 import {
   assertCredentialStoreSafe,
   assertPrivateCredentialFile,
@@ -18,6 +19,8 @@ import {
   tightenPrivateDir,
 } from "./credential-store";
 import { startWebServer, type WebServer } from "./server";
+
+export { canonicalRepoRoot } from "../repo-root";
 
 export type EndpointRecord = {
   repoRoot: string;
@@ -61,14 +64,6 @@ export type AcquireLockHooks = {
 const LOCK_ATTEMPTS = 50;
 const LOCK_WAIT_MS = 100;
 const STALE_LOCK_MS = 10_000;
-
-export async function canonicalRepoRoot(repoRoot: string): Promise<string> {
-  try {
-    return await realpath(repoRoot);
-  } catch {
-    return repoRoot;
-  }
-}
 
 function endpointKey(repoRoot: string): string {
   return createHash("sha256").update(repoRoot).digest("hex");

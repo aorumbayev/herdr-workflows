@@ -86,6 +86,7 @@ async function runChild(
       name: child.name,
       isEntry: false,
       workflowPath: [...c.opts.workflowPath, child.name],
+      parentOrdinal: c.stepIndex,
     },
     childValues,
   );

@@ -1,14 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { WorkflowsConfig } from "../src/config";
 import { HerdrError } from "../src/herdr";
 import { CAPTURE_BYTE_LIMIT, HWF_ENV_BYTE_LIMIT } from "../src/limits";
 import { AGENT_PROMPT_BYTE_LIMIT } from "../src/limits";
+import { listRunHistory, loadAllSnapshots } from "../src/history/store";
+import type { RunSnapshot } from "../src/history/types";
 import type { RunnerDeps } from "../src/run/context";
 import { runWorkflow } from "../src/run/runner";
-import { runLogPath, type RunLogEntry } from "../src/runlog";
 
 const dirs: string[] = [];
 const prevStateDir = process.env.HERDR_PLUGIN_STATE_DIR;
@@ -23,13 +24,8 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
 
-async function readRunLog(): Promise<RunLogEntry[]> {
-  const text = await readFile(runLogPath(), "utf8").catch(() => "");
-  return text
-    .trim()
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as RunLogEntry);
+async function readSnapshots(): Promise<RunSnapshot[]> {
+  return loadAllSnapshots();
 }
 
 async function repoWith(files: Record<string, string>): Promise<string> {
@@ -395,16 +391,9 @@ steps:
       const spillPath = spillMatch![1]!;
       expect(spillPath).toContain("-prompt.txt");
       expect(await Bun.file(spillPath).exists()).toBe(false);
-      const log = await readRunLog();
-      expect(
-        log.some(
-          (e) =>
-            e.workflow === "large" &&
-            typeof e.label === "string" &&
-            e.label.includes("prompt spilled") &&
-            e.label.includes(spillPath),
-        ),
-      ).toBe(true);
+      const snaps = await readSnapshots();
+      expect(snaps.some((s) => s.workflow === "large" && s.status === "succeeded")).toBe(true);
+      expect(JSON.stringify(snaps)).not.toContain(large.slice(0, 80));
     }
   });
 
@@ -717,8 +706,8 @@ steps:
     });
     expect(result.ok).toBe(true);
     expect(notes.filter((n) => n.includes("agent blocked"))).toHaveLength(1);
-    const log = await readRunLog();
-    expect(log.some((e) => e.blocked === true && e.ok === true)).toBe(true);
+    const snaps = await readSnapshots();
+    expect(snaps.some((s) => s.workflow === "m" && s.status === "succeeded")).toBe(true);
   });
 
   test("busy target rejected before prompt", async () => {
@@ -964,8 +953,8 @@ steps:
     expect(err.coordinationLost).toBe(true);
     expect(err.error).toMatch(/may still be active/);
     expect(calls.filter((c) => c.method === "notification.show")).toHaveLength(0);
-    const log = await readRunLog();
-    expect(log.some((e) => e.interrupted)).toBe(true);
+    const snaps = await readSnapshots();
+    expect(snaps.some((s) => s.status === "interrupted")).toBe(true);
   });
 
   test("context.agent uses pane id when the detected agent has a null name", async () => {
@@ -1163,7 +1152,7 @@ steps:
     expect(send?.params).toMatchObject({ pane_id: "w1:p3", keys: ["Enter"] });
   });
 
-  test("entry returns are recorded on the final run-log entry", async () => {
+  test("entry returns are recorded on the private snapshot", async () => {
     const root = await repoWith({
       m: `version: v1alpha1
 returns:
@@ -1183,11 +1172,14 @@ steps:
       deps,
     });
     expect(result.ok).toBe(true);
-    const finals = (await readRunLog()).filter((e) => e.workflow === "m" && e.step === undefined);
-    expect(finals[0]?.returns).toMatchObject({ note: "hello" });
-    expect(typeof (finals[0]?.returns as { platform?: string } | undefined)?.platform).toBe(
+    const snaps = (await readSnapshots()).filter((s) => s.workflow === "m");
+    expect(snaps[0]?.returns).toMatchObject({ note: "hello" });
+    expect(typeof (snaps[0]?.returns as { platform?: string } | undefined)?.platform).toBe(
       "string",
     );
+    const listed = await listRunHistory({ checkout_root: root });
+    expect(listed.ok).toBe(true);
+    if (listed.ok) expect(JSON.stringify(listed.runs)).not.toContain("hello");
   });
 
   test("progress reports one outcome line per step including skip", async () => {
@@ -1273,8 +1265,8 @@ steps:
     });
     expect(result.ok).toBe(true);
     expect(outcomes.some((o) => o.includes("launch"))).toBe(true);
-    const log = await readRunLog();
-    expect(log.some((e) => e.launched)).toBe(true);
+    const snaps = await readSnapshots();
+    expect(snaps.some((s) => s.steps.some((step) => step.outcome === "launched"))).toBe(true);
   });
 
   test("transcript file is cleaned up and never logged", async () => {
@@ -1299,8 +1291,8 @@ steps:
       new Bun.Glob("transcripts/*").scan({ cwd: state, absolute: true }),
     );
     expect(leftover).toEqual([]);
-    const logText = await readFile(runLogPath(), "utf8");
-    expect(logText).not.toContain("TRANSCRIPT");
+    const snaps = await readSnapshots();
+    expect(JSON.stringify(snaps)).not.toContain("TRANSCRIPT");
   });
 
   test("failed run keeps the managed response and still removes the transcript", async () => {
@@ -1620,9 +1612,6 @@ steps:
     expect(
       calls.filter((c) => c.method === "tab.create" || c.method === "pane.split"),
     ).toHaveLength(1);
-    const log = await readRunLog();
-    expect(log.some((e) => e.label?.includes("attempt 1/3"))).toBe(true);
-    expect(log.some((e) => e.label?.includes("attempt 2/3"))).toBe(true);
   });
 
   test("agent that goes working after the first prompt is not re-submitted", async () => {

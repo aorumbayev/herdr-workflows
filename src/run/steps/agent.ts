@@ -9,7 +9,6 @@ import {
 } from "../../config";
 import { HerdrError } from "../../herdr";
 import { AGENT_PROMPT_BYTE_LIMIT, assertUnderCaptureCap } from "../../limits";
-import { appendRunLog } from "../../runlog";
 import { substituteText } from "../../workflow/parse";
 import type { StepAction } from "../../workflow/types";
 import {
@@ -324,14 +323,6 @@ async function maybeSpillAgentPrompt(c: StepCtx, text: string): Promise<string> 
   await mkdir(dirname(spill), { recursive: true, mode: 0o700 });
   await writeFile(spill, text, { mode: 0o600 });
   c.opts.managedResponseFiles.push(spill);
-  await appendRunLog({
-    ts: new Date().toISOString(),
-    run: c.opts.runId,
-    workflow: c.opts.name,
-    step: c.stepIndex,
-    label: `prompt spilled (${bytes}B > ${AGENT_PROMPT_BYTE_LIMIT}B): ${spill}`,
-    ok: true,
-  });
   return spilledPromptInstruction(spill);
 }
 
@@ -346,14 +337,6 @@ async function submitPrompt(c: StepCtx, target: string, text: string): Promise<v
     // A slow-but-successful earlier submit may land during backoff — never double-prompt.
     if (attempt > 1 && promptPickedUp(await deps.agentStatus(target), "idle")) return;
     const before = await deps.agentStatus(target);
-    await appendRunLog({
-      ts: new Date().toISOString(),
-      run: c.opts.runId,
-      workflow: c.opts.name,
-      step: c.stepIndex,
-      label: `agent.prompt attempt ${attempt}/${SUBMIT_MAX_ATTEMPTS} → ${target}`,
-      ok: true,
-    });
     await deps.herdrCall("agent.prompt", { target, text: body });
     if (await waitForPromptPickup(deps, target, before, SUBMIT_PICKUP_DEADLINE_MS)) return;
     // Paste stall: text may be in the composer without an Enter. Never re-prompt if this wakes it.

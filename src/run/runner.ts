@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ensureLocalConfigGitignored } from "../init";
@@ -11,8 +10,15 @@ import {
   tabClose,
 } from "../herdr";
 import { buildTemplateNamespace, type InvocationContext, type WorkflowsConfig } from "../config";
+import { formatHistoryAck } from "../history/ack";
+import { allocateRunId, RunHistorySession } from "../history/store";
+import type {
+  RunActionKind,
+  RunFailureFact,
+  RunStepOutcomeKind,
+  RunStepPhase,
+} from "../history/types";
 import { assertHwfEnvValues } from "../limits";
-import { appendRunLog } from "../runlog";
 import { transcriptText } from "../session";
 import { evaluateWhen } from "../workflow/conditions";
 import { collectWorkflowInputs } from "../workflow/inputs";
@@ -126,6 +132,83 @@ function failureOf(
   };
 }
 
+function failureFact(
+  step: WorkflowStep,
+  outcome: Extract<StepOutcome, { ok: false }>,
+): RunFailureFact {
+  const details = outcome.details ?? {};
+  return {
+    action: step.action.kind as RunActionKind,
+    ...(typeof details.exit_code === "number" ? { exit_code: details.exit_code } : {}),
+    ...(step.action.kind === "herdr" ? { method: step.action.method } : {}),
+    ...(outcome.coordinationLost === true ? { coordination: "lost" } : {}),
+    ...(step.id ? { step_id: step.id } : {}),
+  };
+}
+
+function historyStepBase(
+  opts: StepRunOpts,
+  step: WorkflowStep,
+  stepIndex: number,
+  total: number,
+  label: string,
+  phase: RunStepPhase,
+) {
+  return {
+    phase,
+    workflow: opts.name,
+    workflow_path: [...opts.workflowPath],
+    ordinal: stepIndex,
+    total,
+    ...(opts.parentOrdinal !== undefined ? { parent_ordinal: opts.parentOrdinal } : {}),
+    ...(step.id ? { step_id: step.id } : {}),
+    action: step.action.kind as RunActionKind,
+    label,
+  };
+}
+
+async function historyCurrent(
+  opts: StepRunOpts,
+  step: WorkflowStep,
+  stepIndex: number,
+  total: number,
+  label: string,
+  phase: RunStepPhase = "main",
+): Promise<void> {
+  if (!opts.history?.isAvailable) return;
+  await opts.history.setCurrentStep({
+    ...historyStepBase(opts, step, stepIndex, total, label, phase),
+    started_at: new Date().toISOString(),
+  });
+}
+
+async function historyOutcome(
+  opts: StepRunOpts,
+  step: WorkflowStep,
+  stepIndex: number,
+  total: number,
+  label: string,
+  kind: RunStepOutcomeKind,
+  outcome?: StepOutcome,
+  phase: RunStepPhase = "main",
+): Promise<void> {
+  if (!opts.history?.isAvailable) return;
+  const failed = outcome !== undefined && !outcome.ok;
+  // Nested child steps already carry the explanation; wrapper records facts only.
+  const explainFailure = failed && step.action.kind !== "workflow";
+  await opts.history.recordStep({
+    ...historyStepBase(opts, step, stepIndex, total, label, phase),
+    finished_at: new Date().toISOString(),
+    outcome: kind,
+    ...(failed
+      ? {
+          failure: failureFact(step, outcome),
+          ...(explainFailure ? { explanation: outcome.error } : {}),
+        }
+      : {}),
+  });
+}
+
 async function executeOnce(
   step: WorkflowStep,
   stepIndex: number,
@@ -153,31 +236,6 @@ async function executeWithRetry(
   return last ?? { ok: false, error: "internal: retry produced no outcome" };
 }
 
-async function logStep(
-  opts: StepRunOpts,
-  stepIndex: number,
-  total: number,
-  label: string,
-  entry: {
-    ok: boolean;
-    error?: string;
-    skipped?: boolean;
-    launched?: boolean;
-    blocked?: boolean;
-    interrupted?: boolean;
-  },
-): Promise<void> {
-  await appendRunLog({
-    ts: new Date().toISOString(),
-    run: opts.runId,
-    workflow: opts.name,
-    step: stepIndex,
-    total,
-    label,
-    ...entry,
-  });
-}
-
 async function hardStepFailure(
   opts: StepRunOpts,
   step: WorkflowStep,
@@ -189,12 +247,15 @@ async function hardStepFailure(
   interrupted: boolean,
 ): Promise<StepsResult> {
   const error = await fail(opts.deps, opts.name, stepIndex, outcome.error);
-  await logStep(opts, stepIndex, total, label, {
-    ok: false,
-    error,
-    ...(interrupted ? { interrupted: true } : {}),
-    ...(outcome.blocked === true ? { blocked: true } : {}),
-  });
+  await historyOutcome(
+    opts,
+    step,
+    stepIndex,
+    total,
+    label,
+    interrupted ? "interrupted" : "failed",
+    { ...outcome, error },
+  );
   return {
     ok: false,
     error,
@@ -218,10 +279,11 @@ async function runSteps(
     const label = stepLabel(step);
     if (step.when && !evaluateWhen(step.when, values)) {
       opts.onProgress?.(n, total, label, "skip");
-      await logStep(opts, n, total, label, { ok: true, skipped: true });
+      await historyOutcome(opts, step, n, total, label, "skipped");
       continue;
     }
     opts.onProgress?.(n, total, label, "start");
+    await historyCurrent(opts, step, n, total, label);
     const outcome = await executeWithRetry(step, n, values, opts);
     if (!outcome.ok) {
       opts.onProgress?.(n, total, label, "fail");
@@ -230,11 +292,7 @@ async function runSteps(
       }
       if (step.continueOnError && outcome.hardFailure !== true) {
         tolerated.push(outcome.error);
-        await logStep(opts, n, total, label, {
-          ok: false,
-          error: outcome.error,
-          ...(outcome.blocked === true ? { blocked: true } : {}),
-        });
+        await historyOutcome(opts, step, n, total, label, "failed_continued", outcome);
         continue;
       }
       return hardStepFailure(opts, step, n, total, label, outcome, tolerated, false);
@@ -243,12 +301,9 @@ async function runSteps(
     const progress =
       outcome.skipped === true ? "skip" : outcome.launched === true ? "launch" : "ok";
     opts.onProgress?.(n, total, label, progress);
-    await logStep(opts, n, total, label, {
-      ok: true,
-      ...(outcome.skipped === true ? { skipped: true } : {}),
-      ...(outcome.launched === true ? { launched: true } : {}),
-      ...(outcome.blocked === true ? { blocked: true } : {}),
-    });
+    const kind: RunStepOutcomeKind =
+      outcome.skipped === true ? "skipped" : outcome.launched === true ? "launched" : "succeeded";
+    await historyOutcome(opts, step, n, total, label, kind, outcome);
   }
   if (tolerated.length) return { ok: false, error: tolerated.join("; "), failures: tolerated };
   return { ok: true };
@@ -267,11 +322,33 @@ async function runRecovery(
     steps: values.steps,
     context: { ...values.context, error: failure },
   };
-  return executeOnce({ action }, 0, recoveryValues, {
+  const step: WorkflowStep = { action };
+  const label = stepLabel(step);
+  const recoveryOpts: StepRunOpts = {
     ...opts,
     isEntry: false,
     workflowPath: [...opts.workflowPath, `${opts.name}:on_failure`],
-  });
+    parentOrdinal: failure.step_number,
+  };
+  await historyCurrent(recoveryOpts, step, 1, 1, label, "recovery");
+  const outcome = await executeOnce(step, 0, recoveryValues, recoveryOpts);
+  await historyOutcome(
+    recoveryOpts,
+    step,
+    1,
+    1,
+    label,
+    outcome.ok
+      ? outcome.launched === true
+        ? "launched"
+        : "succeeded"
+      : outcome.coordinationLost
+        ? "interrupted"
+        : "failed",
+    outcome,
+    "recovery",
+  );
+  return outcome;
 }
 
 async function finalizeEntryRun(
@@ -279,7 +356,6 @@ async function finalizeEntryRun(
   workflow: LoadedWorkflow,
   opts: StepRunOpts,
   values: TemplateNamespace,
-  runId: string,
 ): Promise<StepsResult> {
   if (
     !primary.ok &&
@@ -291,14 +367,9 @@ async function finalizeEntryRun(
     const recovery = await runRecovery(workflow.onFailure, opts, values, primary.failure);
     if (!recovery.ok) {
       const error = `${primary.error}; on_failure failed: ${recovery.error}`;
-      await appendRunLog({
-        ts: new Date().toISOString(),
-        run: runId,
-        workflow: workflow.name,
-        ok: false,
-        error,
-        ...(recovery.coordinationLost === true ? { interrupted: true } : {}),
-      });
+      await opts.history
+        ?.finalize(recovery.coordinationLost === true ? "interrupted" : "failed", { error })
+        .catch(() => undefined);
       return {
         ok: false,
         error,
@@ -311,15 +382,17 @@ async function finalizeEntryRun(
   }
   const returns =
     primary.ok && workflow.returns ? evaluateReturns(workflow.returns, values) : undefined;
-  await appendRunLog({
-    ts: new Date().toISOString(),
-    run: runId,
-    workflow: workflow.name,
-    ok: primary.ok,
-    ...(!primary.ok ? { error: primary.error } : {}),
-    ...(!primary.ok && primary.coordinationLost === true ? { interrupted: true } : {}),
-    ...(returns !== undefined ? { returns } : {}),
-  });
+  const status = primary.ok
+    ? "succeeded"
+    : primary.coordinationLost === true
+      ? "interrupted"
+      : "failed";
+  await opts.history
+    ?.finalize(status, {
+      ...(returns !== undefined ? { returns } : {}),
+      ...(!primary.ok ? { error: primary.error } : {}),
+    })
+    .catch(() => undefined);
   return primary;
 }
 
@@ -431,6 +504,10 @@ export type RunOptions = {
    * Defaults to true for direct CLI collection.
    */
   resolveDynamic?: boolean;
+  /** Picker-supplied full UUID; generated when absent. */
+  runId?: string;
+  /** Write machine-readable history ack lines (detached launch channel). */
+  onHistoryAck?: (line: string) => void;
   workflow?: LoadedWorkflow;
   deps?: Partial<RunnerDeps>;
   onProgress?: (step: number, total: number, label: string, outcome?: string) => void;
@@ -439,8 +516,45 @@ export type RunOptions = {
 
 export async function runWorkflow(opts: RunOptions): Promise<StepsResult> {
   const deps = { ...defaultDeps(), ...opts.deps };
-  const runId = randomUUID().slice(0, 8);
   const workflow = opts.workflow ?? (await loadWorkflow(opts.name, opts.repoRoot, opts.config));
+  const history = new RunHistorySession();
+  const claim = await history.claim({
+    ...(opts.runId !== undefined ? { id: opts.runId } : {}),
+    workflow: workflow.name,
+    ...(workflow.title !== undefined ? { title: workflow.title } : {}),
+    source: workflow.repoOwned ? "repo" : "global",
+    checkout_root: opts.repoRoot,
+  });
+  const emitAck = (line: string): void => {
+    try {
+      opts.onHistoryAck?.(line);
+    } catch {
+      /* observed channel best-effort */
+    }
+  };
+  if (!claim.ok) {
+    emitAck(
+      formatHistoryAck({
+        state: "rejected",
+        error: claim.error,
+        ...(claim.id !== undefined ? { id: claim.id } : {}),
+      }),
+    );
+    history.dispose();
+    return { ok: false, error: claim.error };
+  }
+  if (claim.state === "unavailable") {
+    emitAck(
+      formatHistoryAck({
+        state: "unavailable",
+        ...(claim.id !== undefined ? { id: claim.id } : {}),
+      }),
+    );
+  } else {
+    emitAck(formatHistoryAck({ state: "claimed", id: claim.id }));
+  }
+
+  const runId = claim.id ?? opts.runId ?? allocateRunId();
   const managedResponseFiles: string[] = [];
   const stepOpts: StepRunOpts = {
     name: workflow.name,
@@ -452,19 +566,14 @@ export async function runWorkflow(opts: RunOptions): Promise<StepsResult> {
     workflowPath: [workflow.name],
     isEntry: true,
     managedResponseFiles,
+    ...(history.isAvailable ? { history } : {}),
     ...(opts.onProgress ? { onProgress: opts.onProgress } : {}),
     ...(opts.onStderr ? { onStderr: opts.onStderr } : {}),
   };
 
   const failPrecondition = async (detail: string): Promise<StepsResult> => {
     const error = await fail(deps, workflow.name, 0, detail);
-    await appendRunLog({
-      ts: new Date().toISOString(),
-      run: runId,
-      workflow: workflow.name,
-      ok: false,
-      error,
-    });
+    await history.finalize("failed", { error }).catch(() => undefined);
     return { ok: false, error };
   };
 
@@ -499,10 +608,11 @@ export async function runWorkflow(opts: RunOptions): Promise<StepsResult> {
     transcriptFile = context.transcriptFile;
 
     const primary = await runSteps(workflow.steps, stepOpts, context.values);
-    const final = await finalizeEntryRun(primary, workflow, stepOpts, context.values, runId);
+    const final = await finalizeEntryRun(primary, workflow, stepOpts, context.values);
     succeeded = final.ok;
     return final;
   } finally {
+    history.dispose();
     if (transcriptFile) await rm(transcriptFile, { force: true }).catch(() => undefined);
     // A failed step leaves its agent still working, so its answer is the only
     // artifact left to read. Keep it in gitignored .hwf/tmp for the user.

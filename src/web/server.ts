@@ -5,7 +5,9 @@ import { z } from "zod";
 import { globalConfigPath, loadConfig, parseConfigText, repoConfigPath } from "../config";
 import { workflowSchemaUrl } from "../setup/paths";
 import { HERDR_METHOD_BY_NAME } from "../herdr-methods.generated";
-import { readRunLog, recentRuns } from "../runlog";
+import { getRunDetail, listRunHistory, loadAllSnapshots } from "../history/store";
+import { normalizeRunUuid } from "../history/project";
+import type { RunProjectedStatus, RunWorkflowSource } from "../history/types";
 import { exportWorkflowBundle } from "../workflow/export";
 import {
   checkPayload,
@@ -24,6 +26,7 @@ import {
 } from "../workflow/parse";
 import { schemaPointer, withPinnedSchemaPointer } from "../workflow/payload";
 import { analyzeYamlTree, sensitivityLabels, workflowDisplayTitle } from "../workflow/trust";
+import { canonicalRepoRoot } from "../repo-root";
 import pageHtml from "./page.html" with { type: "text" };
 import logoSvg from "../../docs/assets/logo.svg" with { type: "text" };
 
@@ -37,11 +40,15 @@ const METHOD_TABLE = [...HERDR_METHOD_BY_NAME.values()];
 
 type Scope = "repo" | "global";
 
-function json(body: unknown, status = 200): Response {
+function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
   });
+}
+
+function noStoreJson(body: unknown, status = 200): Response {
+  return json(body, status, { "cache-control": "no-store" });
 }
 
 function errText(error: unknown): string {
@@ -337,8 +344,83 @@ async function handleValidate(repoRoot: string, body: Record<string, unknown>): 
   }
 }
 
-async function handleRuns(): Promise<Response> {
-  return json({ runs: recentRuns(await readRunLog()) });
+async function resolveOpenWorkflow(
+  repoRoot: string,
+  checkoutRoot: string | undefined,
+  workflow: string | undefined,
+  source: RunWorkflowSource | undefined,
+): Promise<{ name: string; source: RunWorkflowSource } | undefined> {
+  if (!checkoutRoot || !workflow || !source) return undefined;
+  if ((await canonicalRepoRoot(checkoutRoot)) !== (await canonicalRepoRoot(repoRoot))) {
+    return undefined;
+  }
+  const config = await loadConfig(repoRoot);
+  const entries = await listWorkflows(repoRoot, config);
+  const match = entries.find((e) => e.name === workflow && e.source === source && !e.error);
+  if (!match) return undefined;
+  return { name: match.name, source: match.source };
+}
+
+async function handleRuns(repoRoot: string, url: URL): Promise<Response> {
+  const location = url.searchParams.get("location");
+  const text = url.searchParams.get("q") ?? url.searchParams.get("text") ?? undefined;
+  const statusParam = url.searchParams.get("status");
+  let checkout_root: string | null | undefined = repoRoot;
+  if (location === "all" || location === "*") checkout_root = null;
+  else if (location !== null && location !== "" && location !== "current") {
+    checkout_root = location;
+  }
+  const status = statusParam
+    ? (statusParam.split(",").filter(Boolean) as RunProjectedStatus[])
+    : undefined;
+  const listed = await listRunHistory({
+    checkout_root,
+    ...(text !== undefined ? { text } : {}),
+    ...(status !== undefined && status.length > 0 ? { status } : {}),
+  });
+  if (!listed.ok) {
+    return noStoreJson({ ok: false, unavailable: true, runs: [], locations: [] }, 503);
+  }
+  const snapshots = await loadAllSnapshots().catch(() => []);
+  const roots = new Set<string>();
+  for (const snap of snapshots) roots.add(snap.checkout_root);
+  const locations = [
+    { id: "current", label: "Current", root: repoRoot },
+    { id: "all", label: "All folders", root: null as string | null },
+    ...[...roots]
+      .filter((root) => root !== repoRoot)
+      .sort()
+      .map((root) => ({ id: root, label: root, root })),
+  ];
+  return noStoreJson({ ok: true, runs: listed.runs, locations, checkout_root: repoRoot });
+}
+
+async function handleRunDetail(repoRoot: string, url: URL): Promise<Response> {
+  const id = url.searchParams.get("id") ?? "";
+  if (!normalizeRunUuid(id)) {
+    return noStoreJson(
+      { ok: false, detail: { kind: "invalid", message: "complete UUID required" } },
+      400,
+    );
+  }
+  const preliminary = await getRunDetail(id);
+  if (preliminary.kind === "unavailable") {
+    return noStoreJson({ ok: false, detail: preliminary }, 503);
+  }
+  if (preliminary.kind !== "snapshot") {
+    const status = preliminary.kind === "expired" ? 410 : 404;
+    return noStoreJson({ ok: false, detail: preliminary }, status);
+  }
+  const open_workflow = await resolveOpenWorkflow(
+    repoRoot,
+    preliminary.checkout_root,
+    preliminary.workflow,
+    preliminary.source,
+  );
+  const detail = await getRunDetail(id, {
+    ...(open_workflow !== undefined ? { openWorkflow: open_workflow } : {}),
+  });
+  return noStoreJson({ ok: true, detail });
 }
 
 function requireNameScope(
@@ -639,7 +721,10 @@ function createHandler(
         if (url.searchParams.get("token") !== token)
           return new Response("forbidden", { status: 403 });
         return new Response(PAGE.replace("__HWF_TOKEN__", token), {
-          headers: { "content-type": "text/html; charset=utf-8" },
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "cache-control": "no-store",
+          },
         });
       }
 
@@ -662,7 +747,9 @@ function createHandler(
       if (url.pathname === "/api/validate" && req.method === "POST")
         return handleValidate(repoRoot, body);
       if (url.pathname === "/api/config") return handleConfig(repoRoot, req, url, body);
-      if (url.pathname === "/api/runs" && req.method === "GET") return handleRuns();
+      if (url.pathname === "/api/runs" && req.method === "GET") return handleRuns(repoRoot, url);
+      if (url.pathname === "/api/run" && req.method === "GET")
+        return handleRunDetail(repoRoot, url);
       if (url.pathname === "/api/share" && req.method === "GET") return handleShare(repoRoot, url);
       if (url.pathname === "/api/import/preview" && req.method === "POST")
         return handleImportPreview(repoRoot, body);

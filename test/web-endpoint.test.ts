@@ -56,6 +56,11 @@ describe("web route", () => {
     });
     expect(parseWebRoute("import")).toEqual({ kind: "import", hash: "import" });
     expect(parseWebRoute("new")).toEqual({ kind: "new", hash: "new" });
+    expect(parseWebRoute("run=550e8400-e29b-41d4-a716-446655440000")).toEqual({
+      kind: "run",
+      id: "550e8400-e29b-41d4-a716-446655440000",
+      hash: "run=550e8400-e29b-41d4-a716-446655440000",
+    });
   });
 
   test("rejects arbitrary URL text and invalid names", () => {
@@ -63,6 +68,7 @@ describe("web route", () => {
     expect(parseWebRoute("w=repo:../x")).toBeUndefined();
     expect(parseWebRoute("w=other:name")).toBeUndefined();
     expect(parseWebRoute("share=")).toBeUndefined();
+    expect(parseWebRoute("run=550e8400")).toBeUndefined();
   });
 
   test("appends hash only after the authenticated base URL", () => {

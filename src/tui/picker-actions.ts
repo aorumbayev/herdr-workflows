@@ -7,7 +7,7 @@ import type { WorkflowListEntry } from "../workflow/types";
 export const EMPTY_CATALOG_MESSAGE =
   "Hi there, looks like you got no runnable workflows, start by creating a new one, browsing examples or importing an existing workflow.";
 
-export const EMPTY_LIST_HINT = `ctrl+k | esc`;
+export const EMPTY_LIST_HINT = `tab runs | ctrl+k | esc`;
 export const PALETTE_HINT = `letter fires | esc back`;
 export const DELETE_CONFIRM_HINT = `y delete | n cancel | esc`;
 

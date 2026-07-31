@@ -497,6 +497,7 @@ describe("picker column layout", () => {
 
 describe("actions palette letters", () => {
   test("footer identifies run ctrl+k dismiss", () => {
+    expect(LIST_HINT).toContain("tab runs");
     expect(LIST_HINT).toContain("enter run");
     expect(LIST_HINT).toContain("ctrl+k");
     expect(LIST_HINT).toContain("esc");
@@ -541,6 +542,7 @@ describe("actions palette letters", () => {
 describe("stdin leak prepend boundary", () => {
   test("preserves Ctrl+K C0 byte while dropping unrelated prefix leaks", () => {
     expect(shouldDropStdinLeakSequence(String.fromCharCode(0x0b))).toBe(false); // Ctrl+K
+    expect(shouldDropStdinLeakSequence(String.fromCharCode(0x07))).toBe(false); // Ctrl+G
     expect(shouldDropStdinLeakSequence(String.fromCharCode(0x05))).toBe(true); // Ctrl+E
     expect(shouldDropStdinLeakSequence(String.fromCharCode(0x0f))).toBe(true); // Ctrl+O
     expect(shouldDropStdinLeakSequence("\t")).toBe(false);
@@ -613,6 +615,10 @@ function pickerState(): PickerState {
     rule: { visible: false, content: "" },
     promptInput: { visible: false },
     footer: { content: "" },
+    runsScope: "current",
+    savedWorkflowFilter: "",
+    savedRunsFilter: "",
+    runDetailScroll: 0,
   } as unknown as PickerState;
 }
 
@@ -622,8 +628,10 @@ describe("picker run handoff", () => {
     await startRun(state, { name: "broken", source: "global", file: "/global/broken.yaml" });
 
     expect(state.running).toBe(false);
-    expect(String(state.status.content)).toContain("Failed | reload failed");
-    expect(String(state.footer.content)).toBe("enter/esc close");
+    expect(state.mode).toBe("run-detail");
+    expect(String(state.status.content)).toContain("LAUNCH FAILED");
+    expect(String(state.status.content)).toContain("reload failed");
+    expect(String(state.footer.content)).toContain("esc back");
   });
 
   test("picker loads selected workflows without a second confirmation gate", async () => {
