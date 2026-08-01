@@ -1,4 +1,9 @@
-## ADDED Requirements
+# run-history Specification
+
+## Purpose
+Durable private per-run snapshot history: exclusive run identity, atomic recoverable snapshots, heartbeat-based liveness, exact-checkout scoping, bounded retention, and privacy-preserving list/detail projection.
+
+## Requirements
 
 ### Requirement: Runs have durable exclusive identity
 After an entry workflow loads, the runner MUST use a complete canonical UUID and exclusively create one versioned snapshot for that run. The snapshot MUST identify the entry workflow, its source, the exact canonical checkout root, start time, heartbeat time, current step, ordered recorded outcomes, private returns, and optional terminal state. A picker-supplied UUID MUST arrive through the private launch payload and MUST fail before execution if its snapshot is already claimed.

@@ -45,7 +45,7 @@ A result from a conditional step MUST remain absent when the producer is skipped
 
 #### Scenario: Best-effort cleanup
 - **WHEN** a cleanup Herdr action fails with `continue_on_error: true`
-- **THEN** later steps run and the run log retains the cleanup failure
+- **THEN** later steps run and the private per-run snapshot history retains the cleanup failure
 
 #### Scenario: Tolerated command result
 - **WHEN** a local command exits nonzero with `continue_on_error: true`
