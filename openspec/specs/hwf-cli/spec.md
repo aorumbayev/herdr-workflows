@@ -178,7 +178,7 @@ The `picker` command MUST dynamically import the TUI module only when that comma
 
 #### Scenario: Run does not load picker
 - **WHEN** the user runs `hwf run <name>`
-- **THEN** the process does not import `src/tui/picker` for that invocation
+- **THEN** the process does not load the picker module for that invocation
 
 ### Requirement: Detached self-launch argv compatibility
 Detached `hwf run` launches MUST keep argv shape `run <name> --launch-payload` with the launch payload on stdin, never on argv. Detached `hwf web` launches MUST keep argv shape `web <route>`. Compiled-binary and Bun script entry re-exec rules in the launch helper MUST stay unchanged. A detached run whose outcome the caller awaits MUST settle that outcome on every supported platform, including after the caller stops observing progress, and MUST NOT depend on an unreferenced child handle continuing to report exit or stream end. Detaching MUST still release the caller, so a launcher process MUST NOT stay alive for the remaining lifetime of its child.

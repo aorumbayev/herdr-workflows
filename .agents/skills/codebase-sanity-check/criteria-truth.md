@@ -100,7 +100,7 @@ examples stay unchanged.
 - The reference checkout is `.agents/references/herdr/docs/versions/<version>/`. If absent, report
   "Not measured" and stop this section. Do not infer from memory
 - `rg -n "<method name>" .agents/references/herdr/docs/versions/<version>/` for each method in
-  `schemas/herdr-api.schema.json` and `src/herdr-methods.ts`
+  `schemas/herdr-api.schema.json` and `src/host.ts`
 - `rg -n "0\.7\.[0-9]+" AGENTS.md CONTRIBUTING.md README.md herdr-plugin.toml docs/*.md`
 
 ### Not a finding

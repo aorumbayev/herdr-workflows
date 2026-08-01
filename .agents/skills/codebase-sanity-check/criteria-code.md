@@ -108,8 +108,8 @@ complexity number when the code already names one concept.
 ### How to measure
 
 - `npm run verify:unused-code` for exports
-- For an unreachable branch, trace backward to the entry point in `src/cli.ts`, `src/tui/`, or
-  `src/web/`. If no entry point can produce the input, quote the entry-point line as evidence
+- For an unreachable branch, trace backward to the entry point in `src/cli.ts`, `src/picker.ts`, or
+  `src/workbench.ts`. If no entry point can produce the input, quote the entry-point line as evidence
 - A gate whose scope makes it impossible to fire is the same defect in the tooling. That one belongs
   to Group B, which audits the gates
 
@@ -147,7 +147,7 @@ durable fact the code cannot express and which pages a human for approval.
 ### What to check
 
 - One abstraction loads and validates workflows, one runs them, one per step type. Verify
-  `src/workflow/` and `src/run/steps/` still hold that shape
+  `src/workflow/` and `src/engine.ts` still hold that shape
 - A concept that lives in two folders
 - A folder holding one file with no sibling planned
 - `AGENTS.md` Layout rows that name a path that no longer exists, or paths under `src/` with no row
@@ -219,7 +219,7 @@ refactor away from silently disappearing.
 ### What to check
 
 - Each constraint that says a construct "is a load error" has a test asserting the rejection
-- Each cap in `src/limits.ts` has a test asserting the failure names the source and the limit, and
+- Each cap in `src/context.ts` has a test asserting the failure names the source and the limit, and
   that it does not truncate
 - Each denied herdr method fails at load with its invariant
 - Placement rules, `when:` forms, `retry` restrictions, and `success_codes` each have at least one
@@ -229,7 +229,7 @@ refactor away from silently disappearing.
 
 - List the constraints from `AGENTS.md`. For each, grep the test suite for the error text:
   `rg -n "<distinctive words from the error>" test`
-- `rg -n "export const [A-Z_]+" src/limits.ts` and grep each name in `test`
+- `rg -n "export const [A-Z_]+_(LIMIT|BYTE)" src/context.ts` and grep each name in `test`
 - Report a constraint with no hit as High. This is a FIX when the assertion belongs in an existing
   test file, and an ADD only when a new file is unavoidable
 
