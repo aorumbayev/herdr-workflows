@@ -10,6 +10,7 @@ import { listRunHistory, loadAllSnapshots } from "../src/history/store";
 import type { RunSnapshot } from "../src/history/types";
 import type { RunnerDeps } from "../src/run/context";
 import { runWorkflow } from "../src/run/runner";
+import { fakeRunRecorder } from "./run-recorder-fake";
 
 const dirs: string[] = [];
 const prevStateDir = process.env.HERDR_PLUGIN_STATE_DIR;
@@ -684,11 +685,13 @@ steps:
     let polls = 0;
     const { deps, notes } = mockDeps();
     const baseCall = deps.herdrCall;
+    const recorder = fakeRunRecorder();
     const result = await runWorkflow({
       name: "m",
       repoRoot: root,
       config: baseConfig,
       ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      recorder,
       deps: {
         ...deps,
         ...fastClock(),
@@ -706,8 +709,7 @@ steps:
     });
     expect(result.ok).toBe(true);
     expect(notes.filter((n) => n.includes("agent blocked"))).toHaveLength(1);
-    const snaps = await readSnapshots();
-    expect(snaps.some((s) => s.workflow === "m" && s.status === "succeeded")).toBe(true);
+    expect(recorder.finishedCalls.some((c) => c.status === "succeeded")).toBe(true);
   });
 
   test("busy target rejected before prompt", async () => {
@@ -942,19 +944,20 @@ steps:
         return { type: "ok" };
       },
     });
+    const recorder = fakeRunRecorder();
     const result = await runWorkflow({
       name: "m",
       repoRoot: root,
       config: baseConfig,
       ctx: { selection: "", cwd: root },
       deps,
+      recorder,
     });
     const err = failed(result);
     expect(err.coordinationLost).toBe(true);
     expect(err.error).toMatch(/may still be active/);
     expect(calls.filter((c) => c.method === "notification.show")).toHaveLength(0);
-    const snaps = await readSnapshots();
-    expect(snaps.some((s) => s.status === "interrupted")).toBe(true);
+    expect(recorder.finishedCalls.some((c) => c.status === "interrupted")).toBe(true);
   });
 
   test("context.agent uses pane id when the detected agent has a null name", async () => {
@@ -1255,18 +1258,19 @@ steps:
     });
     const { deps } = mockDeps();
     const outcomes: string[] = [];
+    const recorder = fakeRunRecorder();
     const result = await runWorkflow({
       name: "m",
       repoRoot: root,
       config: baseConfig,
       ctx: { selection: "", cwd: root, workspaceId: "w1" },
       deps,
+      recorder,
       onProgress: (_i, _n, label, outcome) => outcomes.push(`${label}:${outcome ?? "start"}`),
     });
     expect(result.ok).toBe(true);
     expect(outcomes.some((o) => o.includes("launch"))).toBe(true);
-    const snaps = await readSnapshots();
-    expect(snaps.some((s) => s.steps.some((step) => step.outcome === "launched"))).toBe(true);
+    expect(recorder.stepFinishedCalls.some((c) => c.outcomeKind === "launched")).toBe(true);
   });
 
   test("transcript file is cleaned up and never logged", async () => {

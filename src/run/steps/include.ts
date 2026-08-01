@@ -68,14 +68,20 @@ async function runChild(c: StepCtx, action: WorkflowActionSpec): Promise<StepOut
     steps: {},
     context: c.values.context,
   };
+  const childPath = [...c.opts.workflowPath, child.name];
   const result = await c.opts.runSteps(
     child.steps,
     {
       ...c.opts,
       name: child.name,
       isEntry: false,
-      workflowPath: [...c.opts.workflowPath, child.name],
+      workflowPath: childPath,
       parentOrdinal: c.stepIndex,
+      recorder: c.opts.recorder.child({
+        name: child.name,
+        workflowPath: childPath,
+        parentOrdinal: c.stepIndex,
+      }),
     },
     childValues,
   );

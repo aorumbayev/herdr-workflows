@@ -1,11 +1,11 @@
 import { join } from "node:path";
 import type { InvocationContext, TranscriptExtractor, WorkflowsConfig } from "../config";
 import { validateHerdrInvocation } from "../herdr-methods";
-import type { RunHistorySession } from "../history/store";
 import { HerdrError } from "../herdr";
 import { assertUnderCaptureCap, CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../limits";
 import { substituteParams } from "../workflow/template";
 import type { TemplateNamespace, WorkflowStep } from "../workflow/types";
+import type { RunRecorder } from "./recorder";
 
 export type StepFailure = {
   message: string;
@@ -59,7 +59,7 @@ export type StepRunOpts = {
   /** Ordinal of the invoking workflow: step — persisted on nested history records. */
   parentOrdinal?: number;
   managedResponseFiles: string[];
-  history?: RunHistorySession;
+  recorder: RunRecorder;
   onProgress?: (step: number, total: number, label: string, outcome?: string) => void;
   onStderr?: (text: string) => void;
   runSteps: RunSteps;
