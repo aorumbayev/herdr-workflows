@@ -240,7 +240,7 @@ refactor away from silently disappearing.
 
 ### What to check
 
-- A test file that is a dumping ground rather than a suite. `test/runner.test.ts` is the largest.
+- A test file that is a dumping ground rather than a suite. `test/engine/runner.test.ts` is the largest.
   Judge it by whether a maintainer can find the test for a given behavior, not by line count
 - Duplicate tests asserting the same behavior in two files
 - Helpers copied between test files

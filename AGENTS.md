@@ -13,7 +13,7 @@ Before behavior work, read and cite the relevant `openspec/specs/*/spec.md`. See
 ```bash
 bun install --frozen-lockfile
 bun test ./test                          # unit suite (preload test/setup.ts quarantines real herdr/hwf)
-bun test ./test/runner.test.ts           # one file
+bun test test/engine                     # one module folder
 bun test ./test -t 'pattern'             # name filter
 npm run verify                           # all verify:* in parallel (pre-commit gate)
 bun run schema                           # regenerate docs/workflow.schema.json from Zod
@@ -31,7 +31,7 @@ bun run install:dev                      # compile + herdr plugin link + keybind
 
 ## Layout
 
-`.ts` files under `src/` (+ `src/web/page.html`).
+`.ts` files under `src/` (+ `src/web/page.html`). Test the module whose interface you changed, in that module's folder under `test/`; real compiled-binary coverage lives in `test/e2e/`.
 
 | Path                                         | Role                                                                                                                                                                                                                                                                                                     |
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
