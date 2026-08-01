@@ -10,7 +10,7 @@ import {
   parseReleaseTag,
   ReleaseCheckError,
   runUpdate,
-} from "../../src/update";
+} from "../../src/cli";
 import { PRODUCT_VERSION } from "../../src/context";
 
 const dirs: string[] = [];

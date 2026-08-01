@@ -10,7 +10,7 @@ import {
   readOwnership,
   resolveBinDir,
   resolveHerdrConfigPath,
-} from "../../src/setup";
+} from "../../src/cli";
 import { PRODUCT_VERSION } from "../../src/context";
 
 const dirs: string[] = [];

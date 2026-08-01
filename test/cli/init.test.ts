@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../../src/context";
-import { initSeams, runInit } from "../../src/init";
+import { initSeams, runInit } from "../../src/cli";
 
 const dirs: string[] = [];
 const prevPluginDir = process.env.HERDR_PLUGIN_CONFIG_DIR;

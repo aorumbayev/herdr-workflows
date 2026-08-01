@@ -1,6 +1,6 @@
 import { basename } from "node:path";
 import { unlink } from "node:fs/promises";
-import { compareSemver, fetchLatestPublishedRelease } from "./update";
+import { compareSemver, fetchLatestPublishedRelease } from "./cli";
 import { createInputSession, type InputSession } from "./workflow/inputs";
 import { exportWorkflowBundle } from "./workflow/share";
 import {
@@ -35,7 +35,7 @@ import {
   type HostTheme,
 } from "./chrome";
 import { notificationShow } from "./host";
-import { openInBrowser } from "./console";
+import { openInBrowser } from "./cli";
 import { runWorkbenchRoute, parseWebRoute } from "./workbench";
 import {
   sanitizeDisplay,

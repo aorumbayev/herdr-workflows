@@ -1,29 +1,912 @@
 #!/usr/bin/env bun
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, delimiter, dirname, join, resolve, sep } from "node:path";
+import { chdir } from "node:process";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { fileURLToPath } from "node:url";
+import { homedir, tmpdir } from "node:os";
+import { mkdir } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import { Command, InvalidArgumentError, Option } from "commander";
 import manifest from "../herdr-plugin.toml";
-import { die, openInBrowser, readLine, releaseStdinReader, tolerateClosedStdio } from "./console";
+import { appendRouteHash, openWorkbench, parseWebRoute } from "./workbench";
+import { buildIdentity, parseLaunchPayload, retireOnCodeChange, runWorkflow } from "./engine";
 import { ensureHerdrProtocol, HerdrError, notificationShow, pluginPaneOpen } from "./host";
-import { loadContext, resolveRepoRoot } from "./context";
-import { runInit } from "./init";
-import { EXAMPLES_URL, PRODUCT_VERSION } from "./context";
+import { evaluateWhen, resolveDynamicChoices } from "./workflow/inputs";
 import { IMPORT_DISCLAIMER, parseImportScope, runImport } from "./workflow/import";
 import { listWorkflows, loadWorkflow } from "./workflow/load";
-import { evaluateWhen } from "./workflow/inputs";
-import { resolveDynamicChoices } from "./workflow/inputs";
+import {
+  PRODUCT_VERSION,
+  ensureLocalConfigGitignored,
+  globalConfigPath,
+  parseConfigText,
+  PROFILE_NAME_RE,
+  repoConfigPath,
+  loadContext,
+  resolveRepoRoot,
+  EXAMPLES_URL,
+  CaptureLimitError,
+  type AgentProfile,
+  type WorkflowsConfig,
+} from "./context";
 import {
   WORKFLOW_FORMAT,
   WorkflowLoadError,
   type InputSpec,
   type WhenSpec,
 } from "./workflow/types";
-import { CaptureLimitError } from "./context";
-import { buildIdentity, parseLaunchPayload, retireOnCodeChange, runWorkflow } from "./engine";
-import { appendRouteHash, openWorkbench, parseWebRoute } from "./workbench";
-import { runSetup } from "./setup";
-import { runUpdate } from "./update";
+
+/**
+ * Survive a reader that left. A detached `hwf run` outlives the picker holding the read end of its
+ * pipes; without a listener the EPIPE surfaces as an uncaught stream error and kills the run
+ * part-way through the workflow. The write is async, so a try/catch at the call site never sees it.
+ */
+export function tolerateClosedStdio(): void {
+  process.stdout.on("error", tolerateClosedPipe);
+  process.stderr.on("error", tolerateClosedPipe);
+}
+
+function tolerateClosedPipe(error: NodeJS.ErrnoException): void {
+  if (error.code !== "EPIPE") throw error;
+}
+
+export function die(message: string): never {
+  process.stderr.write(`${message}\n`);
+  process.exit(1);
+}
+
+type U8Reader = ReadableStreamDefaultReader<Uint8Array>;
+
+let reader: U8Reader | undefined;
+let stdinBuf = "";
+const decoder = new TextDecoder();
+
+export type PromptResult = { kind: "line"; text: string } | { kind: "cancel" };
+
+function hasBareEsc(raw: string): boolean {
+  for (let i = 0; i < raw.length; i++) {
+    if (raw.charCodeAt(i) !== 0x1b) continue;
+    const next = raw[i + 1];
+    if (next !== "[" && next !== "O") return true;
+  }
+  return false;
+}
+
+/** herdr prefix leaks into popup stdin — strip C0 controls (keep tab/CR/LF/ESC). */
+function sanitizePromptInput(raw: string): string {
+  // oxlint-disable-next-line no-control-regex -- intentional C0 strip for leaked herdr prefix keys
+  return raw.replace(/[\x00-\x08\x0b\x0c\x0e-\x1a\x1c-\x1f]/g, "");
+}
+
+function interpretLine(raw: string): PromptResult {
+  if (hasBareEsc(raw)) return { kind: "cancel" };
+  const text = sanitizePromptInput(raw).replace(/\r$/, "").trim();
+  return { kind: "line", text };
+}
+
+export async function readLine(): Promise<PromptResult> {
+  // Bun's getReader() typings omit readMany; cast keeps a single shared stdin reader.
+  if (!reader) reader = Bun.stdin.stream().getReader() as unknown as U8Reader;
+  const r = reader;
+  while (true) {
+    const nl = stdinBuf.indexOf("\n");
+    if (nl !== -1) {
+      const line = stdinBuf.slice(0, nl);
+      stdinBuf = stdinBuf.slice(nl + 1);
+      return interpretLine(line);
+    }
+    const { done, value } = await r.read();
+    if (done) {
+      const rest = stdinBuf;
+      stdinBuf = "";
+      if (!rest) return { kind: "cancel" };
+      return interpretLine(rest);
+    }
+    stdinBuf += decoder.decode(value, { stream: true });
+  }
+}
+
+/** Drop the shared stdin lock so short-lived CLI commands can exit after prompts. */
+export async function releaseStdinReader(): Promise<void> {
+  const r = reader;
+  if (!r) return;
+  reader = undefined;
+  stdinBuf = "";
+  try {
+    await r.cancel();
+  } catch {
+    /* already closed */
+  }
+}
+
+export async function openInBrowser(url: string): Promise<void> {
+  const cmd = process.platform === "darwin" ? ["open", url] : ["xdg-open", url];
+  try {
+    const proc = Bun.spawn(cmd, {
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "ignore",
+      detached: true,
+    });
+    proc.unref();
+  } catch {
+    /* opener absence is nonfatal */
+  }
+}
+
+const OWNERSHIP_FILE = ".herdr-workflows-cli.json";
+
+export function resolveBinDir(env: NodeJS.ProcessEnv = process.env): string {
+  if (env.XDG_BIN_HOME?.trim()) return resolve(env.XDG_BIN_HOME.trim());
+  return join(homedir(), ".local", "bin");
+}
+
+function binDirOnPath(dir: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  const path = env.PATH ?? "";
+  return path.split(delimiter).some((entry) => entry && resolve(entry) === resolve(dir));
+}
+
+/** Plugin checkout root: HERDR_PLUGIN_ROOT, else parent of a compiled bin/, else cwd. */
+export function resolvePluginRoot(
+  env: NodeJS.ProcessEnv = process.env,
+  opts: { execPath?: string; cwd?: string } = {},
+): string {
+  const injected = env.HERDR_PLUGIN_ROOT?.trim();
+  if (injected) return resolve(injected);
+  const execPath = opts.execPath ?? process.execPath;
+  const base = basename(execPath).toLowerCase();
+  if (base === "herdr-workflows" || base === "hwf") {
+    const parent = dirname(execPath);
+    if (basename(parent).toLowerCase() === "bin") return resolve(dirname(parent));
+  }
+  return resolve(opts.cwd ?? process.cwd());
+}
+
+/** Managed checkout binary path. */
+function resolveManagedBinary(pluginRoot: string): string | undefined {
+  const bare = join(pluginRoot, "bin", "herdr-workflows");
+  if (existsSync(bare)) return bare;
+  return undefined;
+}
+
+function isEphemeralPluginRoot(pluginRoot: string): boolean {
+  return pluginRoot.split(sep).some((part) => part.startsWith(".tmp-install-"));
+}
+
+/** Config.toml Herdr reads on this host. */
+export function resolveHerdrConfigPath(env: NodeJS.ProcessEnv = process.env): string {
+  if (env.HERDR_CONFIG_PATH?.trim()) return env.HERDR_CONFIG_PATH.trim();
+  const base = env.XDG_CONFIG_HOME?.trim()
+    ? join(env.XDG_CONFIG_HOME.trim(), "herdr")
+    : join(homedir(), ".config", "herdr");
+  return join(base, "config.toml");
+}
+
+type OwnedKind = "symlink" | "copy";
+
+type OwnershipEntry = {
+  kind: OwnedKind;
+  version: string;
+  source?: string;
+};
+
+export type OwnershipRegistry = {
+  version: string;
+  entries: Record<string, OwnershipEntry>;
+};
+
+function ownershipPath(binDir: string): string {
+  return join(binDir, OWNERSHIP_FILE);
+}
+
+export function readOwnership(binDir: string): OwnershipRegistry {
+  try {
+    const raw = JSON.parse(readFileSync(ownershipPath(binDir), "utf8")) as OwnershipRegistry;
+    if (!raw || typeof raw !== "object" || typeof raw.entries !== "object") {
+      return { version: PRODUCT_VERSION, entries: {} };
+    }
+    return { version: raw.version || PRODUCT_VERSION, entries: raw.entries ?? {} };
+  } catch {
+    return { version: PRODUCT_VERSION, entries: {} };
+  }
+}
+
+function writeOwnership(binDir: string, registry: OwnershipRegistry): void {
+  writeFileSync(
+    ownershipPath(binDir),
+    `${JSON.stringify({ ...registry, version: PRODUCT_VERSION }, null, 2)}\n`,
+  );
+}
+
+export type CliInstallResult = {
+  messages: string[];
+};
+
+function entryExists(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function mark(registry: OwnershipRegistry, name: string, kind: OwnedKind, source: string): void {
+  registry.entries[name] = { kind, version: PRODUCT_VERSION, source };
+}
+
+function installPosixName(
+  dir: string,
+  name: string,
+  source: string,
+  kind: OwnedKind,
+  registry: OwnershipRegistry,
+  messages: string[],
+): string | null {
+  const dest = join(dir, name);
+  const entry = registry.entries[name];
+
+  if (entryExists(dest)) {
+    const stat = lstatSync(dest);
+    if (stat.isSymbolicLink()) {
+      const target = resolve(dirname(dest), readlinkSync(dest));
+      const owned =
+        entry?.kind === "symlink" &&
+        typeof entry.source === "string" &&
+        target === resolve(entry.source);
+      if (kind === "symlink" && target === resolve(source) && owned) {
+        messages.push(`${name} already linked at ${dest}`);
+        return dest;
+      }
+      if (!owned) {
+        messages.push(`skipped cli install: ${dest} exists and is not owned by herdr-workflows`);
+        return null;
+      }
+      unlinkSync(dest);
+    } else if (entry?.kind === "copy") {
+      unlinkSync(dest);
+    } else {
+      messages.push(`skipped cli install: ${dest} exists and is not owned by herdr-workflows`);
+      return null;
+    }
+  }
+
+  if (kind === "copy") {
+    copyFileSync(source, dest);
+    chmodSync(dest, 0o755);
+    mark(registry, name, "copy", resolve(source));
+    messages.push(`copied ${source} → ${dest}`);
+    return dest;
+  }
+
+  try {
+    symlinkSync(source, dest);
+    mark(registry, name, "symlink", resolve(source));
+    messages.push(`linked ${source} → ${dest}`);
+  } catch {
+    copyFileSync(source, dest);
+    chmodSync(dest, 0o755);
+    mark(registry, name, "copy", resolve(source));
+    messages.push(`copied ${source} → ${dest} (symlink unavailable)`);
+  }
+  return dest;
+}
+
+export function installCliCommands(opts: {
+  binDir: string;
+  binary: string;
+  ephemeral: boolean;
+}): CliInstallResult {
+  const messages: string[] = [];
+  mkdirSync(opts.binDir, { recursive: true });
+  const registry = readOwnership(opts.binDir);
+
+  // Ephemeral roots (herdr temp build checkouts) get one binary copy; `hwf` symlinks to that
+  // copy instead of duplicating ~73 MiB or dangling into the moved checkout.
+  const primary = installPosixName(
+    opts.binDir,
+    "herdr-workflows",
+    opts.binary,
+    opts.ephemeral ? "copy" : "symlink",
+    registry,
+    messages,
+  );
+  const hwf =
+    opts.ephemeral && primary
+      ? { source: primary, kind: "symlink" as const }
+      : { source: opts.binary, kind: opts.ephemeral ? ("copy" as const) : ("symlink" as const) };
+  installPosixName(opts.binDir, "hwf", hwf.source, hwf.kind, registry, messages);
+
+  writeOwnership(opts.binDir, registry);
+  return { messages };
+}
+
+const BINDINGS = [
+  {
+    marker: "herdr-workflows.launch",
+    block: `
+[[keys.command]]
+key = "prefix+k"
+type = "plugin_action"
+command = "herdr-workflows.launch"
+description = "launch a herdr-workflows workflow (picker)"
+`,
+  },
+];
+
+const DEAD_ACTIONS = new Set([
+  "kagan.launch",
+  "kagan.results",
+  "kagan.reconcile",
+  "kagan.confirm",
+  "kagan.flag",
+  "lembas.launch",
+  "lembas.results",
+  "lembas.reconcile",
+  "lembas.confirm",
+  "lembas.flag",
+  "herdr-workflows.results",
+  "herdr-workflows.reconcile",
+  "herdr-workflows.confirm",
+  "herdr-workflows.flag",
+]);
+
+export type KeybindingInstallResult = {
+  messages: string[];
+  path: string;
+};
+
+function herdrBin(env: NodeJS.ProcessEnv): string {
+  return env.HERDR_BIN_PATH?.trim() || "herdr";
+}
+
+function spawnHerdr(
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  opts: { encoding?: "utf8"; stdio?: "ignore" } = {},
+) {
+  return spawnSync(herdrBin(env), args, {
+    ...opts,
+    env,
+  });
+}
+
+function validates(candidate: string, env: NodeJS.ProcessEnv): { ok: boolean; out: string } {
+  const check = spawnHerdr(
+    ["config", "check"],
+    {
+      ...env,
+      HERDR_CONFIG_PATH: candidate,
+    },
+    { encoding: "utf8" },
+  );
+  if (check.error) return { ok: false, out: check.error.message };
+  const out = `${check.stdout ?? ""}${check.stderr ?? ""}`;
+  return { ok: out.includes("config: ok"), out };
+}
+
+/** Drop whole `[[keys.command]]` tables whose command is a retired action. */
+export function stripDeadBindings(text: string): string {
+  const parts = text.split(/(\[\[keys\.command\]\])/);
+  if (parts.length === 1) return text;
+  let out = parts[0] ?? "";
+  for (let i = 1; i < parts.length; i += 2) {
+    const header = parts[i] ?? "";
+    const body = parts[i + 1] ?? "";
+    const command = body.match(/^\s*command\s*=\s*"([^"]+)"/m)?.[1];
+    if (command && DEAD_ACTIONS.has(command)) continue;
+    out += header + body;
+  }
+  return out;
+}
+
+export function installKeybindings(opts: {
+  env?: NodeJS.ProcessEnv;
+  reload?: boolean;
+}): KeybindingInstallResult {
+  const env = opts.env ?? process.env;
+  const path = resolveHerdrConfigPath(env);
+  const messages: string[] = [];
+
+  const original = existsSync(path) ? readFileSync(path, "utf8") : null;
+  const cleaned = original === null ? null : stripDeadBindings(original);
+  const missing = BINDINGS.filter((b) => cleaned === null || !cleaned.includes(b.marker));
+  if (missing.length === 0 && cleaned === original) {
+    messages.push("herdr-workflows keybindings already present; skipping");
+    return { messages, path };
+  }
+
+  mkdirSync(dirname(path), { recursive: true });
+  const prefix = cleaned && !cleaned.endsWith("\n") ? "\n" : "";
+  const next = `${cleaned ?? ""}${prefix}${missing.map((b) => b.block).join("")}`;
+
+  const tmp = `${path}.hwf.tmp`;
+  writeFileSync(tmp, next);
+  const check = validates(tmp, env);
+  if (!check.ok) {
+    rmSync(tmp, { force: true });
+    messages.push("herdr-workflows keybinding install skipped — herdr config check failed:");
+    messages.push(check.out.trim() || "(no output)");
+    return { messages, path };
+  }
+
+  if (original !== null) writeFileSync(`${path}.hwf.bak`, original);
+  renameSync(tmp, path);
+  const parts: string[] = [];
+  if (missing.length) parts.push(`added ${missing.map((b) => b.marker).join(", ")}`);
+  if (cleaned !== original) parts.push("removed dead herdr-workflows.* bindings");
+  messages.push(
+    `${parts.join("; ")} in ${path}${original !== null ? " (backup: config.toml.hwf.bak)" : ""}`,
+  );
+
+  if (opts.reload !== false) {
+    const reload = spawnHerdr(["server", "reload-config"], env, { encoding: "utf8" });
+    if (reload.error || (reload.status ?? 1) !== 0) {
+      const detail =
+        reload.error?.message ||
+        `${reload.stderr ?? ""}${reload.stdout ?? ""}`.trim() ||
+        `exit ${reload.status ?? 1}`;
+      messages.push(
+        `herdr server reload-config failed (${detail}) — wrote ${path} but the running Herdr may not have loaded the binding yet`,
+      );
+    } else {
+      messages.push(`herdr reloaded config so the running server reads ${path}`);
+    }
+  }
+  return { messages, path };
+}
+
+/** Nonfatal host setup: PATH commands + picker keybinding. Never throws to callers. */
+export function runSetup(): void {
+  const log = (line: string) => process.stdout.write(`${line}\n`);
+
+  try {
+    const env = process.env;
+    const binDir = resolveBinDir(env);
+
+    const pluginRoot = resolvePluginRoot(env);
+    const binary = resolveManagedBinary(pluginRoot);
+    if (!binary) {
+      log(`skipped cli install: managed binary not found under ${pluginRoot} (run build first)`);
+    } else {
+      const cli = installCliCommands({
+        binDir,
+        binary,
+        ephemeral: isEphemeralPluginRoot(pluginRoot),
+      });
+      for (const line of cli.messages) log(line);
+    }
+
+    if (!binDirOnPath(binDir, env)) {
+      log(`warning: ${binDir} is not on PATH — add it to your shell profile`);
+    }
+
+    const keys = installKeybindings({ env });
+    for (const line of keys.messages) log(line);
+  } catch (error) {
+    log(`skipped setup: ${error instanceof Error ? error.message : error}`);
+  }
+}
+
+/** Shared GitHub latest-release fetch for `hwf update` and the picker indicator. */
+
+const RELEASE_REPO = "aorumbayev/herdr-workflows";
+const LATEST_RELEASE_URL = `https://api.github.com/repos/${RELEASE_REPO}/releases/latest`;
+const DEFAULT_RELEASE_CHECK_TIMEOUT_MS = 8_000;
+
+export type LatestRelease = {
+  tag: string;
+  version: string;
+};
+
+export class ReleaseCheckError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ReleaseCheckError";
+  }
+}
+
+/** Strict `v0.x.y` tag → bare `0.x.y` version. */
+export function parseReleaseTag(tag: string): LatestRelease {
+  const m = /^v(0\.\d+\.\d+)$/.exec(tag.trim());
+  if (!m) {
+    throw new ReleaseCheckError(
+      `latest release tag is not a strict v0.x.y semver: ${JSON.stringify(tag)}`,
+    );
+  }
+  return { tag: `v${m[1]}`, version: m[1]! };
+}
+
+/** Compare `0.x.y` versions. Negative when a < b. */
+export function compareSemver(a: string, b: string): number {
+  const pa = parseParts(a);
+  const pb = parseParts(b);
+  for (let i = 0; i < 3; i++) {
+    if (pa[i]! !== pb[i]!) return pa[i]! < pb[i]! ? -1 : 1;
+  }
+  return 0;
+}
+
+function parseParts(version: string): [number, number, number] {
+  const m = /^(0)\.(\d+)\.(\d+)$/.exec(version.trim());
+  if (!m) throw new ReleaseCheckError(`expected 0.x.y version, got ${JSON.stringify(version)}`);
+  return [Number(m[1]), Number(m[2]), Number(m[3])];
+}
+
+export type FetchLatestOptions = {
+  timeoutMs?: number;
+  url?: string;
+  fetchImpl?: (url: string, init?: RequestInit) => Promise<Response>;
+};
+
+/**
+ * Fetch only the latest *published* GitHub Release (drafts are not `/releases/latest`).
+ * Network/parse failures throw ReleaseCheckError.
+ */
+export async function fetchLatestPublishedRelease(
+  opts: FetchLatestOptions = {},
+): Promise<LatestRelease> {
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_RELEASE_CHECK_TIMEOUT_MS;
+  const url = opts.url ?? LATEST_RELEASE_URL;
+  const fetchImpl = opts.fetchImpl ?? fetch;
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    const res = await fetchImpl(url, {
+      signal: ac.signal,
+      headers: {
+        Accept: "application/vnd.github+json",
+        "User-Agent": "herdr-workflows",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+    if (!res.ok) {
+      throw new ReleaseCheckError(`latest release request failed: HTTP ${res.status}`);
+    }
+    const body = (await res.json()) as { tag_name?: unknown; draft?: unknown };
+    if (body.draft === true) {
+      throw new ReleaseCheckError("latest release endpoint returned a draft");
+    }
+    if (typeof body.tag_name !== "string") {
+      throw new ReleaseCheckError("latest release response missing tag_name");
+    }
+    return parseReleaseTag(body.tag_name);
+  } catch (error) {
+    if (error instanceof ReleaseCheckError) throw error;
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new ReleaseCheckError(`latest release request timed out after ${timeoutMs}ms`);
+    }
+    throw new ReleaseCheckError(
+      `latest release request failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export type PluginSourceInfo = {
+  kind: "github" | "local" | "unregistered";
+  owner?: string;
+  repo?: string;
+};
+
+export type UpdateDeps = {
+  fetchLatest?: (opts?: FetchLatestOptions) => Promise<{ version: string; tag: string }>;
+  runInstall?: (args: string[], cwd: string) => Promise<number>;
+};
+
+/**
+ * `hwf update` — check latest published release and delegate replacement to Herdr.
+ * Must not import the picker module.
+ */
+export async function runUpdate(deps: UpdateDeps = {}): Promise<void> {
+  const fetchLatest = deps.fetchLatest ?? fetchLatestPublishedRelease;
+  const runInstall = deps.runInstall ?? runHerdrInstall;
+
+  let latest: { version: string; tag: string };
+  try {
+    latest = await fetchLatest();
+  } catch (error) {
+    const msg = error instanceof ReleaseCheckError ? error.message : String(error);
+    die(`update check failed: ${msg}`);
+  }
+
+  if (compareSemver(PRODUCT_VERSION, latest.version) >= 0) {
+    process.stdout.write(`already up to date (${PRODUCT_VERSION})\n`);
+    return;
+  }
+
+  const source = await resolvePluginSource();
+  if (source.kind === "local") {
+    die(
+      `refusing to update a linked development checkout — run bun run install:dev from the working tree instead`,
+    );
+  }
+  if (source.kind === "unregistered") {
+    die(
+      `this binary is not a Herdr-managed herdr-workflows install — run: herdr plugin install ${RELEASE_REPO}`,
+    );
+  }
+
+  process.stdout.write(
+    `updating ${PRODUCT_VERSION} → ${latest.version} via herdr plugin install ${RELEASE_REPO}\n`,
+  );
+  const root = resolvePluginRoot();
+  const cwd = leavePluginRoot(root);
+  const code = await runInstall(
+    ["plugin", "install", RELEASE_REPO, "--ref", latest.tag, "--yes"],
+    cwd,
+  );
+  if (code !== 0) {
+    process.stderr.write(`herdr plugin install failed with exit ${code}\n`);
+    process.exit(code);
+  }
+  process.stdout.write(`updated to ${latest.version}\n`);
+}
+
+export function leavePluginRoot(
+  pluginRootPath: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const candidates = [homedir(), tmpdir(), env.HOME].filter((p): p is string =>
+    Boolean(p && p.length > 0),
+  );
+  const normalizedRoot = join(pluginRootPath);
+  for (const candidate of candidates) {
+    const abs = join(candidate);
+    if (abs !== normalizedRoot && !abs.startsWith(normalizedRoot + "/")) {
+      try {
+        chdir(abs);
+        return abs;
+      } catch {
+        // try next
+      }
+    }
+  }
+  // Last resort: parent of plugin root when it is not the filesystem root.
+  const parent = join(pluginRootPath, "..");
+  if (parent !== normalizedRoot) {
+    chdir(parent);
+    return parent;
+  }
+  throw new Error(`cannot leave HERDR_PLUGIN_ROOT ${pluginRootPath}`);
+}
+
+async function resolvePluginSource(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<PluginSourceInfo> {
+  const herdr = env.HERDR_BIN_PATH?.trim() || "herdr";
+  const proc = Bun.spawn([herdr, "plugin", "list", "--json", "--plugin", "herdr-workflows"], {
+    stdout: "pipe",
+    stderr: "pipe",
+    env,
+  });
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  if (code !== 0) {
+    // Missing plugin / herdr unavailable → treat as unregistered for clear guidance.
+    if (/not found|no such|unknown plugin/i.test(stdout + stderr)) {
+      return { kind: "unregistered" };
+    }
+    throw new Error(`herdr plugin list failed: ${(stderr || stdout).trim() || `exit ${code}`}`);
+  }
+  return parsePluginListSource(stdout);
+}
+
+export function parsePluginListSource(jsonText: string): PluginSourceInfo {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch {
+    throw new Error("herdr plugin list returned invalid JSON");
+  }
+  const plugin = findHerdrWorkflowsPlugin(parsed);
+  if (!plugin) return { kind: "unregistered" };
+  const source = plugin.source;
+  if (!source || typeof source !== "object") return { kind: "local" };
+  const kind = (source as { kind?: unknown }).kind;
+  if (kind === "github") {
+    const owner = str((source as { owner?: unknown }).owner);
+    const repo = str((source as { repo?: unknown }).repo);
+    return { kind: "github", owner, repo };
+  }
+  return { kind: "local" };
+}
+
+/**
+ * Herdr CLI `--json` prints `{ id, result: { type: "plugin_list", plugins: [...] } }`.
+ * Offline/error envelopes and a bare `result` object are accepted for the same shape.
+ */
+function findHerdrWorkflowsPlugin(parsed: unknown): { source?: unknown } | undefined {
+  if (!parsed || typeof parsed !== "object") return undefined;
+  const obj = parsed as Record<string, unknown>;
+  const result =
+    obj.result && typeof obj.result === "object"
+      ? (obj.result as Record<string, unknown>)
+      : obj.type === "plugin_list"
+        ? obj
+        : undefined;
+  if (!result || result.type !== "plugin_list" || !Array.isArray(result.plugins)) {
+    return undefined;
+  }
+  for (const entry of result.plugins) {
+    if (!entry || typeof entry !== "object") continue;
+    const id = (entry as { plugin_id?: unknown }).plugin_id;
+    if (id === "herdr-workflows") return entry as { source?: unknown };
+  }
+  return undefined;
+}
+
+function str(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+async function runHerdrInstall(args: string[], cwd: string): Promise<number> {
+  const herdr = process.env.HERDR_BIN_PATH?.trim() || "herdr";
+  const proc = Bun.spawn([herdr, ...args], {
+    cwd,
+    stdout: "inherit",
+    stderr: "inherit",
+    stdin: "inherit",
+    env: process.env,
+  });
+  return proc.exited;
+}
+
+/** Kinds `herdr agent start --kind` accepts (herdr 0.7.5 cli-reference). Native start stays authoritative. */
+const HERDR_AGENT_KINDS = [
+  "pi",
+  "claude",
+  "codex",
+  "gemini",
+  "cursor",
+  "devin",
+  "agy",
+  "cline",
+  "omp",
+  "mastracode",
+  "opencode",
+  "copilot",
+  "kimi",
+  "kiro",
+  "droid",
+  "amp",
+  "grok",
+  "hermes",
+  "kilo",
+  "qodercli",
+  "maki",
+] as const;
+
+/** Probe subset: kinds above whose canonical executable name is known. */
+const KNOWN_KINDS: { name: (typeof HERDR_AGENT_KINDS)[number]; bin: string }[] = [
+  { name: "claude", bin: "claude" },
+  { name: "codex", bin: "codex" },
+  { name: "cursor", bin: "cursor" },
+  { name: "opencode", bin: "opencode" },
+];
+
+async function onPath(bin: string): Promise<boolean> {
+  return Bun.which(bin) !== null;
+}
+
+async function detectProfiles(): Promise<Record<string, AgentProfile>> {
+  const profiles: Record<string, AgentProfile> = {};
+  for (const kind of KNOWN_KINDS) {
+    if (!PROFILE_NAME_RE.test(kind.name)) continue;
+    if (await onPath(kind.bin)) profiles[kind.name] = { kind: kind.name };
+  }
+  return profiles;
+}
+
+function formatProfilesYaml(config: {
+  profiles: Record<string, AgentProfile>;
+  default_profile?: string;
+  transcripts?: WorkflowsConfig["transcripts"];
+}): string {
+  const lines: string[] = ["profiles:"];
+  const names = Object.keys(config.profiles).sort();
+  if (names.length === 0) {
+    lines.push("  {}");
+  } else {
+    for (const name of names) {
+      const profile = config.profiles[name]!;
+      lines.push(`  ${name}:`);
+      lines.push(`    kind: ${JSON.stringify(profile.kind)}`);
+      if (profile.args && profile.args.length > 0) {
+        const args = profile.args.map((a) => JSON.stringify(a)).join(", ");
+        lines.push(`    args: [${args}]`);
+      }
+    }
+  }
+  if (config.default_profile) {
+    lines.push(`default_profile: ${JSON.stringify(config.default_profile)}`);
+  }
+  if (config.transcripts && Object.keys(config.transcripts).length > 0) {
+    lines.push("transcripts:");
+    for (const kind of Object.keys(config.transcripts).sort()) {
+      const command = config.transcripts[kind]!.command.map((a) => JSON.stringify(a)).join(", ");
+      lines.push(`  ${kind}:`);
+      lines.push(`    command: [${command}]`);
+    }
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+async function readPreservedTranscripts(path: string): Promise<WorkflowsConfig["transcripts"]> {
+  try {
+    if (!(await Bun.file(path).exists())) return {};
+    return parseConfigText(path, await Bun.file(path).text()).transcripts;
+  } catch {
+    return {};
+  }
+}
+
+type InitResult =
+  | { kind: "wrote"; path: string; profiles: string[] }
+  | { kind: "exists"; path: string }
+  | { kind: "overwritten"; path: string; profiles: string[] };
+
+export async function runInit(
+  repoRoot: string,
+  opts: {
+    force?: boolean;
+    confirm?: () => Promise<boolean>;
+    global?: boolean;
+  } = {},
+): Promise<InitResult> {
+  const path = opts.global ? await globalConfigPath() : repoConfigPath(repoRoot);
+  const existed = await Bun.file(path).exists();
+  if (existed && !opts.force) {
+    if (!opts.confirm) return { kind: "exists", path };
+    if (!(await opts.confirm())) return { kind: "exists", path };
+  }
+
+  const profiles = await detectProfiles();
+  const names = Object.keys(profiles).sort();
+
+  await mkdir(dirname(path), { recursive: true });
+  if (!opts.global) {
+    await mkdir(join(repoRoot, ".hwf", "workflows"), { recursive: true });
+    await ensureLocalConfigGitignored(repoRoot);
+  }
+
+  const transcripts = existed ? await readPreservedTranscripts(path) : {};
+  await Bun.write(
+    path,
+    formatProfilesYaml({
+      profiles,
+      ...(names[0] !== undefined ? { default_profile: names[0] } : {}),
+      transcripts,
+    }),
+  );
+
+  return existed
+    ? { kind: "overwritten", path, profiles: names }
+    : { kind: "wrote", path, profiles: names };
+}
+
+/** Declared internal seam — unit tests pin detect/format without widening the CLI export surface. */
+export const initSeams = {
+  HERDR_AGENT_KINDS,
+  detectProfiles,
+  formatProfilesYaml,
+};
 
 function collectInput(value: string, previous: Record<string, string>): Record<string, string> {
   const eq = value.indexOf("=");
@@ -476,4 +1359,6 @@ async function main(): Promise<void> {
   await program.parseAsync(args, { from: "user" });
 }
 
-main().catch((error) => die(error instanceof Error ? error.message : String(error)));
+if (import.meta.main) {
+  main().catch((error) => die(error instanceof Error ? error.message : String(error)));
+}

@@ -27,7 +27,7 @@ const LAYER: Record<Module, number> = {
 
 /** Outsiders may import only these files from each module. */
 const ENTRIES: Record<Module, ReadonlySet<string>> = {
-  cli: new Set(["src/cli.ts", "src/console.ts", "src/init.ts", "src/update.ts", "src/setup.ts"]),
+  cli: new Set(["src/cli.ts"]),
   picker: new Set(["src/picker.ts"]),
   workbench: new Set(["src/workbench.ts"]),
   workflows: new Set([
@@ -56,11 +56,10 @@ const SIDEWAYS = new Set([
  * - engine → workflow/template: step rendering deep-imports the template engine.
  * - host/context/history → workflow/types: shared grammar types still live under workflows.
  * - context + workflows/inputs dynamic-import engine for spawnCapture (breaks cycles).
- * - picker → cli/update + cli/console: update indicator and browser open from the TUI.
+ * - picker → cli: update indicator and browser open from the TUI.
  */
 const ALLOW: ReadonlySet<string> = new Set([
-  "src/picker.ts -> src/update.ts",
-  "src/picker.ts -> src/console.ts",
+  "src/picker.ts -> src/cli.ts",
   "src/context.ts -> src/workflow/types.ts",
   "src/host.ts -> src/workflow/types.ts",
   "src/history.ts -> src/workflow/types.ts",
