@@ -52,6 +52,7 @@
     "verify:duplicate-code": "verifyx duplicate-code",
     "verify:comments": "verifyx comments --pushback",
     "verify:prose": "bun scripts/verify-prose.ts",
+    "verify:layers": "bun scripts/verify-layers.ts",
     "verify:complexity": "verifyx complexity --threshold 12 --ignore=\"**/*.generated.ts\" \"src/**/*.ts\"",
     "verify:hardcoded-colors": "verifyx hardcoded-colors && verifyx hardcoded-colors --root docs/.vitepress/theme"
   },

@@ -1,0 +1,202 @@
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+
+const ROOT = join(import.meta.dir, "..");
+const SRC = join(ROOT, "src");
+
+type Module =
+  | "cli"
+  | "picker"
+  | "workbench"
+  | "workflows"
+  | "engine"
+  | "history"
+  | "host"
+  | "context";
+
+const LAYER: Record<Module, number> = {
+  cli: -1,
+  picker: 0,
+  workbench: 0,
+  workflows: 1,
+  engine: 1,
+  history: 1,
+  host: 2,
+  context: 2,
+};
+
+/** Outsiders may import only these files from each module. */
+const ENTRIES: Record<Module, ReadonlySet<string>> = {
+  cli: new Set(["src/cli.ts", "src/console.ts", "src/init.ts", "src/update.ts", "src/setup.ts"]),
+  picker: new Set(["src/tui/picker.ts"]),
+  workbench: new Set(["src/web/endpoint.ts"]),
+  workflows: new Set([
+    "src/workflow/load.ts",
+    "src/workflow/inputs.ts",
+    "src/workflow/types.ts",
+    "src/workflow/import.ts",
+    "src/workflow/share.ts",
+  ]),
+  engine: new Set(["src/run/runner.ts", "src/run/launch.ts"]),
+  history: new Set(["src/history/store.ts", "src/history/recorder.ts", "src/history/types.ts"]),
+  host: new Set(["src/herdr.ts", "src/herdr-methods.ts", "src/herdr-methods.generated.ts"]),
+  context: new Set([
+    "src/config.ts",
+    "src/limits.ts",
+    "src/session.ts",
+    "src/fs-private.ts",
+    "src/version.ts",
+    "src/latest.ts",
+  ]),
+};
+
+/** Same-layer module edges that are part of the architecture (not residuals). */
+const SIDEWAYS = new Set([
+  "engine->history",
+  "engine->workflows",
+  "picker->workbench",
+  "context->host",
+]);
+
+/**
+ * context: Residual edges the layer rule tolerates until Phase 3 consolidation.
+ * - workflows/inputs → run/steps/shell: dynamic-choice spawnCapture (collection-time).
+ * - engine → workflow/template: step rendering deep-imports the template engine.
+ * - context/session → run/steps/shell: transcript extractors reuse spawnCapture.
+ * - host/context/history → workflow/types: shared grammar types still live under workflows.
+ * - picker → cli/update + cli/console: update indicator and browser open from the TUI.
+ */
+const ALLOW: ReadonlySet<string> = new Set([
+  "src/workflow/inputs.ts -> src/run/steps/shell.ts",
+  "src/session.ts -> src/run/steps/shell.ts",
+  "src/tui/update-indicator.ts -> src/update.ts",
+  "src/tui/picker.ts -> src/console.ts",
+  "src/config.ts -> src/workflow/types.ts",
+  "src/herdr-methods.ts -> src/workflow/types.ts",
+  "src/history/recorder.ts -> src/workflow/types.ts",
+  ...engineTemplateAllows(),
+]);
+
+function engineTemplateAllows(): string[] {
+  return walk(join(SRC, "run"))
+    .map(repoPath)
+    .map((from) => `${from} -> src/workflow/template.ts`);
+}
+
+function walk(dir: string, out: string[] = []): string[] {
+  if (!existsSync(dir)) return out;
+  for (const name of readdirSync(dir)) {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) walk(path, out);
+    else if (path.endsWith(".ts") && !path.endsWith(".d.ts")) out.push(path);
+  }
+  return out;
+}
+
+function repoPath(abs: string): string {
+  return relative(ROOT, abs).split("\\").join("/");
+}
+
+function moduleOf(file: string): Module | undefined {
+  if (file.startsWith("src/tui/")) return "picker";
+  if (file.startsWith("src/web/")) return "workbench";
+  if (file.startsWith("src/workflow/")) return "workflows";
+  if (file.startsWith("src/run/")) return "engine";
+  if (file.startsWith("src/history/")) return "history";
+  if (
+    file === "src/herdr.ts" ||
+    file === "src/herdr-methods.ts" ||
+    file === "src/herdr-methods.generated.ts"
+  ) {
+    return "host";
+  }
+  if (ENTRIES.context.has(file)) return "context";
+  if (ENTRIES.cli.has(file)) return "cli";
+  return undefined;
+}
+
+function resolveImport(from: string, spec: string): string | undefined {
+  const base = join(dirname(join(ROOT, from)), spec);
+  if (existsSync(base) && statSync(base).isFile()) return repoPath(base);
+  if (existsSync(`${base}.ts`)) return repoPath(`${base}.ts`);
+  if (existsSync(join(base, "index.ts"))) return repoPath(join(base, "index.ts"));
+  return undefined;
+}
+
+type Finding = { file: string; message: string };
+
+function checkEdges(files: string[]): Finding[] {
+  const re = /from\s+["'](\.[^"']+)["']/g;
+  const findings: Finding[] = [];
+  for (const file of files) {
+    const fromMod = moduleOf(file);
+    if (!fromMod) continue;
+    const text = readFileSync(join(ROOT, file), "utf8");
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(text))) {
+      const to = resolveImport(file, match[1]!);
+      if (!to || !to.startsWith("src/") || to.endsWith(".generated.ts")) continue;
+      if (to.endsWith(".html") || to.endsWith(".svg") || to.endsWith(".toml")) continue;
+      const toMod = moduleOf(to);
+      if (!toMod) continue;
+      if (fromMod === toMod) continue;
+      const key = `${file} -> ${to}`;
+      if (ALLOW.has(key)) continue;
+      if (LAYER[toMod] < LAYER[fromMod]) {
+        findings.push({
+          file,
+          message: `upward import ${fromMod} → ${toMod}: ${to}`,
+        });
+        continue;
+      }
+      if (LAYER[toMod] === LAYER[fromMod] && !SIDEWAYS.has(`${fromMod}->${toMod}`)) {
+        findings.push({
+          file,
+          message: `sideways import ${fromMod} → ${toMod}: ${to}`,
+        });
+        continue;
+      }
+      if (!ENTRIES[toMod].has(to)) {
+        findings.push({
+          file,
+          message: `deep import into ${toMod} (not an entry): ${to}`,
+        });
+      }
+    }
+  }
+  return findings;
+}
+
+function checkOpentui(files: string[]): Finding[] {
+  const importers: string[] = [];
+  const re = /from\s+["']@opentui\/core["']/;
+  for (const file of files) {
+    if (re.test(readFileSync(join(ROOT, file), "utf8"))) importers.push(file);
+  }
+  if (importers.length === 1 && importers[0] === "src/tui/picker-chrome.ts") return [];
+  return [
+    {
+      file: "src/tui/picker-chrome.ts",
+      message: `@opentui/core importers must be exactly [src/tui/picker-chrome.ts], got [${importers.join(", ") || "(none)"}]`,
+    },
+  ];
+}
+
+const files = walk(SRC)
+  .map(repoPath)
+  .filter((f) => !f.endsWith(".generated.ts"))
+  .sort();
+const findings = [...checkEdges(files), ...checkOpentui(files)].sort(
+  (a, b) => a.file.localeCompare(b.file) || a.message.localeCompare(b.message),
+);
+
+if (findings.length === 0) {
+  console.log(`layers: ${files.length} files clean`);
+  process.exit(0);
+}
+
+for (const f of findings) console.log(`${f.file}: ${f.message}`);
+console.log(
+  `\nlayers: ${findings.length} issue${findings.length === 1 ? "" : "s"} (surfaces → domain → platform; entry-only cross-module imports; one @opentui/core importer)`,
+);
+process.exit(1);
