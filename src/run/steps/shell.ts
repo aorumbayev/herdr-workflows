@@ -1,5 +1,5 @@
 import { CaptureLimitError, CAPTURE_BYTE_LIMIT } from "../../limits";
-import { renderScalar, substituteText, substituteValue } from "../../workflow/parse";
+import { renderScalar, substituteText, substituteValue } from "../../workflow/template";
 import type { PaneOpen, ShellName, StepAction, TemplateNamespace } from "../../workflow/types";
 import { dispatchFailure, errorText, type StepCtx, type StepOutcome } from "../context";
 import { placeCommandPane } from "./pane";

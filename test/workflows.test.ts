@@ -9,17 +9,16 @@ import {
   loadWorkflowEntry,
   parseWorkflowText,
 } from "../src/workflow/load";
+import { parseDurationMs, parseRaw } from "../src/workflow/parse";
 import {
   isWholeValueTemplate,
-  parseDurationMs,
-  parseRaw,
   parseTemplatePath,
   renderScalar,
   substituteParams,
   substituteText,
   substituteValue,
   textTemplates,
-} from "../src/workflow/parse";
+} from "../src/workflow/template";
 import type { TemplateNamespace } from "../src/workflow/types";
 
 const dirs: string[] = [];

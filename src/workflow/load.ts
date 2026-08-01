@@ -3,13 +3,8 @@ import { join } from "node:path";
 import { loadConfig, profileNames, type WorkflowsConfig } from "../config";
 import { CaptureLimitError } from "../limits";
 import { spawnCapture } from "../run/steps/shell";
-import {
-  parseRaw,
-  parseWhenClause,
-  workflowNeedsTranscript,
-  workflowTemplateRefs,
-  type RawWorkflow,
-} from "./parse";
+import { parseRaw, parseWhenClause, type RawWorkflow } from "./parse";
+import { workflowNeedsTranscript, workflowTemplateRefs } from "./template";
 import {
   bail,
   WorkflowLoadError,

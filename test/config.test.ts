@@ -22,7 +22,7 @@ import {
   resolveDynamicChoices,
 } from "../src/workflow/load";
 import { collectWorkflowInputs } from "../src/workflow/inputs";
-import { workflowNeedsTranscript } from "../src/workflow/parse";
+import { workflowNeedsTranscript } from "../src/workflow/template";
 
 const dirs: string[] = [];
 const prevPluginDir = process.env.HERDR_PLUGIN_CONFIG_DIR;

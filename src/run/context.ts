@@ -4,7 +4,7 @@ import { validateHerdrInvocation } from "../herdr-methods";
 import type { RunHistorySession } from "../history/store";
 import { HerdrError } from "../herdr";
 import { assertUnderCaptureCap, CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../limits";
-import { substituteParams } from "../workflow/parse";
+import { substituteParams } from "../workflow/template";
 import type { TemplateNamespace, WorkflowStep } from "../workflow/types";
 
 export type StepFailure = {

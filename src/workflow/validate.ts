@@ -1,6 +1,11 @@
 import { isMethodResultDotPath, RESULT_DOT_PATHS } from "../herdr-methods";
 import { clausesContain, evaluateWhen } from "./conditions";
-import { isWholeValueTemplate, parseTemplatePath, textTemplates, walkValueStrings } from "./parse";
+import {
+  isWholeValueTemplate,
+  parseTemplatePath,
+  textTemplates,
+  walkValueStrings,
+} from "./template";
 import {
   bail,
   IDENT_RE,

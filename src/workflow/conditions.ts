@@ -1,4 +1,4 @@
-import { renderScalar, substituteValue } from "./parse";
+import { renderScalar, substituteValue } from "./template";
 import type { TemplateNamespace, WhenSpec } from "./types";
 
 function clauseEqual(a: WhenSpec, b: WhenSpec): boolean {

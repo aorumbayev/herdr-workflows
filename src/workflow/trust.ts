@@ -1,5 +1,6 @@
 import { HERDR_METHOD_BY_NAME } from "../herdr-methods.generated";
-import { isSensitiveContextPath, parseRaw, workflowTemplateRefs, type RawWorkflow } from "./parse";
+import { parseRaw, type RawWorkflow } from "./parse";
+import { isSensitiveContextPath, workflowTemplateRefs } from "./template";
 import { resolveWorkflowFile } from "./paths";
 import type { RecoveryAction, ReturnsSpec, WorkflowStep } from "./types";
 

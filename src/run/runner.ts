@@ -21,7 +21,7 @@ import { assertHwfEnvValues } from "../limits";
 import { transcriptText } from "../session";
 import { evaluateWhen } from "../workflow/conditions";
 import { collectWorkflowInputs } from "../workflow/inputs";
-import { workflowTemplateRefs } from "../workflow/parse";
+import { workflowTemplateRefs } from "../workflow/template";
 import type {
   LoadedWorkflow,
   RecoveryAction,

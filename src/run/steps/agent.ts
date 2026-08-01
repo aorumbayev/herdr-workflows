@@ -9,7 +9,7 @@ import {
 } from "../../config";
 import { HerdrError } from "../../herdr";
 import { AGENT_PROMPT_BYTE_LIMIT, assertUnderCaptureCap } from "../../limits";
-import { substituteText } from "../../workflow/parse";
+import { substituteText } from "../../workflow/template";
 import type { StepAction } from "../../workflow/types";
 import {
   appendResponseInstruction,

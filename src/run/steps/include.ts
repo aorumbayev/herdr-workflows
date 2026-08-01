@@ -1,6 +1,6 @@
 import { assertHwfEnvValues } from "../../limits";
 import { collectWorkflowInputs } from "../../workflow/inputs";
-import { substituteText, substituteValue } from "../../workflow/parse";
+import { substituteText, substituteValue } from "../../workflow/template";
 import type {
   LoadedWorkflow,
   ReturnsSpec,
