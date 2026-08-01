@@ -10,9 +10,9 @@ import {
   isCoordinationError,
   readManagedResponse,
   sizeToFirstRatio,
-} from "../../src/run/context";
+} from "../../src/engine";
 
-import { buildHwfEnv, mergeStepEnv, runArgvStep, runShellStep } from "../../src/run/steps/shell";
+import { buildHwfEnv, mergeStepEnv, runArgvStep, runShellStep } from "../../src/engine";
 
 async function tempDir(): Promise<string> {
   return mkdtemp(join(tmpdir(), "herdr-workflows-steps-"));

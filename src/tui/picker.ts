@@ -69,7 +69,7 @@ import {
   type DetachedRunHandle,
   type LaunchRunRequest,
   type LaunchWebRequest,
-} from "../run/launch";
+} from "../engine";
 import type { HostTheme } from "./picker-chrome";
 import {
   defaultPickerReleaseCheck,

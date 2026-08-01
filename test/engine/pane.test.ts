@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { placeCommandPane, quoteArgvForShell } from "../../src/run/steps/pane";
+import { placeCommandPane, quoteArgvForShell } from "../../src/engine";
 
 describe("placeCommandPane", () => {
   test("beside splits then send_input and never layout.apply", async () => {

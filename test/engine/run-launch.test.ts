@@ -18,7 +18,7 @@ import {
   type DetachedRunHandle,
   type LaunchRunRequest,
   type LaunchWebRequest,
-} from "../../src/run/launch";
+} from "../../src/engine";
 import type { LoadedWorkflow } from "../../src/workflow/types";
 import { fakePickerChrome, type FakePickerChrome } from "../fakes/picker-chrome-fake";
 

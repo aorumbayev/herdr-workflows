@@ -726,7 +726,7 @@ async function runTranscriptCommand(
   invocationCwd: string,
 ): Promise<string> {
   const cwd = info.cwd || invocationCwd;
-  const { spawnCapture } = await import("./run/steps/shell");
+  const { spawnCapture } = await import("./engine");
   const result = await spawnCapture(argv, {
     cwd,
     env: transcriptEnv(paneId, info, invocationCwd),

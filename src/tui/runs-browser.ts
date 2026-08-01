@@ -26,7 +26,7 @@ import {
   type RunsBrowserState,
   type RunsScope,
 } from "./run-history";
-import { launchDetachedRun, type DetachedRunHandle, type LaunchRunRequest } from "../run/launch";
+import { launchDetachedRun, type DetachedRunHandle, type LaunchRunRequest } from "../engine";
 
 /** Shared with picker Select height — six visible rows, scroll for the rest. */
 export const RUNS_LIST_VIEWPORT = LIST_VIEWPORT;

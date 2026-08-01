@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HerdrError, herdrBinPath, herdrRequest, notificationShow } from "../../src/host";
-import { isCoordinationError } from "../../src/run/context";
+import { isCoordinationError } from "../../src/engine";
 
 describe("herdrBinPath", () => {
   test("empty or whitespace HERDR_BIN_PATH falls back to herdr", () => {

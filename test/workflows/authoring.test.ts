@@ -6,8 +6,8 @@ import { evaluateWhen } from "../../src/workflow/conditions";
 import { createInputSession } from "../../src/workflow/inputs";
 import { parseWorkflowText } from "../../src/workflow/load";
 import { parseRaw as parseDoc } from "../../src/workflow/parse";
-import { parseLaunchPayload } from "../../src/run/launch";
-import { runArgvStep } from "../../src/run/steps/shell";
+import { parseLaunchPayload } from "../../src/engine";
+import { runArgvStep } from "../../src/engine";
 import type { WorkflowsConfig } from "../../src/context";
 import type { InputSpec } from "../../src/workflow/types";
 

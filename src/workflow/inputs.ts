@@ -6,7 +6,6 @@ import {
   type WorkflowsConfig,
 } from "../context";
 import { CaptureLimitError, latest } from "../context";
-import { spawnCapture } from "../run/steps/shell";
 import { evaluateWhen } from "./conditions";
 import {
   bail,
@@ -46,6 +45,7 @@ export async function resolveDynamicChoices(
       bail(file, undefined, `inputs.${name}.options.run`, "dynamic choice argv rejects templates");
     }
   }
+  const { spawnCapture } = await import("../engine");
   let result: Awaited<ReturnType<typeof spawnCapture>>;
   try {
     result = await spawnCapture(dynamic.run, {

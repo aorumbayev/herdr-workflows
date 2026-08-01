@@ -6,8 +6,8 @@ import type { WorkflowsConfig } from "../../src/context";
 import { HerdrError, TRANSPORT_LOSS_CODES } from "../../src/host";
 import { AGENT_PROMPT_BYTE_LIMIT, CAPTURE_BYTE_LIMIT, HWF_ENV_BYTE_LIMIT } from "../../src/context";
 import { listRuns, loadAllSnapshots, type RunSnapshot } from "../../src/history";
-import type { RunnerDeps } from "../../src/run/context";
-import { runWorkflow } from "../../src/run/runner";
+import type { RunnerDeps } from "../../src/engine";
+import { runWorkflow } from "../../src/engine";
 import { fakeRunRecorder } from "../fakes/run-recorder-fake";
 
 const dirs: string[] = [];

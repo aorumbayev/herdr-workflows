@@ -1,6 +1,4 @@
-import type { RunStepOutcomeKind, RunTerminalStatus } from "../../src/history";
-import type { StepOutcome } from "../../src/run/context";
-import type { RunRecorder } from "../../src/history";
+import type { RunRecorder, RunStepOutcomeKind, RunTerminalStatus } from "../../src/history";
 import type { WorkflowStep } from "../../src/workflow/types";
 
 type RunStepPhase = "main" | "recovery";
@@ -23,7 +21,7 @@ export type FakeRecorderCall =
       total: number;
       label: string;
       outcomeKind: RunStepOutcomeKind;
-      outcome?: StepOutcome;
+      outcome?: Parameters<RunRecorder["stepFinished"]>[5];
       phase: RunStepPhase;
     }
   | {

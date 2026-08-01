@@ -24,8 +24,8 @@ import {
   snapshotPath,
 } from "../../src/history";
 import { RUN_HISTORY_RETENTION_BYTES } from "../../src/history";
-import type { RunnerDeps } from "../../src/run/context";
-import { runWorkflow } from "../../src/run/runner";
+import type { RunnerDeps } from "../../src/engine";
+import { runWorkflow } from "../../src/engine";
 import { assertCredentialStoreSafe } from "../../src/context";
 import { writeTestSnapshot } from "../fakes/helpers/history-snapshot";
 

@@ -10,8 +10,8 @@ import {
   parseHistoryAck,
   runDetail,
 } from "../../src/history";
-import type { RunnerDeps } from "../../src/run/context";
-import { runWorkflow } from "../../src/run/runner";
+import type { RunnerDeps } from "../../src/engine";
+import { runWorkflow } from "../../src/engine";
 import { loadWorkflow } from "../../src/workflow/load";
 
 const dirs: string[] = [];

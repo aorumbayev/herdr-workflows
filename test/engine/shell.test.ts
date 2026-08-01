@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CAPTURE_BYTE_LIMIT } from "../../src/context";
-import { defaultShell, killSpawn, shellArgv, spawnCapture } from "../../src/run/steps/shell";
+import { defaultShell, killSpawn, shellArgv, spawnCapture } from "../../src/engine";
 
 const dirs: string[] = [];
 afterEach(async () => {

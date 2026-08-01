@@ -37,7 +37,7 @@ const ENTRIES: Record<Module, ReadonlySet<string>> = {
     "src/workflow/import.ts",
     "src/workflow/share.ts",
   ]),
-  engine: new Set(["src/run/runner.ts", "src/run/launch.ts"]),
+  engine: new Set(["src/engine.ts"]),
   history: new Set(["src/history.ts"]),
   host: new Set(["src/host.ts", "src/herdr-methods.generated.ts"]),
   context: new Set(["src/context.ts"]),
@@ -53,27 +53,19 @@ const SIDEWAYS = new Set([
 
 /**
  * context: Residual edges the layer rule tolerates until Phase 3 consolidation.
- * - workflows/inputs → run/steps/shell: dynamic-choice spawnCapture (collection-time).
  * - engine → workflow/template: step rendering deep-imports the template engine.
  * - host/context/history → workflow/types: shared grammar types still live under workflows.
- * - context transcript path dynamic-imports run/steps/shell (breaks context↔engine cycle).
+ * - context + workflows/inputs dynamic-import engine for spawnCapture (breaks cycles).
  * - picker → cli/update + cli/console: update indicator and browser open from the TUI.
  */
 const ALLOW: ReadonlySet<string> = new Set([
-  "src/workflow/inputs.ts -> src/run/steps/shell.ts",
   "src/tui/update-indicator.ts -> src/update.ts",
   "src/tui/picker.ts -> src/console.ts",
   "src/context.ts -> src/workflow/types.ts",
   "src/host.ts -> src/workflow/types.ts",
   "src/history.ts -> src/workflow/types.ts",
-  ...engineTemplateAllows(),
+  "src/engine.ts -> src/workflow/template.ts",
 ]);
-
-function engineTemplateAllows(): string[] {
-  return walk(join(SRC, "run"))
-    .map(repoPath)
-    .map((from) => `${from} -> src/workflow/template.ts`);
-}
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
@@ -93,7 +85,7 @@ function moduleOf(file: string): Module | undefined {
   if (file.startsWith("src/tui/")) return "picker";
   if (file === "src/workbench.ts" || file.startsWith("src/web/")) return "workbench";
   if (file.startsWith("src/workflow/")) return "workflows";
-  if (file.startsWith("src/run/")) return "engine";
+  if (file === "src/engine.ts") return "engine";
   if (file === "src/history.ts") return "history";
   if (file === "src/host.ts" || file === "src/herdr-methods.generated.ts") {
     return "host";
