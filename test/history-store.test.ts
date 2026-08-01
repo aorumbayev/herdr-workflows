@@ -1,5 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir, platform } from "node:os";
 import { join } from "node:path";
 import { pluginStateDir, type WorkflowsConfig } from "../src/config";
@@ -321,6 +331,22 @@ describe("run history store", () => {
     const listed = await listRunHistory({ checkout_root: null });
     expect(listed.ok).toBe(false);
     await rm(root, { recursive: true, force: true });
+  });
+
+  test("failed atomic replacement removes temporary snapshot", async () => {
+    const session = new RunHistorySession();
+    expect((await session.claim(baseMeta())).state).toBe("claimed");
+    const id = session.id!;
+    const path = snapshotPath(id);
+    await rm(path);
+    await mkdir(path, { mode: 0o700 });
+    await session.touch();
+    const leftovers = (await readdir(runsDir())).filter(
+      (name) => name.startsWith(`.${id}.`) && name.endsWith(".tmp"),
+    );
+    expect(leftovers).toEqual([]);
+    session.dispose();
+    await rm(path, { recursive: true, force: true });
   });
 
   test("unresolvable claim checkout is unavailable", async () => {
