@@ -1,6 +1,6 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { ensureLocalConfigGitignored } from "../config";
+import { ensureLocalConfigGitignored } from "../context";
 import {
   agentStatus,
   herdrCall,
@@ -9,10 +9,9 @@ import {
   reportToken,
   tabClose,
 } from "../host";
-import type { InvocationContext, WorkflowsConfig } from "../config";
+import type { InvocationContext, WorkflowsConfig } from "../context";
 import type { RunStepOutcomeKind } from "../history/types";
-import { assertHwfEnvValues } from "../limits";
-import { transcriptText } from "../session";
+import { assertHwfEnvValues, transcriptText } from "../context";
 import { completeWorkflowInputs, evaluateWhen } from "../workflow/inputs";
 import type {
   LoadedWorkflow,

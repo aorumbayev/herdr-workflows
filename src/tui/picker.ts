@@ -1,7 +1,11 @@
-import type { InvocationContext, WorkflowsConfig } from "../config";
-import { loadContext } from "../config";
+import {
+  EXAMPLES_URL,
+  PRODUCT_VERSION,
+  loadContext,
+  type InvocationContext,
+  type WorkflowsConfig,
+} from "../context";
 import { openInBrowser } from "../console";
-import { EXAMPLES_URL, PRODUCT_VERSION } from "../version";
 import {
   analyzeResolvedSensitivity,
   listWorkflows,

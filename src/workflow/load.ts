@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { loadConfig, profileNames, type WorkflowsConfig } from "../config";
+import { loadConfig, profileNames, type WorkflowsConfig } from "../context";
 import { parseRaw, parseWhenClause, type RawWorkflow } from "./parse";
 import { workflowNeedsTranscript, workflowTemplateRefs } from "./template";
 import {

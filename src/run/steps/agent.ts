@@ -6,9 +6,9 @@ import {
   repoConfigPath,
   resolveProfile,
   type AgentProfile,
-} from "../../config";
+} from "../../context";
 import { HerdrError } from "../../host";
-import { AGENT_PROMPT_BYTE_LIMIT, assertUnderCaptureCap } from "../../limits";
+import { AGENT_PROMPT_BYTE_LIMIT, assertUnderCaptureCap } from "../../context";
 import { substituteText } from "../../workflow/template";
 import type { StepAction } from "../../workflow/types";
 import {

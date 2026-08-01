@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadConfig } from "../../src/config";
+import { loadConfig } from "../../src/context";
 import { initSeams, runInit } from "../../src/init";
 
 const dirs: string[] = [];

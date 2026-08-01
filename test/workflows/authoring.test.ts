@@ -8,7 +8,7 @@ import { parseWorkflowText } from "../../src/workflow/load";
 import { parseRaw as parseDoc } from "../../src/workflow/parse";
 import { parseLaunchPayload } from "../../src/run/launch";
 import { runArgvStep } from "../../src/run/steps/shell";
-import type { WorkflowsConfig } from "../../src/config";
+import type { WorkflowsConfig } from "../../src/context";
 import type { InputSpec } from "../../src/workflow/types";
 
 async function collectInputValues(opts: {

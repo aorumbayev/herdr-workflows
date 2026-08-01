@@ -14,9 +14,13 @@ import {
   resolveProfile,
   resolvePluginConfigDir,
   resolveRepoRoot,
-} from "../../src/config";
-import { assertUnderHwfEnvCap, CAPTURE_BYTE_LIMIT, HWF_ENV_BYTE_LIMIT } from "../../src/limits";
-import { hasTranscriptSupport } from "../../src/session";
+} from "../../src/context";
+import {
+  CAPTURE_BYTE_LIMIT,
+  HWF_ENV_BYTE_LIMIT,
+  assertUnderHwfEnvCap,
+  hasTranscriptSupport,
+} from "../../src/context";
 import {
   completeWorkflowInputs,
   parseDynamicChoiceStdout,

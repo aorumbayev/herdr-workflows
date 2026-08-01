@@ -13,7 +13,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../../src/limits";
+import { CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../../src/context";
 import {
   checkPayload,
   importJournalPath,
@@ -34,7 +34,7 @@ import {
   withPinnedSchemaPointer,
 } from "../../src/workflow/share";
 import { WorkflowLoadError } from "../../src/workflow/types";
-import { PRODUCT_VERSION } from "../../src/version";
+import { PRODUCT_VERSION } from "../../src/context";
 
 const dirs: string[] = [];
 const prevHome = process.env.HOME;

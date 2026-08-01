@@ -1,7 +1,7 @@
 import { closeSync, mkdirSync, openSync, statSync, watch, type FSWatcher } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { pluginStateDir, type InvocationContext } from "../config";
+import { pluginStateDir, type InvocationContext } from "../context";
 
 type DetachedRunResult = { ok: boolean; detail: string };
 

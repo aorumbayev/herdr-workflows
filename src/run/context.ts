@@ -1,7 +1,7 @@
 import { join } from "node:path";
-import type { InvocationContext, TranscriptExtractor, WorkflowsConfig } from "../config";
+import type { InvocationContext, TranscriptExtractor, WorkflowsConfig } from "../context";
 import { HerdrError, validateHerdrInvocation } from "../host";
-import { assertUnderCaptureCap, CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../limits";
+import { assertUnderCaptureCap, CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../context";
 import { substituteParams } from "../workflow/template";
 import type { TemplateNamespace, WorkflowStep } from "../workflow/types";
 import type { RunRecorder } from "../history/recorder";

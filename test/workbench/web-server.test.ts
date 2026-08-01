@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmod, mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pluginStateDir } from "../../src/config";
+import { pluginStateDir } from "../../src/context";
 import { allocateRunId, RunHistorySession } from "../../src/history/store";
-import { workflowSchemaUrl } from "../../src/version";
+import { workflowSchemaUrl } from "../../src/context";
 import { parseWebRoute, runWorkbenchRoute } from "../../src/web/endpoint";
 import { dropSource, startWebServer, type WebServer } from "../../src/web/server";
 

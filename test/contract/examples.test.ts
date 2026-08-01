@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildExamples, renderModule } from "../../scripts/generate-examples";
 import { loadWorkflow } from "../../src/workflow/load";
-import type { WorkflowsConfig } from "../../src/config";
+import type { WorkflowsConfig } from "../../src/context";
 
 const committedGallery = join(
   import.meta.dir,

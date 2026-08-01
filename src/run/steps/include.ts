@@ -1,4 +1,4 @@
-import { assertHwfEnvValues } from "../../limits";
+import { assertHwfEnvValues } from "../../context";
 import { completeWorkflowInputs } from "../../workflow/inputs";
 import { substituteText, substituteValue } from "../../workflow/template";
 import type {

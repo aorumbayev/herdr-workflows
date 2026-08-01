@@ -1,7 +1,11 @@
 import { gunzipSync } from "node:zlib";
 import { z } from "zod";
-import { CAPTURE_BYTE_LIMIT, CaptureLimitError, assertUnderCaptureCap } from "../limits";
-import { workflowSchemaUrl } from "../version";
+import {
+  CAPTURE_BYTE_LIMIT,
+  CaptureLimitError,
+  assertUnderCaptureCap,
+  workflowSchemaUrl,
+} from "../context";
 import { WORKFLOW_NAME_RULE, resolveWorkflowFile, workflowPath } from "./paths";
 import { parseRaw } from "./parse";
 import { referencedWorkflowChildren } from "./trust";

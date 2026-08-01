@@ -8,7 +8,7 @@ import {
   CredentialStoreError,
   parseDarwinAclListing,
   parseLinuxAclListing,
-} from "../../src/fs-private";
+} from "../../src/context";
 import { writeEndpointRecord } from "../../src/web/endpoint";
 
 const dirs: string[] = [];

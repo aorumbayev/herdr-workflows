@@ -5,7 +5,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { die } from "./console";
 import { resolvePluginRoot } from "./setup";
-import { PRODUCT_VERSION } from "./version";
+import { PRODUCT_VERSION } from "./context";
 
 const RELEASE_REPO = "aorumbayev/herdr-workflows";
 const LATEST_RELEASE_URL = `https://api.github.com/repos/${RELEASE_REPO}/releases/latest`;

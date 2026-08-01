@@ -40,14 +40,7 @@ const ENTRIES: Record<Module, ReadonlySet<string>> = {
   engine: new Set(["src/run/runner.ts", "src/run/launch.ts"]),
   history: new Set(["src/history/store.ts", "src/history/recorder.ts", "src/history/types.ts"]),
   host: new Set(["src/host.ts", "src/herdr-methods.generated.ts"]),
-  context: new Set([
-    "src/config.ts",
-    "src/limits.ts",
-    "src/session.ts",
-    "src/fs-private.ts",
-    "src/version.ts",
-    "src/latest.ts",
-  ]),
+  context: new Set(["src/context.ts"]),
 };
 
 /** Same-layer module edges that are part of the architecture (not residuals). */
@@ -62,16 +55,15 @@ const SIDEWAYS = new Set([
  * context: Residual edges the layer rule tolerates until Phase 3 consolidation.
  * - workflows/inputs → run/steps/shell: dynamic-choice spawnCapture (collection-time).
  * - engine → workflow/template: step rendering deep-imports the template engine.
- * - context/session → run/steps/shell: transcript extractors reuse spawnCapture.
  * - host/context/history → workflow/types: shared grammar types still live under workflows.
+ * - context transcript path dynamic-imports run/steps/shell (breaks context↔engine cycle).
  * - picker → cli/update + cli/console: update indicator and browser open from the TUI.
  */
 const ALLOW: ReadonlySet<string> = new Set([
   "src/workflow/inputs.ts -> src/run/steps/shell.ts",
-  "src/session.ts -> src/run/steps/shell.ts",
   "src/tui/update-indicator.ts -> src/update.ts",
   "src/tui/picker.ts -> src/console.ts",
-  "src/config.ts -> src/workflow/types.ts",
+  "src/context.ts -> src/workflow/types.ts",
   "src/host.ts -> src/workflow/types.ts",
   "src/history/recorder.ts -> src/workflow/types.ts",
   ...engineTemplateAllows(),
@@ -106,7 +98,7 @@ function moduleOf(file: string): Module | undefined {
   if (file === "src/host.ts" || file === "src/herdr-methods.generated.ts") {
     return "host";
   }
-  if (ENTRIES.context.has(file)) return "context";
+  if (file === "src/context.ts") return "context";
   if (ENTRIES.cli.has(file)) return "cli";
   return undefined;
 }

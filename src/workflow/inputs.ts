@@ -4,9 +4,8 @@ import {
   profileNames,
   repoConfigPath,
   type WorkflowsConfig,
-} from "../config";
-import { CaptureLimitError } from "../limits";
-import { latest } from "../latest";
+} from "../context";
+import { CaptureLimitError, latest } from "../context";
 import { spawnCapture } from "../run/steps/shell";
 import { evaluateWhen } from "./conditions";
 import {

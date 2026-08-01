@@ -12,7 +12,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir, platform } from "node:os";
 import { join } from "node:path";
-import { pluginStateDir, type WorkflowsConfig } from "../../src/config";
+import { pluginStateDir, type WorkflowsConfig } from "../../src/context";
 import { toListItem } from "../../src/history/project";
 import {
   allocateRunId,
@@ -26,7 +26,7 @@ import {
 import { RUN_HISTORY_RETENTION_BYTES } from "../../src/history/types";
 import type { RunnerDeps } from "../../src/run/context";
 import { runWorkflow } from "../../src/run/runner";
-import { assertCredentialStoreSafe } from "../../src/fs-private";
+import { assertCredentialStoreSafe } from "../../src/context";
 import { writeTestSnapshot } from "../fakes/helpers/history-snapshot";
 
 describe("run history store", () => {

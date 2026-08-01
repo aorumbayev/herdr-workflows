@@ -1,4 +1,4 @@
-import { platformName, sanitizeDisplay, type InvocationContext } from "../config";
+import { platformName, sanitizeDisplay, type InvocationContext } from "../context";
 import {
   TEMPLATE_INNER,
   WHOLE_TEMPLATE_RE,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { latest } from "../../src/latest";
+import { latest } from "../../src/context";
 
 describe("latest-wins token", () => {
   test("older response never overwrites newer", () => {

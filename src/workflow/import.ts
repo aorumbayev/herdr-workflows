@@ -13,7 +13,7 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { assertUnderCaptureCap } from "../limits";
+import { assertUnderCaptureCap } from "../context";
 import { assertWorkflowName } from "./paths";
 import {
   decodePayload,

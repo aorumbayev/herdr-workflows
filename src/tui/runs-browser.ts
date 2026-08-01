@@ -1,4 +1,4 @@
-import { sanitizeDisplay, type InvocationContext, type WorkflowsConfig } from "../config";
+import { sanitizeDisplay, type InvocationContext, type WorkflowsConfig } from "../context";
 import {
   allocateRunId,
   canonicalRepoRoot,
@@ -8,7 +8,7 @@ import {
   presentDetail,
   runDetail,
 } from "../history/store";
-import { latest } from "../latest";
+import { latest } from "../context";
 import type { LoadedWorkflow, WorkflowListEntry } from "../workflow/types";
 import { runWorkbenchRoute } from "../web/endpoint";
 import { LIST_VIEWPORT, type ChromeKeyEvent, type PickerChrome } from "./picker-chrome";

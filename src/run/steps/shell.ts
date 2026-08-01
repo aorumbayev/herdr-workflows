@@ -1,4 +1,4 @@
-import { CaptureLimitError, CAPTURE_BYTE_LIMIT } from "../../limits";
+import { CaptureLimitError, CAPTURE_BYTE_LIMIT } from "../../context";
 import { renderScalar, substituteText, substituteValue } from "../../workflow/template";
 import type { PaneOpen, ShellName, StepAction, TemplateNamespace } from "../../workflow/types";
 import { dispatchFailure, errorText, type StepCtx, type StepOutcome } from "../context";

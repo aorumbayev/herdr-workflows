@@ -15,7 +15,7 @@ import {
 } from "node:fs";
 import { basename, delimiter, dirname, join, resolve, sep } from "node:path";
 import { homedir } from "node:os";
-import { PRODUCT_VERSION } from "./version";
+import { PRODUCT_VERSION } from "./context";
 
 const OWNERSHIP_FILE = ".herdr-workflows-cli.json";
 

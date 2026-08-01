@@ -2,8 +2,13 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { globalConfigPath, loadConfig, parseConfigText, repoConfigPath } from "../config";
-import { workflowSchemaUrl } from "../version";
+import {
+  globalConfigPath,
+  loadConfig,
+  parseConfigText,
+  repoConfigPath,
+  workflowSchemaUrl,
+} from "../context";
 import { HERDR_METHOD_BY_NAME } from "../herdr-methods.generated";
 import { canonicalRepoRoot, listRuns, runDetail } from "../history/store";
 import type { RunProjectedStatus, RunWorkflowSource } from "../history/types";

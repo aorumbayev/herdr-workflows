@@ -8,7 +8,7 @@ import {
   repoConfigPath,
   type AgentProfile,
   type WorkflowsConfig,
-} from "./config";
+} from "./context";
 
 /** Kinds `herdr agent start --kind` accepts (herdr 0.7.5 cli-reference). Native start stays authoritative. */
 const HERDR_AGENT_KINDS = [

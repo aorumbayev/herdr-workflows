@@ -1,12 +1,12 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { chmod, mkdir, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { pluginStateDir } from "../config";
+import { pluginStateDir } from "../context";
 import {
   assertCredentialStoreSafe,
   assertPrivateCredentialFile,
   CredentialStoreError,
-} from "../fs-private";
+} from "../context";
 import {
   filterSortLimit,
   normalizeRunUuid,

@@ -2,13 +2,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CAPTURE_BYTE_LIMIT } from "../../src/limits";
+import { CAPTURE_BYTE_LIMIT } from "../../src/context";
 import {
   extractSessionTranscript,
   readClaudeTranscript,
   slug,
   transcriptText,
-} from "../../src/session";
+} from "../../src/context";
 
 const dirs: string[] = [];
 afterEach(async () => {

@@ -6,9 +6,9 @@ import { Command, InvalidArgumentError, Option } from "commander";
 import manifest from "../herdr-plugin.toml";
 import { die, openInBrowser, readLine, releaseStdinReader, tolerateClosedStdio } from "./console";
 import { ensureHerdrProtocol, HerdrError, notificationShow, pluginPaneOpen } from "./host";
-import { loadContext, resolveRepoRoot } from "./config";
+import { loadContext, resolveRepoRoot } from "./context";
 import { runInit } from "./init";
-import { EXAMPLES_URL, PRODUCT_VERSION } from "./version";
+import { EXAMPLES_URL, PRODUCT_VERSION } from "./context";
 import { IMPORT_DISCLAIMER, parseImportScope, runImport } from "./workflow/import";
 import { listWorkflows, loadWorkflow } from "./workflow/load";
 import { evaluateWhen } from "./workflow/inputs";
@@ -19,7 +19,7 @@ import {
   type InputSpec,
   type WhenSpec,
 } from "./workflow/types";
-import { CaptureLimitError } from "./limits";
+import { CaptureLimitError } from "./context";
 import { runWorkflow } from "./run/runner";
 import { buildIdentity, parseLaunchPayload, retireOnCodeChange } from "./run/launch";
 import { openWorkbench } from "./web/endpoint";
