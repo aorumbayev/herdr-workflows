@@ -288,11 +288,11 @@ A check that cannot fire is worse than no check, because it reports safety it do
 - Check these by name, because they are cheap to lose: tests run on two operating systems while
   `npm run verify` runs on one, pre-commit runs verify without tests, and `openspec validate --all
 --strict` appears in `CONTRIBUTING.md` — confirm whether any CI job runs it
-- The tunable values are few: `--threshold` and `--ignore` on `verify:complexity`, `--max-warnings`
-  on `verify:lint`, and the ignore lists in `verify.config.json` and `knip.json`. Note the direction
-  before you judge one: `verifyx complexity` fails scores _below_ the threshold, so **lowering** the
-  number loosens the gate. `AGENTS.md` has the worked example. Enumerate the values, then run
-  `git log -p -- verify.config.json knip.json package.json | rg -n "threshold|ignore|max-warnings"`
+- The tunable values are few: the 2,500-line cap in `verify:file-length`, the `eslint/complexity`
+  ceiling in `.oxlintrc.json`, `--max-warnings` on `verify:lint`, and the ignore lists in
+  `verify.config.json` and `knip.json`. Note the direction before you judge one: raising the
+  file-length or cyclomatic ceiling loosens the gate. Enumerate the values, then run
+  `git log -p -- .oxlintrc.json knip.json package.json scripts/verify-file-length.ts | rg -n "2500|complexity|max-warnings|ignore"`
   and name the commit behind each. No reason in the message is a finding, and the fix is one line of
   prose
 - `ls -la CLAUDE.md AGENTS.md` — expect a symlink. Two regular files is the finding

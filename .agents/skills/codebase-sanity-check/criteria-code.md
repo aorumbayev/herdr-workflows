@@ -17,11 +17,12 @@ it can pass locally and fail in CI.
 
 ## 1. The splitting trap
 
-Read the "Splitting" constraint in `AGENTS.md` before this section. It owns the formula, the
-threshold, and the current ceiling. Take the numbers from there, not from here.
+Read the "Splitting" constraint in `AGENTS.md` before this section. It owns the file-length cap,
+the per-function cyclomatic ceiling, and the nesting gates. Take the numbers from there, not from
+here.
 
-The one conclusion you must carry: a low complexity score never means "this function is complex", so
-never propose a split to raise a score.
+The one conclusion you must carry: never propose a split only to satisfy a line budget or a
+complexity number when the code already names one concept.
 
 ### What to check
 
@@ -32,9 +33,9 @@ never propose a split to raise a score.
 
 ### How to measure
 
-- Quote the `npm run verify:complexity` line for the file in question. Compare it against the ceiling
-  `AGENTS.md` names for `src/workflow/parse.ts`
-- `npm run verify:lint` reports the `max-depth` and `max-nested-callbacks` violations configured in
+- Quote `npm run verify:file-length` for any `src/**/*.ts` near the 2,500-line cap (`*.generated.ts`
+  exempt)
+- `npm run verify:lint` reports `eslint/complexity`, `max-depth`, and `max-nested-callbacks` from
   `.oxlintrc.json`. Those are findings in the function, not in the file. `.oxlintrc.json` turns
   `max-nested-callbacks` off under `test/`, so that gate does not cover the suite
 - `git log --diff-filter=A --name-only --oneline -20 -- src` for recently added files. For each,
@@ -43,9 +44,10 @@ never propose a split to raise a score.
 
 ### Not a finding
 
-- A file that `verify:complexity` fails on today. Shrinking it is required, and shrinking may mean
-  deleting rather than splitting
-- A long but linear function or file, such as a parser or a schema. Length alone is ungated by design
+- A file that `verify:file-length` or `eslint/complexity` fails on today. Shrinking it is required,
+  and shrinking may mean deleting rather than splitting
+- A long but linear function under the file-length cap, such as a parser or a schema. Function
+  length alone is ungated by design
 
 ## 2. Abstractions with one user
 
