@@ -16,8 +16,8 @@ import { pluginStateDir, type WorkflowsConfig } from "../src/config";
 import { toListItem } from "../src/history/project";
 import {
   allocateRunId,
-  getRunDetail,
-  listRunHistory,
+  runDetail,
+  listRuns,
   readSnapshot,
   RunHistorySession,
   runsDir,
@@ -218,7 +218,7 @@ describe("run history store", () => {
       status: "succeeded",
       steps: [],
     });
-    const listed = await listRunHistory({ checkout_root: "/repo/a", now });
+    const listed = await listRuns({ checkout_root: "/repo/a", now });
     expect(listed.ok).toBe(true);
     if (!listed.ok) return;
     expect(listed.runs.some((r) => r.id === currentId)).toBe(true);
@@ -256,7 +256,7 @@ describe("run history store", () => {
     const activeSnap = await readSnapshot(active.id!);
     expect(activeSnap?.status).toBeUndefined();
 
-    const listed = await listRunHistory({ checkout_root: null });
+    const listed = await listRuns({ checkout_root: null });
     expect(listed.ok).toBe(true);
     if (!listed.ok) return;
     const terminalBytes = (
@@ -311,7 +311,7 @@ describe("run history store", () => {
       })}\n`,
       { mode: 0o600 },
     );
-    const listed = await listRunHistory({ checkout_root: null });
+    const listed = await listRuns({ checkout_root: null });
     expect(listed.ok).toBe(true);
     if (!listed.ok) return;
     expect(listed.runs.every((r) => r.id !== nestedMissingParent)).toBe(true);
@@ -326,9 +326,9 @@ describe("run history store", () => {
     await session.finalize("succeeded");
     session.dispose();
     await chmod(snapshotPath(id), 0o644);
-    const detail = await getRunDetail(id);
+    const { detail } = await runDetail(id);
     expect(detail.kind).toBe("unavailable");
-    const listed = await listRunHistory({ checkout_root: null });
+    const listed = await listRuns({ checkout_root: null });
     expect(listed.ok).toBe(false);
     await rm(root, { recursive: true, force: true });
   });
@@ -370,7 +370,7 @@ describe("run history store", () => {
     const snap = await readSnapshot(id);
     expect(snap?.checkout_root).toBe(canonical);
     await rm(root, { recursive: true, force: true });
-    const listed = await listRunHistory({ checkout_root: snap!.checkout_root });
+    const listed = await listRuns({ checkout_root: snap!.checkout_root });
     expect(listed.ok).toBe(true);
     if (!listed.ok) return;
     expect(listed.runs.some((r) => r.id === id)).toBe(true);
@@ -391,7 +391,7 @@ describe("run history store", () => {
       outcome: "succeeded",
     });
     await session.finalize("succeeded");
-    const listed = await listRunHistory({
+    const listed = await listRuns({
       text: "unique-shell-label",
       checkout_root: checkoutRoot,
     });
@@ -477,7 +477,7 @@ describe("run history store", () => {
         "{not json",
       ].join("\n") + "\n";
     await writeFile(priorPath, body, { mode: 0o600 });
-    const all = await listRunHistory({ checkout_root: null });
+    const all = await listRuns({ checkout_root: null });
     expect(all.ok).toBe(true);
     if (!all.ok) return;
     expect(all.runs.every((r) => r.workflow !== "old-log")).toBe(true);
@@ -501,15 +501,15 @@ describe("run history store", () => {
       explanation: "secret-token-xyz",
     });
     await session.finalize("failed");
-    const listed = await listRunHistory({ text: "secret-token-xyz", checkout_root: null });
+    const listed = await listRuns({ text: "secret-token-xyz", checkout_root: null });
     expect(listed.ok).toBe(true);
     if (!listed.ok) return;
     expect(listed.runs).toHaveLength(0);
-    const byExit = await listRunHistory({ text: "3", checkout_root: checkoutRoot });
+    const byExit = await listRuns({ text: "3", checkout_root: checkoutRoot });
     expect(byExit.ok).toBe(true);
     if (!byExit.ok) return;
     expect(byExit.runs).toHaveLength(1);
-    const detail = await getRunDetail(session.id!);
+    const { detail } = await runDetail(session.id!);
     expect(detail.kind).toBe("snapshot");
     if (detail.kind !== "snapshot") return;
     expect(detail.failure_explanation).toBe("secret-token-xyz");
@@ -585,11 +585,11 @@ steps:
       deps: mockDeps(),
     });
     expect(result.ok).toBe(true);
-    const listed = await listRunHistory({ checkout_root: await realpath(root) });
+    const listed = await listRuns({ checkout_root: await realpath(root) });
     expect(listed.ok).toBe(true);
     if (!listed.ok) return;
     expect(listed.runs[0]?.status).toBe("succeeded");
-    const detail = await getRunDetail(listed.runs[0]!.id);
+    const { detail } = await runDetail(listed.runs[0]!.id);
     expect(detail.kind).toBe("snapshot");
     if (detail.kind !== "snapshot") return;
     expect(detail.steps.map((s) => s.label)).toEqual(["a", "b"]);
@@ -613,7 +613,7 @@ steps:
       deps: mockDeps(),
     });
     expect(result.ok).toBe(false);
-    const listed = await listRunHistory({ checkout_root: await realpath(root) });
+    const listed = await listRuns({ checkout_root: await realpath(root) });
     expect(listed.ok).toBe(true);
     if (!listed.ok) return;
     expect(listed.runs[0]?.status).toBe("failed");
@@ -645,10 +645,10 @@ steps:
       deps: mockDeps(),
     });
     expect(result.ok).toBe(false);
-    const listed = await listRunHistory({ checkout_root: await realpath(root) });
+    const listed = await listRuns({ checkout_root: await realpath(root) });
     expect(listed.ok).toBe(true);
     if (!listed.ok) return;
-    const detail = await getRunDetail(listed.runs[0]!.id);
+    const { detail } = await runDetail(listed.runs[0]!.id);
     expect(detail.kind).toBe("snapshot");
     if (detail.kind !== "snapshot") return;
     expect(detail.steps.some((s) => s.workflow === "child")).toBe(true);
@@ -695,10 +695,10 @@ steps:
       deps: mockDeps(),
     });
     expect(result.ok).toBe(true);
-    const listed = await listRunHistory({ checkout_root: await realpath(root) });
+    const listed = await listRuns({ checkout_root: await realpath(root) });
     expect(listed.ok).toBe(true);
     if (!listed.ok) return;
-    const detail = await getRunDetail(listed.runs[0]!.id);
+    const { detail } = await runDetail(listed.runs[0]!.id);
     expect(detail.kind).toBe("snapshot");
     if (detail.kind !== "snapshot") return;
     expect(detail.steps.map((s) => s.label)).toEqual(["wrap1", "inner1", "wrap2", "inner2"]);
@@ -757,7 +757,7 @@ steps:
     });
     expect(result.ok).toBe(true);
     expect(acks.some((line) => line.includes("unavailable"))).toBe(true);
-    const listed = await listRunHistory({ checkout_root: null });
+    const listed = await listRuns({ checkout_root: null });
     expect(listed.ok === false || (listed.ok && listed.runs.length === 0)).toBe(true);
   });
 
@@ -780,7 +780,7 @@ steps:
       deps: mockDeps(),
     });
     expect(result.ok).toBe(true);
-    const listed = await listRunHistory({ checkout_root: null });
+    const listed = await listRuns({ checkout_root: null });
     expect(listed.ok).toBe(true);
     if (!listed.ok) return;
     expect(listed.runs[0]?.checkout_root).toBe(await realpath(root));

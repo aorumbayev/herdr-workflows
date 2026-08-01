@@ -3,10 +3,10 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { WorkflowsConfig } from "../src/config";
-import { HerdrError } from "../src/herdr";
+import { HerdrError, TRANSPORT_LOSS_CODES } from "../src/herdr";
 import { CAPTURE_BYTE_LIMIT, HWF_ENV_BYTE_LIMIT } from "../src/limits";
 import { AGENT_PROMPT_BYTE_LIMIT } from "../src/limits";
-import { listRunHistory, loadAllSnapshots } from "../src/history/store";
+import { listRuns, loadAllSnapshots } from "../src/history/store";
 import type { RunSnapshot } from "../src/history/types";
 import type { RunnerDeps } from "../src/run/context";
 import { runWorkflow } from "../src/run/runner";
@@ -960,6 +960,78 @@ steps:
     expect(recorder.finishedCalls.some((c) => c.status === "interrupted")).toBe(true);
   });
 
+  for (const code of TRANSPORT_LOSS_CODES) {
+    test(`RunnerDeps transport-loss code ${code} is coordination loss`, async () => {
+      const root = await repoWith({
+        m: `version: v1alpha1
+on_failure:
+  herdr: notification.show
+  params: { title: should-not-run }
+steps:
+  - herdr: notification.show
+    params: { title: go }
+`,
+      });
+      const { deps, calls } = mockDeps({
+        herdrCall: async (method) => {
+          if (method === "notification.show") {
+            throw new HerdrError(code, `${method}: injected ${code}`);
+          }
+          return { type: "ok" };
+        },
+      });
+      const result = await runWorkflow({
+        name: "m",
+        repoRoot: root,
+        config: baseConfig,
+        ctx: { selection: "", cwd: root },
+        deps,
+        recorder: fakeRunRecorder(),
+      });
+      const err = failed(result);
+      expect(err.coordinationLost).toBe(true);
+      expect(err.error).toMatch(/may still be active/);
+      expect(calls.filter((c) => c.method === "notification.show")).toHaveLength(0);
+    });
+  }
+
+  test("port internal HerdrError is ordinary failure and on_failure runs", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+on_failure:
+  herdr: notification.show
+  params: { title: recovered }
+steps:
+  - herdr: notification.show
+    params: { title: go }
+`,
+    });
+    const base = mockDeps();
+    let attempts = 0;
+    const deps: RunnerDeps = {
+      ...base.deps,
+      herdrCall: async (method, params = {}) => {
+        if (method === "notification.show" && attempts++ === 0) {
+          throw new HerdrError("internal", "simulated plain Error from port");
+        }
+        return base.deps.herdrCall(method, params);
+      },
+    };
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      deps,
+      recorder: fakeRunRecorder(),
+    });
+    expect(result.ok).toBe(false);
+    expect(failed(result).coordinationLost).toBeUndefined();
+    const notify = base.calls.filter((c) => c.method === "notification.show");
+    expect(notify).toHaveLength(1);
+    expect(notify[0]?.params).toMatchObject({ title: "recovered" });
+  });
+
   test("context.agent uses pane id when the detected agent has a null name", async () => {
     const root = await repoWith({
       m: `version: v1alpha1
@@ -1180,7 +1252,7 @@ steps:
     expect(typeof (snaps[0]?.returns as { platform?: string } | undefined)?.platform).toBe(
       "string",
     );
-    const listed = await listRunHistory({ checkout_root: root });
+    const listed = await listRuns({ checkout_root: root });
     expect(listed.ok).toBe(true);
     if (listed.ok) expect(JSON.stringify(listed.runs)).not.toContain("hello");
   });

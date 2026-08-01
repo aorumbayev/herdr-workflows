@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { z } from "zod";
-import { sanitizeDisplay } from "./herdr";
+import { sanitizeDisplay } from "./console";
 import type { PlatformName, TemplateNamespace } from "./workflow/types";
 
 export const PROFILE_NAME_RE = /^[a-z][a-z0-9_-]{0,31}$/;
@@ -153,6 +153,26 @@ export function repoLocalConfigPath(repoRoot: string): string {
   return join(repoRoot, ".hwf", "config.local.yaml");
 }
 
+/** Ensure `.hwf/.gitignore` covers local config and tmp before the first write. */
+export async function ensureLocalConfigGitignored(repoRoot: string): Promise<void> {
+  const ignorePath = join(repoRoot, ".hwf", ".gitignore");
+  const markers = [basename(repoLocalConfigPath(repoRoot)), "tmp/"];
+  let text = (await Bun.file(ignorePath).exists()) ? await Bun.file(ignorePath).text() : "";
+  const lines = new Set(
+    text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean),
+  );
+  let changed = false;
+  for (const marker of markers) {
+    if (lines.has(marker)) continue;
+    text = text.length === 0 || text.endsWith("\n") ? `${text}${marker}\n` : `${text}\n${marker}\n`;
+    changed = true;
+  }
+  if (changed || !(await Bun.file(ignorePath).exists())) await Bun.write(ignorePath, text);
+}
+
 function mergeLayer(into: WorkflowsConfig, layer: WorkflowsConfig): void {
   for (const [name, profile] of Object.entries(layer.profiles)) {
     into.profiles[name] = profile;
@@ -261,7 +281,7 @@ type CtxJson = {
   pane?: { pane_id?: string };
 };
 
-export function readInvocationContext(): InvocationContext {
+function readInvocationContext(): InvocationContext {
   let json: CtxJson = {};
   const raw = process.env.HERDR_PLUGIN_CONTEXT_JSON;
   if (raw) {
@@ -287,27 +307,44 @@ export function readInvocationContext(): InvocationContext {
   };
 }
 
-export function buildTemplateNamespace(opts: {
+export type AppContext = {
+  config: WorkflowsConfig;
+  repoRoot: string;
   ctx: InvocationContext;
-  inputs?: Record<string, string>;
-  steps?: Record<string, unknown>;
-  agent?: string;
-  transcript?: string;
-  transcriptFile?: string;
-}): TemplateNamespace {
+  platform: PlatformName;
+  /** Base template namespace (inputs/steps empty; context from invocation). */
+  namespace: TemplateNamespace;
+};
+
+/** Resolve config layers, repo root, invocation context, platform, and base namespace once. */
+export async function loadContext(
+  opts: { start?: string; repoRoot?: string } = {},
+): Promise<AppContext> {
+  const invocation = readInvocationContext();
+  const repoRoot =
+    opts.repoRoot ??
+    process.env.HERDR_WORKFLOWS_REPO_ROOT ??
+    resolveRepoRoot(opts.start ?? invocation.cwd);
+  const ctx: InvocationContext = { ...invocation, cwd: repoRoot };
+  const config = await loadConfig(repoRoot);
+  const platform = platformName();
   return {
-    inputs: { ...opts.inputs },
-    steps: { ...opts.steps },
-    context: {
-      workspace: opts.ctx.workspaceId ?? "",
-      tab: opts.ctx.tabId ?? "",
-      pane: opts.ctx.paneId ?? "",
-      worktree: opts.ctx.worktreePath ?? "",
-      agent: opts.agent ?? "",
-      selection: sanitizeDisplay(opts.ctx.selection),
-      platform: platformName(),
-      ...(opts.transcript !== undefined ? { transcript: opts.transcript } : {}),
-      ...(opts.transcriptFile !== undefined ? { transcript_file: opts.transcriptFile } : {}),
+    config,
+    repoRoot,
+    ctx,
+    platform,
+    namespace: {
+      inputs: {},
+      steps: {},
+      context: {
+        workspace: ctx.workspaceId ?? "",
+        tab: ctx.tabId ?? "",
+        pane: ctx.paneId ?? "",
+        worktree: ctx.worktreePath ?? "",
+        agent: "",
+        selection: sanitizeDisplay(ctx.selection),
+        platform,
+      },
     },
   };
 }

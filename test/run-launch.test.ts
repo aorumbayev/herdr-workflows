@@ -2,17 +2,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { KeyEvent } from "@opentui/core";
-import {
-  attachRunsBrowser,
-  launchWorkbenchRoute,
-  LIST_HINT,
-  selectedListEntry,
-  tryOpenActionsPalette,
-  type PickerState,
-} from "../src/tui/picker";
+import { pickerSeams, type PickerState } from "../src/tui/picker";
+import type { ChromeKeyEvent } from "../src/tui/picker-chrome";
 import { resolvePaletteLetter } from "../src/tui/picker-actions";
+import { LIST_HINT, selectedListEntry } from "../src/tui/picker-rows";
 import { themeFromPalette } from "../src/tui/theme";
+
+const { attachRunsBrowser, launchWorkbenchRoute, tryOpenActionsPalette } = pickerSeams;
 import {
   buildIdentity,
   launchDetachedRun,
@@ -22,7 +18,7 @@ import {
   type DetachedRunHandle,
   type LaunchRunRequest,
   type LaunchWebRequest,
-} from "../src/tui/run-launch";
+} from "../src/run/launch";
 import type { LoadedWorkflow } from "../src/workflow/types";
 import { fakePickerChrome, type FakePickerChrome } from "./picker-chrome-fake";
 
@@ -618,7 +614,7 @@ await Bun.write(${JSON.stringify(envFile)}, JSON.stringify(env));
 });
 
 describe("picker workbench handoff", () => {
-  function key(name: string, ctrl: boolean): KeyEvent {
+  function key(name: string, ctrl: boolean): ChromeKeyEvent {
     let prevented = false;
     return {
       name,
@@ -641,7 +637,7 @@ describe("picker workbench handoff", () => {
       get propagationStopped() {
         return false;
       },
-    } as KeyEvent;
+    } as ChromeKeyEvent;
   }
 
   test("successful launch tears down picker after handoff", () => {

@@ -3,7 +3,6 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  buildTemplateNamespace,
   globalConfigPath,
   loadConfig,
   parseConfigText,
@@ -17,12 +16,12 @@ import {
 import { assertUnderHwfEnvCap, CAPTURE_BYTE_LIMIT, HWF_ENV_BYTE_LIMIT } from "../src/limits";
 import { hasTranscriptSupport } from "../src/session";
 import {
+  completeWorkflowInputs,
   parseDynamicChoiceStdout,
-  parseWorkflowText,
   resolveDynamicChoices,
-} from "../src/workflow/load";
-import { collectWorkflowInputs } from "../src/workflow/inputs";
-import { workflowNeedsTranscript } from "../src/workflow/template";
+} from "../src/workflow/inputs";
+import { parseWorkflowText } from "../src/workflow/load";
+import { buildTemplateNamespace, workflowNeedsTranscript } from "../src/workflow/template";
 
 const dirs: string[] = [];
 const prevPluginDir = process.env.HERDR_PLUGIN_CONFIG_DIR;
@@ -232,7 +231,7 @@ describe("inputs and profile choices", () => {
       config,
       root,
     );
-    const collected = await collectWorkflowInputs(workflow, { config, repoRoot: root });
+    const collected = await completeWorkflowInputs(workflow, { config, repoRoot: root });
     expect(collected.ok).toBe(false);
     if (collected.ok) throw new Error("expected profile collection to fail");
     expect(collected.error).toContain("input 'target': no profiles configured");

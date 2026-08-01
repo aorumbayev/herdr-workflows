@@ -5,8 +5,7 @@ import { z } from "zod";
 import { globalConfigPath, loadConfig, parseConfigText, repoConfigPath } from "../config";
 import { workflowSchemaUrl } from "../version";
 import { HERDR_METHOD_BY_NAME } from "../herdr-methods.generated";
-import { canonicalRepoRoot, getRunDetail, listRunHistory } from "../history/store";
-import { normalizeRunUuid, presentRunDetail } from "../history/project";
+import { canonicalRepoRoot, listRuns, runDetail } from "../history/store";
 import type { RunProjectedStatus, RunWorkflowSource } from "../history/types";
 import {
   checkPayload,
@@ -15,12 +14,19 @@ import {
   previewBundle,
   runImport,
 } from "../workflow/import";
-import { listWorkflows, parseWorkflowText } from "../workflow/load";
-import { workflowPath } from "../workflow/paths";
-import { dumpWorkflow } from "../workflow/dump";
-import { parseRaw, parseRawWithDoc, rawWorkflowSchema } from "../workflow/parse";
+import {
+  analyzeYamlTree,
+  dumpWorkflow,
+  listWorkflows,
+  parseRaw,
+  parseRawWithDoc,
+  parseWorkflowText,
+  rawWorkflowSchema,
+  sensitivityLabels,
+  workflowDisplayTitle,
+  workflowPath,
+} from "../workflow/load";
 import { exportWorkflowBundle, withPinnedSchemaPointer } from "../workflow/share";
-import { analyzeYamlTree, sensitivityLabels, workflowDisplayTitle } from "../workflow/trust";
 import { WORKFLOW_NAME_RE } from "../workflow/types";
 // @ts-expect-error Bun `with { type: "text" }` yields the file text, not the module namespace
 // oxlint-disable-next-line import/default -- Bun text import embeds source; module has named exports only
@@ -244,7 +250,7 @@ async function handleRuns(repoRoot: string, url: URL): Promise<Response> {
     checkout_root = location;
   }
   const status = parseRunStatuses(url.searchParams.get("status"));
-  const listed = await listRunHistory({
+  const listed = await listRuns({
     checkout_root,
     ...(text !== undefined ? { text } : {}),
     ...(status !== undefined ? { status } : {}),
@@ -264,17 +270,16 @@ async function handleRuns(repoRoot: string, url: URL): Promise<Response> {
 
 async function handleRunDetail(repoRoot: string, url: URL): Promise<Response> {
   const id = url.searchParams.get("id") ?? "";
-  if (!normalizeRunUuid(id)) {
-    const detail = { kind: "invalid" as const, message: "complete UUID required" };
-    return noStoreJson({ ok: false, detail, blocks: presentRunDetail(detail) }, 400);
+  const { detail, blocks } = await runDetail(id);
+  if (detail.kind === "invalid") {
+    return noStoreJson({ ok: false, detail, blocks }, 400);
   }
-  const detail = await getRunDetail(id);
   if (detail.kind === "unavailable") {
-    return noStoreJson({ ok: false, detail, blocks: presentRunDetail(detail) }, 503);
+    return noStoreJson({ ok: false, detail, blocks }, 503);
   }
   if (detail.kind !== "snapshot") {
     const status = detail.kind === "expired" ? 410 : 404;
-    return noStoreJson({ ok: false, detail, blocks: presentRunDetail(detail) }, status);
+    return noStoreJson({ ok: false, detail, blocks }, status);
   }
   const open_workflow = await resolveOpenWorkflow(
     repoRoot,
@@ -286,7 +291,7 @@ async function handleRunDetail(repoRoot: string, url: URL): Promise<Response> {
   return noStoreJson({
     ok: true,
     detail: enriched,
-    blocks: presentRunDetail(detail),
+    blocks,
   });
 }
 

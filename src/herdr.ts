@@ -28,8 +28,15 @@ function socketPath(): string {
   return path;
 }
 
-function transportFailure(method: string, address: string, reason: string): HerdrError {
+/** Transport-loss codes the runner treats as uncertain coordination. */
+export const TRANSPORT_LOSS_CODES = ["closed", "no_socket", "unreachable"] as const;
+
+function unreachableFailure(method: string, address: string, reason: string): HerdrError {
   return new HerdrError("unreachable", `unreachable herdr at ${address}: ${method}: ${reason}`);
+}
+
+function closedFailure(method: string): HerdrError {
+  return new HerdrError("closed", `${method}: socket closed before response`);
 }
 
 const RPC_TIMEOUT_MS = 10_000;
@@ -42,7 +49,12 @@ export function herdrRequest(
 ): Promise<HerdrResponse> {
   const id = `herdr-workflows:${randomUUID().slice(0, 8)}`;
   const payload = `${JSON.stringify({ id, method, params })}\n`;
-  const address = socketPath();
+  let address: string;
+  try {
+    address = socketPath();
+  } catch (error) {
+    return Promise.reject(asHerdrError(error, "no_socket", "HERDR_SOCKET_PATH is not set"));
+  }
   return new Promise((resolve, reject) => {
     const sock = connect(address);
     let buf = "";
@@ -56,7 +68,7 @@ export function herdrRequest(
     const timer = setTimeout(() => {
       sock.destroy();
       settle(() =>
-        reject(transportFailure(method, address, `timed out after ${RPC_TIMEOUT_MS}ms`)),
+        reject(unreachableFailure(method, address, `timed out after ${RPC_TIMEOUT_MS}ms`)),
       );
     }, RPC_TIMEOUT_MS);
     sock.on("connect", () => sock.write(payload));
@@ -69,126 +81,53 @@ export function herdrRequest(
         const parsed = JSON.parse(buf.slice(0, nl)) as HerdrResponse;
         settle(() => resolve(parsed));
       } catch (error) {
-        settle(() => reject(error));
+        settle(() =>
+          reject(asHerdrError(error, "invalid_response", `invalid JSON from herdr for ${method}`)),
+        );
       }
     });
     sock.on("close", () => {
-      settle(() => reject(transportFailure(method, address, "socket closed before response")));
+      settle(() => reject(closedFailure(method)));
     });
     sock.on("error", (error) =>
-      settle(() => reject(transportFailure(method, address, error.message))),
+      settle(() => reject(unreachableFailure(method, address, error.message))),
     );
   });
+}
+
+function asHerdrError(error: unknown, code: string, fallback: string): HerdrError {
+  if (error instanceof HerdrError) return error;
+  const message = error instanceof Error ? error.message : fallback;
+  return new HerdrError(code, message || fallback);
 }
 
 export async function herdrCall(
   method: string,
   params: Record<string, unknown> = {},
 ): Promise<Record<string, unknown>> {
-  const response = await herdrRequest(method, params);
-  if (response.error) throw new HerdrError(response.error.code, response.error.message);
-  if (!response.result) throw new HerdrError("empty_result", `no result for ${method}`);
-  return response.result;
+  try {
+    const response = await herdrRequest(method, params);
+    if (response.error) throw new HerdrError(response.error.code, response.error.message);
+    if (!response.result) throw new HerdrError("empty_result", `no result for ${method}`);
+    return response.result;
+  } catch (error) {
+    throw asHerdrError(error, "internal", `herdr call failed: ${method}`);
+  }
 }
 
 async function herdrCli(
   args: string[],
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const proc = Bun.spawn([herdrBinPath(), ...args], { stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  return { stdout, stderr, exitCode };
-}
-
-/**
- * Survive a reader that left. A detached `hwf run` outlives the picker holding the read end of its
- * pipes; without a listener the EPIPE surfaces as an uncaught stream error and kills the run
- * part-way through the workflow. The write is async, so a try/catch at the call site never sees it.
- */
-export function tolerateClosedStdio(): void {
-  process.stdout.on("error", tolerateClosedPipe);
-  process.stderr.on("error", tolerateClosedPipe);
-}
-
-function tolerateClosedPipe(error: NodeJS.ErrnoException): void {
-  if (error.code !== "EPIPE") throw error;
-}
-
-export function die(message: string): never {
-  process.stderr.write(`${message}\n`);
-  process.exit(1);
-}
-
-type U8Reader = ReadableStreamDefaultReader<Uint8Array>;
-
-let reader: U8Reader | undefined;
-let stdinBuf = "";
-const decoder = new TextDecoder();
-
-export type PromptResult = { kind: "line"; text: string } | { kind: "cancel" };
-
-function hasBareEsc(raw: string): boolean {
-  for (let i = 0; i < raw.length; i++) {
-    if (raw.charCodeAt(i) !== 0x1b) continue;
-    const next = raw[i + 1];
-    if (next !== "[" && next !== "O") return true;
-  }
-  return false;
-}
-
-/** herdr prefix leaks into popup stdin — strip C0 controls (keep tab/CR/LF/ESC). */
-function sanitizePromptInput(raw: string): string {
-  // oxlint-disable-next-line no-control-regex -- intentional C0 strip for leaked herdr prefix keys
-  return raw.replace(/[\x00-\x08\x0b\x0c\x0e-\x1a\x1c-\x1f]/g, "");
-}
-
-/** Strip C0 controls from AI/evidence text before writing to the terminal (keep tab/CR/LF). */
-export function sanitizeDisplay(raw: string): string {
-  // oxlint-disable-next-line no-control-regex -- intentional C0 strip before terminal write
-  return raw.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
-}
-
-function interpretLine(raw: string): PromptResult {
-  if (hasBareEsc(raw)) return { kind: "cancel" };
-  const text = sanitizePromptInput(raw).replace(/\r$/, "").trim();
-  return { kind: "line", text };
-}
-
-export async function readLine(): Promise<PromptResult> {
-  // Bun's getReader() typings omit readMany; cast keeps a single shared stdin reader.
-  if (!reader) reader = Bun.stdin.stream().getReader() as unknown as U8Reader;
-  const r = reader;
-  while (true) {
-    const nl = stdinBuf.indexOf("\n");
-    if (nl !== -1) {
-      const line = stdinBuf.slice(0, nl);
-      stdinBuf = stdinBuf.slice(nl + 1);
-      return interpretLine(line);
-    }
-    const { done, value } = await r.read();
-    if (done) {
-      const rest = stdinBuf;
-      stdinBuf = "";
-      if (!rest) return { kind: "cancel" };
-      return interpretLine(rest);
-    }
-    stdinBuf += decoder.decode(value, { stream: true });
-  }
-}
-
-/** Drop the shared stdin lock so short-lived CLI commands can exit after prompts. */
-export async function releaseStdinReader(): Promise<void> {
-  const r = reader;
-  if (!r) return;
-  reader = undefined;
-  stdinBuf = "";
   try {
-    await r.cancel();
-  } catch {
-    /* already closed */
+    const proc = Bun.spawn([herdrBinPath(), ...args], { stdout: "pipe", stderr: "pipe" });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+    return { stdout, stderr, exitCode };
+  } catch (error) {
+    throw asHerdrError(error, "internal", `herdr CLI failed: ${args.join(" ")}`);
   }
 }
 
@@ -330,19 +269,4 @@ export async function ensureHerdrProtocol(): Promise<void> {
   const check = checkHerdrStartup({ protocol: result.protocol, version: result.version });
   if (!check.ok) throw new HerdrError("protocol_mismatch", check.error);
   checked = true;
-}
-
-export async function openInBrowser(url: string): Promise<void> {
-  const cmd = process.platform === "darwin" ? ["open", url] : ["xdg-open", url];
-  try {
-    const proc = Bun.spawn(cmd, {
-      stdin: "ignore",
-      stdout: "ignore",
-      stderr: "ignore",
-      detached: true,
-    });
-    proc.unref();
-  } catch {
-    /* opener absence is nonfatal */
-  }
 }

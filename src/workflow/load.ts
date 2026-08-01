@@ -1,8 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { loadConfig, profileNames, type WorkflowsConfig } from "../config";
-import { CaptureLimitError } from "../limits";
-import { spawnCapture } from "../run/steps/shell";
 import { parseRaw, parseWhenClause, type RawWorkflow } from "./parse";
 import { workflowNeedsTranscript, workflowTemplateRefs } from "./template";
 import {
@@ -26,9 +24,17 @@ import {
   workflowChildNames,
 } from "./validate";
 
-const DYNAMIC_CHOICE_TIMEOUT_MS = 10_000;
-const DYNAMIC_CHOICE_MAX = 1_000;
-const STDERR_TAIL = 500;
+export { dumpWorkflow } from "./dump";
+export { parseRaw, parseRawWithDoc, rawWorkflowSchema } from "./parse";
+export { workflowPath } from "./paths";
+export { buildTemplateNamespace, workflowTemplateRefs } from "./template";
+export {
+  analyzeResolvedSensitivity,
+  analyzeYamlTree,
+  sensitivityLabels,
+  workflowDisplayTitle,
+} from "./trust";
+
 const EMPTY_CONFIG: WorkflowsConfig = { profiles: {}, transcripts: {} };
 
 function globalDir(): string {
@@ -85,71 +91,6 @@ function inputIsUsed(
     if (shellUsesInput(onFailure.payload.command, name)) return true;
   }
   return false;
-}
-
-export function parseDynamicChoiceStdout(stdout: string): string[] {
-  const seen = new Set<string>();
-  const choices: string[] = [];
-  for (const line of stdout.split(/\r?\n/)) {
-    const value = line.trim();
-    if (!value || seen.has(value)) continue;
-    seen.add(value);
-    choices.push(value);
-  }
-  return choices;
-}
-
-export async function resolveDynamicChoices(
-  file: string,
-  name: string,
-  dynamic: DynamicChoice,
-  repoRoot: string,
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<string[]> {
-  for (const el of dynamic.run) {
-    if (el.includes("{{")) {
-      bail(file, undefined, `inputs.${name}.options.run`, "dynamic choice argv rejects templates");
-    }
-  }
-  let result: Awaited<ReturnType<typeof spawnCapture>>;
-  try {
-    result = await spawnCapture(dynamic.run, {
-      cwd: repoRoot,
-      env,
-      timeoutMs: DYNAMIC_CHOICE_TIMEOUT_MS,
-      maxCaptureBytes: { source: `inputs.${name} dynamic choice` },
-    });
-  } catch (error) {
-    if (error instanceof CaptureLimitError) {
-      bail(file, undefined, `inputs.${name}`, error.message);
-    }
-    throw error;
-  }
-  if (result.timedOut) {
-    bail(
-      file,
-      undefined,
-      `inputs.${name}`,
-      `dynamic choice failed: timed out after ${result.timeoutMs / 1000}s`,
-    );
-  }
-  if (result.exitCode !== 0) {
-    const tail = result.stderr.trim().slice(-STDERR_TAIL) || `exit ${result.exitCode}`;
-    bail(file, undefined, `inputs.${name}`, `dynamic choice failed: ${tail}`);
-  }
-  const choices = parseDynamicChoiceStdout(result.stdout);
-  if (choices.length === 0) {
-    bail(file, undefined, `inputs.${name}`, "dynamic choice produced no options");
-  }
-  if (choices.length > DYNAMIC_CHOICE_MAX) {
-    bail(
-      file,
-      undefined,
-      `inputs.${name}`,
-      `dynamic choice produced ${choices.length} options (limit ${DYNAMIC_CHOICE_MAX})`,
-    );
-  }
-  return choices;
 }
 
 function resolveInput(file: string, name: string, raw: RawInputValue): InputSpec {

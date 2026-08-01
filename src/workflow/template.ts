@@ -1,3 +1,5 @@
+import { platformName, type InvocationContext } from "../config";
+import { sanitizeDisplay } from "../console";
 import {
   TEMPLATE_INNER,
   WHOLE_TEMPLATE_RE,
@@ -174,4 +176,29 @@ export function workflowTemplateRefs(
 
 export function workflowNeedsTranscript(steps: WorkflowStep[], returns?: ReturnsSpec): boolean {
   return workflowTemplateRefs(steps, returns).some(isSensitiveContextPath);
+}
+
+export function buildTemplateNamespace(opts: {
+  ctx: InvocationContext;
+  inputs?: Record<string, string>;
+  steps?: Record<string, unknown>;
+  agent?: string;
+  transcript?: string;
+  transcriptFile?: string;
+}): TemplateNamespace {
+  return {
+    inputs: { ...opts.inputs },
+    steps: { ...opts.steps },
+    context: {
+      workspace: opts.ctx.workspaceId ?? "",
+      tab: opts.ctx.tabId ?? "",
+      pane: opts.ctx.paneId ?? "",
+      worktree: opts.ctx.worktreePath ?? "",
+      agent: opts.agent ?? "",
+      selection: sanitizeDisplay(opts.ctx.selection),
+      platform: platformName(),
+      ...(opts.transcript !== undefined ? { transcript: opts.transcript } : {}),
+      ...(opts.transcriptFile !== undefined ? { transcript_file: opts.transcriptFile } : {}),
+    },
+  };
 }

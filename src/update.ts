@@ -3,7 +3,7 @@
 import { chdir } from "node:process";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { die } from "./herdr";
+import { die } from "./console";
 import { resolvePluginRoot } from "./setup";
 import { PRODUCT_VERSION } from "./version";
 

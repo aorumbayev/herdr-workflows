@@ -3,11 +3,26 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { evaluateWhen } from "../src/workflow/conditions";
-import { collectInputValues } from "../src/workflow/inputs";
+import { createInputSession } from "../src/workflow/inputs";
 import { parseWorkflowText } from "../src/workflow/load";
 import { parseRaw as parseDoc } from "../src/workflow/parse";
-import { parseLaunchPayload } from "../src/tui/run-launch";
+import { parseLaunchPayload } from "../src/run/launch";
 import { runArgvStep } from "../src/run/steps/shell";
+import type { WorkflowsConfig } from "../src/config";
+import type { InputSpec } from "../src/workflow/types";
+
+async function collectInputValues(opts: {
+  specs: InputSpec[];
+  file: string;
+  config: WorkflowsConfig;
+  repoRoot: string;
+  provided?: Record<string, string>;
+  domains?: Record<string, string[]>;
+  resolveDynamic?: boolean;
+}) {
+  const { provided, ...sessionOpts } = opts;
+  return createInputSession(sessionOpts).completeFromProvided(provided);
+}
 
 async function tempRepo(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "hwf-adaptive-"));
@@ -377,7 +392,7 @@ steps:
       }),
     ).toEqual({ ok: false, error: "input 'mode' must be one of: fast, full" });
 
-    // empty profile options: already covered in config.test.ts against collectWorkflowInputs
+    // empty profile options: already covered in config.test.ts against completeWorkflowInputs
     expect(
       await collectInputValues({
         ...base,

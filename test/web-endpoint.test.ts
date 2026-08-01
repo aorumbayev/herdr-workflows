@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { canonicalRepoRoot } from "../src/history/store";
 import {
   acquireEndpointLockSync,
-  ensureWorkbench,
+  openWorkbench,
   endpointLockPath,
   endpointRecordPath,
   probeEndpoint,
@@ -104,7 +104,7 @@ describe("endpoint lifecycle", () => {
     expect(await probeEndpoint("http://127.0.0.1:1/?token=dead", root)).toBe(false);
 
     let starts = 0;
-    const first = await ensureWorkbench(
+    const first = await openWorkbench(
       { repoRoot: root },
       {
         stateDir,
@@ -140,12 +140,12 @@ describe("endpoint lifecycle", () => {
       return s;
     };
 
-    const owned = await ensureWorkbench({ repoRoot: root }, { stateDir, start });
+    const owned = await openWorkbench({ repoRoot: root }, { stateDir, start });
     stops.push(owned.stop);
     expect(owned.owned).toBe(true);
     expect(starts).toBe(1);
 
-    const reused = await ensureWorkbench({ repoRoot: root }, { stateDir, start });
+    const reused = await openWorkbench({ repoRoot: root }, { stateDir, start });
     expect(reused.owned).toBe(false);
     expect(reused.url).toBe(owned.url);
     expect(starts).toBe(1);
@@ -164,11 +164,11 @@ describe("endpoint lifecycle", () => {
       return s;
     };
 
-    const owned = await ensureWorkbench({ repoRoot: root, build: "ino:1:10" }, { stateDir, start });
+    const owned = await openWorkbench({ repoRoot: root, build: "ino:1:10" }, { stateDir, start });
     stops.push(owned.stop);
     expect(starts).toBe(1);
 
-    const sameBuild = await ensureWorkbench(
+    const sameBuild = await openWorkbench(
       { repoRoot: root, build: "ino:1:10" },
       { stateDir, start },
     );
@@ -176,7 +176,7 @@ describe("endpoint lifecycle", () => {
     expect(sameBuild.url).toBe(owned.url);
     expect(starts).toBe(1);
 
-    const upgraded = await ensureWorkbench(
+    const upgraded = await openWorkbench(
       { repoRoot: root, build: "ino:2:11" },
       { stateDir, start },
     );
@@ -198,11 +198,11 @@ describe("endpoint lifecycle", () => {
       return s;
     };
 
-    const legacy = await ensureWorkbench({ repoRoot: root }, { stateDir, start });
+    const legacy = await openWorkbench({ repoRoot: root }, { stateDir, start });
     stops.push(legacy.stop);
     expect((await readEndpointRecord(root, stateDir))?.build).toBeUndefined();
 
-    const identified = await ensureWorkbench(
+    const identified = await openWorkbench(
       { repoRoot: root, build: "ino:3:12" },
       { stateDir, start },
     );
@@ -222,14 +222,11 @@ describe("endpoint lifecycle", () => {
       return s;
     };
 
-    const owned = await ensureWorkbench({ repoRoot: root }, { stateDir, start });
+    const owned = await openWorkbench({ repoRoot: root }, { stateDir, start });
     stops.push(owned.stop);
     const ownedPort = Number(new URL(owned.url).port);
 
-    const samePort = await ensureWorkbench(
-      { repoRoot: root, port: ownedPort },
-      { stateDir, start },
-    );
+    const samePort = await openWorkbench({ repoRoot: root, port: ownedPort }, { stateDir, start });
     expect(samePort.owned).toBe(false);
     expect(samePort.url).toBe(owned.url);
     expect(requested).toEqual([0]);
@@ -238,7 +235,7 @@ describe("endpoint lifecycle", () => {
     const freePort = Number(new URL(probe.url).port);
     probe.stop();
 
-    const other = await ensureWorkbench({ repoRoot: root, port: freePort }, { stateDir, start });
+    const other = await openWorkbench({ repoRoot: root, port: freePort }, { stateDir, start });
     stops.push(other.stop);
     expect(other.owned).toBe(true);
     expect(Number(new URL(other.url).port)).toBe(freePort);
@@ -248,7 +245,7 @@ describe("endpoint lifecycle", () => {
   test("stop clears the owned endpoint record", async () => {
     const stateDir = await tempState();
     const root = await tempRepo();
-    const owned = await ensureWorkbench(
+    const owned = await openWorkbench(
       { repoRoot: root },
       {
         stateDir,
@@ -267,7 +264,7 @@ describe("endpoint lifecycle", () => {
   test("stop does not remove a newer owner's record after replacement", async () => {
     const stateDir = await tempState();
     const root = await tempRepo();
-    const owned = await ensureWorkbench(
+    const owned = await openWorkbench(
       { repoRoot: root },
       {
         stateDir,
@@ -290,7 +287,7 @@ describe("endpoint lifecycle", () => {
   test("old-owner cleanup skips while successor holds the lock so successor record survives", async () => {
     const stateDir = await tempState();
     const root = await tempRepo();
-    const owned = await ensureWorkbench(
+    const owned = await openWorkbench(
       { repoRoot: root },
       {
         stateDir,
@@ -320,7 +317,7 @@ describe("endpoint lifecycle", () => {
     servers.push(live);
     await writeEndpointRecord({ repoRoot: root, url: "http://127.0.0.1:1/?token=dead" }, stateDir);
 
-    const result = await ensureWorkbench(
+    const result = await openWorkbench(
       { repoRoot: root },
       {
         stateDir,
@@ -478,7 +475,7 @@ describe("endpoint lifecycle", () => {
     const root = await tempRepo();
     let stopped = false;
     await expect(
-      ensureWorkbench(
+      openWorkbench(
         { repoRoot: root },
         {
           stateDir,
@@ -512,8 +509,8 @@ describe("endpoint lifecycle", () => {
     };
 
     const [one, two] = await Promise.all([
-      ensureWorkbench({ repoRoot: root }, { stateDir, start }),
-      ensureWorkbench({ repoRoot: root }, { stateDir, start }),
+      openWorkbench({ repoRoot: root }, { stateDir, start }),
+      openWorkbench({ repoRoot: root }, { stateDir, start }),
     ]);
     stops.push(one.stop, two.stop);
     expect(starts).toBe(1);
@@ -531,7 +528,7 @@ describe("endpoint lifecycle", () => {
     const past = new Date(Date.now() - 60_000);
     await utimes(`${base}.${stale!.token}`, past, past);
 
-    const owned = await ensureWorkbench(
+    const owned = await openWorkbench(
       { repoRoot: root },
       {
         stateDir,
@@ -560,7 +557,7 @@ describe("endpoint lifecycle", () => {
     const past = new Date(Date.now() - 60_000);
     await utimes(lock, past, past);
 
-    const owned = await ensureWorkbench(
+    const owned = await openWorkbench(
       { repoRoot: root },
       {
         stateDir,
@@ -584,7 +581,7 @@ describe("endpoint lifecycle", () => {
     expect(hold).toBeDefined();
 
     await expect(
-      ensureWorkbench(
+      openWorkbench(
         { repoRoot: root },
         {
           stateDir,

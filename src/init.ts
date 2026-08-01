@@ -1,19 +1,17 @@
 import { mkdir } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import {
+  ensureLocalConfigGitignored,
   globalConfigPath,
   parseConfigText,
   PROFILE_NAME_RE,
   repoConfigPath,
-  repoLocalConfigPath,
   type AgentProfile,
   type WorkflowsConfig,
 } from "./config";
 
-export const EXAMPLES_URL = "https://aorumbayev.github.io/herdr-workflows/examples";
-
 /** Kinds `herdr agent start --kind` accepts (herdr 0.7.5 cli-reference). Native start stays authoritative. */
-export const HERDR_AGENT_KINDS = [
+const HERDR_AGENT_KINDS = [
   "pi",
   "claude",
   "codex",
@@ -49,7 +47,7 @@ async function onPath(bin: string): Promise<boolean> {
   return Bun.which(bin) !== null;
 }
 
-export async function detectProfiles(): Promise<Record<string, AgentProfile>> {
+async function detectProfiles(): Promise<Record<string, AgentProfile>> {
   const profiles: Record<string, AgentProfile> = {};
   for (const kind of KNOWN_KINDS) {
     if (!PROFILE_NAME_RE.test(kind.name)) continue;
@@ -58,7 +56,7 @@ export async function detectProfiles(): Promise<Record<string, AgentProfile>> {
   return profiles;
 }
 
-export function formatProfilesYaml(config: {
+function formatProfilesYaml(config: {
   profiles: Record<string, AgentProfile>;
   default_profile?: string;
   transcripts?: WorkflowsConfig["transcripts"];
@@ -101,27 +99,7 @@ async function readPreservedTranscripts(path: string): Promise<WorkflowsConfig["
   }
 }
 
-export async function ensureLocalConfigGitignored(repoRoot: string): Promise<void> {
-  const hwfDir = dirname(repoConfigPath(repoRoot));
-  const ignorePath = join(hwfDir, ".gitignore");
-  const markers = [basename(repoLocalConfigPath(repoRoot)), "tmp/"];
-  let text = (await Bun.file(ignorePath).exists()) ? await Bun.file(ignorePath).text() : "";
-  const lines = new Set(
-    text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean),
-  );
-  let changed = false;
-  for (const marker of markers) {
-    if (lines.has(marker)) continue;
-    text = text.length === 0 || text.endsWith("\n") ? `${text}${marker}\n` : `${text}\n${marker}\n`;
-    changed = true;
-  }
-  if (changed || !(await Bun.file(ignorePath).exists())) await Bun.write(ignorePath, text);
-}
-
-export type InitResult =
+type InitResult =
   | { kind: "wrote"; path: string; profiles: string[] }
   | { kind: "exists"; path: string }
   | { kind: "overwritten"; path: string; profiles: string[] };

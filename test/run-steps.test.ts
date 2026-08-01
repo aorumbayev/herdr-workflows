@@ -173,9 +173,10 @@ describe("coordination loss", () => {
         new HerdrError("unreachable", "unreachable herdr at /tmp/x: pane.split: closed"),
       ),
     ).toBe(true);
-    expect(isCoordinationError(new Error("read ECONNRESET"))).toBe(true);
-    expect(isCoordinationError(new Error("write EPIPE"))).toBe(true);
+    expect(isCoordinationError(new Error("read ECONNRESET"))).toBe(false);
+    expect(isCoordinationError(new Error("write EPIPE"))).toBe(false);
     expect(isCoordinationError(new HerdrError("invalid_params", "bad ratio"))).toBe(false);
+    expect(isCoordinationError(new HerdrError("internal", "plain Error wrapped"))).toBe(false);
     expect(isCoordinationError("nope")).toBe(false);
   });
 

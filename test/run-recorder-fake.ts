@@ -1,6 +1,6 @@
 import type { RunStepOutcomeKind, RunStepPhase, RunTerminalStatus } from "../src/history/types";
 import type { StepOutcome } from "../src/run/context";
-import type { RunRecorder } from "../src/run/recorder";
+import type { RunRecorder } from "../src/history/recorder";
 import type { WorkflowStep } from "../src/workflow/types";
 
 export type FakeRecorderCall =

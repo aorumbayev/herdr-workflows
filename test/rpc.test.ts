@@ -3,7 +3,8 @@ import { createServer } from "node:net";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HerdrError, herdrBinPath, herdrRequest } from "../src/herdr";
+import { HerdrError, herdrBinPath, herdrRequest, notificationShow } from "../src/herdr";
+import { isCoordinationError } from "../src/run/context";
 
 describe("herdrBinPath", () => {
   test("empty or whitespace HERDR_BIN_PATH falls back to herdr", () => {
@@ -39,11 +40,11 @@ describe("herdrRequest socket failures", () => {
     try {
       await expect(herdrRequest("layout.apply", {})).rejects.toMatchObject({
         name: "HerdrError",
-        code: "unreachable",
-        message: expect.stringContaining(`unreachable herdr at ${sockPath}`),
+        code: "closed",
+        message: expect.stringContaining("layout.apply"),
       });
       await expect(herdrRequest("layout.apply", {})).rejects.toMatchObject({
-        message: expect.stringContaining("layout.apply"),
+        message: "layout.apply: socket closed before response",
       });
     } finally {
       server.close();
@@ -57,5 +58,23 @@ describe("herdrRequest socket failures", () => {
     const transport = new HerdrError("unreachable", "unreachable herdr at /tmp/x: ping: boom");
     const protocol = new HerdrError("protocol_mismatch", "herdr protocol mismatch");
     expect(transport.code).not.toBe(protocol.code);
+  });
+
+  test("unknown spawn failure wraps as internal, not coordination loss", async () => {
+    const prev = process.env.HERDR_BIN_PATH;
+    process.env.HERDR_BIN_PATH = "/nonexistent/herdr-bin-xyz";
+    try {
+      await notificationShow("title");
+      throw new Error("expected notificationShow to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(HerdrError);
+      const herdr = error as HerdrError;
+      expect(herdr.code).toBe("internal");
+      expect(herdr.message).toMatch(/ENOENT/);
+      expect(isCoordinationError(herdr)).toBe(false);
+    } finally {
+      if (prev === undefined) delete process.env.HERDR_BIN_PATH;
+      else process.env.HERDR_BIN_PATH = prev;
+    }
   });
 });

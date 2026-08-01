@@ -5,7 +5,7 @@ import { HerdrError } from "../herdr";
 import { assertUnderCaptureCap, CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../limits";
 import { substituteParams } from "../workflow/template";
 import type { TemplateNamespace, WorkflowStep } from "../workflow/types";
-import type { RunRecorder } from "./recorder";
+import type { RunRecorder } from "../history/recorder";
 
 export type StepFailure = {
   message: string;
@@ -90,7 +90,6 @@ type RunSteps = (
 ) => Promise<StepsResult>;
 
 const COORDINATION_CODES = new Set(["closed", "no_socket", "unreachable"]);
-const COORDINATION_PATTERNS = [/socket closed/i, /unreachable herdr/i, /ECONNRESET/, /EPIPE/];
 
 export class CoordinationError extends Error {
   constructor(action: string, detail: string) {
@@ -102,9 +101,7 @@ export class CoordinationError extends Error {
 }
 
 export function isCoordinationError(err: unknown): boolean {
-  if (err instanceof HerdrError && COORDINATION_CODES.has(err.code)) return true;
-  if (!(err instanceof Error)) return false;
-  return COORDINATION_PATTERNS.some((pattern) => pattern.test(err.message));
+  return err instanceof HerdrError && COORDINATION_CODES.has(err.code);
 }
 
 export function errorText(err: unknown): string {

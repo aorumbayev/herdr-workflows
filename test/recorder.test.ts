@@ -3,9 +3,10 @@ import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { WorkflowsConfig } from "../src/config";
-import { allocateRunId, getRunDetail, listRunHistory, parseHistoryAck } from "../src/history/store";
+import { parseHistoryAck } from "../src/history/ack";
+import { createRunRecorder } from "../src/history/recorder";
+import { allocateRunId, runDetail, listRuns } from "../src/history/store";
 import type { RunnerDeps } from "../src/run/context";
-import { createRunRecorder } from "../src/run/recorder";
 import { runWorkflow } from "../src/run/runner";
 import { loadWorkflow } from "../src/workflow/load";
 
@@ -80,7 +81,7 @@ steps:
     });
     expect(result.ok).toBe(true);
     expect(acks.some((line) => parseHistoryAck(line)?.state === "unavailable")).toBe(true);
-    const listed = await listRunHistory({ checkout_root: null });
+    const listed = await listRuns({ checkout_root: null });
     expect(listed.ok === false || (listed.ok && listed.runs.length === 0)).toBe(true);
   });
 
@@ -128,11 +129,11 @@ steps:
     const { recorder } = created;
     await recorder.finished("succeeded", { returns: { a: 1 } });
     await recorder.finished("failed", { error: "should-not-apply" });
-    const listed = await listRunHistory({ checkout_root: await realpath(root) });
+    const listed = await listRuns({ checkout_root: await realpath(root) });
     expect(listed.ok).toBe(true);
     if (!listed.ok) return;
     expect(listed.runs[0]?.status).toBe("succeeded");
-    const detail = await getRunDetail(listed.runs[0]!.id);
+    const { detail } = await runDetail(listed.runs[0]!.id);
     expect(detail.kind).toBe("snapshot");
     if (detail.kind !== "snapshot") return;
     expect(detail.status).toBe("succeeded");

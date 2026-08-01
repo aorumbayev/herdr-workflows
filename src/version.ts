@@ -2,6 +2,8 @@ import manifest from "../herdr-plugin.toml";
 
 export const PRODUCT_VERSION: string = manifest.version;
 
+export const EXAMPLES_URL = "https://aorumbayev.github.io/herdr-workflows/examples";
+
 /**
  * Where the workflow contract this build implements is published. Pinned to the release tag for
  * `PRODUCT_VERSION`, because schemas diverge between versions: a pointer at a moving ref would

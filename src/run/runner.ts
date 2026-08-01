@@ -1,6 +1,6 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { ensureLocalConfigGitignored } from "../init";
+import { ensureLocalConfigGitignored } from "../config";
 import {
   agentStatus,
   herdrCall,
@@ -9,20 +9,18 @@ import {
   reportToken,
   tabClose,
 } from "../herdr";
-import { buildTemplateNamespace, type InvocationContext, type WorkflowsConfig } from "../config";
+import type { InvocationContext, WorkflowsConfig } from "../config";
 import type { RunStepOutcomeKind } from "../history/types";
 import { assertHwfEnvValues } from "../limits";
 import { transcriptText } from "../session";
-import { evaluateWhen } from "../workflow/conditions";
-import { collectWorkflowInputs } from "../workflow/inputs";
-import { workflowTemplateRefs } from "../workflow/template";
+import { completeWorkflowInputs, evaluateWhen } from "../workflow/inputs";
 import type {
   LoadedWorkflow,
   RecoveryAction,
   TemplateNamespace,
   WorkflowStep,
 } from "../workflow/types";
-import { loadWorkflow } from "../workflow/load";
+import { buildTemplateNamespace, loadWorkflow, workflowTemplateRefs } from "../workflow/load";
 import {
   errorText,
   herdrStep,
@@ -34,7 +32,7 @@ import {
   type StepRunOpts,
   type StepsResult,
 } from "./context";
-import { createRunRecorder, type RunRecorder } from "./recorder";
+import { createRunRecorder, type RunRecorder } from "../history/recorder";
 import { agentStep } from "./steps/agent";
 import { evaluateReturns, workflowStep } from "./steps/include";
 import { shellStep } from "./steps/shell";
@@ -425,7 +423,7 @@ export type RunOptions = {
   runId?: string;
   /** Write machine-readable history ack lines (detached launch channel). */
   onHistoryAck?: (line: string) => void;
-  /** Test seam — skip claim and use this recorder. */
+  /** Internal test seam — skip claim and inject a recorder handle. */
   recorder?: RunRecorder;
   workflow?: LoadedWorkflow;
   deps?: Partial<RunnerDeps>;
@@ -477,7 +475,7 @@ export async function runWorkflow(opts: RunOptions): Promise<StepsResult> {
   let transcriptFile: string | undefined;
   let succeeded = false;
   try {
-    const inputs = await collectWorkflowInputs(workflow, {
+    const inputs = await completeWorkflowInputs(workflow, {
       provided: opts.inputs,
       domains: opts.domains,
       config: opts.config,

@@ -22,6 +22,7 @@ function displayRunId(id: string): string {
   return id.slice(0, 8);
 }
 
+/** History-internal projection — surfaces use `listRuns` / `runDetail`. */
 export function projectStatus(snapshot: RunSnapshot, now: number = Date.now()): RunProjectedStatus {
   if (snapshot.status === "succeeded") return "succeeded";
   if (snapshot.status === "failed") return "failed";
@@ -86,6 +87,7 @@ function identityFields(snapshot: RunSnapshot, status: RunProjectedStatus, now: 
   };
 }
 
+/** History-internal projection — surfaces use `listRuns`. */
 export function toListItem(snapshot: RunSnapshot, now: number = Date.now()): RunListItem {
   const status = projectStatus(snapshot, now);
   const progress = progressOf(snapshot);
@@ -176,6 +178,7 @@ function orderDetailSteps(steps: RunDetailStep[]): RunDetailStep[] {
   return out;
 }
 
+/** History-internal projection — surfaces use `runDetail`. */
 export function toDetail(snapshot: RunSnapshot, opts: { now?: number } = {}): RunDetail {
   const now = opts.now ?? Date.now();
   const status = projectStatus(snapshot, now);
@@ -248,6 +251,7 @@ function sortNewestFirst(items: RunListItem[]): RunListItem[] {
   });
 }
 
+/** History-internal list filter — surfaces use `listRuns`. */
 export function filterSortLimit(items: RunListItem[], filter: RunListFilter = {}): RunListItem[] {
   const matched = items.filter((item) => matchesListFilter(item, filter));
   return sortNewestFirst(matched).slice(0, RUN_HISTORY_LIST_LIMIT);
@@ -308,6 +312,7 @@ export function optimisticRunningDetail(opts: {
   };
 }
 
+/** History-internal presentation — surfaces consume `runDetail().blocks`. */
 export function presentRunDetail(detail: RunDetail): RunDetailBlock[] {
   if (detail.kind === "invalid") {
     return [{ kind: "error", text: detail.message ?? "invalid run" }];

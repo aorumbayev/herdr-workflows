@@ -1,5 +1,5 @@
 import { assertHwfEnvValues } from "../../limits";
-import { collectWorkflowInputs } from "../../workflow/inputs";
+import { completeWorkflowInputs } from "../../workflow/inputs";
 import { substituteText, substituteValue } from "../../workflow/template";
 import type {
   LoadedWorkflow,
@@ -43,7 +43,7 @@ async function runChild(c: StepCtx, action: WorkflowActionSpec): Promise<StepOut
   );
   let inputs: ResolvedInputs;
   try {
-    const collected = await collectWorkflowInputs(child, {
+    const collected = await completeWorkflowInputs(child, {
       provided: passed,
       config: c.opts.config,
       repoRoot,

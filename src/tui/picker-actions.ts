@@ -89,3 +89,32 @@ export async function shareWorkflowCopy(opts: {
 export async function deleteWorkflowFile(entry: WorkflowListEntry): Promise<void> {
   await unlink(entry.file);
 }
+
+/** Escape while a run is in flight dismisses with 0; Escape after failure is nonzero. */
+export function pickerEscapeExitCode(mode: string, running: boolean): number {
+  if (mode === "run") return running ? 0 : 1;
+  return 0;
+}
+
+/** Claim the confirmed delete target; a second call while in flight returns undefined. */
+export function beginConfirmedDelete(state: {
+  deleteTarget?: WorkflowListEntry;
+  deleteInFlight?: boolean;
+}): WorkflowListEntry | undefined {
+  if (state.deleteInFlight) return undefined;
+  const entry = state.deleteTarget;
+  if (!entry) return undefined;
+  state.deleteTarget = undefined;
+  state.deleteInFlight = true;
+  return entry;
+}
+
+export function shouldDropStdinLeakSequence(sequence: string): boolean {
+  if (sequence.length !== 1) return false;
+  const c = sequence.charCodeAt(0);
+  if (c >= 0x20) return false;
+  if (c === 0x09 || c === 0x0a || c === 0x0d || c === 0x1b || c === 0x0b || c === 0x07) {
+    return false;
+  }
+  return true;
+}

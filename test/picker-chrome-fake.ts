@@ -1,4 +1,4 @@
-import type { SelectOption } from "@opentui/core";
+import type { ChromeOption } from "../src/tui/picker-chrome";
 import type { PickerChrome } from "../src/tui/picker-chrome";
 import { LIST_VIEWPORT } from "../src/tui/picker-chrome";
 
@@ -17,7 +17,7 @@ export type FakePickerChrome = PickerChrome & {
 };
 
 export function fakePickerChrome(overrides: Partial<PickerChrome> = {}): FakePickerChrome {
-  let options: SelectOption[] = [];
+  let options: ChromeOption[] = [];
   let selected = 0;
   let filter = "";
   let filterPlaceholder = "filter workflows...";
@@ -32,7 +32,7 @@ export function fakePickerChrome(overrides: Partial<PickerChrome> = {}): FakePic
   let lastBrowser: BrowserShowOpts | undefined;
   let listHeight = 99;
   let destroyed = false;
-  const listSelect: Array<(option: SelectOption) => void> = [];
+  const listSelect: Array<(option: ChromeOption) => void> = [];
 
   const chrome: FakePickerChrome = {
     showBrowser(opts = {}) {
@@ -129,7 +129,7 @@ export function fakePickerChrome(overrides: Partial<PickerChrome> = {}): FakePic
     },
     whenDestroyed() {},
     on(event, cb) {
-      if (event === "list-select") listSelect.push(cb as (option: SelectOption) => void);
+      if (event === "list-select") listSelect.push(cb as (option: ChromeOption) => void);
     },
     lastStatus() {
       return status;

@@ -1,12 +1,18 @@
-import type { KeyEvent } from "@opentui/core";
 import type { InvocationContext, WorkflowsConfig } from "../config";
-import { optimisticRunningDetail, normalizeRunUuid } from "../history/project";
-import { allocateRunId, canonicalRepoRoot, getRunDetail, parseHistoryAck } from "../history/store";
-import { sanitizeDisplay } from "../herdr";
+import {
+  allocateRunId,
+  canonicalRepoRoot,
+  normalizeRunUuid,
+  optimisticRunningDetail,
+  parseHistoryAck,
+  presentDetail,
+  runDetail,
+} from "../history/store";
+import { sanitizeDisplay } from "../console";
 import { latest } from "../latest";
 import type { LoadedWorkflow, WorkflowListEntry } from "../workflow/types";
 import { runWorkbenchRoute } from "../web/endpoint";
-import { LIST_VIEWPORT, type PickerChrome } from "./picker-chrome";
+import { LIST_VIEWPORT, type ChromeKeyEvent, type PickerChrome } from "./picker-chrome";
 import { formatDetailLines, truncate } from "./picker-rows";
 import {
   detailLines,
@@ -21,7 +27,7 @@ import {
   type RunsBrowserState,
   type RunsScope,
 } from "./run-history";
-import { launchDetachedRun, type DetachedRunHandle, type LaunchRunRequest } from "./run-launch";
+import { launchDetachedRun, type DetachedRunHandle, type LaunchRunRequest } from "../run/launch";
 
 /** Shared with picker Select height — six visible rows, scroll for the rest. */
 export const RUNS_LIST_VIEWPORT = LIST_VIEWPORT;
@@ -89,7 +95,7 @@ type RunsBrowserSession = {
 export type RunsBrowser = {
   enter(): Promise<void>;
   leave(): void;
-  handleKey(key: KeyEvent): boolean;
+  handleKey(key: ChromeKeyEvent): boolean;
   dispose(): void;
   refresh(): Promise<void>;
   onSelectionChanged(): void;
@@ -193,9 +199,9 @@ async function refreshOpenDetail(session: RunsBrowserSession): Promise<void> {
     stopDetailPoll(session);
     return;
   }
-  const detail = await getRunDetail(req.id);
+  const view = await runDetail(req.id);
   if (!detailPollResponseCurrent(session, req.id, req.gen)) return;
-  session.detailView = { kind: "detail", detail };
+  session.detailView = { kind: "detail", ...view };
   renderDetail(session);
   if (!detailIsPollable(session)) stopDetailPoll(session);
 }
@@ -293,7 +299,7 @@ async function openDetail(session: RunsBrowserSession, id: string): Promise<void
   session.activeRunId = id;
   session.detailScroll = 0;
   const gen = session.detailToken.begin();
-  const detail = await getRunDetail(id);
+  const view = await runDetail(id);
   if (
     session.view !== "detail" ||
     session.activeRunId !== id ||
@@ -301,7 +307,7 @@ async function openDetail(session: RunsBrowserSession, id: string): Promise<void
   ) {
     return;
   }
-  session.detailView = { kind: "detail", detail };
+  session.detailView = { kind: "detail", ...view };
   renderDetail(session);
   startDetailPoll(session);
 }
@@ -335,7 +341,7 @@ function onResize(session: RunsBrowserSession): void {
   else if (session.view === "detail") renderDetail(session);
 }
 
-function handleDetailKey(session: RunsBrowserSession, key: KeyEvent): boolean {
+function handleDetailKey(session: RunsBrowserSession, key: ChromeKeyEvent): boolean {
   if (key.name === "escape") {
     key.preventDefault();
     detachRun(session);
@@ -368,7 +374,7 @@ function handleDetailKey(session: RunsBrowserSession, key: KeyEvent): boolean {
   return true;
 }
 
-function handleKey(session: RunsBrowserSession, key: KeyEvent): boolean {
+function handleKey(session: RunsBrowserSession, key: ChromeKeyEvent): boolean {
   if (session.view === "detail") return handleDetailKey(session, key);
   if (session.view !== "list") return false;
   if (key.ctrl && (key.name === "g" || key.sequence === "\x07")) {
@@ -418,12 +424,14 @@ function runningDetailView(
 ): RunDetailView {
   return {
     kind: "detail",
-    detail: optimisticRunningDetail({
-      id: runId,
-      workflow: entry.name,
-      source: entry.source,
-      checkout_root: checkoutRoot,
-    }),
+    ...presentDetail(
+      optimisticRunningDetail({
+        id: runId,
+        workflow: entry.name,
+        source: entry.source,
+        checkout_root: checkoutRoot,
+      }),
+    ),
     progress,
   };
 }
@@ -534,7 +542,7 @@ async function startRun(
       return;
     }
     const gen = session.detailToken.begin();
-    const detail = await getRunDetail(runId);
+    const view = await runDetail(runId);
     if (
       session.view !== "detail" ||
       session.activeRunId !== runId ||
@@ -542,7 +550,7 @@ async function startRun(
     ) {
       return;
     }
-    session.detailView = { kind: "detail", detail };
+    session.detailView = { kind: "detail", ...view };
     renderDetail(session);
     startDetailPoll(session);
   } catch (error) {

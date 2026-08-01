@@ -22,7 +22,7 @@ import {
 
 type ProducerKind = "agent" | "command" | "readiness" | "herdr" | "child" | "none";
 
-export type StepProducer = {
+type StepProducer = {
   id: string;
   index: number;
   kind: ProducerKind;

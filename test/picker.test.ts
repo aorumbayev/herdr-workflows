@@ -1,44 +1,39 @@
 import { describe, expect, test } from "bun:test";
 import type { InputSpec, LoadedWorkflow, WorkflowListEntry } from "../src/workflow/types";
-import {
-  acceptWorkflow,
-  attachRunsBrowser,
-  beginConfirmedDelete,
-  filterWorkflowEntries,
-  formatInputAnswers,
-  formatInputPrompt,
-  hasVisibleEntries,
-  isCustomChoiceValue,
-  LIST_HINT,
-  PICKER_CHROME_STRINGS,
-  runPickerSession,
-  setListMode,
-  shouldDropStdinLeakSequence,
-  shouldRestoreCustomChoiceText,
-  tryOpenActionsPalette,
-  type PickerState,
-} from "../src/tui/picker";
+import { pickerSeams, runPickerSession, type PickerState } from "../src/tui/picker";
 import { createInputSession } from "../src/workflow/inputs";
 import {
+  beginConfirmedDelete,
   EMPTY_CATALOG_MESSAGE,
   EMPTY_LIST_HINT,
   resolvePaletteLetter,
+  shouldDropStdinLeakSequence,
 } from "../src/tui/picker-actions";
 import {
   buildInvalidOptions,
   buildPickerOptions,
   entrySensitivity,
   filterChoiceOptions,
+  filterWorkflowEntries,
   formatDetailLines,
+  formatInputAnswers,
+  formatInputPrompt,
   formatListFooter,
   formatPickerRowName,
   formatRule,
   formatRunProgress,
+  hasVisibleEntries,
+  isCustomChoiceValue,
+  LIST_HINT,
+  PICKER_CHROME_STRINGS,
+  shouldRestoreCustomChoiceText,
   truncate,
 } from "../src/tui/picker-rows";
 import { themeFromPalette } from "../src/tui/theme";
 import { humanizeWorkflowName, workflowDisplayTitle } from "../src/workflow/trust";
 import { fakePickerChrome, type FakePickerChrome } from "./picker-chrome-fake";
+
+const { acceptWorkflow, attachRunsBrowser, setListMode, tryOpenActionsPalette } = pickerSeams;
 
 const entries: WorkflowListEntry[] = [
   {

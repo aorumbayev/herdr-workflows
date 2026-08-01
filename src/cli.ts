@@ -4,22 +4,15 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command, InvalidArgumentError, Option } from "commander";
 import manifest from "../herdr-plugin.toml";
-import {
-  die,
-  ensureHerdrProtocol,
-  HerdrError,
-  notificationShow,
-  openInBrowser,
-  pluginPaneOpen,
-  readLine,
-  releaseStdinReader,
-  tolerateClosedStdio,
-} from "./herdr";
-import { loadConfig, readInvocationContext, resolveRepoRoot } from "./config";
-import { EXAMPLES_URL, runInit } from "./init";
+import { die, openInBrowser, readLine, releaseStdinReader, tolerateClosedStdio } from "./console";
+import { ensureHerdrProtocol, HerdrError, notificationShow, pluginPaneOpen } from "./herdr";
+import { loadContext, resolveRepoRoot } from "./config";
+import { runInit } from "./init";
+import { EXAMPLES_URL, PRODUCT_VERSION } from "./version";
 import { IMPORT_DISCLAIMER, parseImportScope, runImport } from "./workflow/import";
-import { listWorkflows, loadWorkflow, resolveDynamicChoices } from "./workflow/load";
-import { evaluateWhen } from "./workflow/conditions";
+import { listWorkflows, loadWorkflow } from "./workflow/load";
+import { evaluateWhen } from "./workflow/inputs";
+import { resolveDynamicChoices } from "./workflow/inputs";
 import {
   WORKFLOW_FORMAT,
   WorkflowLoadError,
@@ -28,12 +21,11 @@ import {
 } from "./workflow/types";
 import { CaptureLimitError } from "./limits";
 import { runWorkflow } from "./run/runner";
-import { buildIdentity, parseLaunchPayload, retireOnCodeChange } from "./tui/run-launch";
-import { ensureWorkbench } from "./web/endpoint";
+import { buildIdentity, parseLaunchPayload, retireOnCodeChange } from "./run/launch";
+import { openWorkbench } from "./web/endpoint";
 import { appendRouteHash, parseWebRoute } from "./web/endpoint";
 import { runSetup } from "./setup";
 import { runUpdate } from "./update";
-import { PRODUCT_VERSION } from "./version";
 
 function collectInput(value: string, previous: Record<string, string>): Record<string, string> {
   const eq = value.indexOf("=");
@@ -170,8 +162,7 @@ async function cmdWorkflowInspect(
   name: string,
   opts: { input?: Record<string, string>; resolve?: boolean },
 ): Promise<void> {
-  const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot());
-  const config = await loadConfig(repoRoot);
+  const { repoRoot, config } = await loadContext();
   let workflow;
   try {
     workflow = await loadWorkflow(name, repoRoot, config);
@@ -225,8 +216,7 @@ async function cmdWorkflowInspect(
 async function cmdLaunch(): Promise<void> {
   await ensureHerdrProtocol();
   // Picker popup cwd is the plugin dir; forward invocation repo + context.
-  const ctx = readInvocationContext();
-  const repoRoot = await resolveRepoRoot(ctx.cwd);
+  const { repoRoot } = await loadContext();
   const env: Record<string, string> = { HERDR_WORKFLOWS_REPO_ROOT: repoRoot };
   if (process.env.HERDR_PLUGIN_CONTEXT_JSON)
     env.HERDR_PLUGIN_CONTEXT_JSON = process.env.HERDR_PLUGIN_CONTEXT_JSON;
@@ -264,10 +254,7 @@ async function cmdRun(
     runId = payload.runId;
   }
   inputs = { ...inputs, ...opts.input };
-  const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || resolveRepoRoot();
-  const config = await loadConfig(repoRoot);
-  const ctx = readInvocationContext();
-  ctx.cwd = repoRoot;
+  const { repoRoot, config, ctx } = await loadContext();
   try {
     const result = await runWorkflow({
       name,
@@ -314,8 +301,8 @@ async function cmdWeb(
       `web route expects w=<repo|global>:<name>, share=<repo|global>:<name>, run=<uuid>, import, or new, got '${routeRaw}'`,
     );
   }
-  const repoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot());
-  const workbench = await ensureWorkbench({ repoRoot, port, build: buildIdentity() });
+  const { repoRoot } = await loadContext();
+  const workbench = await openWorkbench({ repoRoot, port, build: buildIdentity() });
   const url = appendRouteHash(workbench.url, route);
   // Open before printing: a detached picker handoff can already have a dead stdout.
   if (opts.open !== false) void openInBrowser(url);
@@ -357,28 +344,25 @@ async function runPickerPopup(
   pickerImport: Promise<typeof import("./tui/picker")>,
   protocolReady: Promise<void>,
 ): Promise<void> {
-  const ctx = readInvocationContext();
   const loading = (async () => {
-    const root = process.env.HERDR_WORKFLOWS_REPO_ROOT || (await resolveRepoRoot(ctx.cwd));
+    const app = await loadContext();
     const { defaultPickerReleaseCheck } = await import("./tui/update-indicator");
     const releaseCheck = defaultPickerReleaseCheck();
-    const config = await loadConfig(root);
-    const entries = await listWorkflows(root, config);
-    return { releaseCheck, config, entries, root };
+    const entries = await listWorkflows(app.repoRoot, app.config);
+    return { releaseCheck, app, entries };
   })();
   void loading.catch(() => {});
 
   await protocolReady;
   if (!process.stdin.isTTY || !process.stdout.isTTY) die("picker requires a tty");
   const picker = await pickerImport;
-  const { releaseCheck, config, entries, root } = await loading;
+  const { releaseCheck, app, entries } = await loading;
 
-  ctx.cwd = root;
   const code = await picker.runPickerSession({
     entries,
-    repoRoot: root,
-    config,
-    ctx,
+    repoRoot: app.repoRoot,
+    config: app.config,
+    ctx: app.ctx,
     checkLatestRelease: () => releaseCheck,
   });
   process.exit(code);

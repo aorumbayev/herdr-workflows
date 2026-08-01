@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { RGBA, type TerminalColors } from "@opentui/core";
+import { RGBA, type TerminalColors } from "../src/tui/picker-chrome";
 import { resolveHostTheme, themeFromPalette } from "../src/tui/theme";
 
 function colors(partial: Partial<TerminalColors>): TerminalColors {

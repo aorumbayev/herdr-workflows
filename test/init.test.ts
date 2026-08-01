@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../src/config";
-import { detectProfiles, formatProfilesYaml, HERDR_AGENT_KINDS, runInit } from "../src/init";
+import { runInit } from "../src/init";
 
 const dirs: string[] = [];
 const prevPluginDir = process.env.HERDR_PLUGIN_CONFIG_DIR;
@@ -23,17 +23,8 @@ async function withPluginEnv(): Promise<{ root: string; plugin: string }> {
 }
 
 describe("herdr-workflows init", () => {
-  test("detected profiles only name kinds native agent.start accepts", async () => {
-    const detected = await detectProfiles();
-    const kinds = new Set<string>(HERDR_AGENT_KINDS);
-    for (const profile of Object.values(detected)) {
-      expect(kinds.has(profile.kind)).toBe(true);
-    }
-  });
-
   test("fresh init writes profiles config and gitignores local", async () => {
     const { root } = await withPluginEnv();
-    const detected = await detectProfiles();
     const result = await runInit(root);
     expect(result.kind).toBe("wrote");
     if (result.kind === "exists") throw new Error("unreachable");
@@ -44,11 +35,11 @@ describe("herdr-workflows init", () => {
     const ignore = await readFile(join(root, ".hwf", ".gitignore"), "utf8");
     expect(ignore).toContain("config.local.yaml");
     const cfg = await loadConfig(root);
-    for (const name of Object.keys(detected)) {
+    for (const name of result.profiles) {
       expect(cfg.profiles[name]).toEqual({ kind: name });
     }
-    if (Object.keys(detected).length > 0) {
-      expect(cfg.default_profile).toBe(Object.keys(detected).sort()[0]);
+    if (result.profiles.length > 0) {
+      expect(cfg.default_profile).toBe(result.profiles.sort()[0]);
     }
   });
 
@@ -60,15 +51,6 @@ describe("herdr-workflows init", () => {
     const result = await runInit(root);
     expect(result.kind).toBe("exists");
     expect(await readFile(path, "utf8")).toContain("claude");
-  });
-
-  test("formatProfilesYaml emits kind objects", () => {
-    expect(
-      formatProfilesYaml({
-        profiles: { claude: { kind: "claude" } },
-        default_profile: "claude",
-      }),
-    ).toContain('kind: "claude"');
   });
 
   test("force init preserves transcripts in config", async () => {
@@ -111,7 +93,6 @@ describe("herdr-workflows init", () => {
 
   test("init --global writes plugin config dir, not repo .hwf", async () => {
     const { root, plugin } = await withPluginEnv();
-    const detected = await detectProfiles();
     const result = await runInit(root, { global: true });
     expect(result.kind).toBe("wrote");
     if (result.kind === "exists") throw new Error("unreachable");
@@ -120,7 +101,7 @@ describe("herdr-workflows init", () => {
     expect(await Bun.file(join(root, ".hwf", "config.yaml")).exists()).toBe(false);
     const text = await readFile(result.path, "utf8");
     expect(text).toContain("profiles:");
-    for (const name of Object.keys(detected)) {
+    for (const name of result.profiles) {
       expect(text).toContain(`${name}:`);
     }
   });

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { allocateRunId, RunHistorySession, getRunDetail } from "../src/history/store";
+import { allocateRunId, RunHistorySession, runDetail } from "../src/history/store";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,7 +20,7 @@ import {
   type RunsBrowser,
   type RunsBrowserDeps,
 } from "../src/tui/runs-browser";
-import { pickerEscapeExitCode, shouldDropStdinLeakSequence } from "../src/tui/picker";
+import { pickerEscapeExitCode, shouldDropStdinLeakSequence } from "../src/tui/picker-actions";
 import { fakePickerChrome, type FakePickerChrome } from "./picker-chrome-fake";
 
 const dirs: string[] = [];
@@ -228,7 +228,7 @@ describe("picker run history formatting", () => {
   });
 
   test("non-UUID detail ids are invalid not legacy summaries", async () => {
-    const detail = await getRunDetail("not-a-uuid");
+    const { detail } = await runDetail("not-a-uuid");
     expect(detail.kind).toBe("invalid");
   });
 

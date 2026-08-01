@@ -201,7 +201,7 @@ describe("presentRunDetail", () => {
     },
   ])("TUI and web agree on $name", ({ detail, needle }) => {
     const blocks = presentRunDetail(detail);
-    const tui = formatRunDetailLines(detail, 120).join("\n");
+    const tui = formatRunDetailLines(blocks, 120).join("\n");
     const web = webTexts(blocks).join("\n");
     expect(tui).toContain(needle);
     expect(web).toContain(needle);

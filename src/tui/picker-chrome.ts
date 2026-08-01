@@ -1,9 +1,11 @@
 import {
   Box,
   BoxRenderable,
+  createCliRenderer,
   Input,
   InputRenderable,
   InputRenderableEvents,
+  RGBA,
   Select,
   SelectRenderable,
   SelectRenderableEvents,
@@ -11,13 +13,101 @@ import {
   TextAttributes,
   TextRenderable,
   type CliRenderer,
+  type ColorInput,
   type KeyEvent,
   type SelectOption,
+  type TerminalColors,
 } from "@opentui/core";
-import type { HostTheme } from "./theme";
 
 /** Shared with runs browser Select height — six visible rows, scroll for the rest. */
 export const LIST_VIEWPORT = 6;
+
+export type ChromeKeyEvent = KeyEvent;
+export type ChromeOption = SelectOption;
+export { RGBA };
+export type { CliRenderer, TerminalColors };
+
+export type HostTheme = {
+  text: { fg: ColorInput };
+  warn: ColorInput;
+  input: {
+    backgroundColor: ColorInput;
+    textColor: ColorInput;
+    focusedBackgroundColor: ColorInput;
+    focusedTextColor: ColorInput;
+    placeholderColor: ColorInput;
+  };
+  select: {
+    backgroundColor: ColorInput;
+    textColor: ColorInput;
+    focusedBackgroundColor: ColorInput;
+    focusedTextColor: ColorInput;
+    selectedBackgroundColor: ColorInput;
+    selectedTextColor: ColorInput;
+    descriptionColor: ColorInput;
+    selectedDescriptionColor: ColorInput;
+  };
+};
+
+function hexOrNull(value: string | null | undefined): string | null {
+  const m = value ? /^#([0-9a-fA-F]{6})/.exec(value) : null;
+  return m ? `#${m[1]!.toLowerCase()}` : null;
+}
+
+function selection(colors: TerminalColors | null): { bg: ColorInput; fg: ColorInput } {
+  const fgHex = hexOrNull(colors?.defaultForeground);
+  const bgHex = hexOrNull(colors?.defaultBackground);
+  if (!fgHex || !bgHex) return { bg: RGBA.fromIndex(7), fg: RGBA.fromIndex(0) };
+  return { bg: RGBA.fromHex(fgHex), fg: RGBA.fromHex(bgHex) };
+}
+
+export function themeFromPalette(colors: TerminalColors | null): HostTheme {
+  const fg = RGBA.defaultForeground(hexOrNull(colors?.defaultForeground) ?? undefined);
+  const muted = RGBA.fromIndex(8, hexOrNull(colors?.palette?.[8] ?? null) ?? undefined);
+  const warn = RGBA.fromIndex(3, hexOrNull(colors?.palette?.[3] ?? null) ?? undefined);
+  const sel = selection(colors);
+
+  return {
+    text: { fg },
+    warn,
+    input: {
+      backgroundColor: "transparent",
+      textColor: fg,
+      focusedBackgroundColor: "transparent",
+      focusedTextColor: fg,
+      placeholderColor: muted,
+    },
+    select: {
+      backgroundColor: "transparent",
+      textColor: fg,
+      focusedBackgroundColor: "transparent",
+      focusedTextColor: fg,
+      selectedBackgroundColor: sel.bg,
+      selectedTextColor: sel.fg,
+      descriptionColor: muted,
+      selectedDescriptionColor: sel.fg,
+    },
+  };
+}
+
+const STANDALONE_PALETTE_TIMEOUT_MS = 400;
+const HERDR_PANE_PALETTE_TIMEOUT_MS = 1;
+
+function hostPaletteTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  return env.HERDR_PLUGIN_ENTRYPOINT_ID
+    ? HERDR_PANE_PALETTE_TIMEOUT_MS
+    : STANDALONE_PALETTE_TIMEOUT_MS;
+}
+
+export async function resolveHostTheme(renderer: CliRenderer): Promise<HostTheme> {
+  try {
+    return themeFromPalette(
+      await renderer.getPalette({ size: 16, timeout: hostPaletteTimeoutMs() }),
+    );
+  } catch {
+    return themeFromPalette(null);
+  }
+}
 
 /**
  * context: OpenTUI Select.options clamps `_selectedIndex` silently. `setSelectedIndex`
@@ -25,8 +115,8 @@ export const LIST_VIEWPORT = 6;
  * list-selection-changed → refreshListChrome → setOptions loop.
  */
 export function assignListOptions(
-  list: { options: SelectOption[] },
-  options: SelectOption[],
+  list: { options: ChromeOption[] },
+  options: ChromeOption[],
 ): void {
   list.options = options;
 }
@@ -41,11 +131,11 @@ type BrowserShowOpts = {
 };
 
 type ChromeEventMap = {
-  "list-select": (option: SelectOption) => void;
+  "list-select": (option: ChromeOption) => void;
   "list-selection-changed": () => void;
   "filter-input": () => void;
   "prompt-enter": (value: string) => void;
-  keypress: (key: KeyEvent) => void;
+  keypress: (key: ChromeKeyEvent) => void;
   resize: (width: number) => void;
 };
 
@@ -65,7 +155,7 @@ export type PickerChrome = {
   setPromptValue(value: string): void;
   setFooter(text: string): void;
   setDetail(content: string): void;
-  setOptions(options: SelectOption[]): void;
+  setOptions(options: ChromeOption[]): void;
   updateHint(text: string | undefined): void;
   setRule(content: string): void;
   filterValue(): string;
@@ -76,7 +166,7 @@ export type PickerChrome = {
   focusList(): void;
   selectedIndex(): number;
   setSelectedIndex(i: number): void;
-  options(): SelectOption[];
+  options(): ChromeOption[];
   moveUp(): void;
   moveDown(): void;
   selectCurrent(): void;
@@ -341,7 +431,7 @@ function createChrome(w: ChromeWidgets, theme: HostTheme): PickerChrome {
   };
 }
 
-export function mountPickerChrome(
+function mountPickerChrome(
   renderer: CliRenderer,
   theme: HostTheme,
   listHint: string,
@@ -361,4 +451,27 @@ export function mountPickerChrome(
     ),
   );
   return createChrome(collectWidgets(renderer), theme);
+}
+
+export type MountedChrome = {
+  chrome: PickerChrome;
+  theme: HostTheme;
+  width: number;
+};
+
+/** Own the OpenTUI renderer — the only factory that calls `createCliRenderer`. */
+export async function mountChrome(opts: {
+  listHint: string;
+  exitOnCtrlC?: boolean;
+  prependInputHandlers?: ((sequence: string) => boolean)[];
+}): Promise<MountedChrome> {
+  const renderer = await createCliRenderer({
+    exitOnCtrlC: opts.exitOnCtrlC ?? true,
+    ...(opts.prependInputHandlers !== undefined
+      ? { prependInputHandlers: opts.prependInputHandlers }
+      : {}),
+  });
+  const theme = await resolveHostTheme(renderer);
+  const chrome = mountPickerChrome(renderer, theme, opts.listHint);
+  return { chrome, theme, width: renderer.width };
 }

@@ -1,39 +1,63 @@
-import { createCliRenderer, type KeyEvent, type SelectOption } from "@opentui/core";
 import type { InvocationContext, WorkflowsConfig } from "../config";
-import { loadConfig } from "../config";
-import { openInBrowser } from "../herdr";
-import { EXAMPLES_URL } from "../init";
-import { PRODUCT_VERSION } from "../version";
-import { listWorkflows, loadWorkflowEntry } from "../workflow/load";
+import { loadContext } from "../config";
+import { openInBrowser } from "../console";
+import { EXAMPLES_URL, PRODUCT_VERSION } from "../version";
+import {
+  analyzeResolvedSensitivity,
+  listWorkflows,
+  loadWorkflowEntry,
+  workflowDisplayTitle,
+} from "../workflow/load";
 import { createInputSession, type InputSession } from "../workflow/inputs";
-import { analyzeResolvedSensitivity, workflowDisplayTitle } from "../workflow/trust";
 import type { InputSpec, LoadedWorkflow, WorkflowListEntry } from "../workflow/types";
 import { parseWebRoute } from "../web/endpoint";
 import {
+  beginConfirmedDelete,
   deleteWorkflowFile,
   EMPTY_CATALOG_MESSAGE,
   EMPTY_LIST_HINT,
   formatPaletteBody,
   PALETTE_HINT,
   DELETE_CONFIRM_HINT,
+  pickerEscapeExitCode,
   resolvePaletteLetter,
   shareWorkflowCopy,
+  shouldDropStdinLeakSequence,
   type ResolvedPaletteAction,
 } from "./picker-actions";
-import { mountPickerChrome, type PickerChrome } from "./picker-chrome";
+import {
+  mountChrome,
+  type ChromeKeyEvent,
+  type ChromeOption,
+  type PickerChrome,
+} from "./picker-chrome";
 import {
   CHROME_SEP,
+  CHOICE_HINT,
+  CUSTOM_CHOICE_HINT,
+  CUSTOM_CHOICE_LABEL,
+  FAIL_HINT,
+  LIST_HINT,
+  RUN_HINT,
   buildInvalidOptions,
   buildPickerOptions,
   entrySensitivity,
   filterChoiceOptions,
+  filterWorkflowEntries,
   formatDetailLines,
+  formatInputAnswers,
+  formatInputPrompt,
   formatListFooter,
   formatPickerRowName,
   formatRule,
   formatRunProgress,
+  hasVisibleEntries,
+  isCustomChoiceValue,
+  selectedListEntry,
+  shouldRestoreCustomChoiceText,
   stripFilePrefix,
   truncate,
+  type CustomChoiceValue,
 } from "./picker-rows";
 import { createRunsBrowser, type RunsBrowser } from "./runs-browser";
 import {
@@ -41,29 +65,13 @@ import {
   type DetachedRunHandle,
   type LaunchRunRequest,
   type LaunchWebRequest,
-} from "./run-launch";
-import { resolveHostTheme, type HostTheme } from "./theme";
+} from "../run/launch";
+import type { HostTheme } from "./picker-chrome";
 import {
   defaultPickerReleaseCheck,
   formatFilterUpdateHint,
   startPickerUpdateCheck,
 } from "./update-indicator";
-export type CustomChoiceValue = { kind: "custom" };
-
-export function isCustomChoiceValue(value: unknown): value is CustomChoiceValue {
-  return (
-    typeof value === "object" && value !== null && (value as { kind?: unknown }).kind === "custom"
-  );
-}
-
-export function shouldRestoreCustomChoiceText(
-  hasAnswer: boolean,
-  answer: string | undefined,
-  options: string[],
-  allowCustom: boolean,
-): boolean {
-  return hasAnswer && allowCustom && !options.includes(answer ?? "");
-}
 
 function syncInputSession(state: PickerState): void {
   const session = state.inputSession;
@@ -78,40 +86,13 @@ function syncInputSession(state: PickerState): void {
   state.inputIndex = session.cursor;
 }
 
-const CUSTOM_CHOICE_LABEL = "custom...";
 const CUSTOM_CHOICE_VALUE: CustomChoiceValue = { kind: "custom" };
-const ELLIPSIS = "...";
 
 function pickerContentWidth(rendererWidth: number): number {
   return Math.max(0, rendererWidth - 2);
 }
 
 type PickerRowValue = { entry: WorkflowListEntry };
-
-// `hidden: true` workflows are background halves — runnable via `hwf run`, kept out of the picker.
-const isPickerVisible = (e: WorkflowListEntry): boolean => !e.hidden;
-
-export function hasVisibleEntries(entries: WorkflowListEntry[]): boolean {
-  return entries.some(isPickerVisible);
-}
-
-export function filterWorkflowEntries(
-  entries: WorkflowListEntry[],
-  filter: string,
-): { valid: WorkflowListEntry[]; invalid: WorkflowListEntry[] } {
-  const visible = entries.filter(isPickerVisible);
-  const needle = filter.toLowerCase();
-  const matched = filter
-    ? visible.filter((e) => {
-        const title = workflowDisplayTitle(e.name, e.title).toLowerCase();
-        return title.includes(needle) || e.name.toLowerCase().includes(needle);
-      })
-    : visible;
-  return {
-    valid: matched.filter((e) => !e.error),
-    invalid: matched.filter((e) => e.error),
-  };
-}
 
 export type PickerState = {
   mode: "list" | "input" | "run" | "palette" | "delete-confirm";
@@ -153,34 +134,6 @@ export type PickerState = {
   savedListEntry?: WorkflowListEntry;
   runs: RunsBrowser;
 };
-
-export const LIST_HINT = `tab runs${CHROME_SEP}enter run${CHROME_SEP}ctrl+k${CHROME_SEP}esc`;
-const CHOICE_HINT = `type filter${CHROME_SEP}up/down move${CHROME_SEP}enter select${CHROME_SEP}esc back`;
-const CUSTOM_CHOICE_HINT = `type filter${CHROME_SEP}up/down${CHROME_SEP}enter select/custom${CHROME_SEP}esc back`;
-const RUN_HINT = `esc dismiss${CHROME_SEP}run continues`;
-const FAIL_HINT = "enter/esc close";
-
-/** Every chrome fragment the picker draws; each glyph must be unambiguous single-column. */
-export const PICKER_CHROME_STRINGS: readonly string[] = [
-  LIST_HINT,
-  EMPTY_LIST_HINT,
-  PALETTE_HINT,
-  DELETE_CONFIRM_HINT,
-  CHOICE_HINT,
-  CUSTOM_CHOICE_HINT,
-  RUN_HINT,
-  FAIL_HINT,
-  CUSTOM_CHOICE_LABEL,
-  ELLIPSIS,
-  CHROME_SEP,
-  "> ",
-  "! ",
-  "filter workflows...",
-  "filter runs...",
-  "prompt...",
-  `enter submit${CHROME_SEP}esc back`,
-  EMPTY_CATALOG_MESSAGE,
-];
 
 function updateDetail(state: PickerState): void {
   if (state.mode !== "list") {
@@ -254,7 +207,7 @@ function applyFilter(state: PickerState): void {
 
 function applyChoiceFilter(state: PickerState): void {
   const matched = filterChoiceOptions(state.choiceOptions, state.chrome.filterValue());
-  const options: SelectOption[] = matched.map((option) => ({
+  const options: ChromeOption[] = matched.map((option) => ({
     name: option,
     description: "",
     value: option,
@@ -316,7 +269,7 @@ function restoreWorkflowListSelection(state: PickerState): void {
 }
 
 /** Return to the workflow list; restores filter/selection saved before palette or runs. */
-export function setListMode(state: PickerState): void {
+function setListMode(state: PickerState): void {
   state.runs.leave();
   state.mode = "list";
   state.pending = undefined;
@@ -343,7 +296,7 @@ export function setListMode(state: PickerState): void {
 }
 
 /** Attach a runs browser bound to this picker's chrome. Call after UI fields exist. */
-export function attachRunsBrowser(state: PickerState): RunsBrowser {
+function attachRunsBrowser(state: PickerState): RunsBrowser {
   return (state.runs = createRunsBrowser({
     repoRoot: state.repoRoot,
     getContentWidth: () => state.contentWidth,
@@ -363,41 +316,6 @@ function launchFromPicker(state: PickerState, entry: WorkflowListEntry): Promise
     launchRun: state.launchRun,
     getExit: () => state.exit,
   });
-}
-
-/**
- * What the prompt is collecting, then how to answer it. The description carries the author's
- * intent; without one the type and domain still say more than a bare name.
- */
-export function formatInputPrompt(spec: InputSpec): string {
-  const desc = spec.description?.trim();
-  const label = desc ? `${spec.name} — ${desc}` : spec.name;
-  const hints: string[] = [];
-  if (spec.type === "text") {
-    hints.push("type free text");
-    if (spec.default) hints.push(`default ${spec.default}`);
-  } else {
-    const count = spec.options?.length;
-    hints.push(count === undefined ? "pick one" : `pick one of ${count}`);
-    if (spec.allowCustom) hints.push("or type your own");
-  }
-  if (spec.minLength !== undefined && spec.minLength > 0) {
-    hints.push(`min ${spec.minLength} char${spec.minLength === 1 ? "" : "s"}`);
-  }
-  return `${label}${CHROME_SEP}${hints.join(CHROME_SEP)}`;
-}
-
-/** Answers already collected, so a filtered domain is not a mystery. */
-export function formatInputAnswers(
-  queue: InputSpec[],
-  values: Record<string, string>,
-  contentWidth: number,
-): string {
-  const answered = queue
-    .filter((spec) => Object.hasOwn(values, spec.name))
-    .map((spec) => `${spec.name}=${values[spec.name]}`);
-  if (answered.length === 0) return "";
-  return truncate(`chosen: ${answered.join(CHROME_SEP)}`, contentWidth);
 }
 
 function inputStatusLine(
@@ -501,7 +419,7 @@ function finish(state: PickerState, code: number): void {
   state.chrome.destroy();
 }
 
-function navigateSelectList(state: PickerState, key: KeyEvent): boolean {
+function navigateSelectList(state: PickerState, key: ChromeKeyEvent): boolean {
   if (key.name === "up") {
     key.preventDefault();
     state.chrome.moveUp();
@@ -520,13 +438,13 @@ function navigateSelectList(state: PickerState, key: KeyEvent): boolean {
   return false;
 }
 
-function handleInputKey(state: PickerState, key: KeyEvent): void {
+function handleInputKey(state: PickerState, key: ChromeKeyEvent): void {
   const spec = state.inputQueue[state.inputIndex];
   if (!spec || (spec.type !== "choice" && spec.type !== "profile")) return;
   navigateSelectList(state, key);
 }
 
-function handleRunKey(state: PickerState, key: KeyEvent): void {
+function handleRunKey(state: PickerState, key: ChromeKeyEvent): void {
   if (key.name === "escape") {
     key.preventDefault();
     finish(state, pickerEscapeExitCode(state.mode, state.running));
@@ -539,21 +457,7 @@ function handleRunKey(state: PickerState, key: KeyEvent): void {
   }
 }
 
-/** Escape while a run is in flight dismisses with 0; Escape after failure is nonzero. */
-export function pickerEscapeExitCode(mode: PickerState["mode"], running: boolean): number {
-  if (mode === "run") return running ? 0 : 1;
-  return 0;
-}
-
-/** Selected valid row in list mode, or undefined when the filtered list is empty. */
-export function selectedListEntry(state: PickerState): WorkflowListEntry | undefined {
-  if (state.chrome.options().length === 0) return undefined;
-  const option = state.chrome.options()[state.chrome.selectedIndex()];
-  const value = option?.value as PickerRowValue | undefined;
-  return value?.entry;
-}
-
-export function launchWorkbenchRoute(state: PickerState, route: string): void {
+function launchWorkbenchRoute(state: PickerState, route: string): void {
   const parsed = parseWebRoute(route);
   if (!parsed) return;
   const launch = state.launchWeb ?? launchDetachedWeb;
@@ -591,19 +495,6 @@ function openDeleteConfirm(state: PickerState, entry: WorkflowListEntry): void {
   state.chrome.setFooter(DELETE_CONFIRM_HINT);
 }
 
-/** Claim the confirmed delete target; a second call while in flight returns undefined. */
-export function beginConfirmedDelete(state: {
-  deleteTarget?: WorkflowListEntry;
-  deleteInFlight?: boolean;
-}): WorkflowListEntry | undefined {
-  if (state.deleteInFlight) return undefined;
-  const entry = state.deleteTarget;
-  if (!entry) return undefined;
-  state.deleteTarget = undefined;
-  state.deleteInFlight = true;
-  return entry;
-}
-
 function failPalette(state: PickerState, label: string, error: unknown): void {
   const detail = truncate(error instanceof Error ? error.message : String(error), 60);
   showStatus(state, `${label}${CHROME_SEP}${detail}`);
@@ -638,7 +529,7 @@ async function runPaletteAction(state: PickerState, action: ResolvedPaletteActio
   if (action.id === "delete") openDeleteConfirm(state, action.entry);
 }
 
-function handlePaletteKey(state: PickerState, key: KeyEvent): void {
+function handlePaletteKey(state: PickerState, key: ChromeKeyEvent): void {
   if (key.name === "escape") {
     key.preventDefault();
     setListMode(state);
@@ -652,7 +543,7 @@ function handlePaletteKey(state: PickerState, key: KeyEvent): void {
   void runPaletteAction(state, action);
 }
 
-function handleDeleteConfirmKey(state: PickerState, key: KeyEvent): void {
+function handleDeleteConfirmKey(state: PickerState, key: ChromeKeyEvent): void {
   if (state.deleteInFlight) {
     key.preventDefault();
     return;
@@ -683,7 +574,7 @@ function handleDeleteConfirmKey(state: PickerState, key: KeyEvent): void {
   })();
 }
 
-export function tryOpenActionsPalette(state: PickerState, key: KeyEvent): boolean {
+function tryOpenActionsPalette(state: PickerState, key: ChromeKeyEvent): boolean {
   if (state.mode !== "list") return false;
   if (!key.ctrl || key.name.toLowerCase() !== "k") return false;
   key.preventDefault();
@@ -706,7 +597,7 @@ function backtrackInput(state: PickerState): void {
   void advanceInput(state, entry);
 }
 
-function handlePickerKey(state: PickerState, key: KeyEvent): void {
+function handlePickerKey(state: PickerState, key: ChromeKeyEvent): void {
   if (state.mode === "run" && !state.runs.isActive()) return handleRunKey(state, key);
   if (state.runs.isActive()) {
     if (state.runs.handleKey(key)) return;
@@ -747,16 +638,6 @@ function handlePickerKey(state: PickerState, key: KeyEvent): void {
  * True when a raw stdin sequence should be dropped as a herdr prefix-key leak.
  * Keeps tab/newline/CR/escape, Ctrl+K (0x0b), and Ctrl+G (0x07) for OpenTUI.
  */
-export function shouldDropStdinLeakSequence(sequence: string): boolean {
-  if (sequence.length !== 1) return false;
-  const c = sequence.charCodeAt(0);
-  if (c >= 0x20) return false;
-  if (c === 0x09 || c === 0x0a || c === 0x0d || c === 0x1b || c === 0x0b || c === 0x07) {
-    return false;
-  }
-  return true;
-}
-
 function stdinLeakHandlers(): {
   drain: () => void;
   prepend: ((sequence: string) => boolean)[];
@@ -833,7 +714,7 @@ function submitInputText(state: PickerState, value: string): void {
   if (state.mode === "input") storeInput(state, value.trim());
 }
 
-export function acceptWorkflow(state: PickerState, entry: WorkflowListEntry): void {
+function acceptWorkflow(state: PickerState, entry: WorkflowListEntry): void {
   if (entry.error) {
     const err = stripFilePrefix(entry.error, entry.file);
     state.chrome.setDetail(formatDetailLines(err, state.contentWidth));
@@ -960,12 +841,12 @@ export async function runPickerSession(opts: PickerSessionOpts): Promise<number>
     },
   });
 
-  const renderer = await createCliRenderer({
+  const mounted = await mountChrome({
+    listHint: LIST_HINT,
     exitOnCtrlC: true,
     prependInputHandlers: leak.prepend,
   });
-  const theme = await resolveHostTheme(renderer);
-  const chrome = mountPickerChrome(renderer, theme, LIST_HINT);
+  const { chrome, theme } = mounted;
 
   const state = {
     mode: "list" as const,
@@ -983,11 +864,11 @@ export async function runPickerSession(opts: PickerSessionOpts): Promise<number>
     ctx: opts.ctx,
     loadWorkflow: loadWorkflowEntry,
     reloadEntries: async () => {
-      const config = await loadConfig(opts.repoRoot);
-      state.config = config;
-      return listWorkflows(opts.repoRoot, config);
+      const app = await loadContext({ repoRoot: opts.repoRoot });
+      state.config = app.config;
+      return listWorkflows(opts.repoRoot, app.config);
     },
-    contentWidth: pickerContentWidth(renderer.width),
+    contentWidth: pickerContentWidth(mounted.width),
     theme,
     chrome,
     savedWorkflowFilter: "",
@@ -1009,3 +890,12 @@ export async function runPickerSession(opts: PickerSessionOpts): Promise<number>
 
   return state.exit?.code ?? 0;
 }
+
+/** Declared internal seam — unit tests drive state transitions without the TTY entry. */
+export const pickerSeams = {
+  setListMode,
+  attachRunsBrowser,
+  launchWorkbenchRoute,
+  tryOpenActionsPalette,
+  acceptWorkflow,
+};

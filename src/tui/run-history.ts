@@ -1,11 +1,5 @@
 import { basename } from "node:path";
-import {
-  formatElapsed,
-  presentRunDetail,
-  statusLabel,
-  type RunDetailBlock,
-} from "../history/project";
-import { listRunHistory } from "../history/store";
+import { formatElapsed, listRuns, statusLabel, type RunDetailBlock } from "../history/store";
 import type { RunDetail, RunListItem, RunProjectedStatus } from "../history/types";
 import { truncate } from "./picker-rows";
 
@@ -117,8 +111,8 @@ function blockToLines(block: RunDetailBlock, width: number): string[] {
   return lines;
 }
 
-export function formatRunDetailLines(detail: RunDetail, width: number): string[] {
-  return presentRunDetail(detail).flatMap((block) => blockToLines(block, width));
+export function formatRunDetailLines(blocks: RunDetailBlock[], width: number): string[] {
+  return blocks.flatMap((block) => blockToLines(block, width));
 }
 
 function formatStartingDetail(workflow: string, id: string, width: number): string[] {
@@ -148,7 +142,7 @@ export type RunDetailView =
       finished?: "succeeded" | "failed";
       message?: string;
     }
-  | { kind: "detail"; detail: RunDetail; progress?: string[] };
+  | { kind: "detail"; detail: RunDetail; blocks: RunDetailBlock[]; progress?: string[] };
 
 export function viewAllowsWorkbench(view: RunDetailView): boolean {
   return (
@@ -162,7 +156,7 @@ export async function loadRunsBrowser(
   filter: string,
   preserveId?: string,
 ): Promise<RunsBrowserState> {
-  const allProbe = await listRunHistory({ checkout_root: null });
+  const allProbe = await listRuns({ checkout_root: null });
   const hasMachineRuns = allProbe.ok && allProbe.runs.length > 0;
   if (!allProbe.ok) {
     return {
@@ -173,7 +167,7 @@ export async function loadRunsBrowser(
       unavailable: true,
     };
   }
-  const listed = await listRunHistory({
+  const listed = await listRuns({
     checkout_root: scope === "current" ? checkoutRoot : null,
     text: filter,
   });
@@ -216,7 +210,7 @@ export function detailLines(view: RunDetailView, width: number): string[] {
     if (view.message) lines.push(view.message.slice(0, width));
     return lines;
   }
-  const lines = formatRunDetailLines(view.detail, width);
+  const lines = formatRunDetailLines(view.blocks, width);
   if (view.progress?.length) {
     return [...lines, "", ...view.progress.map((line) => line.slice(0, width))];
   }

@@ -1,15 +1,25 @@
-import { formatHistoryAck, RunHistorySession } from "../history/store";
+import { formatHistoryAck } from "./ack";
+import { RunHistorySession } from "./store";
 import type {
   RunActionKind,
   RunFailureFact,
   RunStepOutcomeKind,
   RunStepPhase,
   RunTerminalStatus,
-} from "../history/types";
+} from "./types";
 import type { LoadedWorkflow, WorkflowStep } from "../workflow/types";
-import type { StepOutcome } from "./context";
 
 type RunFinalStatus = RunTerminalStatus;
+
+/** Narrow outcome shape the recorder persists — avoids importing the engine context module. */
+type RecorderOutcome =
+  | { ok: true }
+  | {
+      ok: false;
+      error: string;
+      details?: Record<string, unknown>;
+      coordinationLost?: boolean;
+    };
 
 export type RunRecorder = {
   readonly runId: string;
@@ -27,7 +37,7 @@ export type RunRecorder = {
     total: number,
     label: string,
     kind: RunStepOutcomeKind,
-    outcome?: StepOutcome,
+    outcome?: RecorderOutcome,
     phase?: RunStepPhase,
   ): Promise<void>;
   finished(status: RunFinalStatus, extras?: { returns?: unknown; error?: string }): Promise<void>;
@@ -46,7 +56,7 @@ type SharedState = {
 
 function failureFact(
   step: WorkflowStep,
-  outcome: Extract<StepOutcome, { ok: false }>,
+  outcome: Extract<RecorderOutcome, { ok: false }>,
 ): RunFailureFact {
   const details = outcome.details ?? {};
   return {

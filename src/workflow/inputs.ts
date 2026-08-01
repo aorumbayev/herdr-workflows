@@ -5,26 +5,92 @@ import {
   repoConfigPath,
   type WorkflowsConfig,
 } from "../config";
+import { CaptureLimitError } from "../limits";
 import { latest } from "../latest";
+import { spawnCapture } from "../run/steps/shell";
 import { evaluateWhen } from "./conditions";
-import { resolveDynamicChoices } from "./load";
-import type { InputSpec, LoadedWorkflow, TemplateNamespace } from "./types";
+import {
+  bail,
+  type DynamicChoice,
+  type InputSpec,
+  type LoadedWorkflow,
+  type TemplateNamespace,
+} from "./types";
+
+export { evaluateWhen } from "./conditions";
+
+const DYNAMIC_CHOICE_TIMEOUT_MS = 10_000;
+const DYNAMIC_CHOICE_MAX = 1_000;
+const STDERR_TAIL = 500;
+
+export function parseDynamicChoiceStdout(stdout: string): string[] {
+  const seen = new Set<string>();
+  const choices: string[] = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const value = line.trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    choices.push(value);
+  }
+  return choices;
+}
+
+export async function resolveDynamicChoices(
+  file: string,
+  name: string,
+  dynamic: DynamicChoice,
+  repoRoot: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string[]> {
+  for (const el of dynamic.run) {
+    if (el.includes("{{")) {
+      bail(file, undefined, `inputs.${name}.options.run`, "dynamic choice argv rejects templates");
+    }
+  }
+  let result: Awaited<ReturnType<typeof spawnCapture>>;
+  try {
+    result = await spawnCapture(dynamic.run, {
+      cwd: repoRoot,
+      env,
+      timeoutMs: DYNAMIC_CHOICE_TIMEOUT_MS,
+      maxCaptureBytes: { source: `inputs.${name} dynamic choice` },
+    });
+  } catch (error) {
+    if (error instanceof CaptureLimitError) {
+      bail(file, undefined, `inputs.${name}`, error.message);
+    }
+    throw error;
+  }
+  if (result.timedOut) {
+    bail(
+      file,
+      undefined,
+      `inputs.${name}`,
+      `dynamic choice failed: timed out after ${result.timeoutMs / 1000}s`,
+    );
+  }
+  if (result.exitCode !== 0) {
+    const tail = result.stderr.trim().slice(-STDERR_TAIL) || `exit ${result.exitCode}`;
+    bail(file, undefined, `inputs.${name}`, `dynamic choice failed: ${tail}`);
+  }
+  const choices = parseDynamicChoiceStdout(result.stdout);
+  if (choices.length === 0) {
+    bail(file, undefined, `inputs.${name}`, "dynamic choice produced no options");
+  }
+  if (choices.length > DYNAMIC_CHOICE_MAX) {
+    bail(
+      file,
+      undefined,
+      `inputs.${name}`,
+      `dynamic choice produced ${choices.length} options (limit ${DYNAMIC_CHOICE_MAX})`,
+    );
+  }
+  return choices;
+}
 
 export type CollectedInputs =
   | { ok: true; values: Record<string, string>; domains: Record<string, string[]> }
   | { ok: false; error: string };
-
-export type CollectInputsOpts = {
-  specs: InputSpec[];
-  provided?: Record<string, string>;
-  /** Pre-resolved dynamic domains from picker launch payload. */
-  domains?: Record<string, string[]>;
-  config: WorkflowsConfig;
-  repoRoot: string;
-  file: string;
-  /** Resolve dynamic choices that lack a supplied domain snapshot. */
-  resolveDynamic?: boolean;
-};
 
 type ActivePrompt = {
   index: number;
@@ -43,6 +109,8 @@ export type InputSession = {
   answer(value: string): { ok: true } | { ok: false; error: string };
   back(): boolean;
   result(): CollectedInputs;
+  /** Headless driver: apply provided/default values through the session. */
+  completeFromProvided(provided?: Record<string, string>): Promise<CollectedInputs>;
   cancelPending(): void;
   readonly values: Record<string, string>;
   readonly domains: Record<string, string[]>;
@@ -247,73 +315,65 @@ export function createInputSession(opts: CreateInputSessionOpts): InputSession {
       }
       return { ok: true, values: { ...values }, domains: { ...domains } };
     },
+    async completeFromProvided(provided = {}) {
+      const declared = new Set(specs.map((spec) => spec.name));
+      for (const name of Object.keys(provided)) {
+        if (!declared.has(name)) return { ok: false, error: `unknown input '${name}'` };
+      }
+      for (const name of Object.keys(opts.domains ?? {})) {
+        const spec = specs.find((row) => row.name === name);
+        if (!spec || spec.type !== "choice" || !spec.dynamicOptions) {
+          return {
+            ok: false,
+            error: `launch payload domain '${name}' must name a declared dynamic choice input`,
+          };
+        }
+      }
+
+      for (;;) {
+        const cur = await session.current();
+        if (cur.status === "cancelled") return { ok: false, error: "input collection cancelled" };
+        if (cur.status === "error") return { ok: false, error: cur.error };
+        if (cur.status === "done") break;
+        const name = cur.prompt.spec.name;
+        const value = Object.hasOwn(provided, name) ? provided[name]! : cur.prompt.spec.default;
+        if (value === undefined) {
+          return { ok: false, error: `missing input '${name}' (--input ${name}=…)` };
+        }
+        const answered = session.answer(value);
+        if (!answered.ok) return answered;
+      }
+
+      for (const name of Object.keys(provided)) {
+        if (!Object.hasOwn(session.values, name)) {
+          return {
+            ok: false,
+            error: `input '${name}' is inactive under current answers`,
+          };
+        }
+      }
+
+      return session.result();
+    },
   };
   return session;
 }
 
-/**
- * Sequential input collection shared by entry CLI, picker, and child workflows.
- * Skips inactive inputs, resolves active dynamic choices at most once, and rejects
- * supplied values for inactive inputs.
- */
-export async function collectInputValues(opts: CollectInputsOpts): Promise<CollectedInputs> {
-  const provided = opts.provided ?? {};
-  const declared = new Set(opts.specs.map((spec) => spec.name));
-  for (const name of Object.keys(provided)) {
-    if (!declared.has(name)) return { ok: false, error: `unknown input '${name}'` };
-  }
-  for (const name of Object.keys(opts.domains ?? {})) {
-    const spec = opts.specs.find((row) => row.name === name);
-    if (!spec || spec.type !== "choice" || !spec.dynamicOptions) {
-      return {
-        ok: false,
-        error: `launch payload domain '${name}' must name a declared dynamic choice input`,
-      };
-    }
-  }
-
-  const session = createInputSession({
-    specs: opts.specs,
-    file: opts.file,
-    config: opts.config,
-    repoRoot: opts.repoRoot,
-    domains: opts.domains,
-    resolveDynamic: opts.resolveDynamic,
-  });
-
-  for (;;) {
-    const cur = await session.current();
-    if (cur.status === "cancelled") return { ok: false, error: "input collection cancelled" };
-    if (cur.status === "error") return { ok: false, error: cur.error };
-    if (cur.status === "done") break;
-    const name = cur.prompt.spec.name;
-    const value = Object.hasOwn(provided, name) ? provided[name]! : cur.prompt.spec.default;
-    if (value === undefined) {
-      return { ok: false, error: `missing input '${name}' (--input ${name}=…)` };
-    }
-    const answered = session.answer(value);
-    if (!answered.ok) return answered;
-  }
-
-  for (const name of Object.keys(provided)) {
-    if (!Object.hasOwn(session.values, name)) {
-      return {
-        ok: false,
-        error: `input '${name}' is inactive under current answers`,
-      };
-    }
-  }
-
-  return session.result();
-}
-
-export async function collectWorkflowInputs(
+/** Engine entry: bind a loaded workflow and drive the session headlessly. */
+export async function completeWorkflowInputs(
   workflow: LoadedWorkflow,
-  opts: Omit<CollectInputsOpts, "specs" | "file">,
+  opts: Omit<CreateInputSessionOpts, "specs" | "file"> & {
+    provided?: Record<string, string>;
+  },
 ): Promise<CollectedInputs> {
-  return collectInputValues({
-    ...opts,
+  const session = createInputSession({
     specs: workflow.inputs,
     file: workflow.file,
+    config: opts.config,
+    repoRoot: opts.repoRoot,
+    ...(opts.answers !== undefined ? { answers: opts.answers } : {}),
+    ...(opts.domains !== undefined ? { domains: opts.domains } : {}),
+    ...(opts.resolveDynamic !== undefined ? { resolveDynamic: opts.resolveDynamic } : {}),
   });
+  return session.completeFromProvided(opts.provided);
 }

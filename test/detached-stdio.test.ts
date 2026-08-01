@@ -40,8 +40,8 @@ steps:
   }, 20_000);
 
   test("a non-EPIPE standard-stream error remains fatal", async () => {
-    const herdr = join(import.meta.dir, "..", "src", "herdr.ts");
-    const script = `import { tolerateClosedStdio } from ${JSON.stringify(herdr)};
+    const consoleMod = join(import.meta.dir, "..", "src", "console.ts");
+    const script = `import { tolerateClosedStdio } from ${JSON.stringify(consoleMod)};
 tolerateClosedStdio();
 process.stdout.emit("error", Object.assign(new Error("stream failed"), { code: "EACCES" }));`;
     const proc = Bun.spawn([process.execPath, "-e", script], {

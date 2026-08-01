@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { SelectOption } from "@opentui/core";
+import type { ChromeOption } from "../src/tui/picker-chrome";
 import { assignListOptions } from "../src/tui/picker-chrome";
 
 /** Mirrors OpenTUI Select: options clamps silently; setSelectedIndex always emits. */
-function fakeSelect(initial: SelectOption[]) {
+function fakeSelect(initial: ChromeOption[]) {
   let options = initial;
   let selectedIndex = 0;
   const selectionChanged: Array<() => void> = [];
@@ -11,7 +11,7 @@ function fakeSelect(initial: SelectOption[]) {
     get options() {
       return options;
     },
-    set options(next: SelectOption[]) {
+    set options(next: ChromeOption[]) {
       options = next;
       selectedIndex = Math.min(selectedIndex, Math.max(0, next.length - 1));
     },
@@ -55,7 +55,7 @@ describe("assignListOptions", () => {
     let depth = 0;
     let maxDepth = 0;
 
-    const setOptions = (next: SelectOption[]) => {
+    const setOptions = (next: ChromeOption[]) => {
       assignListOptions(list, next);
     };
 
@@ -84,7 +84,7 @@ describe("assignListOptions", () => {
       { name: "a", description: "", value: "a" },
       { name: "b", description: "", value: "b" },
     ]);
-    const setOptions = (next: SelectOption[]) => {
+    const setOptions = (next: ChromeOption[]) => {
       list.options = next;
       if (list.options.length > 0) {
         list.setSelectedIndex(Math.min(list.getSelectedIndex(), list.options.length - 1));

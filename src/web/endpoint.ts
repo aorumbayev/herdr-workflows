@@ -20,7 +20,7 @@ import {
 } from "../fs-private";
 import { startWebServer, type WebServer } from "./server";
 
-export type EndpointRecord = {
+type EndpointRecord = {
   repoRoot: string;
   url: string;
   /**
@@ -31,13 +31,13 @@ export type EndpointRecord = {
   build?: string;
 };
 
-export type EnsuredWorkbench = {
+export type WorkbenchHandle = {
   url: string;
   owned: boolean;
   stop: () => void;
 };
 
-export type EndpointLockHold = {
+type EndpointLockHold = {
   base: string;
   token: string;
 };
@@ -54,7 +54,7 @@ export type EnsureWorkbenchDeps = {
   lockWaitMs?: number;
 };
 
-export type AcquireLockHooks = {
+type AcquireLockHooks = {
   /** Invoked after a stale/dangling decision, before the atomic steal. Tests use this as a barrier. */
   beforeSteal?: (info: { kind: "owned" | "dangling" | "legacy"; token?: string }) => void;
 };
@@ -390,10 +390,10 @@ function servesPort(url: string, port: number | undefined): boolean {
   }
 }
 
-export async function ensureWorkbench(
+export async function openWorkbench(
   opts: { repoRoot: string; port?: number; build?: string },
   deps: EnsureWorkbenchDeps = {},
-): Promise<EnsuredWorkbench> {
+): Promise<WorkbenchHandle> {
   const repoRoot = await canonicalRepoRoot(opts.repoRoot);
   const stateDir = deps.stateDir ?? pluginStateDir();
   const fetchImpl = deps.fetch ?? fetch;

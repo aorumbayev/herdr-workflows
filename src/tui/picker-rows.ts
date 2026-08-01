@@ -1,6 +1,12 @@
-import type { SelectOption } from "@opentui/core";
-import { sensitivityLabels, workflowDisplayTitle } from "../workflow/trust";
-import type { WorkflowListEntry } from "../workflow/types";
+import type { ChromeOption, PickerChrome } from "./picker-chrome";
+import {
+  DELETE_CONFIRM_HINT,
+  EMPTY_CATALOG_MESSAGE,
+  EMPTY_LIST_HINT,
+  PALETTE_HINT,
+} from "./picker-actions";
+import { sensitivityLabels, workflowDisplayTitle } from "../workflow/load";
+import type { InputSpec, WorkflowListEntry } from "../workflow/types";
 
 const ELLIPSIS = "...";
 export const CHROME_SEP = " | ";
@@ -14,6 +20,119 @@ const LOCATION_WIDTH = 7;
 const WARNING_WIDTH = 2;
 
 type PickerRowValue = { entry: WorkflowListEntry };
+
+export type CustomChoiceValue = { kind: "custom" };
+
+export function isCustomChoiceValue(value: unknown): value is CustomChoiceValue {
+  return (
+    typeof value === "object" && value !== null && (value as { kind?: unknown }).kind === "custom"
+  );
+}
+
+export function shouldRestoreCustomChoiceText(
+  hasAnswer: boolean,
+  answer: string | undefined,
+  options: string[],
+  allowCustom: boolean,
+): boolean {
+  return hasAnswer && allowCustom && !options.includes(answer ?? "");
+}
+
+// `hidden: true` workflows are background halves — runnable via `hwf run`, kept out of the picker.
+const isPickerVisible = (e: WorkflowListEntry): boolean => !e.hidden;
+
+export function hasVisibleEntries(entries: WorkflowListEntry[]): boolean {
+  return entries.some(isPickerVisible);
+}
+
+export function filterWorkflowEntries(
+  entries: WorkflowListEntry[],
+  filter: string,
+): { valid: WorkflowListEntry[]; invalid: WorkflowListEntry[] } {
+  const visible = entries.filter(isPickerVisible);
+  const needle = filter.toLowerCase();
+  const matched = filter
+    ? visible.filter((e) => {
+        const title = workflowDisplayTitle(e.name, e.title).toLowerCase();
+        return title.includes(needle) || e.name.toLowerCase().includes(needle);
+      })
+    : visible;
+  return {
+    valid: matched.filter((e) => !e.error),
+    invalid: matched.filter((e) => e.error),
+  };
+}
+
+export const LIST_HINT = `tab runs${CHROME_SEP}enter run${CHROME_SEP}ctrl+k${CHROME_SEP}esc`;
+const CHOICE_HINT = `type filter${CHROME_SEP}up/down move${CHROME_SEP}enter select${CHROME_SEP}esc back`;
+const CUSTOM_CHOICE_HINT = `type filter${CHROME_SEP}up/down${CHROME_SEP}enter select/custom${CHROME_SEP}esc back`;
+const RUN_HINT = `esc dismiss${CHROME_SEP}run continues`;
+const FAIL_HINT = "enter/esc close";
+const CUSTOM_CHOICE_LABEL = "custom...";
+
+/** Every chrome fragment the picker draws; each glyph must be unambiguous single-column. */
+export const PICKER_CHROME_STRINGS: readonly string[] = [
+  LIST_HINT,
+  EMPTY_LIST_HINT,
+  PALETTE_HINT,
+  DELETE_CONFIRM_HINT,
+  CHOICE_HINT,
+  CUSTOM_CHOICE_HINT,
+  RUN_HINT,
+  FAIL_HINT,
+  CUSTOM_CHOICE_LABEL,
+  ELLIPSIS,
+  CHROME_SEP,
+  "> ",
+  "! ",
+  "filter workflows...",
+  "filter runs...",
+  "prompt...",
+  `enter submit${CHROME_SEP}esc back`,
+  EMPTY_CATALOG_MESSAGE,
+];
+
+export { CHOICE_HINT, CUSTOM_CHOICE_HINT, CUSTOM_CHOICE_LABEL, FAIL_HINT, RUN_HINT };
+
+/** What the prompt is collecting, then how to answer it. */
+export function formatInputPrompt(spec: InputSpec): string {
+  const desc = spec.description?.trim();
+  const label = desc ? `${spec.name} — ${desc}` : spec.name;
+  const hints: string[] = [];
+  if (spec.type === "text") {
+    hints.push("type free text");
+    if (spec.default) hints.push(`default ${spec.default}`);
+  } else {
+    const count = spec.options?.length;
+    hints.push(count === undefined ? "pick one" : `pick one of ${count}`);
+    if (spec.allowCustom) hints.push("or type your own");
+  }
+  if (spec.minLength !== undefined && spec.minLength > 0) {
+    hints.push(`min ${spec.minLength} char${spec.minLength === 1 ? "" : "s"}`);
+  }
+  return `${label}${CHROME_SEP}${hints.join(CHROME_SEP)}`;
+}
+
+/** Answers already collected, so a filtered domain is not a mystery. */
+export function formatInputAnswers(
+  queue: InputSpec[],
+  values: Record<string, string>,
+  contentWidth: number,
+): string {
+  const answered = queue
+    .filter((spec) => Object.hasOwn(values, spec.name))
+    .map((spec) => `${spec.name}=${values[spec.name]}`);
+  if (answered.length === 0) return "";
+  return truncate(`chosen: ${answered.join(CHROME_SEP)}`, contentWidth);
+}
+
+/** Selected valid row in list mode, or undefined when the filtered list is empty. */
+export function selectedListEntry(state: { chrome: PickerChrome }): WorkflowListEntry | undefined {
+  if (state.chrome.options().length === 0) return undefined;
+  const option = state.chrome.options()[state.chrome.selectedIndex()];
+  const value = option?.value as PickerRowValue | undefined;
+  return value?.entry;
+}
 
 function columns(text: string): number {
   return Bun.stringWidth(text);
@@ -77,7 +196,7 @@ export function formatPickerRowName(
   return `${prefix}${padColumns(truncate(title, titleW), titleW)} ${warning}${location.padStart(LOCATION_WIDTH)}`;
 }
 
-export function buildPickerOptions(valid: WorkflowListEntry[], rowWidth: number): SelectOption[] {
+export function buildPickerOptions(valid: WorkflowListEntry[], rowWidth: number): ChromeOption[] {
   return valid.map((entry) => ({
     name: formatPickerRowName(
       workflowDisplayTitle(entry.name, entry.title),
@@ -93,7 +212,7 @@ export function buildPickerOptions(valid: WorkflowListEntry[], rowWidth: number)
 export function buildInvalidOptions(
   invalid: WorkflowListEntry[],
   rowWidth: number,
-): SelectOption[] {
+): ChromeOption[] {
   return invalid.map((entry) => ({
     name: formatPickerRowName(
       workflowDisplayTitle(entry.name, entry.title),

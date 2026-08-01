@@ -7,7 +7,14 @@ import {
   assertPrivateCredentialFile,
   CredentialStoreError,
 } from "../fs-private";
-import { filterSortLimit, normalizeRunUuid, toDetail, toListItem } from "./project";
+import {
+  filterSortLimit,
+  normalizeRunUuid,
+  presentRunDetail,
+  toDetail,
+  toListItem,
+  type RunDetailBlock,
+} from "./project";
 import {
   RUN_HISTORY_HEARTBEAT_MS,
   RUN_HISTORY_RETENTION_BYTES,
@@ -23,44 +30,6 @@ import {
   type RunTerminalStatus,
   type RunWorkflowSource,
 } from "./types";
-
-/** Machine-readable launch acknowledgements on the observed stdout channel. */
-
-export type HistoryAck =
-  | { state: "claimed"; id: string }
-  | { state: "unavailable"; id?: string }
-  | { state: "rejected"; error: string; id?: string };
-
-const ACK_RE = /^@hwf-history:(claimed|unavailable|rejected)(?:\s+(\S+))?(?:\s+(.*))?$/;
-
-export function formatHistoryAck(ack: HistoryAck): string {
-  if (ack.state === "claimed") return `@hwf-history:claimed ${ack.id}`;
-  if (ack.state === "unavailable") {
-    return ack.id ? `@hwf-history:unavailable ${ack.id}` : "@hwf-history:unavailable";
-  }
-  return ack.id
-    ? `@hwf-history:rejected ${ack.id} ${ack.error}`
-    : `@hwf-history:rejected ${ack.error}`;
-}
-
-export function parseHistoryAck(line: string): HistoryAck | undefined {
-  const m = ACK_RE.exec(line.trim());
-  if (!m) return undefined;
-  const state = m[1] as HistoryAck["state"];
-  const second = m[2];
-  const rest = m[3];
-  if (state === "claimed") {
-    if (!second) return undefined;
-    return { state, id: second.toLowerCase() };
-  }
-  if (state === "unavailable") {
-    return { state, ...(second ? { id: second.toLowerCase() } : {}) };
-  }
-  if (second && rest) {
-    return { state: "rejected", id: second.toLowerCase(), error: rest };
-  }
-  return { state: "rejected", error: second ?? rest ?? "launch rejected" };
-}
 
 /**
  * Soft canonicalization for display and Current-scope lookups when a checkout may
@@ -238,7 +207,7 @@ async function retentionCleanup(env: NodeJS.ProcessEnv = process.env): Promise<v
   }
 }
 
-export type ClaimMeta = {
+type ClaimMeta = {
   id?: string;
   workflow: string;
   title?: string;
@@ -432,7 +401,8 @@ export class RunHistorySession {
   }
 }
 
-export async function listRunHistory(
+/** List projection for picker and workbench — surfaces consume `runs` as-is. */
+export async function listRuns(
   filter: RunListFilter = {},
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<
@@ -455,7 +425,7 @@ export async function listRunHistory(
   }
 }
 
-export async function getRunDetail(
+async function loadRunDetail(
   id: string,
   opts: { now?: number; env?: NodeJS.ProcessEnv } = {},
 ): Promise<RunDetail> {
@@ -480,6 +450,33 @@ export async function getRunDetail(
   }
 }
 
+export type PresentedRunDetail = {
+  detail: RunDetail;
+  blocks: RunDetailBlock[];
+};
+
+/** Attach presentation blocks to a detail value (disk load or optimistic). */
+export function presentDetail(detail: RunDetail): PresentedRunDetail {
+  return { detail, blocks: presentRunDetail(detail) };
+}
+
+/** Detail projection + presentation blocks — picker and workbench render `blocks` identically. */
+export async function runDetail(
+  id: string,
+  opts: { now?: number; env?: NodeJS.ProcessEnv } = {},
+): Promise<PresentedRunDetail> {
+  return presentDetail(await loadRunDetail(id, opts));
+}
+
 export function allocateRunId(): string {
   return randomUUID().toLowerCase();
 }
+
+export {
+  formatElapsed,
+  normalizeRunUuid,
+  optimisticRunningDetail,
+  statusLabel,
+  type RunDetailBlock,
+} from "./project";
+export { parseHistoryAck } from "./ack";
