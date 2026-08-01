@@ -33,3 +33,7 @@ None.
 - **Tests:** the suite is the behavioral oracle and stays green after every move. Tests that imported now-internal helpers re-point to internal-seam imports. Inline `RunnerDeps` fakes may consolidate.
 - **Gates:** `bun test ./test`, `CI=1 npm run verify`, `bun run docs:build`, `openspec validate --all --strict` after each move. Knip reachability holds because every entry file is on the `cli.ts` graph.
 - **Dependencies:** none added or removed.
+
+## Final decision
+
+Implemented as proposed. A later simplification program then consolidated production into about 14 TypeScript files plus web assets — approved extractions `update`, `runs-browser`, `inputs`, and `exchange`, plus a flat `src/` layout. That consolidation supersedes the "no file merges" constraint stated in Impact. See `design.md` Final decision.

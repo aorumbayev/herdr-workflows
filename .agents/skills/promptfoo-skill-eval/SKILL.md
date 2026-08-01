@@ -15,7 +15,7 @@ This skill belongs to the herdr-workflows repository. From any cwd inside it, de
 ## What makes this eval trustworthy
 
 **The oracle is the loader, not a rubric.** Every ```yaml fence the agent emits is loaded through
-`src/workflow/inputs-exchange.ts` with the fixture's own `.hwf/workflows/` seeded so `workflow:` children
+`src/workflow/inputs.ts` with the fixture's own `.hwf/workflows/` seeded so `workflow:` children
 resolve. A workflow either loads or it does not. Do not replace this with an LLM judge — the whole
 point is that this repository can answer the question objectively.
 
@@ -74,6 +74,7 @@ fix your own arithmetic.
 
 ```
 <scratchpad>/skill-eval/
+├── .promptfoo-skill-eval-owned     # ownership marker (required before reset)
 ├── promptfooconfig.yaml            # copy from promptfooconfig.example.yaml here
 ├── promptfooconfig.adversarial.yaml
 └── fixtures/
@@ -83,6 +84,19 @@ fix your own arithmetic.
 
 Build fixtures in a scratchpad, not in the repo. Only `SKILL.md` and `reference/` may differ
 between v1 and v2 — same model, same tasks, same permissions, or the comparison means nothing.
+
+Ownership marker (write once when seeding the scratchpad. Paths must be absolute):
+
+```bash
+skill_root="$root/.agents/skills/promptfoo-skill-eval"
+printf 'promptfoo-skill-eval\nskill_root=%s\n' "$skill_root" > .promptfoo-skill-eval-owned
+```
+
+`reset-fixtures.sh` cleans only under that owned eval root's `fixtures/v1` and `fixtures/v2`
+(generated workflow YAML except `child-verify.yaml`, plus `.hwf/tmp`). It refuses missing or
+mismatched markers, unknown trees, and symlink path components under the owned root. Dry-run
+guards with `--guard-check`. It does not kill processes and does not delete shared `/tmp`
+paths. Put agent draft files under `fixtures/<v>/.hwf/tmp/` so reset can remove them.
 
 ## Provider
 
@@ -122,6 +136,8 @@ the score, is the finding.
 
 ## Run it
 
+Supported maintainer invocation (eval root = the scratchpad directory that holds `fixtures/`):
+
 ```bash
 root=$(git rev-parse --show-toplevel)
 cd <scratchpad>/skill-eval
@@ -130,9 +146,13 @@ promptfoo eval -c promptfooconfig.yaml --no-cache -o iter.json --max-concurrency
 node "$root/.agents/skills/promptfoo-skill-eval/scripts/regrade.js" iter.json
 ```
 
+`reset-fixtures.sh` defaults to the current working directory as the eval root. Pass an absolute
+path as the first argument when the shell is elsewhere. Seed `.promptfoo-skill-eval-owned` before
+the first reset (see Layout).
+
 `--max-concurrency 1` matters whenever a skill under test writes to a fixed draft path: parallel
-sessions overwrite each other's draft and the failures look like model errors. `reset-fixtures.sh`
-kills stray `hwf web` servers, so never run it while an eval is in flight.
+sessions overwrite each other's draft and the failures look like model errors. Do not run reset
+while an eval is in flight — it deletes fixture workflow YAML under the owned tree.
 
 Add `--repeat 3` when a result sits near the noise floor.
 

@@ -3,18 +3,21 @@ import { allocateRunId, RunHistorySession, runDetail } from "../../src/history";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { formatRunRow, formatRunListEmpty, detailLines, loadRunsBrowser } from "../../src/picker";
 import type { RunListItem } from "../../src/history";
 import { runWorkbenchRoute } from "../../src/workbench";
 import {
   createRunsBrowser,
+  detailLines,
+  formatRunListEmpty,
+  formatRunRow,
   isDetailPollableStatus,
+  loadRunsBrowser,
   RUNS_LIST_VIEWPORT,
   runsSelectedIndex,
   scrollDetailLines,
   type RunsBrowser,
   type RunsBrowserDeps,
-} from "../../src/picker";
+} from "../../src/runs-browser";
 import { pickerEscapeExitCode, shouldDropStdinLeakSequence } from "../../src/picker";
 import { fakePickerChrome, type FakePickerChrome } from "../fakes/picker-chrome-fake";
 

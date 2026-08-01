@@ -183,6 +183,8 @@ The `picker` command MUST dynamically import the TUI module only when that comma
 ### Requirement: Detached self-launch argv compatibility
 Detached `hwf run` launches MUST keep argv shape `run <name> --launch-payload` with the launch payload on stdin, never on argv. Detached `hwf web` launches MUST keep argv shape `web <route>`. Compiled-binary and Bun script entry re-exec rules in the launch helper MUST stay unchanged. A detached run whose outcome the caller awaits MUST settle that outcome on every supported platform, including after the caller stops observing progress, and MUST NOT depend on an unreferenced child handle continuing to report exit or stream end. Detaching MUST still release the caller, so a launcher process MUST NOT stay alive for the remaining lifetime of its child.
 
+While a caller observes a detached `hwf run`, the parent MUST retain only progress lines needed by the picker, history acknowledgement lines, and the final non-empty diagnostic line (or a small bounded tail) used for the awaited failure detail. It MUST NOT retain the complete aggregate stdout or stderr of the child.
+
 #### Scenario: Detached run argv omits secrets
 - **WHEN** the picker launches a detached run with secret inputs
 - **THEN** the child argv contains `--launch-payload` and does not contain input values
@@ -194,6 +196,10 @@ Detached `hwf run` launches MUST keep argv shape `run <name> --launch-payload` w
 #### Scenario: Launcher exits after detach
 - **WHEN** the picker dismisses while a detached run is still executing
 - **THEN** the picker process exits without waiting for the child, and the run outcome still reaches the private per-run snapshot history
+
+#### Scenario: Observed detached failure keeps a bounded diagnostic
+- **WHEN** an observed detached `hwf run` exits nonzero with multi-line stderr
+- **THEN** the awaited failure detail is the final non-empty diagnostic line (or a small bounded tail), not the complete aggregate child output
 
 ### Requirement: Managed plugin update
 `hwf update` MUST check the latest published GitHub Release without considering drafts, validate its tag as a plugin semver, and compare it with the version embedded from `herdr-plugin.toml`. It MUST report success without reinstalling when the installed version is current or newer. For a newer release installed from a Herdr-managed GitHub checkout, it MUST change its working directory outside `HERDR_PLUGIN_ROOT` and synchronously invoke `herdr plugin install aorumbayev/herdr-workflows --ref <tag> --yes` with the validated release tag, forwarding output and failure status. It MUST refuse to overwrite a linked development checkout and direct the developer to `bun run install:dev`. It MUST explain that an unregistered or directly copied binary must first be installed through Herdr.

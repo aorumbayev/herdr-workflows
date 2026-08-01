@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { InputSpec, LoadedWorkflow, WorkflowListEntry } from "../../src/workflow/grammar";
 import { pickerSeams, runPickerSession, type PickerState } from "../../src/picker";
-import { createInputSession } from "../../src/workflow/inputs-exchange";
+import { createInputSession } from "../../src/workflow/inputs";
 import {
   beginConfirmedDelete,
   EMPTY_CATALOG_MESSAGE,
@@ -21,7 +21,6 @@ import {
   formatListFooter,
   formatPickerRowName,
   formatRule,
-  formatRunProgress,
   hasVisibleEntries,
   isCustomChoiceValue,
   LIST_HINT,
@@ -29,7 +28,6 @@ import {
   shouldRestoreCustomChoiceText,
   truncate,
 } from "../../src/picker";
-import { themeFromPalette } from "../../src/chrome";
 import { humanizeWorkflowName, workflowDisplayTitle } from "../../src/workflow/grammar";
 import { fakePickerChrome, type FakePickerChrome } from "../fakes/picker-chrome-fake";
 
@@ -277,19 +275,6 @@ describe("display titles", () => {
     expect(humanizeWorkflowName("chat-handoff")).toBe("Chat Handoff");
     expect(workflowDisplayTitle("chat-handoff")).toBe("Chat Handoff");
     expect(workflowDisplayTitle("chat-handoff", "Custom")).toBe("Custom");
-  });
-});
-
-describe("formatRunProgress", () => {
-  test("pending shows ellipsis; terminal appends status", () => {
-    expect(formatRunProgress("handoff", [])).toBe("handoff\n...");
-    expect(formatRunProgress("handoff", ["[1/2] shell"])).toBe("handoff\n[1/2] shell");
-    expect(formatRunProgress("handoff", ["[1/1] shell"], { ok: true, detail: "" })).toBe(
-      "handoff\n[1/1] shell\n\nDone.",
-    );
-    expect(formatRunProgress("handoff", ["[1/1] shell"], { ok: false, detail: "boom" })).toBe(
-      "handoff\n[1/1] shell\n\nFailed | boom",
-    );
   });
 });
 
@@ -606,7 +591,6 @@ function pickerState(): PickerState & { chrome: FakePickerChrome } {
     choiceOptions: [],
     customChoice: false,
     running: false,
-    progressLines: [],
     repoRoot: "/repo",
     config: { profiles: {}, transcripts: {} },
     ctx: { selection: "", cwd: "/repo" },
@@ -615,7 +599,6 @@ function pickerState(): PickerState & { chrome: FakePickerChrome } {
     },
     reloadEntries: async () => [],
     contentWidth: 80,
-    theme: themeFromPalette(null),
     chrome,
     savedWorkflowFilter: "",
   } as unknown as PickerState & { chrome: FakePickerChrome };

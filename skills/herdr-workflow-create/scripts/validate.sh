@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # Validate a workflow YAML through hwf's own loader.
 # usage: validate.sh <file.yaml> [workflow-name]
-# prints {"ok":true} / {"ok":false,"error":…}; exit 0 = valid, 1 = invalid, 2 = cannot check.
+# prints {"ok":true,"flags":[…]} / {"ok":false,"error":…,"flags":[…]}; exit 0/1/2.
 set -eu
 
 file=${1:?usage: validate.sh <file.yaml> [name]}

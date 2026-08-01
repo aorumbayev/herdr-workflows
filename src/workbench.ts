@@ -8,9 +8,9 @@ import {
   writeFileSync,
   type Stats,
 } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import {
   assertCredentialStoreSafe,
@@ -34,11 +34,12 @@ import {
 } from "./history";
 import {
   checkPayload,
+  exportWorkflowBundle,
   parseImportScope,
   preflightConflicts,
   previewBundle,
   runImport,
-} from "./workflow/inputs-exchange";
+} from "./workflow/exchange";
 import {
   analyzeYamlTree,
   dumpWorkflow,
@@ -48,10 +49,10 @@ import {
   parseWorkflowText,
   rawWorkflowSchema,
   sensitivityLabels,
+  withPinnedSchemaPointer,
   workflowDisplayTitle,
   workflowPath,
-} from "./workflow/inputs-exchange";
-import { exportWorkflowBundle, withPinnedSchemaPointer } from "./workflow/inputs-exchange";
+} from "./workflow/inputs";
 import { WORKFLOW_NAME_RE } from "./workflow/grammar";
 // @ts-expect-error Bun `with { type: "text" }` yields the file text, not the module namespace
 // oxlint-disable-next-line import/default -- Bun text import embeds source; module has named exports only
@@ -76,12 +77,12 @@ type Scope = "repo" | "global";
 function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json", ...headers },
+    headers: {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      ...headers,
+    },
   });
-}
-
-function noStoreJson(body: unknown, status = 200): Response {
-  return json(body, status, { "cache-control": "no-store" });
 }
 
 function errText(error: unknown): string {
@@ -102,7 +103,7 @@ function errCode(error: unknown): string {
 async function claimFile(file: string, text: string, taken: string): Promise<Response | undefined> {
   await mkdir(dirname(file), { recursive: true });
   try {
-    await writeFile(file, text, { flag: "wx" });
+    await writeFile(file, text, { flag: "wx", mode: 0o600 });
   } catch (error) {
     if (errCode(error) === "EEXIST") return json({ ok: false, error: taken }, 409);
     return json({ ok: false, error: errText(error) }, 500);
@@ -127,6 +128,193 @@ async function diskToken(file: string): Promise<string | undefined> {
     .text()
     .catch(() => undefined);
   return text === undefined ? undefined : contentToken(text);
+}
+
+/** Trusted ancestor that must not be escaped via intermediate symlinks. */
+function trustedWorkflowBase(scope: Scope, repoRoot: string): string {
+  return scope === "repo" ? resolve(repoRoot) : resolve(process.env.HOME ?? homedir());
+}
+
+function pathInsideRoot(file: string, root: string): boolean {
+  return file === root || file.startsWith(`${root}${sep}`);
+}
+
+async function existingFileMode(file: string): Promise<number> {
+  try {
+    const st = await lstat(file);
+    if (!st.isSymbolicLink() && st.isFile()) return st.mode & 0o777;
+  } catch {
+    /* new file */
+  }
+  return 0o600;
+}
+
+/**
+ * Refuse symlinked path components (including intermediate parents), symlinked
+ * workflow roots/files, and any path that resolves outside the trusted base.
+ */
+async function refuseUnsafeWorkflowPath(
+  file: string,
+  trustedBase: string,
+  label: string,
+): Promise<Response | undefined> {
+  const absBase = resolve(trustedBase);
+  const absFile = resolve(file);
+  const rel = relative(absBase, absFile);
+  if (!rel || rel.startsWith("..") || isAbsolute(rel)) {
+    return json({ ok: false, error: `refusing path outside workflow root for ${label}` }, 400);
+  }
+  let realBase: string;
+  try {
+    realBase = await realpath(absBase);
+  } catch {
+    realBase = absBase;
+  }
+  const segments = rel.split(sep).filter((s) => s.length > 0);
+  let cur = absBase;
+  for (let i = 0; i < segments.length; i++) {
+    cur = join(cur, segments[i]!);
+    let st;
+    try {
+      st = await lstat(cur);
+    } catch (error) {
+      if (errCode(error) !== "ENOENT") return json({ ok: false, error: errText(error) }, 500);
+      const realParent = await realpath(dirname(cur));
+      if (!pathInsideRoot(realParent, realBase)) {
+        return json({ ok: false, error: `refusing path outside workflow root for ${label}` }, 400);
+      }
+      // The first missing component proves every remaining descendant is also absent.
+      // The caller creates the directory chain, then runs this check again before writing.
+      return undefined;
+    }
+    if (st.isSymbolicLink()) {
+      if (i === segments.length - 1) {
+        return json({ ok: false, error: `refusing symlinked workflow '${label}'` }, 400);
+      }
+      if (segments[i] === "workflows") {
+        return json({ ok: false, error: `refusing symlinked workflow root for ${label}` }, 400);
+      }
+      return json({ ok: false, error: `refusing symlinked path component for ${label}` }, 400);
+    }
+  }
+  const realFile = await realpath(absFile);
+  if (!pathInsideRoot(realFile, realBase)) {
+    return json({ ok: false, error: `refusing path outside workflow root for ${label}` }, 400);
+  }
+}
+
+/**
+ * In-place compare-and-swap: exclusive adjacent claim, baseline recheck under the
+ * claim, same-directory temp write, atomic rename. Concurrent same-baseline saves
+ * cannot both succeed. Claim ownership is token-scoped so a stale owner cannot
+ * clear a successor's claim.
+ */
+async function replaceInPlace(
+  file: string,
+  text: string,
+  base: string | undefined,
+  name: string,
+  scope: Scope,
+  trustedBase: string,
+): Promise<Response> {
+  const claim = `${file}.save`;
+  const hold = acquireEndpointLockSync(claim);
+  if (!hold) {
+    return json({ ok: false, error: `'${name}' is being saved in ${scope}` }, 409);
+  }
+  const tmp = join(dirname(file), `.${name}.${randomUUID()}.tmp`);
+  let published = false;
+  try {
+    const unsafe = await refuseUnsafeWorkflowPath(file, trustedBase, name);
+    if (unsafe) return unsafe;
+    const onDisk = await diskToken(file);
+    if (onDisk !== base) {
+      return json(
+        {
+          ok: false,
+          stale: true,
+          error:
+            onDisk === undefined
+              ? `'${name}' no longer exists in ${scope}; it changed since this buffer was loaded`
+              : `'${name}' changed in ${scope} since this buffer was loaded — reload to see the current file before saving`,
+        },
+        409,
+      );
+    }
+    const mode = await existingFileMode(file);
+    try {
+      await writeFile(tmp, text, { mode });
+      const beforePublish = await refuseUnsafeWorkflowPath(file, trustedBase, name);
+      if (beforePublish) {
+        await rm(tmp, { force: true }).catch(() => undefined);
+        return beforePublish;
+      }
+      await rename(tmp, file);
+      published = true;
+    } catch (error) {
+      let stillThere = false;
+      try {
+        await rm(tmp, { force: true });
+      } catch {
+        stillThere = true;
+      }
+      if (!stillThere) {
+        try {
+          await lstat(tmp);
+          stillThere = true;
+        } catch {
+          /* removed */
+        }
+      }
+      if (stillThere) {
+        return json(
+          {
+            ok: false,
+            orphan: shortPath(tmp),
+            error: `save failed — ${errText(error)}; temporary file left at ${shortPath(tmp)}`,
+          },
+          500,
+        );
+      }
+      return json({ ok: false, error: errText(error) }, 500);
+    }
+    try {
+      releaseEndpointLockSync(hold);
+    } catch (error) {
+      return json(
+        {
+          ok: false,
+          orphan: shortPath(claim),
+          error: published
+            ? `saved '${name}' but could not release save claim at ${shortPath(claim)} — ${errText(error)}`
+            : errText(error),
+        },
+        500,
+      );
+    }
+    try {
+      statSync(`${claim}.${hold.token}`);
+      return json(
+        {
+          ok: false,
+          orphan: shortPath(claim),
+          error: `saved '${name}' but save claim at ${shortPath(claim)} still blocks later saves`,
+        },
+        500,
+      );
+    } catch {
+      /* owned marker gone — claim is dangling and the next saver clears it */
+    }
+    return json({ ok: true, base: contentToken(text) });
+  } finally {
+    if (!published) {
+      try {
+        releaseEndpointLockSync(hold);
+      } catch {
+        /* best-effort on the failure path */
+      }
+    }
+  }
 }
 
 /** Home-relative path for display (`~/…`). */
@@ -215,19 +403,28 @@ function handleFormat(body: Record<string, unknown>): Response {
   }
 }
 
+async function sensitivityFlagsForText(
+  name: string,
+  text: string,
+  repoRoot: string,
+): Promise<string[]> {
+  if (!text) return [];
+  try {
+    return sensitivityLabels(await analyzeYamlTree(`${name}.yaml`, text, name, repoRoot));
+  } catch {
+    return [];
+  }
+}
+
 async function handleValidate(repoRoot: string, body: Record<string, unknown>): Promise<Response> {
   const name = String(body.name ?? "buffer");
+  const text = String(body.text ?? "");
+  const flags = await sensitivityFlagsForText(name, text, repoRoot);
   try {
-    await parseWorkflowText(
-      name,
-      String(body.text ?? ""),
-      await loadConfig(repoRoot),
-      repoRoot,
-      `${name}.yaml`,
-    );
-    return json({ ok: true });
+    await parseWorkflowText(name, text, await loadConfig(repoRoot), repoRoot, `${name}.yaml`);
+    return json({ ok: true, flags });
   } catch (error) {
-    return json({ ok: false, error: errText(error) }, 400);
+    return json({ ok: false, error: errText(error), flags }, 400);
   }
 }
 
@@ -281,7 +478,7 @@ async function handleRuns(repoRoot: string, url: URL): Promise<Response> {
     ...(status !== undefined ? { status } : {}),
   });
   if (!listed.ok) {
-    return noStoreJson({ ok: false, unavailable: true, runs: [], locations: [] }, 503);
+    return json({ ok: false, unavailable: true, runs: [], locations: [] }, 503);
   }
   const locations = [
     { id: "current", label: "Current", root: repoRoot },
@@ -290,21 +487,21 @@ async function handleRuns(repoRoot: string, url: URL): Promise<Response> {
       .filter((root) => root !== repoRoot)
       .map((root) => ({ id: root, label: root, root })),
   ];
-  return noStoreJson({ ok: true, runs: listed.runs, locations, checkout_root: repoRoot });
+  return json({ ok: true, runs: listed.runs, locations, checkout_root: repoRoot });
 }
 
 async function handleRunDetail(repoRoot: string, url: URL): Promise<Response> {
   const id = url.searchParams.get("id") ?? "";
   const { detail, blocks } = await runDetail(id);
   if (detail.kind === "invalid") {
-    return noStoreJson({ ok: false, detail, blocks }, 400);
+    return json({ ok: false, detail, blocks }, 400);
   }
   if (detail.kind === "unavailable") {
-    return noStoreJson({ ok: false, detail, blocks }, 503);
+    return json({ ok: false, detail, blocks }, 503);
   }
   if (detail.kind !== "snapshot") {
     const status = detail.kind === "expired" ? 410 : 404;
-    return noStoreJson({ ok: false, detail, blocks }, status);
+    return json({ ok: false, detail, blocks }, status);
   }
   const open_workflow = await resolveOpenWorkflow(
     repoRoot,
@@ -313,7 +510,7 @@ async function handleRunDetail(repoRoot: string, url: URL): Promise<Response> {
     detail.source,
   );
   const enriched = { ...detail, ...(open_workflow ? { open_workflow } : {}) };
-  return noStoreJson({
+  return json({
     ok: true,
     detail: enriched,
     blocks,
@@ -367,9 +564,9 @@ export async function dropSource(
  * Persist a workflow. `previous` is the path the editor loaded this buffer from: the same
  * path means an in-place edit, a different path — or no previous at all — means the destination
  * is being claimed, so it must be free. An in-place edit may only replace the content the buffer
- * was derived from, identified by `base`. A move claims the destination and drops the source in
- * one request; a source that will not go away undoes the claim, so the call either moves the
- * workflow or changes nothing.
+ * was derived from, identified by `base`, under an exclusive adjacent claim with atomic rename.
+ * A move claims the destination and drops the source in one request; a source that will not go
+ * away undoes the claim, so the call either moves the workflow or changes nothing.
  */
 async function writeWorkflow(
   repoRoot: string,
@@ -387,26 +584,27 @@ async function writeWorkflow(
     return json({ ok: false, error: errText(error) }, 400);
   }
   const file = workflowPath(scope, repoRoot, name);
+  const trustedBase = trustedWorkflowBase(scope, repoRoot);
+  const unsafe = await refuseUnsafeWorkflowPath(file, trustedBase, name);
+  if (unsafe) return unsafe;
   const prev = previous ? workflowPath(previous.scope, repoRoot, previous.name) : undefined;
-  if (prev === file) {
-    const onDisk = await diskToken(file);
-    if (onDisk !== base) {
-      return json(
-        {
-          ok: false,
-          stale: true,
-          error:
-            onDisk === undefined
-              ? `'${name}' no longer exists in ${scope}; it changed since this buffer was loaded`
-              : `'${name}' changed in ${scope} since this buffer was loaded — reload to see the current file before saving`,
-        },
-        409,
-      );
-    }
-    await mkdir(dirname(file), { recursive: true });
-    await Bun.write(file, normalized);
-    return json({ ok: true, base: contentToken(normalized) });
+  if (previous && prev && prev !== file) {
+    const prevUnsafe = await refuseUnsafeWorkflowPath(
+      prev,
+      trustedWorkflowBase(previous.scope, repoRoot),
+      previous.name,
+    );
+    if (prevUnsafe) return prevUnsafe;
   }
+  if (prev === file) {
+    await mkdir(dirname(file), { recursive: true });
+    const underClaim = await refuseUnsafeWorkflowPath(file, trustedBase, name);
+    if (underClaim) return underClaim;
+    return replaceInPlace(file, normalized, base, name, scope, trustedBase);
+  }
+  await mkdir(dirname(file), { recursive: true });
+  const beforeClaim = await refuseUnsafeWorkflowPath(file, trustedBase, name);
+  if (beforeClaim) return beforeClaim;
   const claimed = await claimFile(file, normalized, `'${name}' already exists in ${scope}`);
   if (claimed) return claimed;
   if (!previous) return json({ ok: true, base: contentToken(normalized) });
@@ -436,14 +634,7 @@ async function handleWorkflow(
         error = errText(e);
       }
     }
-    let flags: string[] = [];
-    if (text) {
-      try {
-        flags = sensitivityLabels(await analyzeYamlTree(`${name}.yaml`, text, name, repoRoot));
-      } catch {
-        flags = [];
-      }
-    }
+    const flags = await sensitivityFlagsForText(name, text, repoRoot);
     return json({ text, valid, error, flags, base: text ? contentToken(text) : undefined });
   }
   if (req.method === "PUT") {

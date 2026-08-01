@@ -2006,38 +2006,6 @@
 
       const VERBS = ["run", "agent", "herdr", "workflow"];
 
-      // Mirrors the Zod schema in src/workflow/parse.ts.
-      const TOP_KEYS = [
-        "version",
-        "title",
-        "description",
-        "hidden",
-        "inputs",
-        "returns",
-        "on_failure",
-        "steps",
-      ];
-      const STEP_KEYS = [
-        "agent",
-        "run",
-        "herdr",
-        "workflow",
-        "id",
-        "using",
-        "target",
-        "shell",
-        "params",
-        "inputs",
-        "cwd",
-        "env",
-        "pane",
-        "background",
-        "ready_when",
-        "timeout",
-        "retry",
-        "when",
-        "continue_on_error",
-      ];
       const CONTEXT_HINTS = [
         "context.workspace",
         "context.tab",
@@ -2104,6 +2072,15 @@
         const steps = state.schema && state.schema.properties && state.schema.properties.steps;
         const items = steps && steps.items;
         return (items && items.properties) || {};
+      }
+
+      function topSchemaKeys() {
+        const props = state.schema && state.schema.properties;
+        return props ? Object.keys(props) : [];
+      }
+
+      function stepSchemaKeys() {
+        return Object.keys(stepSchemaProps());
       }
 
       function methodTable() {
@@ -3434,7 +3411,7 @@
           if (!key) return null;
           const prefix = key[3] || "";
           if (!prefix) return null;
-          const pool = key[1].length === 0 && !key[2] ? TOP_KEYS : STEP_KEYS;
+          const pool = key[1].length === 0 && !key[2] ? topSchemaKeys() : stepSchemaKeys();
           return { start: p - prefix.length, prefix, pool, suffix: ": " };
         }
 
@@ -3763,29 +3740,20 @@
 
         canvas.onHistoryChange(updateHistoryBtns);
 
+        let validateSeq = 0;
         function runValidate() {
           clearTimeout(validateTimer);
           validateTimer = setTimeout(async () => {
+            const seq = ++validateSeq;
+            const submitted = ta.value;
             const r = await api("/api/validate", {
               method: "POST",
-              body: JSON.stringify({ name: nameIn.value.trim() || "buffer", text: ta.value }),
+              body: JSON.stringify({ name: nameIn.value.trim() || "buffer", text: submitted }),
             });
             if (!ta.isConnected) return; // editor was replaced while the request was in flight
+            if (seq !== validateSeq || ta.value !== submitted) return; // stale response
             showProblem(r.data.ok, r.data.ok ? "" : r.data.error);
-            const t = ta.value;
-            const next = [];
-            if (/^\s*-\s*run\s*:/m.test(t) || /\n\s*-\s*run\s*:/.test(t)) next.push("commands");
-            if (/context\.transcript(?:_file)?/.test(t)) next.push("transcript");
-            for (const m of t.matchAll(/^\s*herdr:\s*(\S+)/gm)) {
-              const method = m[1];
-              if (
-                /^(pane\.close|tab\.close|workspace\.close|agent\.send_keys|pane\.send_keys|pane\.send_text|pane\.send_input|worktree\.create|layout\.apply)$/.test(
-                  method,
-                )
-              )
-                next.push("herdr:" + method);
-            }
-            paintFlags([...new Set(next)]);
+            paintFlags(r.data.flags || []);
           }, 350);
         }
 

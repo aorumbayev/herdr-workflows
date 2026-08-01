@@ -20,7 +20,13 @@ import {
   type WorkflowsConfig,
   type AgentProfile,
 } from "./context";
-import { completeWorkflowInputs, evaluateWhen } from "./workflow/inputs-exchange";
+import {
+  buildTemplateNamespace,
+  completeWorkflowInputs,
+  evaluateWhen,
+  loadWorkflow,
+  workflowTemplateRefs,
+} from "./workflow/inputs";
 import { createRunRecorder, type RunRecorder, type RunStepOutcomeKind } from "./history";
 import {
   HerdrError,
@@ -32,11 +38,6 @@ import {
   reportToken,
   tabClose,
 } from "./host";
-import {
-  loadWorkflow,
-  buildTemplateNamespace,
-  workflowTemplateRefs,
-} from "./workflow/inputs-exchange";
 import {
   substituteParams,
   renderScalar,
@@ -65,7 +66,7 @@ type StepFailure = {
 };
 
 type StepOutcome =
-  | { ok: true; result?: unknown; skipped?: boolean; launched?: boolean; blocked?: boolean }
+  | { ok: true; result?: unknown; launched?: boolean }
   | {
       ok: false;
       error: string;
@@ -73,7 +74,6 @@ type StepOutcome =
       coordinationLost?: boolean;
       hardFailure?: boolean;
       failure?: StepFailure;
-      blocked?: boolean;
     };
 
 export type RunnerDeps = {
@@ -102,9 +102,6 @@ type StepRunOpts = {
   deps: RunnerDeps;
   runId: string;
   workflowPath: string[];
-  isEntry: boolean;
-  /** Ordinal of the invoking workflow: step — persisted on nested history records. */
-  parentOrdinal?: number;
   managedResponseFiles: string[];
   recorder: RunRecorder;
   onProgress?: (step: number, total: number, label: string, outcome?: string) => void;
@@ -446,11 +443,7 @@ async function readStreamAgainstBudget(
   return Buffer.concat(chunks).toString("utf8");
 }
 
-export function defaultShell(): ShellName {
-  return "sh";
-}
-
-export function shellArgv(command: string, shell: ShellName = defaultShell()): string[] {
+export function shellArgv(command: string, shell: ShellName = "sh"): string[] {
   switch (shell) {
     case "sh":
       return ["sh", "-c", command];
@@ -904,9 +897,7 @@ async function missingManagedError(path: string): Promise<string> {
   return `managed response file is empty: ${path}`;
 }
 
-type TurnWait =
-  | { settled: true; blocked: boolean }
-  | { settled: false; error: string; blocked: boolean };
+type TurnWait = { settled: true } | { settled: false; error: string };
 
 async function awaitManagedTurn(
   c: StepCtx,
@@ -918,13 +909,12 @@ async function awaitManagedTurn(
   const deps = c.opts.deps;
   const deadline = deps.now() + timeoutMs;
   let notifiedBlocked = false;
-  let sawBlocked = false;
   let sawActive = false;
   let settledEmptyPolls = 0;
   for (;;) {
     const status = await deps.agentStatus(target);
     const hasText = await fileHasText(path);
-    if (SETTLED.has(status) && hasText) return { settled: true, blocked: sawBlocked };
+    if (SETTLED.has(status) && hasText) return { settled: true };
     if (!SETTLED.has(status)) sawActive = true;
 
     // Skip pre-work idle: agent.start leaves the agent idle until the prompt is taken.
@@ -933,35 +923,27 @@ async function awaitManagedTurn(
     if (emptySettled) {
       settledEmptyPolls += 1;
       if (settledEmptyPolls > SETTLED_EMPTY_GRACE_POLLS) {
-        return {
-          settled: false,
-          error: await missingManagedError(path),
-          blocked: sawBlocked,
-        };
+        return { settled: false, error: await missingManagedError(path) };
       }
     } else {
       settledEmptyPolls = 0;
     }
 
     if (status !== "blocked") notifiedBlocked = false;
-    else {
-      sawBlocked = true;
-      if (!notifiedBlocked) {
-        notifiedBlocked = true;
-        await deps
-          .notificationShow(
-            `herdr-workflows: ${c.opts.name} agent blocked`,
-            `${target} is waiting for input at step ${c.stepIndex}`,
-          )
-          .catch(() => undefined);
-      }
+    else if (!notifiedBlocked) {
+      notifiedBlocked = true;
+      await deps
+        .notificationShow(
+          `herdr-workflows: ${c.opts.name} agent blocked`,
+          `${target} is waiting for input at step ${c.stepIndex}`,
+        )
+        .catch(() => undefined);
     }
 
     if (deps.now() >= deadline) {
       return {
         settled: false,
         error: `agent turn on '${target}' did not settle with a managed response within ${timeoutMs / 1000}s (last status ${status})`,
-        blocked: sawBlocked,
       };
     }
     await deps.sleep(POLL_MS);
@@ -1002,12 +984,7 @@ async function managedResult(
 ): Promise<StepOutcome> {
   const wait = await awaitManagedTurn(c, target, path, timeoutMs, mode);
   if (!wait.settled) {
-    return {
-      ok: false,
-      error: wait.error,
-      details,
-      ...(wait.blocked ? { blocked: true } : {}),
-    };
+    return { ok: false, error: wait.error, details };
   }
   try {
     const response = await readManagedResponse(path);
@@ -1018,20 +995,11 @@ async function managedResult(
         : typeof agent.pane_id === "string"
           ? agent.pane_id
           : "";
-    return {
-      ok: true,
-      result: { response, agent, pane_id: pane },
-      ...(wait.blocked ? { blocked: true } : {}),
-    };
+    return { ok: true, result: { response, agent, pane_id: pane } };
   } catch (error) {
     const message =
       error instanceof HerdrError ? error.message : `managed response: ${String(error)}`;
-    return {
-      ok: false,
-      error: message,
-      details,
-      ...(wait.blocked ? { blocked: true } : {}),
-    };
+    return { ok: false, error: message, details };
   }
 }
 
@@ -1285,9 +1253,7 @@ async function runChild(c: StepCtx, action: WorkflowActionSpec): Promise<StepOut
     {
       ...c.opts,
       name: child.name,
-      isEntry: false,
       workflowPath: childPath,
-      parentOrdinal: c.stepIndex,
       recorder: c.opts.recorder.child({
         name: child.name,
         workflowPath: childPath,
@@ -1483,33 +1449,33 @@ export function parseLaunchPayload(text: string): LaunchPayload {
   return result.data;
 }
 
-function decodeLines(
+/** Incomplete-line diagnostic tail — progress/history lines still require a newline. */
+const DECODE_LINE_TAIL = 64 * 1024;
+
+/** Stream lines without retaining the aggregate body. */
+async function decodeLines(
   stream: ReadableStream<Uint8Array> | null,
   onLine: (line: string) => void,
-): Promise<string> {
-  if (!stream) return Promise.resolve("");
-  return (async () => {
-    const reader = stream.getReader();
-    const decoder = new TextDecoder();
-    let buf = "";
-    let all = "";
+): Promise<void> {
+  if (!stream) return;
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
     for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const chunk = decoder.decode(value, { stream: true });
-      all += chunk;
-      buf += chunk;
-      for (;;) {
-        const nl = buf.indexOf("\n");
-        if (nl === -1) break;
-        onLine(buf.slice(0, nl));
-        buf = buf.slice(nl + 1);
-      }
+      const nl = buf.indexOf("\n");
+      if (nl === -1) break;
+      onLine(buf.slice(0, nl));
+      buf = buf.slice(nl + 1);
     }
-    buf += decoder.decode();
-    if (buf) onLine(buf);
-    return all;
-  })();
+    if (buf.length > DECODE_LINE_TAIL) buf = buf.slice(-DECODE_LINE_TAIL);
+  }
+  buf += decoder.decode();
+  if (buf.length > DECODE_LINE_TAIL) buf = buf.slice(-DECODE_LINE_TAIL);
+  if (buf) onLine(buf);
 }
 
 /** Spawn `hwf run` in its own process group so the picker popup can exit freely. */
@@ -1551,7 +1517,9 @@ export function launchDetachedRun(req: LaunchRunRequest): DetachedRunHandle {
 
   void (async () => {
     let lastProgress = "";
-    const onLine = (line: string) => {
+    let lastStdoutDiag = "";
+    let lastStderrDiag = "";
+    const onStdoutLine = (line: string) => {
       const trimmed = line.trimEnd();
       if (!trimmed) return;
       if (trimmed.startsWith("@hwf-history:")) {
@@ -1561,11 +1529,17 @@ export function launchDetachedRun(req: LaunchRunRequest): DetachedRunHandle {
       if (/^\[\d+\/\d+\]/.test(trimmed)) {
         lastProgress = trimmed;
         if (!detached) req.onProgressLine(trimmed);
+        return;
       }
+      lastStdoutDiag = trimmed;
     };
-    const [stdoutText, stderrText, code] = await Promise.all([
-      decodeLines(proc.stdout, onLine),
-      decodeLines(proc.stderr, () => undefined),
+    const onStderrLine = (line: string) => {
+      const trimmed = line.trimEnd();
+      if (trimmed) lastStderrDiag = trimmed;
+    };
+    const [, , code] = await Promise.all([
+      decodeLines(proc.stdout, onStdoutLine),
+      decodeLines(proc.stderr, onStderrLine),
       proc.exited,
     ]);
     if (detached) return;
@@ -1574,11 +1548,7 @@ export function launchDetachedRun(req: LaunchRunRequest): DetachedRunHandle {
       settle = undefined;
       return;
     }
-    const detail =
-      stderrText.trim().split("\n").at(-1)?.trim() ||
-      stdoutText.trim().split("\n").at(-1)?.trim() ||
-      lastProgress ||
-      `run exited ${code}`;
+    const detail = lastStderrDiag || lastStdoutDiag || lastProgress || `run exited ${code}`;
     settle?.({ ok: false, detail });
     settle = undefined;
   })();
@@ -1684,9 +1654,13 @@ async function fail(
   detail: string,
 ): Promise<string> {
   const text = `step ${step}: ${detail}`;
-  const body = text.length > 500 ? `…${text.slice(-500)}` : text;
-  await deps.notificationShow(`herdr-workflows: ${workflow} failed`, body).catch(() => undefined);
-  return body;
+  await deps
+    .notificationShow(
+      `herdr-workflows: ${workflow} failed`,
+      `Step ${step} failed; inspect the terminal or run history for details.`,
+    )
+    .catch(() => undefined);
+  return text;
 }
 
 function stepLabel(step: WorkflowStep): string {
@@ -1822,11 +1796,9 @@ async function runSteps(
       return hardStepFailure(opts, step, n, total, label, outcome, tolerated, false);
     }
     bindResult(step, values, outcome);
-    const progress =
-      outcome.skipped === true ? "skip" : outcome.launched === true ? "launch" : "ok";
+    const progress = outcome.launched === true ? "launch" : "ok";
     opts.onProgress?.(n, total, label, progress);
-    const kind: RunStepOutcomeKind =
-      outcome.skipped === true ? "skipped" : outcome.launched === true ? "launched" : "succeeded";
+    const kind: RunStepOutcomeKind = outcome.launched === true ? "launched" : "succeeded";
     await opts.recorder.stepFinished(step, n, total, label, kind, outcome);
   }
   if (tolerated.length) return { ok: false, error: tolerated.join("; "), failures: tolerated };
@@ -1849,9 +1821,7 @@ async function runRecovery(
   const recoveryPath = [...opts.workflowPath, `${opts.name}:on_failure`];
   const recoveryOpts: StepRunOpts = {
     ...opts,
-    isEntry: false,
     workflowPath: recoveryPath,
-    parentOrdinal: failure.step_number,
     recorder: opts.recorder.child({
       name: opts.name,
       workflowPath: recoveryPath,
@@ -2068,7 +2038,6 @@ export async function runWorkflow(opts: RunOptions): Promise<StepsResult> {
     deps,
     runId,
     workflowPath: [workflow.name],
-    isEntry: true,
     managedResponseFiles,
     runSteps,
     recorder,

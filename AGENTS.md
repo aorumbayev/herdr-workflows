@@ -1,6 +1,6 @@
 # herdr-workflows
 
-herdr ≥ 0.7.5 plugin. It sequences short linear YAML workflows (`agent` / `run` / `herdr` / `workflow`). herdr owns panes and UI. This repo only loads and runs steps. Runtime is Bun + TypeScript ESM.
+herdr ≥ 0.7.5 plugin. It sequences short linear YAML workflows (`agent` / `run` / `herdr` / `workflow`). herdr owns host panes and lifecycle. This repository owns the picker and browser workbench, and loads and runs workflow steps. Runtime is Bun + TypeScript ESM.
 
 Workflow format is `version: v1alpha1`. The package stays semver `0.x`. A later incompatible alpha increments `v1alphaN`. Workflow YAML never declares a herdr version. The plugin manifest and CLI own minimum version and protocol enforcement.
 
@@ -33,31 +33,34 @@ bun run install:dev                      # compile + herdr plugin link + keybind
 
 `.ts` files under `src/` (+ `src/web/page.html`, `src/web/field-model.ts`). Test the module whose interface you changed, in that module's folder under `test/`; real compiled-binary coverage lives in `test/e2e/`.
 
-| Path                                         | Role                                                                                                                                                                                  |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/cli.ts`                                 | entry, args, subcommands, terminal I/O, and `hwf init` / `update` / `setup`                                                                                                           |
-| `src/host.ts`                                | herdr socket RPC, CLI wrappers, protocol check, pane placement, method param validation, explicit-target focus policy                                                                 |
-| `src/herdr-methods.generated.ts`             | generated — do not hand-edit                                                                                                                                                          |
-| `src/context.ts`                             | profile/transcript config layers, repo root, invocation context, `loadContext`, display sanitization, caps, transcript extraction, private credential ACL, version, latest-wins token |
-| `src/history.ts`                             | atomic run snapshots, list/detail, project claims, recorder, history ack codec, retention                                                                                             |
-| `src/workflow/grammar.ts`                    | types, paths, template engine, conditions (`when:`), parse (YAML → WorkflowStep[]), trust                                                                                             |
-| `src/workflow/validate.ts`                   | cross-field workflow validation                                                                                                                                                       |
-| `src/workflow/inputs-exchange.ts`            | load, inputs, share, import, dump                                                                                                                                                     |
-| `src/engine.ts`                              | workflow runner, launch identity/payload/retire-on-code-change, step contracts/outcomes, agent/shell/pane/include steps                                                               |
-| `src/picker.ts`                              | picker TUI, rows, ctrl+k palette, runs browser, run-history presentation, update indicator                                                                                            |
-| `src/chrome.ts`                              | sole `@opentui/core` importer (picker chrome adapter)                                                                                                                                 |
-| `src/workbench.ts`                           | browser workbench server, adopt/lock endpoint                                                                                                                                         |
-| `src/web/field-model.ts`                     | canvas field metadata (browser text asset)                                                                                                                                            |
-| `src/web/page.html`                          | workbench UI served by the web server                                                                                                                                                 |
-| `src/svg-text.d.ts`                          | ambient `*.svg` text import used by `src/workbench.ts`                                                                                                                                |
-| `test/setup.ts`                              | Bun preload quarantine — denies real `herdr`/`hwf`, isolates HOME/config/socket env                                                                                                   |
-| `herdr-plugin.toml`                          | plugin manifest (build + `prefix+k` → picker)                                                                                                                                         |
-| `knip.json`                                  | unused-code (package.bin → `src/cli.ts`)                                                                                                                                              |
-| `openspec/`                                  | tracked specs and changes (OpenSpec CLI root)                                                                                                                                         |
-| `.agents/skills/herdr-workflows-smoke-test/` | tracked second-Herdr smoke sandbox skill                                                                                                                                              |
-| `.agents/skills/promptfoo-skill-eval/`       | tracked eval for user-facing skills — the loader is the oracle, not a judge                                                                                                           |
-| `.agents/skills/codebase-sanity-check/`      | tracked whole-repository review — gates first, one agent per criteria group, additions face three whys                                                                                |
-| `.agents/references/AGENTS.md`               | tracked Herdr checkout instructions (clone contents are local-only)                                                                                                                   |
+| Path                                         | Role                                                                                                                                                                                                |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/cli.ts`                                 | entry, args, subcommands, terminal I/O, and `hwf init` / `setup`                                                                                                                                    |
+| `src/update.ts`                              | GitHub release check and managed-plugin `hwf update`                                                                                                                                                |
+| `src/picker.ts`                              | picker TUI, workflow rows, ctrl+k palette, update indicator                                                                                                                                         |
+| `src/runs-browser.ts`                        | runs browser TUI, list/detail, run-history presentation                                                                                                                                             |
+| `src/chrome.ts`                              | sole `@opentui/core` importer (picker and runs-browser chrome adapter)                                                                                                                              |
+| `src/workbench.ts`                           | browser workbench server, adopt/lock endpoint                                                                                                                                                       |
+| `src/web/field-model.ts`                     | canvas field metadata (browser text asset)                                                                                                                                                          |
+| `src/web/page.html`                          | workbench UI served by the web server                                                                                                                                                               |
+| `src/workflow/grammar.ts`                    | types, paths, template engine, conditions (`when:`), parse (YAML → WorkflowStep[]), trust                                                                                                           |
+| `src/workflow/validate.ts`                   | cross-field workflow validation                                                                                                                                                                     |
+| `src/workflow/inputs.ts`                     | load, list, input session, dump                                                                                                                                                                     |
+| `src/workflow/exchange.ts`                   | share, import, bundle encode/decode                                                                                                                                                                 |
+| `src/engine.ts`                              | workflow runner, launch identity/payload/retire-on-code-change, step contracts/outcomes, agent/shell/pane/include steps                                                                             |
+| `src/history.ts`                             | atomic run snapshots, list/detail, project claims, recorder, history ack codec, retention                                                                                                           |
+| `src/host.ts`                                | herdr socket RPC, CLI wrappers, protocol check, pane placement, method param validation, explicit-target focus policy                                                                               |
+| `src/herdr-methods.generated.ts`             | generated — do not hand-edit                                                                                                                                                                        |
+| `src/context.ts`                             | profile/transcript config layers, repo root, invocation context, `loadContext`, display sanitization, caps, transcript extraction, private credential ACL, version, latest-wins token, browser open |
+| `src/svg-text.d.ts`                          | ambient `*.svg` text import used by `src/workbench.ts`                                                                                                                                              |
+| `test/setup.ts`                              | Bun preload quarantine — denies real `herdr`/`hwf`, isolates HOME/config/socket env                                                                                                                 |
+| `herdr-plugin.toml`                          | plugin manifest (build + `prefix+k` → picker)                                                                                                                                                       |
+| `knip.json`                                  | unused-code (package.bin → `src/cli.ts`)                                                                                                                                                            |
+| `openspec/`                                  | tracked specs and changes (OpenSpec CLI root)                                                                                                                                                       |
+| `.agents/skills/herdr-workflows-smoke-test/` | tracked second-Herdr smoke sandbox skill                                                                                                                                                            |
+| `.agents/skills/promptfoo-skill-eval/`       | tracked eval for user-facing skills — the loader is the oracle, not a judge                                                                                                                         |
+| `.agents/skills/codebase-sanity-check/`      | tracked whole-repository review — gates first, one agent per criteria group, additions face three whys                                                                                              |
+| `.agents/references/AGENTS.md`               | tracked Herdr checkout instructions (clone contents are local-only)                                                                                                                                 |
 
 Gitignored local-only: `.agents/references/*` except `AGENTS.md`, `.plans/`, `.opencode/`, `.cursor/`. Do not commit them.
 
@@ -65,7 +68,7 @@ Gitignored local-only: `.agents/references/*` except `AGENTS.md`, `.plans/`, `.o
 
 Agents miss these. The loader or verifyx will fail, or the product regresses:
 
-- **Module layers.** Surfaces (`cli`, `picker`, `workbench`) → domain (`workflows`, `engine`, `history`) → platform (`host`, `context`). Imports only point down, except allowlisted dynamic `context` → `engine` (transcript reads) and `workflows` → `engine` (dynamic-choice capture). Sanctioned sideways edges include `engine` → `history` and `engine` → `workflows`. Cross-module imports go through each module's entry files; `verify:layers` enforces this.
+- **Module layers.** Surfaces (`cli`, `picker`, `runs-browser`, `workbench`) → domain (`workflows`, `engine`, `history`, `update`) → platform (`host`, `context`). Adapters: `chrome` (OpenTUI), `web/` (browser page). Imports only point down, except allowlisted dynamic `context` → `engine` (transcript reads) and `workflows` → `engine` (dynamic-choice capture). Sanctioned sideways edges include `engine` → `history`, `engine` → `workflows`, `picker` → `chrome` / `runs-browser` / `workbench`, `runs-browser` → `chrome` / `workbench`, and `host` ↔ `context`. Cross-module imports go through each module's entry files; `verify:layers` enforces this.
 - **No external workflow engine.** Linear herdr-native YAML only. Do not add Dagu, Taskfile/go-task, Cockpit, or similar sidecars.
 - **Templates are `{{inputs.*}}` / `{{steps.*}}` / `{{context.*}}` only.** Any other `{{…}}` is a load error. No flat `{name}`, no `out:` bindings, no `{session}` / `{session_file}` (use `{{context.transcript}}` / `{{context.transcript_file}}`). `{{prompt}}` is config-only and is not a workflow template.
 - **No templates in string `run:` command text** — load error. Use list-form `run:` (argv, templates allowed per element) or explicit `env:` / `HWF_<name>` values. `herdr:` `params:` take templates recursively. A whole-value template keeps its type. Embedded ones render text.
@@ -89,7 +92,7 @@ Trace the real flow end to end before editing. Question speculative need. Reuse 
 
 Prose style of record is `CONTRIBUTING.md` "Documentation style" (Simplified Technical English). This section is only the machine-checked subset.
 
-`verify:prose` (`scripts/verify-prose.ts`) scans `docs/**.md`, `README.md`, and `CONTRIBUTING.md`, and fails on:
+`verify:prose` (`scripts/verify-prose.ts`) scans `README.md`, `CONTRIBUTING.md`, `AGENTS.md`, and every `*.md` under `docs/`, `openspec/`, and `.agents/skills/`, and fails on:
 
 - **UI verbs** — `select` not `click`/`click on`/`double-click`/`tap`; `press` not `hit`; `enter` not `key in`; `sign in`/`sign out` not `log in`/`log out`.
 - **Wordy phrases** — `to` not `in order to`; `because` not `due to the fact that`; also `at this point in time`, `in the event that`, `with regard to`, `prior to`, `subsequent to`, `utilize`, `leverage`, `facilitate`, `commence`.

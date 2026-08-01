@@ -1,12 +1,19 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmod, mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises";
+import { existsSync, utimesSync } from "node:fs";
+import { chmod, mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pluginStateDir } from "../../src/context";
 import { allocateRunId, RunHistorySession } from "../../src/history";
 import { workflowSchemaUrl } from "../../src/context";
 import { parseWebRoute, runWorkbenchRoute } from "../../src/workbench";
-import { dropSource, startWebServer, type WebServer } from "../../src/workbench";
+import {
+  acquireEndpointLockSync,
+  dropSource,
+  releaseEndpointLockSync,
+  startWebServer,
+  type WebServer,
+} from "../../src/workbench";
 
 const dirs: string[] = [];
 const servers: WebServer[] = [];
@@ -380,9 +387,61 @@ describe("web provenance and sensitivity", () => {
     expect(saved.ok).toBe(false);
     expect(saved.error).toMatch(/out/);
   });
+
+  test("validate returns the same sensitivity flags as workflow GET", async () => {
+    const root = await repo();
+    const text = `${V1}steps:\n  - agent: "see {{context.transcript}}"\n    using: claude\n  - run: [echo, hi]\n  - herdr: pane.close\n    params: { pane_id: "w1:p1" }\n  - workflow: missing-child\n`;
+    await writeFile(join(root, ".hwf", "workflows", "sens.yaml"), text);
+    const { base, token } = await serve(root);
+    const headers = { "x-hwf-token": token, "content-type": "application/json" };
+    const loaded = (await (
+      await fetch(`${base}/api/workflow?name=sens&scope=repo`, {
+        headers: { "x-hwf-token": token },
+      })
+    ).json()) as { flags: string[]; valid: boolean };
+    const validated = (await (
+      await fetch(`${base}/api/validate`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ name: "sens", text }),
+      })
+    ).json()) as { ok: boolean; flags: string[]; error?: string };
+    // Missing children fail load validation; sensitivity analysis still labels them.
+    expect(validated.ok).toBe(false);
+    expect(validated.error).toMatch(/missing-child/);
+    expect(loaded.valid).toBe(false);
+    expect(validated.flags).toEqual(loaded.flags);
+    expect(validated.flags).toEqual(
+      expect.arrayContaining([
+        "commands",
+        "transcript",
+        "herdr:pane.close",
+        "unresolved:missing-child",
+      ]),
+    );
+  });
 });
 
 describe("web server writes", () => {
+  test("first save creates a missing repo workflow directory", async () => {
+    const root = await repo();
+    await rm(join(root, ".hwf"), { recursive: true, force: true });
+    const { base, token } = await serve(root);
+    const res = await fetch(`${base}/api/workflow`, {
+      method: "PUT",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "first",
+        scope: "repo",
+        text: `${V1}steps:\n  - run: [echo, first]\n`,
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(await Bun.file(join(root, ".hwf", "workflows", "first.yaml")).text()).toContain(
+      "echo, first",
+    );
+  });
+
   test("validate does not write", async () => {
     const root = await repo();
     const { base, token } = await serve(root);
@@ -739,6 +798,198 @@ steps:
     expect(await Bun.file(join(wdir, `${loser}.yaml`)).text()).toContain(`echo ${loser}`);
   });
 
+  test("concurrent in-place saves with one baseline let exactly one win", async () => {
+    const root = await repo();
+    const file = join(root, ".hwf", "workflows", "race.yaml");
+    const body = `# yaml-language-server: $schema=${workflowSchemaUrl()}\n${V1}steps:\n  - run: echo base\n`;
+    await writeFile(file, body);
+    const { base, token } = await serve(root);
+    const loaded = (await (
+      await fetch(`${base}/api/workflow?name=race&scope=repo`, {
+        headers: { "x-hwf-token": token },
+      })
+    ).json()) as { base: string };
+    const put = (marker: string) =>
+      fetch(`${base}/api/workflow`, {
+        method: "PUT",
+        headers: { "x-hwf-token": token, "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "race",
+          scope: "repo",
+          previousName: "race",
+          previousScope: "repo",
+          base: loaded.base,
+          text: body.replace("echo base", `echo ${marker}`),
+        }),
+      });
+    const results = await Promise.all([put("one"), put("two")]);
+    const codes = results.map((r) => r.status).sort();
+    expect(codes).toEqual([200, 409]);
+    const onDisk = await Bun.file(file).text();
+    const winner = onDisk.includes("echo one") ? "one" : "two";
+    expect(onDisk).toContain(`echo ${winner}`);
+    expect(onDisk.includes("echo one") && onDisk.includes("echo two")).toBe(false);
+  });
+
+  test("symlinked workflow file is refused without modifying its target", async () => {
+    const root = await repo();
+    const outside = join(root, "outside-target.yaml");
+    const original = `${V1}steps:\n  - run: echo external\n`;
+    await writeFile(outside, original);
+    await symlink(outside, join(root, ".hwf", "workflows", "linked.yaml"));
+    const { base, token } = await serve(root);
+    const loaded = (await (
+      await fetch(`${base}/api/workflow?name=linked&scope=repo`, {
+        headers: { "x-hwf-token": token },
+      })
+    ).json()) as { base?: string; text?: string };
+    const res = await fetch(`${base}/api/workflow`, {
+      method: "PUT",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "linked",
+        scope: "repo",
+        previousName: "linked",
+        previousScope: "repo",
+        base: loaded.base ?? "missing",
+        text: `${V1}steps:\n  - run: echo overwritten\n`,
+      }),
+    });
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { ok: boolean; error?: string };
+    expect(data.ok).toBe(false);
+    expect(data.error).toMatch(/symlink/i);
+    expect(await Bun.file(outside).text()).toBe(original);
+  });
+
+  test("symlinked workflow root is refused without modifying its target", async () => {
+    const root = await repo();
+    const outsideDir = join(root, "outside-workflows");
+    await mkdir(outsideDir, { recursive: true });
+    const target = join(outsideDir, "kept.yaml");
+    const original = `${V1}steps:\n  - run: echo kept\n`;
+    await writeFile(target, original);
+    await rm(join(root, ".hwf", "workflows"), { recursive: true, force: true });
+    await symlink(outsideDir, join(root, ".hwf", "workflows"));
+    const { base, token } = await serve(root);
+    const res = await fetch(`${base}/api/workflow`, {
+      method: "PUT",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "escape",
+        scope: "repo",
+        text: `${V1}steps:\n  - run: echo escape\n`,
+      }),
+    });
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { ok: boolean; error?: string };
+    expect(data.ok).toBe(false);
+    expect(data.error).toMatch(/symlink/i);
+    expect(await Bun.file(target).text()).toBe(original);
+    expect(await Bun.file(join(outsideDir, "escape.yaml")).exists()).toBe(false);
+  });
+
+  test("intermediate .hwf symlink cannot redirect a workbench write", async () => {
+    const root = await repo();
+    const outside = join(root, "outside-hwf");
+    await mkdir(join(outside, "workflows"), { recursive: true });
+    await writeFile(
+      join(outside, "config.yaml"),
+      "profiles:\n  claude:\n    kind: claude\ndefault_profile: claude\n",
+    );
+    const trap = join(outside, "workflows", "escape.yaml");
+    await rm(join(root, ".hwf"), { recursive: true, force: true });
+    await symlink(outside, join(root, ".hwf"));
+    const { base, token } = await serve(root);
+    const res = await fetch(`${base}/api/workflow`, {
+      method: "PUT",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "escape",
+        scope: "repo",
+        text: `${V1}steps:\n  - run: echo escape\n`,
+      }),
+    });
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { ok: boolean; error?: string };
+    expect(data.ok).toBe(false);
+    expect(data.error).toMatch(/symlink/i);
+    expect(await Bun.file(trap).exists()).toBe(false);
+  });
+
+  test("stale save claim is reclaimed and old owner cannot clear successor", async () => {
+    const root = await repo();
+    const file = join(root, ".hwf", "workflows", "claim.yaml");
+    const body = `# yaml-language-server: $schema=${workflowSchemaUrl()}\n${V1}steps:\n  - run: echo base\n`;
+    await writeFile(file, body);
+    const claim = `${file}.save`;
+    const stale = acquireEndpointLockSync(claim);
+    expect(stale).toBeDefined();
+    const past = new Date(Date.now() - 60_000);
+    utimesSync(`${claim}.${stale!.token}`, past, past);
+
+    const { base, token } = await serve(root);
+    const loaded = (await (
+      await fetch(`${base}/api/workflow?name=claim&scope=repo`, {
+        headers: { "x-hwf-token": token },
+      })
+    ).json()) as { base: string };
+    const res = await fetch(`${base}/api/workflow`, {
+      method: "PUT",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "claim",
+        scope: "repo",
+        previousName: "claim",
+        previousScope: "repo",
+        base: loaded.base,
+        text: body.replace("echo base", "echo next"),
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { ok: boolean }).ok).toBe(true);
+    expect(await Bun.file(file).text()).toContain("echo next");
+
+    const successor = acquireEndpointLockSync(claim);
+    expect(successor).toBeDefined();
+    expect(successor!.token).not.toBe(stale!.token);
+    expect(existsSync(`${claim}.${successor!.token}`)).toBe(true);
+    releaseEndpointLockSync(stale!);
+    expect(await Bun.file(claim).text()).toBe(successor!.token);
+    expect(existsSync(`${claim}.${successor!.token}`)).toBe(true);
+    releaseEndpointLockSync(successor!);
+  });
+
+  test("in-place save preserves existing file mode", async () => {
+    const root = await repo();
+    const file = join(root, ".hwf", "workflows", "mode.yaml");
+    const body = `# yaml-language-server: $schema=${workflowSchemaUrl()}\n${V1}steps:\n  - run: echo base\n`;
+    await writeFile(file, body, { mode: 0o600 });
+    await chmod(file, 0o600);
+    const { base, token } = await serve(root);
+    const loaded = (await (
+      await fetch(`${base}/api/workflow?name=mode&scope=repo`, {
+        headers: { "x-hwf-token": token },
+      })
+    ).json()) as { base: string };
+    const res = await fetch(`${base}/api/workflow`, {
+      method: "PUT",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "mode",
+        scope: "repo",
+        previousName: "mode",
+        previousScope: "repo",
+        base: loaded.base,
+        text: body.replace("echo base", "echo kept-mode"),
+      }),
+    });
+    expect(res.status).toBe(200);
+    const { stat } = await import("node:fs/promises");
+    expect((await stat(file)).mode & 0o777).toBe(0o600);
+    expect(await Bun.file(file).text()).toContain("echo kept-mode");
+  });
+
   test("rename PUT undoes its destination when the source cannot be removed", async () => {
     const root = await repo();
     const wdir = join(root, ".hwf", "workflows");
@@ -847,8 +1098,7 @@ describe("web share and import APIs", () => {
   test("import preview accepts command text and rejects old payloads", async () => {
     const root = await repo();
     const { base, token } = await serve(root);
-    const { encodePayload, formatImportCommand } =
-      await import("../../src/workflow/inputs-exchange");
+    const { encodePayload, formatImportCommand } = await import("../../src/workflow/exchange");
     const payload = encodePayload([{ name: "demo", yaml: `${V1}steps:\n  - run: x\n` }]);
     const ok = await fetch(`${base}/api/import/preview`, {
       method: "POST",
@@ -884,7 +1134,7 @@ describe("web share and import APIs", () => {
     const root = await repo();
     await writeFile(join(root, ".hwf", "workflows", "demo.yaml"), `${V1}steps:\n  - run: mine\n`);
     const { base, token } = await serve(root);
-    const { encodePayload } = await import("../../src/workflow/inputs-exchange");
+    const { encodePayload } = await import("../../src/workflow/exchange");
     const text = encodePayload([{ name: "demo", yaml: `${V1}steps:\n  - run: new\n` }]);
     const conflict = await fetch(`${base}/api/import`, {
       method: "POST",
@@ -911,68 +1161,55 @@ describe("web page share and import routes", () => {
     const res = await fetch(`${base}/?token=${encodeURIComponent(token)}`);
     expect(res.status).toBe(200);
     const html = await res.text();
+
+    // URL hash contracts for share / import / new (and empty hash leaves those views).
     expect(html).toContain('hash === "import"');
+    expect(html).toContain('hash === "new"');
     expect(html).toContain("^share=(repo|global):");
+    expect(html).toMatch(/if \(!hash\) \{/);
+
+    // API wiring and user-facing share/import copy.
     expect(html).toContain("/api/share?");
     expect(html).toContain("/api/import/preview");
+    expect(html).toContain('label: "share"');
     expect(html).toContain("copy import command");
     expect(html).toContain("confirm import");
     expect(html).toContain("replace existing workflows");
     expect(html).toContain("no run");
-    expect(html).toContain("confirmLeave()");
+    expect(html).not.toMatch(/run imported|import and run|run this bundle/i);
+
+    // Accessibility for import surfaces.
     expect(html).toContain('aria-label", "import command"');
     expect(html).toContain('aria-label", "Import workflows"');
-    expect(html).toContain("openImport()");
-    expect(html).toContain('label: "share"');
-    expect(html).toContain("openShare(scope, name)");
-    expect(html).toContain('hash === "new"');
-    expect(html).toContain("cmd.tabIndex = 0");
     expect(html).toContain("aria-readonly");
-    expect(html).not.toMatch(/run imported|import and run|run this bundle/i);
+    expect(html).toMatch(/tabIndex\s*=\s*0/);
   });
 
-  test("served page clears share/import on empty hash and restores list layout", async () => {
+  test("served page guards dirty navigation with confirm copy and hash restore", async () => {
     const root = await repo();
     const { base, token } = await serve(root);
     const html = await (await fetch(`${base}/?token=${encodeURIComponent(token)}`)).text();
-    expect(html).toContain("function syncWorkflowLayout()");
-    expect(html).toMatch(/if \(!hash\) \{[\s\S]*?routeView = exitRouteView\(routeView\)/);
-    expect(html).toMatch(/if \(!hash\) \{[\s\S]*?confirmLeave\(\)/);
-    expect(html).toContain("syncWorkflowLayout()");
-    expect(html).toMatch(/openWorkflow[\s\S]*?syncWorkflowLayout\(\)/);
-  });
 
-  test("served page restores prior hash when dirty confirm cancels route changes", async () => {
-    const root = await repo();
-    const { base, token } = await serve(root);
-    const html = await (await fetch(`${base}/?token=${encodeURIComponent(token)}`)).text();
-    expect(html).toContain("function currentRouteHash()");
-    expect(html).toContain("function restoreRouteHash()");
-    expect(html).toMatch(/function currentRouteHash\(\) \{/);
-    expect(html).toContain('if (tab !== "workflows") return ""');
+    // User-facing leave-confirm and dirty indicator copy.
+    expect(html).toContain("discard unsaved config changes?");
+    expect(html).toContain("discard unsaved workflow changes?");
+    expect(html).toContain("unsaved changes");
+    expect(html).not.toContain("moved to ");
+
+    // Canceling a dirty leave restores the prior hash; deep links include runs.
     expect(html).toContain("#run=");
     expect(html).toMatch(
       /history\.replaceState\(null, "", location\.pathname \+ location\.search \+ want\)/,
     );
-    expect(html).toMatch(/if \(!confirmLeave\(\)\) \{\s*restoreRouteHash\(\);\s*return;\s*\}/);
-    const cancelRestores = html.match(
-      /if \(!confirmLeave\(\)\) \{\s*restoreRouteHash\(\);\s*return;\s*\}/g,
-    );
-    expect(cancelRestores?.length).toBeGreaterThanOrEqual(4);
-    expect(html).toMatch(
-      /if \(\s*!routeView &&\s*current &&\s*current\.name === name &&\s*current\.scope === scope\s*\)\s*return;/,
-    );
-    expect(html).toMatch(
-      /if \(!confirmLeave\(\)\) \{\s*restoreRouteHash\(\);\s*return;\s*\}\s*tab = "workflows";/,
-    );
-    expect(html).toContain("routeView = exitRouteView(routeView)");
-    expect(html).toContain("configDirty");
-    expect(html).toContain("editorDirty");
-    expect(html).toContain("discard unsaved config changes?");
-    expect(html).toContain("discard unsaved workflow changes?");
-    expect(html).toContain("function refreshDirty()");
-    expect(html).toContain("unsaved changes");
-    expect(html).not.toContain("moved to ");
+    expect(html).toContain("beforeunload");
+    const restoreSites = html.match(/history\.replaceState\(null, "", location\.pathname/g);
+    expect(restoreSites?.length).toBeGreaterThanOrEqual(1);
+
+    // Route transitions must ask before discarding; stripping those calls fails this test.
+    const hashFn = html.match(/function applyHash\(\) \{([\s\S]*?)\n      let liveSig/);
+    expect(hashFn?.[1]).toBeDefined();
+    expect(hashFn![1]!.match(/confirmLeave\(\)/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(html).toMatch(/querySelectorAll\("\.tab"\)[\s\S]{0,200}confirmLeave\(\)/);
   });
 });
 
@@ -1017,6 +1254,24 @@ describe("run history web API", () => {
     } finally {
       server.stop();
     }
+  });
+
+  test("authenticated JSON responses use no-store by default", async () => {
+    const root = await repo();
+    const { base, token } = await serve(root);
+    const headers = { "x-hwf-token": token, "content-type": "application/json" };
+    const state = await fetch(`${base}/api/state`, { headers: { "x-hwf-token": token } });
+    expect(state.headers.get("cache-control")).toBe("no-store");
+    const schema = await fetch(`${base}/api/schema`, { headers: { "x-hwf-token": token } });
+    expect(schema.headers.get("cache-control")).toBe("no-store");
+    const validate = await fetch(`${base}/api/validate`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ name: "buf", text: `${V1}steps:\n  - run: [echo, hi]\n` }),
+    });
+    expect(validate.headers.get("cache-control")).toBe("no-store");
+    const favicon = await fetch(`${base}/favicon.svg`);
+    expect(favicon.headers.get("cache-control")).toMatch(/public/);
   });
 
   test("list and detail use no-store and exclude private output", async () => {

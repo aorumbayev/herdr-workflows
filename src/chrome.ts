@@ -484,3 +484,64 @@ export async function mountChrome(opts: {
   const chrome = mountPickerChrome(renderer, theme, opts.listHint);
   return { chrome, theme, width: renderer.width };
 }
+
+const ELLIPSIS = "...";
+const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+/** Select name indent: contentX+1+indicatorWidth with indicator off. */
+export const ROW_TEXT_INDENT = 3;
+
+export function columns(text: string): number {
+  return Bun.stringWidth(text);
+}
+
+export function padColumns(text: string, width: number): string {
+  const used = columns(text);
+  if (used >= width) return text;
+  return `${text}${" ".repeat(width - used)}`;
+}
+
+function takeColumns(text: string, max: number): string {
+  if (max <= 0) return "";
+  if (columns(text) <= max) return text;
+  let out = "";
+  let used = 0;
+  for (const { segment } of segmenter.segment(text)) {
+    const w = columns(segment);
+    if (used + w > max) break;
+    out += segment;
+    used += w;
+  }
+  return out;
+}
+
+/** Truncate to `max` terminal columns at a grapheme boundary. */
+export function truncate(text: string, max: number): string {
+  if (columns(text) <= max) return text;
+  if (max <= 0) return "";
+  const ellipsisCols = columns(ELLIPSIS);
+  if (max < ellipsisCols) return takeColumns(ELLIPSIS, max);
+  return `${takeColumns(text, max - ellipsisCols)}${ELLIPSIS}`;
+}
+
+function takeWrappedLine(text: string, budget: number): string {
+  if (columns(text) <= budget) return text;
+  const window = takeColumns(text, budget);
+  const space = window.lastIndexOf(" ");
+  if (space > 0) return window.slice(0, space);
+  return window;
+}
+
+export function formatDetailLines(description: string, contentWidth: number): string {
+  const text = description.replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  const indent = " ".repeat(ROW_TEXT_INDENT);
+  const budget = Math.max(0, contentWidth - ROW_TEXT_INDENT);
+  const line1 = takeWrappedLine(text, budget);
+  const rest = text.slice(line1.length).trimStart();
+  if (!rest) return `${indent}${line1}`;
+  const line2 = columns(rest) <= budget ? rest : truncate(rest, budget);
+  return `${indent}${line1}\n${indent}${line2}`;
+}
+
+export { ELLIPSIS };

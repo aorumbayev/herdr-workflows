@@ -3,22 +3,16 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CAPTURE_BYTE_LIMIT } from "../../src/context";
-import { defaultShell, killSpawn, shellArgv, spawnCapture } from "../../src/engine";
+import { killSpawn, shellArgv, spawnCapture } from "../../src/engine";
 
 const dirs: string[] = [];
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
 
-describe("defaultShell", () => {
-  test("defaults to sh", () => {
-    expect(defaultShell()).toBe("sh");
-  });
-});
-
 describe("shellArgv", () => {
-  test("follows the platform default", () => {
-    expect(shellArgv("echo hi", defaultShell())).toEqual(["sh", "-c", "echo hi"]);
+  test("defaults to sh when shell is omitted", () => {
+    expect(shellArgv("echo hi")).toEqual(["sh", "-c", "echo hi"]);
   });
 
   test("explicit shell overrides the default", () => {

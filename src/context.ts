@@ -13,6 +13,22 @@ export const PRODUCT_VERSION: string = manifest.version;
 
 export const EXAMPLES_URL = "https://aorumbayev.github.io/herdr-workflows/examples";
 
+/** Best-effort OS browser open — absence of the opener is nonfatal. */
+export async function openInBrowser(url: string): Promise<void> {
+  const cmd = process.platform === "darwin" ? ["open", url] : ["xdg-open", url];
+  try {
+    const proc = Bun.spawn(cmd, {
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "ignore",
+      detached: true,
+    });
+    proc.unref();
+  } catch {
+    /* opener absence is nonfatal */
+  }
+}
+
 /**
  * Where the workflow contract this build implements is published. Pinned to the release tag for
  * `PRODUCT_VERSION`, because schemas diverge between versions: a pointer at a moving ref would
@@ -607,16 +623,9 @@ export type AppContext = {
   config: WorkflowsConfig;
   repoRoot: string;
   ctx: InvocationContext;
-  platform: PlatformName;
-  /** Base template namespace (inputs/steps empty; context from invocation). */
-  namespace: {
-    inputs: Record<string, unknown>;
-    steps: Record<string, unknown>;
-    context: Record<string, unknown>;
-  };
 };
 
-/** Resolve config layers, repo root, invocation context, platform, and base namespace once. */
+/** Resolve config layers, repo root, and invocation context once. */
 export async function loadContext(
   opts: { start?: string; repoRoot?: string; fromInvocation?: boolean } = {},
 ): Promise<AppContext> {
@@ -625,26 +634,7 @@ export async function loadContext(
   const repoRoot = opts.repoRoot || process.env.HERDR_WORKFLOWS_REPO_ROOT || resolveRepoRoot(start);
   const ctx: InvocationContext = { ...invocation, cwd: repoRoot };
   const config = await loadConfig(repoRoot);
-  const platform = platformName();
-  return {
-    config,
-    repoRoot,
-    ctx,
-    platform,
-    namespace: {
-      inputs: {},
-      steps: {},
-      context: {
-        workspace: ctx.workspaceId ?? "",
-        tab: ctx.tabId ?? "",
-        pane: ctx.paneId ?? "",
-        worktree: ctx.worktreePath ?? "",
-        agent: "",
-        selection: sanitizeDisplay(ctx.selection),
-        platform,
-      },
-    },
-  };
+  return { config, repoRoot, ctx };
 }
 
 const TRANSCRIPT_TIMEOUT_MS = 30_000;

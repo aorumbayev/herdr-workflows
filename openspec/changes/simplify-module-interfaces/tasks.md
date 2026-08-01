@@ -35,3 +35,7 @@ Run `bun test ./test` and `CI=1 npm run verify` after every task. Both must be g
 - [x] 6.1 Prune `src/tui/picker.ts` exports to the picker entry. Tests re-point to internal-seam imports where needed.
 - [x] 6.2 Prune `src/run/context.ts`, `src/history/*`, `src/web/*`, and `src/workflow/*` exports to the entry points named in design.md. Knip must stay green.
 - [x] 6.3 Sweep: confirm the layer rule (surfaces → domain → platform, no upward or sideways imports beyond `engine → history` and `exchange → workflows`). Run the full gate set including `bun run schema && bun run examples` regeneration check (zero-byte diff).
+
+## Final decision
+
+All tasks above are complete for the original change. A later simplification program consolidated production into about 14 TypeScript files plus web assets (`update`, `runs-browser`, `inputs`, `exchange` extractions, and a flat `src/` layout). That consolidation supersedes the original "no file merges" design constraint. See `design.md` Final decision.

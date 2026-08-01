@@ -7,20 +7,26 @@ const SRC = join(ROOT, "src");
 type Module =
   | "cli"
   | "picker"
+  | "runs-browser"
+  | "chrome"
   | "workbench"
   | "workflows"
   | "engine"
   | "history"
+  | "update"
   | "host"
   | "context";
 
 const LAYER: Record<Module, number> = {
   cli: -1,
   picker: 0,
+  "runs-browser": 0,
+  chrome: 0,
   workbench: 0,
   workflows: 1,
   engine: 1,
   history: 1,
+  update: 1,
   host: 2,
   context: 2,
 };
@@ -29,14 +35,18 @@ const LAYER: Record<Module, number> = {
 const ENTRIES: Record<Module, ReadonlySet<string>> = {
   cli: new Set(["src/cli.ts"]),
   picker: new Set(["src/picker.ts"]),
+  "runs-browser": new Set(["src/runs-browser.ts"]),
+  chrome: new Set(["src/chrome.ts"]),
   workbench: new Set(["src/workbench.ts"]),
   workflows: new Set([
     "src/workflow/grammar.ts",
     "src/workflow/validate.ts",
-    "src/workflow/inputs-exchange.ts",
+    "src/workflow/inputs.ts",
+    "src/workflow/exchange.ts",
   ]),
   engine: new Set(["src/engine.ts"]),
   history: new Set(["src/history.ts"]),
+  update: new Set(["src/update.ts"]),
   host: new Set(["src/host.ts", "src/herdr-methods.generated.ts"]),
   context: new Set(["src/context.ts"]),
 };
@@ -45,7 +55,11 @@ const ENTRIES: Record<Module, ReadonlySet<string>> = {
 const SIDEWAYS = new Set([
   "engine->history",
   "engine->workflows",
+  "picker->chrome",
+  "picker->runs-browser",
   "picker->workbench",
+  "runs-browser->chrome",
+  "runs-browser->workbench",
   "context->host",
   "host->context",
 ]);
@@ -53,15 +67,13 @@ const SIDEWAYS = new Set([
 /**
  * context: Residual edges the layer rule tolerates after Phase 3 consolidation.
  * - history → workflow/grammar: shared step/workflow types for run snapshots.
- * - picker → cli: update indicator and browser open from the TUI.
  * - context → engine (dynamic): breaks the context↔engine cycle for transcript reads.
- * - workflows/inputs-exchange → engine (dynamic): dynamic-choice capture via spawnCapture.
+ * - workflows/inputs → engine (dynamic): dynamic-choice capture via spawnCapture.
  */
 const ALLOW: ReadonlySet<string> = new Set([
-  "src/picker.ts -> src/cli.ts",
   "src/history.ts -> src/workflow/grammar.ts",
   "src/context.ts -> src/engine.ts",
-  "src/workflow/inputs-exchange.ts -> src/engine.ts",
+  "src/workflow/inputs.ts -> src/engine.ts",
 ]);
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -79,11 +91,14 @@ function repoPath(abs: string): string {
 }
 
 function moduleOf(file: string): Module | undefined {
-  if (file === "src/picker.ts" || file === "src/chrome.ts") return "picker";
+  if (file === "src/picker.ts") return "picker";
+  if (file === "src/runs-browser.ts") return "runs-browser";
+  if (file === "src/chrome.ts") return "chrome";
   if (file === "src/workbench.ts" || file.startsWith("src/web/")) return "workbench";
   if (file.startsWith("src/workflow/")) return "workflows";
   if (file === "src/engine.ts") return "engine";
   if (file === "src/history.ts") return "history";
+  if (file === "src/update.ts") return "update";
   if (file === "src/host.ts" || file === "src/herdr-methods.generated.ts") {
     return "host";
   }

@@ -154,24 +154,20 @@ function contrast(a: [number, number, number], b: [number, number, number]): num
 }
 
 describe("web workbench presentation", () => {
-  test("page exposes theme tokens, control, and highlighted YAML helper", async () => {
+  test("page exposes theme tokens, control, and highlighted YAML display", async () => {
     const page = await servedPage();
 
     expect(page).toContain("--nord0:");
     expect(page).toContain("--nord15:");
     expect(page).toMatch(/:root\[data-theme=["']light["']\]/);
     expect(page).toContain('id="theme-btn"');
+    expect(page).toContain('aria-label="Theme: system"');
     expect(page).toContain("hwf-theme");
-    expect(page).toContain("yamlBlock(");
-    expect(page).toMatch(/function\s+yamlBlock\s*\(/);
 
+    // Share/import YAML is a highlighted <pre class="yaml">, not plain textContent.
+    expect(page).toMatch(/className\s*=\s*["']yaml["']/);
+    expect(page).toMatch(/innerHTML\s*=\s*highlight\(/);
     expect(page).not.toMatch(/\.textContent\s*=\s*[^;]*\.yaml\b/i);
-
-    const yamlClassSites = [...page.matchAll(/className\s*=\s*["']yaml["']/g)];
-    expect(yamlClassSites.length).toBe(1);
-    const helperIdx = page.indexOf("function yamlBlock");
-    expect(helperIdx).toBeGreaterThanOrEqual(0);
-    expect(page.indexOf('className = "yaml"')).toBeGreaterThan(helperIdx);
     expect(page).not.toMatch(/createElement\(\s*["']pre["']\s*\)[\s\S]{0,120}textContent\s*=/);
   });
 
@@ -297,79 +293,57 @@ describe("web workbench presentation", () => {
   test("editor exposes accessible dirty state, history, and expanded canvas controls", async () => {
     const page = await servedPage();
 
-    expect(page).toContain('unsaved.textContent = "unsaved changes"');
-    expect(page).toContain("function refreshDirty()");
-    expect(page).toContain("savedName");
-    expect(page).toContain("savedScope");
-    expect(page).toContain("savedText");
-    expect(page).toContain("previousName");
-    expect(page).toContain("previousScope");
-    expect(page).toContain("sourceName");
-    expect(page).toContain("sourceScope");
-    // Moves are one server-side request: no client-side write-then-delete sequence.
-    expect(page).not.toMatch(/method:\s*"DELETE",\s*\n\s*body: JSON.stringify\(\{ name: prev/);
+    // User-visible dirty / save / delete copy (product contract).
+    expect(page).toContain("unsaved changes");
+    expect(page).toContain("discard unsaved workflow changes?");
     expect(page).toContain('"not saved — "');
     expect(page).toContain('"not deleted — "');
+    expect(page).not.toContain("move to ");
+    expect(page).not.toContain("run in a terminal:");
+
+    // Accessibility names and menu roles — setAttribute strings are the served a11y contract.
     expect(page).toContain('setAttribute("aria-label", "Undo")');
     expect(page).toContain('setAttribute("aria-label", "Redo")');
     expect(page).toContain('setAttribute("aria-label", "Save")');
+    expect(page).toContain('setAttribute("aria-label", "Add step")');
+    expect(page).toContain('setAttribute("aria-label", "Keyboard shortcuts")');
     expect(page).toContain('name: "Fit canvas"');
     expect(page).toContain('name: "Expand canvas"');
     expect(page).toContain("Exit expanded canvas");
-    expect(page).toContain("canvas-expanded");
-    expect(page).toContain(".canvas.expanded");
-    expect(page).toContain("document.execCommand(kind)");
-    expect(page).toContain("canRedo()");
-    expect(page).toContain("redos");
-    expect(page).not.toContain("move to ");
-    expect(page).not.toMatch(/mkBtn\(""|\/\* Move/);
-    expect(page).toMatch(/\.zoombar\s*button\s*,\s*\.viewbar\s*button\s*\{[^}]*min-height:\s*32px/);
-    expect(page).toMatch(/\.bar\s*button\s*\{[^}]*min-height:\s*32px/);
-
-    expect(page).toContain("function mkMenu(");
+    expect(page).toContain('name: "Reset zoom"');
+    expect(page).toContain('"More actions"');
     expect(page).toContain('setAttribute("aria-haspopup", "menu")');
     expect(page).toContain('setAttribute("role", "menu")');
     expect(page).toContain('setAttribute("role", "menuitem")');
-    expect(page).toContain('className = "bar"');
-    expect(page).toContain('className = "bar-spacer"');
-    expect(page).toContain('className = "chip"');
-    expect(page).toContain('className = "viewbar"');
-    expect(page).toContain('Math.round(view.z * 100) + "%"');
-    expect(page).toContain('name: "Reset zoom"');
-    expect(page).toContain('setAttribute("aria-label", "Add step")');
-    expect(page).toContain('setAttribute("aria-label", "Keyboard shortcuts")');
-    expect(page).toContain("tip.hidden = true");
-    expect(page).toContain("function setTipOpen(");
-    expect(page).toContain(".status:empty");
-    expect(page).not.toContain("run in a terminal:");
-    expect(page).not.toContain('className = "addnode"');
-    expect(page).not.toContain('className = "addbar"');
-    expect(page).toContain('flagBox.className = "chip"');
+
+    // List collapse chrome (static markup + a11y).
+    expect(page).toContain('id="list-rail"');
+    expect(page).toContain('aria-label="Show workflow list"');
+    expect(page).toContain('aria-label", "Hide workflow list"');
+    expect(page).toContain('aria-controls="list"');
+    expect(page).not.toContain('id="list-btn"');
+
+    // Served CSS: expanded canvas, touch targets, responsive layout, collapse.
+    expect(page).toContain("canvas-expanded");
+    expect(page).toContain(".canvas.expanded");
+    expect(page).toContain(".viewbar");
+    expect(page).toContain(".zoombar");
+    expect(page).toContain(".list-actions");
+    expect(page).toContain(".list-chrome");
+    expect(page).toContain(".bar-spacer");
+    expect(page).toContain("list-collapsed");
+    expect(page).toMatch(/\.zoombar\s*button\s*,\s*\.viewbar\s*button\s*\{[^}]*min-height:\s*32px/);
+    expect(page).toMatch(/\.bar\s*button\s*\{[^}]*min-height:\s*32px/);
     expect(page).toMatch(/@media\s*\(max-width:\s*720px\)/);
     expect(page).toMatch(/@media\s*\(max-width:\s*480px\)/);
     expect(page).toContain("flex: 1 0 100%");
     expect(page).toContain("grid-template-columns: minmax(0, 1fr)");
-    expect(page).toContain('id="list-rail"');
-    expect(page).toContain('hide.id = "list-hide"');
-    expect(page).toContain("function setListCollapsed(");
-    expect(page).toContain("function narrowViewport(");
-    expect(page).toContain('aria-label", "Hide workflow list"');
-    expect(page).toContain('aria-label="Show workflow list"');
-    expect(page).toContain('className = "list-actions"');
-    expect(page).toContain('className = "list-chrome"');
-    expect(page).not.toContain('id="list-btn"');
-    // Collapsing routes through `.hide` / `.list-collapsed`, which outrank narrow-viewport `aside` rules.
-    expect(page).toContain('$("list").classList.toggle("hide", !showList)');
-    expect(page).toContain('main.classList.toggle("list-collapsed"');
     expect(page).toMatch(/\.hide\s*\{\s*display:\s*none\s*!important/);
-    // `⋯` is not an accessible name, and an outside click must not pull focus back to the trigger.
-    expect(page).toContain('"More actions"');
-    expect(page).toContain("if (back) btn.focus()");
-    expect(page).toContain("close(false)");
-    // A folded history item offers only what the bar pair would allow.
-    expect(page).toContain("item.el.disabled = item.pair.disabled");
-    // The height the retired bands freed belongs to the canvas.
     expect(page).toMatch(/\.canvas\s*\{[^}]*flex:\s*1 1 auto/);
+    expect(page).toContain(".status:empty");
+
+    // Moves are one server-side request: no client-side write-then-delete sequence.
+    expect(page).not.toMatch(/method:\s*"DELETE",\s*\n\s*body: JSON.stringify\(\{ name: prev/);
   });
 });
 
@@ -571,9 +545,9 @@ describe("node form field model", () => {
         form,
       ),
     ).toEqual([]);
-    expect(page).toContain('head.setAttribute("aria-expanded", on ? "true" : "false")');
-    expect(page).toContain("function paintNdvIssues()");
-    expect(page).toContain("canvas.setIssues(r.data.issues || [])");
+    // Sections expose expand state; validation issues from the format API are applied to the form.
+    expect(page).toContain('setAttribute("aria-expanded"');
+    expect(page).toContain("r.data.issues");
   });
 
   test("served page inlines executable field-model JavaScript", async () => {
@@ -592,5 +566,44 @@ describe("node form field model", () => {
     expect(api.widgetFor({ type: "string" })).toEqual({ kind: "text" });
     expect(api.addressesField("timeout", "timeout")).toBe(true);
     expect(api.addressesField("retry", "timeout")).toBe(false);
+  });
+
+  test("YAML key autocomplete and sensitivity come from the served schema and validate API", async () => {
+    const { page, base, token } = await served();
+    const headers = { "x-hwf-token": token, "content-type": "application/json" };
+    const schema = (await (
+      await fetch(`${base}/api/schema`, { headers: { "x-hwf-token": token } })
+    ).json()) as {
+      properties: { steps: { items: { properties: Record<string, unknown> } } };
+    };
+    expect(Object.keys(schema.properties)).toContain("version");
+    expect(Object.keys(schema.properties.steps.items.properties)).toContain("success_codes");
+
+    // Page loads the schema and derives autocomplete keys from it — no hardcoded key tables.
+    expect(page).toContain("/api/schema");
+    expect(page).toMatch(/Object\.keys\(/);
+    expect(page).not.toMatch(/\bconst TOP_KEYS\b/);
+    expect(page).not.toMatch(/\bconst STEP_KEYS\b/);
+
+    // Sensitivity flags are authoritative validate/API output, not browser-side regex tables.
+    const validated = (await (
+      await fetch(`${base}/api/validate`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          name: "sens",
+          text: `version: v1alpha1\nsteps:\n  - agent: "see {{context.transcript}}"\n    using: claude\n  - run: [echo, hi]\n`,
+        }),
+      })
+    ).json()) as { ok: boolean; flags: string[] };
+    expect(validated.flags).toEqual(expect.arrayContaining(["commands", "transcript"]));
+    expect(page).toContain("/api/validate");
+    expect(page).toContain("r.data.flags");
+    // Stale validate responses must not paint flags for a superseded buffer.
+    expect(page).toMatch(/let validateSeq\s*=\s*0/);
+    expect(page).toMatch(/ta\.value\s*!==\s*submitted/);
+    expect(page).not.toMatch(/next\.push\(["']commands["']\)/);
+    expect(page).not.toMatch(/next\.push\(["']transcript["']\)/);
+    expect(page).not.toMatch(/pane\.close\|tab\.close\|workspace\.close/);
   });
 });

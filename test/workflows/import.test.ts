@@ -16,23 +16,20 @@ import { dirname, join } from "node:path";
 import { CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../../src/context";
 import {
   checkPayload,
-  importJournalPath,
-  parseImportScope,
-  previewBundle,
-  publishStaged,
-  recoverInterruptedImport,
-  runImport,
-} from "../../src/workflow/inputs-exchange";
-import {
   decodePayload,
   encodePayload,
   exportWorkflowBundle,
   extractPayload,
   formatImportCommand,
+  importJournalPath,
   looksLikeWorkflowYaml,
-  schemaPointer,
-  withPinnedSchemaPointer,
-} from "../../src/workflow/inputs-exchange";
+  parseImportScope,
+  previewBundle,
+  publishStaged,
+  recoverInterruptedImport,
+  runImport,
+} from "../../src/workflow/exchange";
+import { schemaPointer, withPinnedSchemaPointer } from "../../src/workflow/inputs";
 import { WorkflowLoadError } from "../../src/workflow/grammar";
 import { PRODUCT_VERSION } from "../../src/context";
 
@@ -442,8 +439,8 @@ steps:
         process.execPath,
         "-e",
         `
-        import { runImport } from ${JSON.stringify(join(import.meta.dir, "../../src/workflow/inputs-exchange.ts"))};
-        import { encodePayload } from ${JSON.stringify(join(import.meta.dir, "../../src/workflow/inputs-exchange.ts"))};
+        import { runImport } from ${JSON.stringify(join(import.meta.dir, "../../src/workflow/exchange.ts"))};
+        import { encodePayload } from ${JSON.stringify(join(import.meta.dir, "../../src/workflow/exchange.ts"))};
         import { writeFile } from "node:fs/promises";
         const exactBody = ${JSON.stringify(exactBody)};
         await runImport(encodePayload([

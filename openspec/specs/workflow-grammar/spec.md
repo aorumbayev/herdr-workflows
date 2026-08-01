@@ -15,7 +15,7 @@ A workflow MUST declare string `version: v1alpha1` and a non-empty `steps:` list
 - **THEN** loading fails with the supported format and rewrite-or-upgrade guidance
 
 ### Requirement: Four explicit actions and strict modifiers
-Every step MUST carry exactly one action from `agent`, `run`, `herdr`, and `workflow`. Every step MUST accept optional `id`, `when`, and `continue_on_error`. Agent actions MUST also accept mutually exclusive `using` and `target`, plus `cwd`, `env`, `pane`, `background`, and `timeout`. Run actions MUST also accept `shell`, `cwd`, `env`, `pane`, `background`, `ready_when`, `timeout`, and `retry`. Herdr actions MUST also accept `params` and `retry`. Workflow actions MUST also accept `inputs`. Any other key MUST be a load error. Dotted keys MUST never be inferred as actions. Keys such as `out`, `wait`, `in`, `ratio`, `allow_fail`, `for`, and `as` MUST fail as unknown keys.
+Every step MUST carry exactly one action from `agent`, `run`, `herdr`, and `workflow`. Every step MUST accept optional `id`, `when`, and `continue_on_error`. Agent actions MUST also accept mutually exclusive `using` and `target`, plus `cwd`, `env`, `pane`, `background`, and `timeout`. Run actions MUST also accept `shell`, `cwd`, `env`, `pane`, `background`, `ready_when`, `timeout`, `retry`, and `success_codes`. Herdr actions MUST also accept `params` and `retry`. Workflow actions MUST also accept `inputs`. Any other key MUST be a load error. Dotted keys MUST never be inferred as actions. Keys such as `out`, `wait`, `in`, `ratio`, `allow_fail`, `for`, and `as` MUST fail as unknown keys.
 
 #### Scenario: Multiple actions
 - **WHEN** a step contains both `run` and `agent`

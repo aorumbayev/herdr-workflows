@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { WorkflowsConfig } from "../../src/context";
 import { HerdrError, TRANSPORT_LOSS_CODES } from "../../src/host";
 import { AGENT_PROMPT_BYTE_LIMIT, CAPTURE_BYTE_LIMIT, HWF_ENV_BYTE_LIMIT } from "../../src/context";
-import { listRuns, loadAllSnapshots, type RunSnapshot } from "../../src/history";
+import { listRuns, loadAllSnapshots, runDetail, type RunSnapshot } from "../../src/history";
 import type { RunnerDeps } from "../../src/engine";
 import { runWorkflow } from "../../src/engine";
 import { fakeRunRecorder } from "../fakes/run-recorder-fake";
@@ -748,6 +748,7 @@ steps:
 `,
     });
     const { deps, notes, calls } = mockDeps();
+    const recorder = fakeRunRecorder();
     const outcomes: string[] = [];
     const result = await runWorkflow({
       name: "m",
@@ -755,12 +756,69 @@ steps:
       config: baseConfig,
       ctx: { selection: "", cwd: root },
       deps,
+      recorder,
       onProgress: (_i, _n, label, outcome) => outcomes.push(`${label}:${outcome ?? "start"}`),
     });
     expect(result.ok).toBe(true);
     expect(outcomes.some((o) => o.includes("skip"))).toBe(true);
+    expect(recorder.stepFinishedCalls.some((c) => c.outcomeKind === "skipped")).toBe(true);
     expect(calls.some((c) => c.method === "notification.show")).toBe(false);
     expect(notes).toHaveLength(0);
+  });
+
+  test("automatic failure notification omits command stderr", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - run: [sh, -c, "printf 'secret-stderr' >&2; exit 3"]
+`,
+    });
+    const { deps, notes } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    const err = failed(result);
+    expect(err.error).toContain("secret-stderr");
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatch(/^herdr-workflows: m failed\|/);
+    expect(notes[0]).toContain("Step 1 failed; inspect the terminal or run history for details.");
+    expect(notes[0]).not.toContain("secret-stderr");
+  });
+
+  test("history explanation is bounded while CLI error keeps full stderr", async () => {
+    const marker = "hist-bound-marker-";
+    const long = `${marker}${"x".repeat(600)}`;
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - run: [sh, -c, "printf '%s' '${long}' >&2; exit 3"]
+`,
+    });
+    const { deps, notes } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    const err = failed(result);
+    expect(err.error).toContain(long);
+    expect(notes[0]).not.toContain(marker);
+    const listed = await listRuns({ checkout_root: root });
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    const { detail } = await runDetail(listed.runs[0]!.id);
+    expect(detail.kind).toBe("snapshot");
+    if (detail.kind !== "snapshot") return;
+    expect(detail.failure_explanation).toBeDefined();
+    expect(detail.failure_explanation!.length).toBeLessThanOrEqual(501);
+    expect(detail.failure_explanation).toContain("…");
+    expect(detail.failure_explanation).not.toBe(err.error);
   });
 
   test("continue_on_error suppresses recovery and leaves run failed", async () => {

@@ -111,7 +111,7 @@ List data MUST contain only allowlisted scalar facts and safe labels. It MUST ex
 - **THEN** that text does not make the run match
 
 ### Requirement: Run storage and responses remain private
-The run-history directory and files MUST pass the existing private credential-store ownership and permission assertions. Authenticated workbench page, list, and detail responses MUST include `Cache-Control: no-store`. A permission mismatch MUST make history unavailable rather than weaken access checks. When the state root or runs directory is a directory with permissive mode but no entries, the runner MUST tighten it to private (0700) and proceed. A non-empty permissive state root or runs directory MUST make history unavailable.
+The run-history directory and files MUST pass the existing private credential-store ownership and permission assertions. Authenticated workbench page, list, and detail responses MUST include `Cache-Control: no-store`, matching the workbench rule that authenticated JSON is not stored by caches. A permission mismatch MUST make history unavailable rather than weaken access checks. When the state root or runs directory is a directory with permissive mode but no entries, the runner MUST tighten it to private (0700) and proceed. A non-empty permissive state root or runs directory MUST make history unavailable.
 
 #### Scenario: Run directory is group-readable
 - **WHEN** a non-empty run-history state root has unsafe permissions

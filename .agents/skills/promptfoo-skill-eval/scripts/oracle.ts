@@ -12,7 +12,7 @@ import { basename, join, resolve } from "node:path";
 // This script lives at <repo>/.agents/skills/promptfoo-skill-eval/scripts/, so the checkout is
 // four levels up — no absolute path to go stale when the repo moves or is cloned elsewhere.
 const REPO = process.env.HWF_REPO ?? resolve(import.meta.dir, "..", "..", "..", "..");
-const { loadWorkflow } = (await import(join(REPO, "src/workflow/inputs-exchange-exchange.ts"))) as {
+const { loadWorkflow } = (await import(join(REPO, "src/workflow/inputs.ts"))) as {
   loadWorkflow: (name: string, root: string, config: unknown) => Promise<{ steps: unknown[] }>;
 };
 

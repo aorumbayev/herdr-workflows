@@ -26,15 +26,15 @@ Callers outside the repository must substitute an absolute path to the checkout 
 
 `sandbox.sh` sets `PLUGIN_ROOT` from its own location (`scripts/../../../../`). That resolves to the repository root under `.agents/skills/<skill>/scripts/`.
 
-`up` is idempotent only when `/tmp/hwf-sandbox` is absent or already owned (valid `.hwf-sandbox-owned` sentinel). It:
+`up` is idempotent only when `/tmp/hwf-sandbox` is absent or already owned (complete `.hwf-sandbox-owned` sentinel). It:
 
-1. Creates `/tmp/hwf-sandbox/{config,bin,repo}` and an ownership sentinel when the path is absent. It refuses if the path already exists without a valid sentinel. It never overwrites or claims unknown contents. It refuses paths outside `/tmp/hwf-sandbox`.
+1. Claims `/tmp/hwf-sandbox` with an exclusive `mkdir` when the path is absent, then writes the ownership sentinel (`hwf-sandbox`, `session=hwf-sandbox`, `plugin_root=<this checkout>`). If the path already exists, it validates that complete sentinel (session and plugin-root must match) and reuses the tree. It refuses missing, partial, or mismatched sentinels. It never overwrites or claims unknown contents. It refuses paths outside `/tmp/hwf-sandbox`.
 2. Seeds `repo/` as a git repo (initial commit, a `feature/sandbox` branch, a dirty `src/app.ts` so `git diff HEAD` is non-empty).
 3. Starts Herdr in fixed tmux session `hwf-sandbox` on its own socket. The session name is not overridable. Kill only when that session's `HERDR_SOCKET_PATH` exactly matches the sandbox socket. A sentinel alone is never enough.
 4. Runs `bun run install:dev` against that instance (**shared binary mutation**).
 5. Runs `hwf init`, then proves the chain with a `sandbox-selfcheck` workflow.
 
-Other actions: `sandbox.sh status`, `sandbox.sh down` (stops the server, kills the `hwf-sandbox` tmux session only when its socket matches, deletes `/tmp/hwf-sandbox` only when the sentinel is present), `sandbox.sh guard-check` (non-destructive ownership and kill-guard checks. Never starts Herdr).
+Other actions: `sandbox.sh status`, `sandbox.sh down` (stops the server, kills the `hwf-sandbox` tmux session only when its socket matches, deletes `/tmp/hwf-sandbox` only after the same complete ownership validator passes), `sandbox.sh guard-check` (non-destructive ownership and kill-guard checks. Never starts Herdr).
 
 Inherited `HERDR_CONFIG_PATH` / `HERDR_BIN_PATH` / `HERDR_SOCKET_*` / plugin-dir overrides are unset before sandbox commands. A poisoned caller env cannot retarget the live instance.
 

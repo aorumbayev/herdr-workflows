@@ -2,16 +2,16 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runUpdate } from "../../src/cli";
+import { PRODUCT_VERSION } from "../../src/context";
 import {
+  checkForUpdate,
   compareSemver,
-  fetchLatestPublishedRelease,
   leavePluginRoot,
   parsePluginListSource,
   parseReleaseTag,
   ReleaseCheckError,
-  runUpdate,
-} from "../../src/cli";
-import { PRODUCT_VERSION } from "../../src/context";
+} from "../../src/update";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -132,28 +132,28 @@ describe("release-check", () => {
     expect(compareSemver("0.3.1", "0.2.9")).toBeGreaterThan(0);
   });
 
-  test("fetchLatestPublishedRelease validates JSON and respects timeout", async () => {
-    const ok = await fetchLatestPublishedRelease({
+  test("checkForUpdate validates JSON and respects timeout", async () => {
+    const ok = await checkForUpdate({
       fetchImpl: async () =>
         new Response(JSON.stringify({ tag_name: "v0.4.0", draft: false }), { status: 200 }),
     });
     expect(ok).toEqual({ tag: "v0.4.0", version: "0.4.0" });
 
     await expect(
-      fetchLatestPublishedRelease({
+      checkForUpdate({
         fetchImpl: async () => new Response("nope", { status: 404 }),
       }),
     ).rejects.toThrow(/HTTP 404/);
 
     await expect(
-      fetchLatestPublishedRelease({
+      checkForUpdate({
         fetchImpl: async () =>
           new Response(JSON.stringify({ tag_name: "v0.4.0", draft: true }), { status: 200 }),
       }),
     ).rejects.toThrow(/draft/);
 
     await expect(
-      fetchLatestPublishedRelease({
+      checkForUpdate({
         timeoutMs: 20,
         fetchImpl: async (_url, init) => {
           await new Promise<void>((resolve, reject) => {
@@ -303,5 +303,41 @@ describe("update", () => {
     const [stdout, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
     expect(code).toBe(0);
     expect(stdout).toMatch(/Update to the latest published GitHub Release/);
+  });
+
+  test("fetch failures stay update-check errors; other failures use update failed", async () => {
+    const check = await captureRunUpdate({
+      fetchLatest: async () => {
+        throw new ReleaseCheckError("latest release request failed: HTTP 503");
+      },
+    });
+    expect(check.exitCode).toBe(1);
+    expect(check.stderr).toContain("update check failed:");
+    expect(check.stderr).toContain("HTTP 503");
+    expect(check.stderr).not.toContain("update failed:");
+
+    const herdr = await writeFakeHerdr(
+      JSON.stringify({
+        id: "cli:plugin",
+        result: { type: "plugin_list", plugins: [] },
+      }),
+    );
+    // Force plugin-list to fail with a non-not-found error.
+    await writeFile(
+      herdr,
+      `#!/bin/sh
+echo 'plugin list exploded' >&2
+exit 3
+`,
+    );
+    await chmod(herdr, 0o755);
+    const other = await captureRunUpdate(
+      { fetchLatest: async () => ({ tag: `v${NEWER}`, version: NEWER }) },
+      { HERDR_BIN_PATH: herdr },
+    );
+    expect(other.exitCode).toBe(1);
+    expect(other.stderr).toContain("update failed:");
+    expect(other.stderr).toContain("herdr plugin list failed");
+    expect(other.stderr).not.toContain("update check failed:");
   });
 });

@@ -1,6 +1,6 @@
 /**
  * Objective oracle assertion: every v1alpha1 YAML fence in the reply must load through hwf's
- * real loader (src/workflow/inputs-exchange.ts). No LLM judge — the loader is the authority.
+ * real loader (src/workflow/inputs.ts). No LLM judge — the loader is the authority.
  *
  * vars:
  *   require_yaml: false  -> a reply with no workflow fence passes (clarify / routing tasks)

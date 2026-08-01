@@ -10,7 +10,7 @@ import {
   type RunDetail,
   type RunSnapshot,
 } from "../../src/history";
-import { formatRunDetailLines } from "../../src/picker";
+import { formatRunDetailLines } from "../../src/runs-browser";
 import { writeTestSnapshot } from "../fakes/helpers/history-snapshot";
 
 function snapshot(

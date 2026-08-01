@@ -25,8 +25,8 @@ import {
   completeWorkflowInputs,
   parseDynamicChoiceStdout,
   resolveDynamicChoices,
-} from "../../src/workflow/inputs-exchange";
-import { parseWorkflowText } from "../../src/workflow/inputs-exchange";
+} from "../../src/workflow/inputs";
+import { parseWorkflowText } from "../../src/workflow/inputs";
 import { buildTemplateNamespace, workflowNeedsTranscript } from "../../src/workflow/grammar";
 
 const dirs: string[] = [];

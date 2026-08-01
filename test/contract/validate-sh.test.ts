@@ -82,7 +82,9 @@ describe("validate.sh", () => {
     const result = await runValidate(env, file, "ok");
     expect(result.stderr).toBe("");
     expect(result.code).toBe(0);
-    expect(JSON.parse(result.stdout)).toEqual({ ok: true });
+    const body = JSON.parse(result.stdout) as { ok: boolean; flags?: string[] };
+    expect(body.ok).toBe(true);
+    expect(body.flags).toEqual(["commands"]);
   });
 
   test("exit 1 for loader-invalid YAML", async () => {
@@ -91,9 +93,10 @@ describe("validate.sh", () => {
     await writeFile(file, "version: v1alpha1\nsteps:\n  - run: 'echo {{inputs.x}}'\n");
     const result = await runValidate(env, file, "bad");
     expect(result.code).toBe(1);
-    const body = JSON.parse(result.stdout) as { ok: boolean; error?: string };
+    const body = JSON.parse(result.stdout) as { ok: boolean; error?: string; flags?: string[] };
     expect(body.ok).toBe(false);
     expect(body.error).toMatch(/template/);
+    expect(Array.isArray(body.flags)).toBe(true);
   });
 
   test("exit 2 when hwf is missing", async () => {

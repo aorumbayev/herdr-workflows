@@ -48,3 +48,7 @@ Constraints that shape everything: the complexity gate scores each function agai
 ## Migration Plan
 
 Execute tasks in order. After every task run `bun test ./test` and `CI=1 npm run verify` (plus `docs:build` and `openspec validate --all --strict` at milestones). Each task is a self-contained commit candidate. Abort-and-revert is per-task. No data, schema, or config migration — purely source moves and export changes.
+
+## Final decision
+
+The original design forbade file merges because the complexity gate scored whole-file SLOC. After that change landed, a later simplification program consolidated production into about 14 TypeScript files plus web assets, with four approved extractions (`update`, `runs-browser`, `inputs`, `exchange`) and a flat `src/` layout (workflow language stays under `src/workflow/`). That consolidation supersedes the "no file merges" constraint for the post-change architecture. The layering goals (surfaces → domain → platform, arrows down, one OpenTUI importer) remain. Tasks above stay complete for the original change. Later consolidation is recorded here, not as a rewrite of those tasks.

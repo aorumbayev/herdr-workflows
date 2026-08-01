@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listWorkflows } from "../../src/workflow/inputs-exchange";
+import { listWorkflows } from "../../src/workflow/inputs";
 import {
   analyzeRawWorkflow,
   analyzeResolvedSensitivity,

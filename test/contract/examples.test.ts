@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildExamples, renderModule } from "../../scripts/generate-examples";
-import { loadWorkflow } from "../../src/workflow/inputs-exchange";
+import { loadWorkflow } from "../../src/workflow/inputs";
 import type { WorkflowsConfig } from "../../src/context";
 
 const committedGallery = join(

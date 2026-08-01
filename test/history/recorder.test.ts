@@ -12,7 +12,7 @@ import {
 } from "../../src/history";
 import type { RunnerDeps } from "../../src/engine";
 import { runWorkflow } from "../../src/engine";
-import { loadWorkflow } from "../../src/workflow/inputs-exchange";
+import { loadWorkflow } from "../../src/workflow/inputs";
 
 const dirs: string[] = [];
 let prevState: string | undefined;

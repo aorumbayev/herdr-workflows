@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { WorkflowsConfig } from "../../src/context";
-import { loadWorkflow, parseWorkflowText } from "../../src/workflow/inputs-exchange";
+import { loadWorkflow, parseWorkflowText } from "../../src/workflow/inputs";
 
 const dirs: string[] = [];
 afterEach(async () => {

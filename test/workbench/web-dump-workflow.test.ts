@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { dumpWorkflow } from "../../src/workflow/inputs-exchange";
+import { dumpWorkflow } from "../../src/workflow/inputs";
 import { parseRaw, rawStepKeyOrder, type RawWorkflowDoc } from "../../src/workflow/grammar";
 
 function roundTrip(doc: RawWorkflowDoc) {

@@ -8,7 +8,7 @@ import {
   loadWorkflow,
   loadWorkflowEntry,
   parseWorkflowText,
-} from "../../src/workflow/inputs-exchange";
+} from "../../src/workflow/inputs";
 import { parseDurationMs, parseRaw } from "../../src/workflow/grammar";
 import {
   isWholeValueTemplate,

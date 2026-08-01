@@ -90,3 +90,14 @@ Any unexpected Herdr transport loss after dispatching an in-flight agent, placed
 #### Scenario: Transport interrupts wait
 - **WHEN** the Herdr transport closes while a workflow operation is in flight
 - **THEN** the run stops with coordination-interrupted status and does not execute `on_failure`
+
+### Requirement: Automatic failure notifications omit command output
+When the runner shows an automatic Herdr notification for a hard step failure or preflight failure, the notification body MUST use a generic message that names the failed step number and directs the operator to the terminal or private run history. The body MUST NOT include command stdout, stderr, or other captured action output. Detailed failure text MUST remain available on the CLI result and in private run history. Author `on_failure` actions that call `notification.show` and agent `blocked` episode notifications are separate and MUST keep their current content rules.
+
+#### Scenario: Command failure notification omits stderr
+- **WHEN** a local command step fails hard with stderr text
+- **THEN** the automatic failure notification body does not contain that stderr, and the CLI error and private run history still carry the detailed failure text
+
+#### Scenario: Agent blocked notification unchanged
+- **WHEN** a managed agent enters `blocked` during a turn
+- **THEN** the runner still sends one blocked-episode notification per episode and keeps waiting

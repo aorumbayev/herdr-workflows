@@ -42,7 +42,7 @@ A workflow the workbench writes MUST begin with a schema pointer that resolves t
 - **THEN** the second save is accepted rather than rejected as stale
 
 ### Requirement: Scope changes are applied by explicit save
-The workflow scope selector MUST mark a changed scope as unsaved and MUST NOT move a workflow immediately. A successful Save MUST apply a rename or re-scope as a single request that claims the destination and removes the original source. A save MUST NOT destroy content the buffer was not derived from: it MUST replace only content that still matches what the editor loaded, and MUST otherwise be rejected as stale, naming the conflict and leaving the file as the other writer left it. A save that cannot complete MUST leave the filesystem unchanged. The editor MUST NOT provide a separate move-to-scope action.
+The workflow scope selector MUST mark a changed scope as unsaved and MUST NOT move a workflow immediately. A successful Save MUST apply a rename or re-scope as a single request that claims the destination and removes the original source. A save MUST NOT destroy content the buffer was not derived from: it MUST replace only content that still matches what the editor loaded, and MUST otherwise be rejected as stale, naming the conflict and leaving the file as the other writer left it. An in-place save MUST acquire an exclusive adjacent claim, recheck the submitted baseline while holding that claim, and replace the file through a same-directory temporary write and atomic rename so concurrent baselines cannot both succeed. The workbench MUST refuse to edit a symlinked workflow file or workflow root, and MUST resolve paths and keep them inside the selected workflow root. A save that cannot complete MUST leave the filesystem unchanged. The editor MUST NOT provide a separate move-to-scope action.
 
 #### Scenario: Scope selection changes
 - **WHEN** a user changes a workflow from global to local
@@ -60,6 +60,10 @@ The workflow scope selector MUST mark a changed scope as unsaved and MUST NOT mo
 - **WHEN** two saves target the same previously absent destination
 - **THEN** exactly one succeeds and the other is rejected as a collision
 
+#### Scenario: Concurrent in-place saves share one baseline
+- **WHEN** two saves target the path their buffers were loaded from and carry the same baseline
+- **THEN** exactly one succeeds and the other is rejected as a conflict, and the winning writer's bytes remain on disk
+
 #### Scenario: The loaded file changed underneath the editor
 - **WHEN** a save targets the path its buffer was loaded from and that file's content has changed since it was loaded, whether by another workbench tab, an import, or a checkout
 - **THEN** the save is rejected as stale, the other writer's content is left in place, and the editor keeps the unsaved buffer
@@ -67,6 +71,10 @@ The workflow scope selector MUST mark a changed scope as unsaved and MUST NOT mo
 #### Scenario: Save cannot identify what it would replace
 - **WHEN** a save targets the path its buffer was loaded from but carries no record of the content it loaded
 - **THEN** the save is rejected rather than overwriting the file unseen
+
+#### Scenario: Symlinked workflow or workflow root
+- **WHEN** a save would write a workflow file or workflow root that is a symbolic link, or whose resolved path leaves the selected workflow root
+- **THEN** the workbench rejects the save and leaves any symlink target unchanged
 
 #### Scenario: Source removal fails
 - **WHEN** a rename or re-scope claims its destination but cannot remove the original source
@@ -275,5 +283,38 @@ When the workbench opens with hash `#new` (route `new`), it MUST present the sam
 #### Scenario: Hash new
 - **WHEN** the workbench loads with `#new`
 - **THEN** the editor shows an unsaved new workflow with the starter YAML and no existing file path
+
+### Requirement: YAML key autocomplete derives from the served schema
+YAML key autocomplete in the workbench editor MUST offer top-level and step keys from the workflow JSON Schema the server derives from the loader's Zod schema. It MUST NOT maintain a separate key list that can omit a key the served schema describes. A key such as `success_codes` that the schema accepts on a step MUST appear among step-key suggestions once the schema is loaded.
+
+#### Scenario: Step key present in the served schema
+- **WHEN** the served schema describes `success_codes` on a step
+- **THEN** step-key autocomplete includes `success_codes`
+
+#### Scenario: Top-level keys follow the served schema
+- **WHEN** the served schema lists top-level workflow properties
+- **THEN** top-level key autocomplete offers exactly those property names
+
+### Requirement: Live validation reports domain sensitivity labels
+The workbench validate endpoint MUST return sensitivity labels from the same domain analysis used for workflow listing, workflow load, and bundle preview, including unresolved child references when analysis can parse the document. The editor MUST present those labels and MUST NOT recompute command, transcript, or sensitive-Herdr-method detection with browser-side heuristics.
+
+#### Scenario: Validate matches workflow load
+- **WHEN** the editor validates YAML that a workflow GET would flag as sensitive
+- **THEN** the validate response carries the same sensitivity labels
+
+#### Scenario: Unresolved child is reported
+- **WHEN** validated YAML references a child workflow that cannot be resolved
+- **THEN** the labels include an unresolved entry for that child name
+
+### Requirement: Authenticated JSON responses are not stored by caches
+Authenticated workbench JSON API responses MUST include `Cache-Control: no-store`. Public static assets such as the favicon MAY remain cacheable.
+
+#### Scenario: Authenticated API response
+- **WHEN** a client with a valid token requests an authenticated JSON endpoint
+- **THEN** the response includes `Cache-Control: no-store`
+
+#### Scenario: Public static asset
+- **WHEN** a client requests the workbench favicon
+- **THEN** the response MAY advertise a public cache lifetime
 
 

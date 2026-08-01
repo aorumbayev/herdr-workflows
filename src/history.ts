@@ -17,6 +17,14 @@ const RUN_HISTORY_HEARTBEAT_MS = 5_000;
 export const RUN_HISTORY_STALE_MS = 15_000;
 export const RUN_HISTORY_RETENTION_BYTES = 512_000;
 const RUN_HISTORY_LIST_LIMIT = 40;
+/** Persisted failure explanation cap — CLI errors stay full; detail projection stays bounded. */
+const FAILURE_EXPLANATION_LIMIT = 500;
+
+function boundFailureExplanation(text: string): string {
+  return text.length > FAILURE_EXPLANATION_LIMIT
+    ? `…${text.slice(-FAILURE_EXPLANATION_LIMIT)}`
+    : text;
+}
 
 export const RUN_UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const RUN_UUID_RE = new RegExp(`^${RUN_UUID_PATTERN}$`);
@@ -983,7 +991,7 @@ export class RunHistorySession {
           const last = this.snapshot.steps[this.snapshot.steps.length - 1]!;
           this.snapshot.steps = [
             ...this.snapshot.steps.slice(0, -1),
-            { ...last, explanation: opts.error },
+            { ...last, explanation: boundFailureExplanation(opts.error) },
           ];
         }
       }
@@ -1187,7 +1195,7 @@ function makeRecorder(
         ...(failed
           ? {
               failure: failureFact(step, outcome),
-              ...(explainFailure ? { explanation: outcome.error } : {}),
+              ...(explainFailure ? { explanation: boundFailureExplanation(outcome.error) } : {}),
             }
           : {}),
       });

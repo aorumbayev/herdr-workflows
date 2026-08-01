@@ -6,7 +6,6 @@ import { pickerSeams, type PickerState } from "../../src/picker";
 import type { ChromeKeyEvent } from "../../src/chrome";
 import { resolvePaletteLetter } from "../../src/picker";
 import { LIST_HINT, selectedListEntry } from "../../src/picker";
-import { themeFromPalette } from "../../src/chrome";
 
 const { attachRunsBrowser, launchWorkbenchRoute, tryOpenActionsPalette } = pickerSeams;
 import {
@@ -73,7 +72,6 @@ function pickerState(
     inputValues: {},
     choiceOptions: [],
     running: false,
-    progressLines: [],
     repoRoot: "/repo",
     config: { profiles: {}, transcripts: {} },
     ctx: {
@@ -95,7 +93,6 @@ function pickerState(
         needsTranscript: false,
       }) satisfies LoadedWorkflow,
     contentWidth: 80,
-    theme: themeFromPalette(null),
     inputDomains: {},
     customChoice: false,
     reloadEntries: async () => [],
@@ -485,6 +482,88 @@ process.exit(1);
       await Bun.sleep(25);
     }
     expect(markerReady).toBe(true);
+  });
+
+  test("observed failure keeps only the final diagnostic line", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-detach-bound-"));
+    dirs.push(root);
+    const script = join(root, "noisy-fail.ts");
+    await writeFile(
+      script,
+      `
+process.stdout.write("[1/1] run: noisy\\n");
+process.stdout.write("stdout noise one\\n");
+process.stdout.write("stdout noise two\\n");
+process.stderr.write("stderr line one\\n");
+process.stderr.write("final diagnostic\\n");
+process.exit(2);
+`,
+    );
+
+    const progress: string[] = [];
+    const handle = launchDetachedRun({
+      name: "ignored",
+      repoRoot: root,
+      ctx: { selection: "", cwd: root },
+      inputs: {},
+      onProgressLine: (line) => progress.push(line),
+      spawn: ((_argv, opts) =>
+        Bun.spawn([process.execPath, script], {
+          cwd: typeof opts?.cwd === "string" ? opts.cwd : root,
+          env: opts?.env,
+          stdin: "pipe",
+          stdout: "pipe",
+          stderr: "pipe",
+          detached: true,
+        })) as typeof Bun.spawn,
+    });
+
+    const result = await handle.result;
+    expect(result).toEqual({ ok: false, detail: "final diagnostic" });
+    expect(progress).toEqual(["[1/1] run: noisy"]);
+  });
+
+  test("multi-megabyte stderr without newlines keeps a bounded diagnostic tail", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-detach-nonewline-"));
+    dirs.push(root);
+    const script = join(root, "flood-fail.ts");
+    await writeFile(
+      script,
+      `
+import { writeSync } from "node:fs";
+process.stdout.write("[1/1] run: flood\\n");
+const chunk = Buffer.alloc(1024 * 1024, 0x61);
+for (let i = 0; i < 4; i++) writeSync(2, chunk);
+writeSync(2, "TAIL-END");
+process.exit(2);
+`,
+    );
+
+    const before = process.memoryUsage().heapUsed;
+    const handle = launchDetachedRun({
+      name: "ignored",
+      repoRoot: root,
+      ctx: { selection: "", cwd: root },
+      inputs: {},
+      onProgressLine: () => undefined,
+      spawn: ((_argv, opts) =>
+        Bun.spawn([process.execPath, script], {
+          cwd: typeof opts?.cwd === "string" ? opts.cwd : root,
+          env: opts?.env,
+          stdin: "pipe",
+          stdout: "pipe",
+          stderr: "pipe",
+          detached: true,
+        })) as typeof Bun.spawn,
+    });
+
+    const result = await handle.result;
+    expect(result.ok).toBe(false);
+    expect(result.detail.endsWith("TAIL-END")).toBe(true);
+    expect(result.detail.length).toBeLessThanOrEqual(64 * 1024);
+    expect(result.detail.length).toBeGreaterThan(0);
+    const growth = process.memoryUsage().heapUsed - before;
+    expect(growth).toBeLessThan(8 * 1024 * 1024);
   });
 
   test("detached spawn argv never contains input values", async () => {
