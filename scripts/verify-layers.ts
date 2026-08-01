@@ -47,17 +47,21 @@ const SIDEWAYS = new Set([
   "engine->workflows",
   "picker->workbench",
   "context->host",
+  "host->context",
 ]);
 
 /**
  * context: Residual edges the layer rule tolerates after Phase 3 consolidation.
  * - history → workflow/grammar: shared step/workflow types for run snapshots.
- * - workflows/inputs-exchange dynamic-imports engine for spawnCapture (breaks cycles).
  * - picker → cli: update indicator and browser open from the TUI.
+ * - context → engine (dynamic): breaks the context↔engine cycle for transcript reads.
+ * - workflows/inputs-exchange → engine (dynamic): dynamic-choice capture via spawnCapture.
  */
 const ALLOW: ReadonlySet<string> = new Set([
   "src/picker.ts -> src/cli.ts",
   "src/history.ts -> src/workflow/grammar.ts",
+  "src/context.ts -> src/engine.ts",
+  "src/workflow/inputs-exchange.ts -> src/engine.ts",
 ]);
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -98,8 +102,17 @@ function resolveImport(from: string, spec: string): string | undefined {
 
 type Finding = { file: string; message: string };
 
+function checkMapped(files: string[]): Finding[] {
+  return files
+    .filter((file) => !moduleOf(file))
+    .map((file) => ({
+      file,
+      message: "unmapped src file — add it to the module map in scripts/verify-layers.ts",
+    }));
+}
+
 function checkEdges(files: string[]): Finding[] {
-  const re = /from\s+["'](\.[^"']+)["']/g;
+  const re = /(?:from\s+|import\s*\(\s*)["'](\.[^"']+)["']/g;
   const findings: Finding[] = [];
   for (const file of files) {
     const fromMod = moduleOf(file);
@@ -111,7 +124,13 @@ function checkEdges(files: string[]): Finding[] {
       if (!to || !to.startsWith("src/") || to.endsWith(".generated.ts")) continue;
       if (to.endsWith(".html") || to.endsWith(".svg") || to.endsWith(".toml")) continue;
       const toMod = moduleOf(to);
-      if (!toMod) continue;
+      if (!toMod) {
+        findings.push({
+          file,
+          message: `import target unmapped — add ${to} to the module map in scripts/verify-layers.ts`,
+        });
+        continue;
+      }
       if (fromMod === toMod) continue;
       const key = `${file} -> ${to}`;
       if (ALLOW.has(key)) continue;
@@ -159,7 +178,7 @@ const files = walk(SRC)
   .map(repoPath)
   .filter((f) => !f.endsWith(".generated.ts"))
   .sort();
-const findings = [...checkEdges(files), ...checkOpentui(files)].sort(
+const findings = [...checkMapped(files), ...checkEdges(files), ...checkOpentui(files)].sort(
   (a, b) => a.file.localeCompare(b.file) || a.message.localeCompare(b.message),
 );
 

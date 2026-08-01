@@ -5,7 +5,7 @@ import { homedir, platform, userInfo } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { z } from "zod";
 import manifest from "../herdr-plugin.toml";
-import { agentSessionInfo, HerdrError, type AgentSessionInfo } from "./host";
+import type { AgentSessionInfo } from "./host";
 
 export type PlatformName = "macos" | "linux";
 
@@ -43,6 +43,9 @@ export function latest(): {
     },
   };
 }
+
+export const WHOLE_TEMPLATE_RE =
+  /^\{\{\s*((?:inputs|steps|context)(?:\.[a-zA-Z_][a-zA-Z0-9_]*)+)\s*\}\}$/;
 
 export const CAPTURE_BYTE_LIMIT = 8 * 1024 * 1024;
 export const HWF_ENV_BYTE_LIMIT = 24 * 1024;
@@ -687,6 +690,7 @@ export async function readClaudeTranscript(
   sessionId: string,
   base = join(homedir(), ".claude", "projects"),
 ): Promise<string> {
+  const { HerdrError } = await import("./host");
   const path = join(base, slug(cwd), `${sessionId}.jsonl`);
   const file = Bun.file(path);
   if (!(await file.exists())) {
@@ -730,6 +734,7 @@ async function runTranscriptCommand(
   info: AgentSessionInfo,
   invocationCwd: string,
 ): Promise<string> {
+  const { HerdrError } = await import("./host");
   const cwd = info.cwd || invocationCwd;
   const { spawnCapture } = await import("./engine");
   const result = await spawnCapture(argv, {
@@ -778,6 +783,7 @@ export async function transcriptText(
     getInfo?: (paneId: string) => Promise<AgentSessionInfo>;
   },
 ): Promise<string> {
+  const { HerdrError, agentSessionInfo } = await import("./host");
   const getInfo = opts.getInfo ?? agentSessionInfo;
   const info = await getInfo(paneId);
   const extractor = transcripts[info.agent];

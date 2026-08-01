@@ -1,5 +1,6 @@
 import { connect } from "node:net";
 import { randomUUID } from "node:crypto";
+import { WHOLE_TEMPLATE_RE } from "./context";
 import {
   HERDR_FOCUS_POLICY,
   HERDR_METHOD_BY_NAME,
@@ -10,8 +11,6 @@ import {
   type PropSpec,
 } from "./herdr-methods.generated";
 export { HERDR_PROTOCOL, METHOD_RESULT_VARIANTS, MIN_HERDR_VERSION, RESULT_DOT_PATHS };
-
-const WHOLE_TEMPLATE_RE = /^\{\{\s*(?:inputs|steps|context)(?:\.[a-zA-Z_][a-zA-Z0-9_]*)+\s*\}\}$/;
 
 type Params = Record<string, unknown>;
 

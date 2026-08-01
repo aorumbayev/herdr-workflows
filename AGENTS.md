@@ -65,7 +65,7 @@ Gitignored local-only: `.agents/references/*` except `AGENTS.md`, `.plans/`, `.o
 
 Agents miss these. The loader or verifyx will fail, or the product regresses:
 
-- **Module layers.** Surfaces (`cli`, `picker`, `workbench`) → domain (`workflows`, `engine`, `history`) → platform (`host`, `context`). Imports only point down. Sanctioned sideways edges include `engine` → `history` and `engine` → `workflows`. Cross-module imports go through each module's entry files; `verify:layers` enforces this.
+- **Module layers.** Surfaces (`cli`, `picker`, `workbench`) → domain (`workflows`, `engine`, `history`) → platform (`host`, `context`). Imports only point down, except allowlisted dynamic `context` → `engine` (transcript reads) and `workflows` → `engine` (dynamic-choice capture). Sanctioned sideways edges include `engine` → `history` and `engine` → `workflows`. Cross-module imports go through each module's entry files; `verify:layers` enforces this.
 - **No external workflow engine.** Linear herdr-native YAML only. Do not add Dagu, Taskfile/go-task, Cockpit, or similar sidecars.
 - **Templates are `{{inputs.*}}` / `{{steps.*}}` / `{{context.*}}` only.** Any other `{{…}}` is a load error. No flat `{name}`, no `out:` bindings, no `{session}` / `{session_file}` (use `{{context.transcript}}` / `{{context.transcript_file}}`). `{{prompt}}` is config-only and is not a workflow template.
 - **No templates in string `run:` command text** — load error. Use list-form `run:` (argv, templates allowed per element) or explicit `env:` / `HWF_<name>` values. `herdr:` `params:` take templates recursively. A whole-value template keeps its type. Embedded ones render text.

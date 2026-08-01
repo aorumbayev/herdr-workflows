@@ -2,7 +2,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { HERDR_METHOD_BY_NAME } from "../herdr-methods.generated";
-import { platformName, sanitizeDisplay, type InvocationContext } from "../context";
+import {
+  platformName,
+  sanitizeDisplay,
+  WHOLE_TEMPLATE_RE,
+  type InvocationContext,
+} from "../context";
 import { validateHerdrInvocation } from "../host";
 
 export class WorkflowLoadError extends Error {
@@ -40,7 +45,6 @@ export const IDENT_RE = /^[a-z][a-z0-9_]{0,31}$/;
 export const WORKFLOW_NAME_RE = /^[a-z0-9][a-z0-9-_]*$/;
 const DURATION_RE = /^([1-9]\d*)(ms|s|m|h)$/;
 const TEMPLATE_INNER = "(?:inputs|steps|context)(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)+";
-const WHOLE_TEMPLATE_RE = new RegExp(`^\\{\\{\\s*(${TEMPLATE_INNER})\\s*\\}\\}$`);
 
 export type ShellName = "sh" | "bash" | "zsh" | "pwsh" | "powershell" | "cmd";
 export type PaneOpen = "tab" | "beside" | "below";
