@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { RGBA, type TerminalColors } from "../../src/tui/picker-chrome";
-import { resolveHostTheme, themeFromPalette } from "../../src/tui/picker-chrome";
+import { RGBA, type TerminalColors } from "../../src/chrome";
+import { resolveHostTheme, themeFromPalette } from "../../src/chrome";
 
 function colors(partial: Partial<TerminalColors>): TerminalColors {
   return {

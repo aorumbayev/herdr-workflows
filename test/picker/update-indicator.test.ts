@@ -4,7 +4,7 @@ import {
   startPickerUpdateCheck,
   UPDATE_INDICATOR,
   updateAvailable,
-} from "../../src/tui/update-indicator";
+} from "../../src/picker";
 
 const isAscii = (s: string) => /^[\x20-\x7E]*$/.test(s);
 

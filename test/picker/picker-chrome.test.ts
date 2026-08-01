@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { ChromeOption } from "../../src/tui/picker-chrome";
-import { assignListOptions } from "../../src/tui/picker-chrome";
+import type { ChromeOption } from "../../src/chrome";
+import { assignListOptions } from "../../src/chrome";
 
 /** Mirrors OpenTUI Select: options clamps silently; setSelectedIndex always emits. */
 function fakeSelect(initial: ChromeOption[]) {

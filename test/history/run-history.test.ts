@@ -3,12 +3,7 @@ import { allocateRunId, RunHistorySession, runDetail } from "../../src/history";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  formatRunRow,
-  formatRunListEmpty,
-  detailLines,
-  loadRunsBrowser,
-} from "../../src/tui/run-history";
+import { formatRunRow, formatRunListEmpty, detailLines, loadRunsBrowser } from "../../src/picker";
 import type { RunListItem } from "../../src/history";
 import { runWorkbenchRoute } from "../../src/workbench";
 import {
@@ -19,8 +14,8 @@ import {
   scrollDetailLines,
   type RunsBrowser,
   type RunsBrowserDeps,
-} from "../../src/tui/runs-browser";
-import { pickerEscapeExitCode, shouldDropStdinLeakSequence } from "../../src/tui/picker-actions";
+} from "../../src/picker";
+import { pickerEscapeExitCode, shouldDropStdinLeakSequence } from "../../src/picker";
 import { fakePickerChrome, type FakePickerChrome } from "../fakes/picker-chrome-fake";
 
 const dirs: string[] = [];

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { InputSpec, LoadedWorkflow, WorkflowListEntry } from "../../src/workflow/types";
-import { pickerSeams, runPickerSession, type PickerState } from "../../src/tui/picker";
+import { pickerSeams, runPickerSession, type PickerState } from "../../src/picker";
 import { createInputSession } from "../../src/workflow/inputs";
 import {
   beginConfirmedDelete,
@@ -8,7 +8,7 @@ import {
   EMPTY_LIST_HINT,
   resolvePaletteLetter,
   shouldDropStdinLeakSequence,
-} from "../../src/tui/picker-actions";
+} from "../../src/picker";
 import {
   buildInvalidOptions,
   buildPickerOptions,
@@ -28,8 +28,8 @@ import {
   PICKER_CHROME_STRINGS,
   shouldRestoreCustomChoiceText,
   truncate,
-} from "../../src/tui/picker-rows";
-import { themeFromPalette } from "../../src/tui/picker-chrome";
+} from "../../src/picker";
+import { themeFromPalette } from "../../src/chrome";
 import { humanizeWorkflowName, workflowDisplayTitle } from "../../src/workflow/trust";
 import { fakePickerChrome, type FakePickerChrome } from "../fakes/picker-chrome-fake";
 

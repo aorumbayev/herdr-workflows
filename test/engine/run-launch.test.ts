@@ -2,11 +2,11 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pickerSeams, type PickerState } from "../../src/tui/picker";
-import type { ChromeKeyEvent } from "../../src/tui/picker-chrome";
-import { resolvePaletteLetter } from "../../src/tui/picker-actions";
-import { LIST_HINT, selectedListEntry } from "../../src/tui/picker-rows";
-import { themeFromPalette } from "../../src/tui/picker-chrome";
+import { pickerSeams, type PickerState } from "../../src/picker";
+import type { ChromeKeyEvent } from "../../src/chrome";
+import { resolvePaletteLetter } from "../../src/picker";
+import { LIST_HINT, selectedListEntry } from "../../src/picker";
+import { themeFromPalette } from "../../src/chrome";
 
 const { attachRunsBrowser, launchWorkbenchRoute, tryOpenActionsPalette } = pickerSeams;
 import {

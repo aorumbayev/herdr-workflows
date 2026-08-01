@@ -339,12 +339,12 @@ function preferOnDiskOpentuiLib(): void {
 }
 
 async function runPickerPopup(
-  pickerImport: Promise<typeof import("./tui/picker")>,
+  pickerImport: Promise<typeof import("./picker")>,
   protocolReady: Promise<void>,
 ): Promise<void> {
   const loading = (async () => {
     const app = await loadContext({ fromInvocation: true });
-    const { defaultPickerReleaseCheck } = await import("./tui/update-indicator");
+    const { defaultPickerReleaseCheck } = await import("./picker");
     const releaseCheck = defaultPickerReleaseCheck();
     const entries = await listWorkflows(app.repoRoot, app.config);
     return { releaseCheck, app, entries };
@@ -431,7 +431,7 @@ function buildProgram(): Command {
     .action(async () => {
       preferOnDiskOpentuiLib();
       const protocolReady = ensureHerdrProtocol();
-      const pickerImport = import("./tui/picker");
+      const pickerImport = import("./picker");
       void protocolReady.catch(() => {});
       void pickerImport.catch(() => {});
       await runPickerPopup(pickerImport, protocolReady);

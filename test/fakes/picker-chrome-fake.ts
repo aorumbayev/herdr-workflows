@@ -1,6 +1,6 @@
-import type { ChromeOption } from "../../src/tui/picker-chrome";
-import type { PickerChrome } from "../../src/tui/picker-chrome";
-import { LIST_VIEWPORT } from "../../src/tui/picker-chrome";
+import type { ChromeOption } from "../../src/chrome";
+import type { PickerChrome } from "../../src/chrome";
+import { LIST_VIEWPORT } from "../../src/chrome";
 
 type BrowserShowOpts = Parameters<PickerChrome["showBrowser"]>[0];
 

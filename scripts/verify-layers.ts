@@ -28,7 +28,7 @@ const LAYER: Record<Module, number> = {
 /** Outsiders may import only these files from each module. */
 const ENTRIES: Record<Module, ReadonlySet<string>> = {
   cli: new Set(["src/cli.ts", "src/console.ts", "src/init.ts", "src/update.ts", "src/setup.ts"]),
-  picker: new Set(["src/tui/picker.ts"]),
+  picker: new Set(["src/picker.ts"]),
   workbench: new Set(["src/workbench.ts"]),
   workflows: new Set([
     "src/workflow/load.ts",
@@ -59,8 +59,8 @@ const SIDEWAYS = new Set([
  * - picker → cli/update + cli/console: update indicator and browser open from the TUI.
  */
 const ALLOW: ReadonlySet<string> = new Set([
-  "src/tui/update-indicator.ts -> src/update.ts",
-  "src/tui/picker.ts -> src/console.ts",
+  "src/picker.ts -> src/update.ts",
+  "src/picker.ts -> src/console.ts",
   "src/context.ts -> src/workflow/types.ts",
   "src/host.ts -> src/workflow/types.ts",
   "src/history.ts -> src/workflow/types.ts",
@@ -82,7 +82,7 @@ function repoPath(abs: string): string {
 }
 
 function moduleOf(file: string): Module | undefined {
-  if (file.startsWith("src/tui/")) return "picker";
+  if (file === "src/picker.ts" || file === "src/chrome.ts") return "picker";
   if (file === "src/workbench.ts" || file.startsWith("src/web/")) return "workbench";
   if (file.startsWith("src/workflow/")) return "workflows";
   if (file === "src/engine.ts") return "engine";
@@ -153,11 +153,11 @@ function checkOpentui(files: string[]): Finding[] {
   for (const file of files) {
     if (re.test(readFileSync(join(ROOT, file), "utf8"))) importers.push(file);
   }
-  if (importers.length === 1 && importers[0] === "src/tui/picker-chrome.ts") return [];
+  if (importers.length === 1 && importers[0] === "src/chrome.ts") return [];
   return [
     {
-      file: "src/tui/picker-chrome.ts",
-      message: `@opentui/core importers must be exactly [src/tui/picker-chrome.ts], got [${importers.join(", ") || "(none)"}]`,
+      file: "src/chrome.ts",
+      message: `@opentui/core importers must be exactly [src/chrome.ts], got [${importers.join(", ") || "(none)"}]`,
     },
   ];
 }
