@@ -19,6 +19,18 @@ import type { HostTheme } from "./theme";
 /** Shared with runs browser Select height — six visible rows, scroll for the rest. */
 export const LIST_VIEWPORT = 6;
 
+/**
+ * context: OpenTUI Select.options clamps `_selectedIndex` silently. `setSelectedIndex`
+ * always emits `selectionChanged`, so calling it from setOptions re-enters the picker's
+ * list-selection-changed → refreshListChrome → setOptions loop.
+ */
+export function assignListOptions(
+  list: { options: SelectOption[] },
+  options: SelectOption[],
+): void {
+  list.options = options;
+}
+
 type StatusOpts = { flexGrow?: number; warn?: boolean };
 
 type BrowserShowOpts = {
@@ -243,10 +255,7 @@ function createChrome(w: ChromeWidgets, theme: HostTheme): PickerChrome {
       w.detail.content = content;
     },
     setOptions(options) {
-      w.list.options = options;
-      if (w.list.options.length > 0) {
-        w.list.setSelectedIndex(Math.min(w.list.getSelectedIndex(), w.list.options.length - 1));
-      }
+      assignListOptions(w.list, options);
     },
     updateHint(text) {
       if (!text) {
