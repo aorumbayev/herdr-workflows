@@ -2,10 +2,15 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { z } from "zod";
-import { sanitizeDisplay } from "./console";
 import type { PlatformName, TemplateNamespace } from "./workflow/types";
 
 export const PROFILE_NAME_RE = /^[a-z][a-z0-9_-]{0,31}$/;
+
+/** Strip C0 controls from AI/evidence text before writing to the terminal (keep tab/CR/LF). */
+export function sanitizeDisplay(raw: string): string {
+  // oxlint-disable-next-line no-control-regex -- intentional C0 strip before terminal write
+  return raw.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
+}
 
 export type AgentProfile = {
   kind: string;
@@ -318,13 +323,11 @@ export type AppContext = {
 
 /** Resolve config layers, repo root, invocation context, platform, and base namespace once. */
 export async function loadContext(
-  opts: { start?: string; repoRoot?: string } = {},
+  opts: { start?: string; repoRoot?: string; fromInvocation?: boolean } = {},
 ): Promise<AppContext> {
   const invocation = readInvocationContext();
-  const repoRoot =
-    opts.repoRoot ??
-    process.env.HERDR_WORKFLOWS_REPO_ROOT ??
-    resolveRepoRoot(opts.start ?? invocation.cwd);
+  const start = opts.start ?? (opts.fromInvocation ? invocation.cwd : process.cwd());
+  const repoRoot = opts.repoRoot || process.env.HERDR_WORKFLOWS_REPO_ROOT || resolveRepoRoot(start);
   const ctx: InvocationContext = { ...invocation, cwd: repoRoot };
   const config = await loadConfig(repoRoot);
   const platform = platformName();

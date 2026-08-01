@@ -1,4 +1,4 @@
-import type { InvocationContext, WorkflowsConfig } from "../config";
+import { sanitizeDisplay, type InvocationContext, type WorkflowsConfig } from "../config";
 import {
   allocateRunId,
   canonicalRepoRoot,
@@ -8,7 +8,6 @@ import {
   presentDetail,
   runDetail,
 } from "../history/store";
-import { sanitizeDisplay } from "../console";
 import { latest } from "../latest";
 import type { LoadedWorkflow, WorkflowListEntry } from "../workflow/types";
 import { runWorkbenchRoute } from "../web/endpoint";

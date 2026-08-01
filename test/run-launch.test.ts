@@ -6,7 +6,7 @@ import { pickerSeams, type PickerState } from "../src/tui/picker";
 import type { ChromeKeyEvent } from "../src/tui/picker-chrome";
 import { resolvePaletteLetter } from "../src/tui/picker-actions";
 import { LIST_HINT, selectedListEntry } from "../src/tui/picker-rows";
-import { themeFromPalette } from "../src/tui/theme";
+import { themeFromPalette } from "../src/tui/picker-chrome";
 
 const { attachRunsBrowser, launchWorkbenchRoute, tryOpenActionsPalette } = pickerSeams;
 import {

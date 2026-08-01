@@ -54,6 +54,14 @@ function hexOrNull(value: string | null | undefined): string | null {
   return m ? `#${m[1]!.toLowerCase()}` : null;
 }
 
+/**
+ * Selection as reverse video of the host defaults, baked to literal RGB.
+ *
+ * SGR default slots can't express it: there is one "default" intent and the
+ * emitter picks 39 or 49 by paint side, so a default-fg handed to a background
+ * comes out as default-bg. Select also never passes TextAttributes.INVERSE.
+ * Without a palette answer, fall back to the terminal's own palette slots.
+ */
 function selection(colors: TerminalColors | null): { bg: ColorInput; fg: ColorInput } {
   const fgHex = hexOrNull(colors?.defaultForeground);
   const bgHex = hexOrNull(colors?.defaultBackground);
@@ -91,6 +99,7 @@ export function themeFromPalette(colors: TerminalColors | null): HostTheme {
 }
 
 const STANDALONE_PALETTE_TIMEOUT_MS = 400;
+// context: Herdr plugin panes inject HERDR_PLUGIN_ENTRYPOINT_ID; measured popup answer matches at 1ms vs 400ms.
 const HERDR_PANE_PALETTE_TIMEOUT_MS = 1;
 
 function hostPaletteTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {

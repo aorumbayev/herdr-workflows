@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   globalConfigPath,
   loadConfig,
+  loadContext,
   parseConfigText,
   platformName,
   profileNames,
@@ -12,6 +13,7 @@ import {
   repoLocalConfigPath,
   resolveProfile,
   resolvePluginConfigDir,
+  resolveRepoRoot,
 } from "../src/config";
 import { assertUnderHwfEnvCap, CAPTURE_BYTE_LIMIT, HWF_ENV_BYTE_LIMIT } from "../src/limits";
 import { hasTranscriptSupport } from "../src/session";
@@ -315,5 +317,67 @@ describe("inputs and profile choices", () => {
       `version: v1alpha1\ninputs:\n  foo: text\nsteps:\n  - run: 'echo "$HWF_foo"'\n`,
     );
     expect(wf.inputs).toHaveLength(1);
+  });
+});
+
+describe("loadContext repo root", () => {
+  const prevRepoRoot = process.env.HERDR_WORKFLOWS_REPO_ROOT;
+  const prevCtxJson = process.env.HERDR_PLUGIN_CONTEXT_JSON;
+
+  afterEach(() => {
+    if (prevRepoRoot === undefined) delete process.env.HERDR_WORKFLOWS_REPO_ROOT;
+    else process.env.HERDR_WORKFLOWS_REPO_ROOT = prevRepoRoot;
+    if (prevCtxJson === undefined) delete process.env.HERDR_PLUGIN_CONTEXT_JSON;
+    else process.env.HERDR_PLUGIN_CONTEXT_JSON = prevCtxJson;
+  });
+
+  test("empty HERDR_WORKFLOWS_REPO_ROOT is treated as unset", async () => {
+    const { root } = await fixture();
+    process.env.HERDR_WORKFLOWS_REPO_ROOT = "";
+    const before = process.cwd();
+    try {
+      process.chdir(root);
+      const app = await loadContext();
+      expect(app.repoRoot).toBe(resolveRepoRoot());
+      expect(app.repoRoot).not.toBe("");
+    } finally {
+      process.chdir(before);
+    }
+  });
+
+  test("repo root walks from process.cwd not invocation pane cwd", async () => {
+    const { root } = await fixture();
+    const pane = await mkdtemp(join(tmpdir(), "herdr-workflows-pane-"));
+    dirs.push(pane);
+    await mkdir(join(pane, ".hwf"), { recursive: true });
+    process.env.HERDR_PLUGIN_CONTEXT_JSON = JSON.stringify({ focused_pane_cwd: pane });
+    delete process.env.HERDR_WORKFLOWS_REPO_ROOT;
+    const before = process.cwd();
+    try {
+      process.chdir(root);
+      const app = await loadContext();
+      expect(app.repoRoot).toBe(resolveRepoRoot());
+      expect(app.repoRoot).not.toBe(resolveRepoRoot(pane));
+    } finally {
+      process.chdir(before);
+    }
+  });
+
+  test("fromInvocation walks from pane cwd", async () => {
+    const { root } = await fixture();
+    const pane = await mkdtemp(join(tmpdir(), "herdr-workflows-pane-"));
+    dirs.push(pane);
+    await mkdir(join(pane, ".hwf"), { recursive: true });
+    process.env.HERDR_PLUGIN_CONTEXT_JSON = JSON.stringify({ focused_pane_cwd: pane });
+    delete process.env.HERDR_WORKFLOWS_REPO_ROOT;
+    const before = process.cwd();
+    try {
+      process.chdir(root);
+      const app = await loadContext({ fromInvocation: true });
+      expect(app.repoRoot).toBe(resolveRepoRoot(pane));
+      expect(app.repoRoot).not.toBe(resolveRepoRoot());
+    } finally {
+      process.chdir(before);
+    }
   });
 });

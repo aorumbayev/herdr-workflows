@@ -216,7 +216,7 @@ async function cmdWorkflowInspect(
 async function cmdLaunch(): Promise<void> {
   await ensureHerdrProtocol();
   // Picker popup cwd is the plugin dir; forward invocation repo + context.
-  const { repoRoot } = await loadContext();
+  const { repoRoot } = await loadContext({ fromInvocation: true });
   const env: Record<string, string> = { HERDR_WORKFLOWS_REPO_ROOT: repoRoot };
   if (process.env.HERDR_PLUGIN_CONTEXT_JSON)
     env.HERDR_PLUGIN_CONTEXT_JSON = process.env.HERDR_PLUGIN_CONTEXT_JSON;
@@ -345,7 +345,7 @@ async function runPickerPopup(
   protocolReady: Promise<void>,
 ): Promise<void> {
   const loading = (async () => {
-    const app = await loadContext();
+    const app = await loadContext({ fromInvocation: true });
     const { defaultPickerReleaseCheck } = await import("./tui/update-indicator");
     const releaseCheck = defaultPickerReleaseCheck();
     const entries = await listWorkflows(app.repoRoot, app.config);

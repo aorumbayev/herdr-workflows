@@ -29,7 +29,7 @@ import {
   shouldRestoreCustomChoiceText,
   truncate,
 } from "../src/tui/picker-rows";
-import { themeFromPalette } from "../src/tui/theme";
+import { themeFromPalette } from "../src/tui/picker-chrome";
 import { humanizeWorkflowName, workflowDisplayTitle } from "../src/workflow/trust";
 import { fakePickerChrome, type FakePickerChrome } from "./picker-chrome-fake";
 

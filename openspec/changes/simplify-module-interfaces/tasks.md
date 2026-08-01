@@ -17,12 +17,12 @@ Run `bun test ./test` and `CI=1 npm run verify` after every task. Both must be g
 ## 3. One input session
 
 - [x] 3.1 Move dynamic-choice resolution (`resolveDynamicChoices`, stdout parsing, caps) from `workflow/load.ts` to `workflow/inputs.ts`. Loading never resolves options. Detached payload replay keeps rejecting live resolution. Detached-run tests are the oracle and must not be rewritten.
-- [x] 3.2 Merge `collectInputValues` / `collectWorkflowInputs` into `createInputSession`. The headless CLI collector becomes an internal driver over the session. Picker and web field submission consume the session as adapters.
+- [x] 3.2 Merge `collectInputValues` / `collectWorkflowInputs` into `createInputSession`. The headless CLI collector becomes an internal driver over the session. The picker consumes the session as an adapter. Web field submission reaches the session only via `hwf run` (no direct web adapter).
 
 ## 4. Context and caps
 
 - [x] 4.1 Introduce `loadContext()` in `src/config.ts` returning config layers + repo root + invocation context + platform + base namespace in one call. `cli.ts` resolves it once and threads it down. Surfaces stop calling `loadConfig`/`readInvocationContext`/`platformName` piecemeal.
-- [x] 4.2 Move `buildTemplateNamespace` from `config.ts` to `src/workflow/`. Confirm cap assertions (`assertUnder*`) appear only at the four capture boundaries (herdr response capture, shell capture, dynamic-choice output, transcript read) and nowhere else.
+- [x] 4.2 Move `buildTemplateNamespace` from `config.ts` to `src/workflow/`. Cap assertions (`assertUnder*`) fire at the capture boundaries (herdr response, shell, dynamic-choice output, transcript) and at the other sized-payload gates that also cross the shared byte cap (workflow import YAML, share bundle JSON, agent prompt before spill).
 
 ## 5. Surface entry points
 

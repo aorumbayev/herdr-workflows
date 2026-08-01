@@ -142,3 +142,10 @@ export async function runInit(
     ? { kind: "overwritten", path, profiles: names }
     : { kind: "wrote", path, profiles: names };
 }
+
+/** Declared internal seam — unit tests pin detect/format without widening the CLI export surface. */
+export const initSeams = {
+  HERDR_AGENT_KINDS,
+  detectProfiles,
+  formatProfilesYaml,
+};
