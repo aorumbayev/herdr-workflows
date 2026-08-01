@@ -38,7 +38,7 @@ const ENTRIES: Record<Module, ReadonlySet<string>> = {
     "src/workflow/share.ts",
   ]),
   engine: new Set(["src/run/runner.ts", "src/run/launch.ts"]),
-  history: new Set(["src/history/store.ts", "src/history/recorder.ts", "src/history/types.ts"]),
+  history: new Set(["src/history.ts"]),
   host: new Set(["src/host.ts", "src/herdr-methods.generated.ts"]),
   context: new Set(["src/context.ts"]),
 };
@@ -65,7 +65,7 @@ const ALLOW: ReadonlySet<string> = new Set([
   "src/tui/picker.ts -> src/console.ts",
   "src/context.ts -> src/workflow/types.ts",
   "src/host.ts -> src/workflow/types.ts",
-  "src/history/recorder.ts -> src/workflow/types.ts",
+  "src/history.ts -> src/workflow/types.ts",
   ...engineTemplateAllows(),
 ]);
 
@@ -94,7 +94,7 @@ function moduleOf(file: string): Module | undefined {
   if (file.startsWith("src/web/")) return "workbench";
   if (file.startsWith("src/workflow/")) return "workflows";
   if (file.startsWith("src/run/")) return "engine";
-  if (file.startsWith("src/history/")) return "history";
+  if (file === "src/history.ts") return "history";
   if (file === "src/host.ts" || file === "src/herdr-methods.generated.ts") {
     return "host";
   }

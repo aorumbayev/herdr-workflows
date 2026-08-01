@@ -7,7 +7,7 @@ import {
   parseHistoryAck,
   presentDetail,
   runDetail,
-} from "../history/store";
+} from "../history";
 import { latest } from "../context";
 import type { LoadedWorkflow, WorkflowListEntry } from "../workflow/types";
 import { runWorkbenchRoute } from "../web/endpoint";

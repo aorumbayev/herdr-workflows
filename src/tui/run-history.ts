@@ -1,6 +1,13 @@
 import { basename } from "node:path";
-import { formatElapsed, listRuns, statusLabel, type RunDetailBlock } from "../history/store";
-import type { RunDetail, RunListItem, RunProjectedStatus } from "../history/types";
+import {
+  formatElapsed,
+  listRuns,
+  statusLabel,
+  type RunDetail,
+  type RunDetailBlock,
+  type RunListItem,
+  type RunProjectedStatus,
+} from "../history";
 import { truncate } from "./picker-rows";
 
 const SEP = " · ";

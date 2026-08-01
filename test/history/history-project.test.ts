@@ -2,19 +2,14 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  presentRunDetail,
-  projectStatus,
-  toDetail,
-  type RunDetailBlock,
-} from "../../src/history/project";
-import { allocateRunId, runsDir } from "../../src/history/store";
+import { presentRunDetail, projectStatus, toDetail, type RunDetailBlock } from "../../src/history";
+import { allocateRunId, runsDir } from "../../src/history";
 import {
   RUN_HISTORY_STALE_MS,
   isSnapshot,
   type RunDetail,
   type RunSnapshot,
-} from "../../src/history/types";
+} from "../../src/history";
 import { formatRunDetailLines } from "../../src/tui/run-history";
 import { writeTestSnapshot } from "../fakes/helpers/history-snapshot";
 

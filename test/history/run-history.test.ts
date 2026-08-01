@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { allocateRunId, RunHistorySession, runDetail } from "../../src/history/store";
+import { allocateRunId, RunHistorySession, runDetail } from "../../src/history";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +9,7 @@ import {
   detailLines,
   loadRunsBrowser,
 } from "../../src/tui/run-history";
-import type { RunListItem } from "../../src/history/types";
+import type { RunListItem } from "../../src/history";
 import { runWorkbenchRoute } from "../../src/web/endpoint";
 import {
   createRunsBrowser,

@@ -1,7 +1,9 @@
-import type { RunStepOutcomeKind, RunStepPhase, RunTerminalStatus } from "../../src/history/types";
+import type { RunStepOutcomeKind, RunTerminalStatus } from "../../src/history";
 import type { StepOutcome } from "../../src/run/context";
-import type { RunRecorder } from "../../src/history/recorder";
+import type { RunRecorder } from "../../src/history";
 import type { WorkflowStep } from "../../src/workflow/types";
+
+type RunStepPhase = "main" | "recovery";
 
 export type FakeRecorderCall =
   | {

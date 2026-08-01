@@ -3,7 +3,7 @@ import { chmod, mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pluginStateDir } from "../../src/context";
-import { allocateRunId, RunHistorySession } from "../../src/history/store";
+import { allocateRunId, RunHistorySession } from "../../src/history";
 import { workflowSchemaUrl } from "../../src/context";
 import { parseWebRoute, runWorkbenchRoute } from "../../src/web/endpoint";
 import { dropSource, startWebServer, type WebServer } from "../../src/web/server";

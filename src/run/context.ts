@@ -4,7 +4,7 @@ import { HerdrError, validateHerdrInvocation } from "../host";
 import { assertUnderCaptureCap, CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../context";
 import { substituteParams } from "../workflow/template";
 import type { TemplateNamespace, WorkflowStep } from "../workflow/types";
-import type { RunRecorder } from "../history/recorder";
+import type { RunRecorder } from "../history";
 
 export type StepFailure = {
   message: string;

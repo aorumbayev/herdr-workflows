@@ -11,8 +11,7 @@ import {
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pluginStateDir } from "../context";
-import { RUN_UUID_PATTERN } from "../history/types";
-import { canonicalRepoRoot } from "../history/store";
+import { RUN_UUID_PATTERN, canonicalRepoRoot } from "../history";
 import {
   assertCredentialStoreSafe,
   assertPrivateCredentialFile,

@@ -10,8 +10,13 @@ import {
   workflowSchemaUrl,
 } from "../context";
 import { HERDR_METHOD_BY_NAME } from "../herdr-methods.generated";
-import { canonicalRepoRoot, listRuns, runDetail } from "../history/store";
-import type { RunProjectedStatus, RunWorkflowSource } from "../history/types";
+import {
+  canonicalRepoRoot,
+  listRuns,
+  runDetail,
+  type RunProjectedStatus,
+  type RunWorkflowSource,
+} from "../history";
 import {
   checkPayload,
   parseImportScope,

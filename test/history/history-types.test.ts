@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { allocateRunId } from "../../src/history/store";
-import { isSnapshot } from "../../src/history/types";
+import { allocateRunId, isSnapshot } from "../../src/history";
 
 describe("run snapshot schema", () => {
   test("malformed nested step fields are rejected by guard", () => {

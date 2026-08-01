@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { canonicalRepoRoot } from "../../src/history/store";
+import { canonicalRepoRoot } from "../../src/history";
 import {
   acquireEndpointLockSync,
   openWorkbench,

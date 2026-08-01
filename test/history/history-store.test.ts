@@ -13,7 +13,7 @@ import {
 import { tmpdir, platform } from "node:os";
 import { join } from "node:path";
 import { pluginStateDir, type WorkflowsConfig } from "../../src/context";
-import { toListItem } from "../../src/history/project";
+import { toListItem } from "../../src/history";
 import {
   allocateRunId,
   runDetail,
@@ -22,8 +22,8 @@ import {
   RunHistorySession,
   runsDir,
   snapshotPath,
-} from "../../src/history/store";
-import { RUN_HISTORY_RETENTION_BYTES } from "../../src/history/types";
+} from "../../src/history";
+import { RUN_HISTORY_RETENTION_BYTES } from "../../src/history";
 import type { RunnerDeps } from "../../src/run/context";
 import { runWorkflow } from "../../src/run/runner";
 import { assertCredentialStoreSafe } from "../../src/context";

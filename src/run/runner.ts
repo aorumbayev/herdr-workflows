@@ -10,7 +10,7 @@ import {
   tabClose,
 } from "../host";
 import type { InvocationContext, WorkflowsConfig } from "../context";
-import type { RunStepOutcomeKind } from "../history/types";
+import type { RunStepOutcomeKind } from "../history";
 import { assertHwfEnvValues, transcriptText } from "../context";
 import { completeWorkflowInputs, evaluateWhen } from "../workflow/inputs";
 import type {
@@ -31,7 +31,7 @@ import {
   type StepRunOpts,
   type StepsResult,
 } from "./context";
-import { createRunRecorder, type RunRecorder } from "../history/recorder";
+import { createRunRecorder, type RunRecorder } from "../history";
 import { agentStep } from "./steps/agent";
 import { evaluateReturns, workflowStep } from "./steps/include";
 import { shellStep } from "./steps/shell";
