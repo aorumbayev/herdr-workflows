@@ -2,7 +2,7 @@ import { gunzipSync } from "node:zlib";
 import { z } from "zod";
 import { CAPTURE_BYTE_LIMIT, CaptureLimitError, assertUnderCaptureCap } from "../limits";
 import { workflowSchemaUrl } from "../version";
-import { resolveWorkflowFile, workflowPath } from "./paths";
+import { WORKFLOW_NAME_RULE, resolveWorkflowFile, workflowPath } from "./paths";
 import { parseRaw } from "./parse";
 import { referencedWorkflowChildren } from "./trust";
 import { WORKFLOW_NAME_RE, WorkflowLoadError } from "./types";
@@ -35,17 +35,9 @@ export function looksLikeWorkflowYaml(text: string): boolean {
   return /^version:\s*v1alpha1\b/m.test(t) && /^steps:\s*(?:$|\[)/m.test(t);
 }
 
-export function assertWorkflowName(name: string): string {
-  const n = name.trim();
-  if (!WORKFLOW_NAME_RE.test(n)) {
-    throw new WorkflowLoadError("workflow name must match [a-z0-9][a-z0-9-_]*");
-  }
-  return n;
-}
-
 const entrySchema = z
   .object({
-    name: z.string().regex(WORKFLOW_NAME_RE, "workflow name must match [a-z0-9][a-z0-9-_]*"),
+    name: z.string().regex(WORKFLOW_NAME_RE, WORKFLOW_NAME_RULE),
     yaml: z.string().min(1, "yaml must be non-empty"),
   })
   .strict();

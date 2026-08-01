@@ -1,6 +1,9 @@
 import { createCliRenderer, type KeyEvent, type SelectOption } from "@opentui/core";
 import type { InvocationContext, WorkflowsConfig } from "../config";
 import { loadConfig } from "../config";
+import { openInBrowser } from "../herdr";
+import { EXAMPLES_URL } from "../init";
+import { PRODUCT_VERSION } from "../version";
 import { listWorkflows, loadWorkflowEntry } from "../workflow/load";
 import { createInputSession, type InputSession } from "../workflow/inputs";
 import { analyzeResolvedSensitivity, workflowDisplayTitle } from "../workflow/trust";
@@ -11,7 +14,6 @@ import {
   EMPTY_CATALOG_MESSAGE,
   EMPTY_LIST_HINT,
   formatPaletteBody,
-  openExamplesInBrowser,
   PALETTE_HINT,
   DELETE_CONFIRM_HINT,
   resolvePaletteLetter,
@@ -43,7 +45,6 @@ import {
 import { resolveHostTheme, type HostTheme } from "./theme";
 import {
   defaultPickerReleaseCheck,
-  embeddedPluginVersion,
   formatFilterUpdateHint,
   startPickerUpdateCheck,
 } from "./update-indicator";
@@ -616,7 +617,7 @@ async function runPaletteAction(state: PickerState, action: ResolvedPaletteActio
   }
   if (action.id === "examples") {
     try {
-      await openExamplesInBrowser();
+      await openInBrowser(EXAMPLES_URL);
     } catch (error) {
       failPalette(state, "examples failed", error);
       return;
@@ -952,7 +953,7 @@ export async function runPickerSession(opts: PickerSessionOpts): Promise<number>
   let applyNewer: ((version: string) => void) | undefined;
   startPickerUpdateCheck({
     check: opts.checkLatestRelease ?? defaultPickerReleaseCheck,
-    embeddedVersion: opts.embeddedVersion ?? embeddedPluginVersion(),
+    embeddedVersion: opts.embeddedVersion ?? PRODUCT_VERSION,
     onNewer: (version) => {
       if (applyNewer) applyNewer(version);
       else pendingNewer = version;

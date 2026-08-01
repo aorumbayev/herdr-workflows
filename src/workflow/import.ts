@@ -14,8 +14,8 @@ import {
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { assertUnderCaptureCap } from "../limits";
+import { assertWorkflowName } from "./paths";
 import {
-  assertWorkflowName,
   decodePayload,
   looksLikeWorkflowYaml,
   withPinnedSchemaPointer,

@@ -217,7 +217,14 @@ describe("update", () => {
     );
     expect(result.exitCode).toBe(7);
     expect(installs).toHaveLength(1);
-    expect(installs[0]!.args).toEqual(["plugin", "install", "aorumbayev/herdr-workflows", "--yes"]);
+    expect(installs[0]!.args).toEqual([
+      "plugin",
+      "install",
+      "aorumbayev/herdr-workflows",
+      "--ref",
+      `v${NEWER}`,
+      "--yes",
+    ]);
     expect(installs[0]!.cwd).not.toBe(pluginRoot);
     expect(result.stdout).toContain(`updating ${PRODUCT_VERSION} → ${NEWER}`);
     expect(result.stderr).toContain("exit 7");
@@ -227,15 +234,20 @@ describe("update", () => {
     const herdr = await writeFakeHerdr(githubListJson());
     const pluginRoot = await mkdtemp(join(tmpdir(), "hwf-managed-plugin-"));
     dirs.push(pluginRoot);
+    const installs: Array<{ args: string[]; cwd: string }> = [];
     const result = await captureRunUpdate(
       {
         fetchLatest: async () => ({ tag: `v${NEWER}`, version: NEWER }),
-        runInstall: async () => 0,
+        runInstall: async (args, cwd) => {
+          installs.push({ args, cwd });
+          return 0;
+        },
       },
       { HERDR_BIN_PATH: herdr, HERDR_PLUGIN_ROOT: pluginRoot },
     );
     expect(result.exitCode).toBeUndefined();
     expect(result.error).toBeUndefined();
+    expect(installs[0]!.args).toContain(`v${NEWER}`);
     expect(result.stdout).toContain(`updated to ${NEWER}`);
   });
 

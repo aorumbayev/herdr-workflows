@@ -112,8 +112,6 @@ export type UpdateDeps = {
   runInstall?: (args: string[], cwd: string) => Promise<number>;
 };
 
-const INSTALL_ARGS = ["plugin", "install", RELEASE_REPO, "--yes"] as const;
-
 /**
  * `hwf update` — check latest published release and delegate replacement to Herdr.
  * Must not import the picker module.
@@ -152,7 +150,10 @@ export async function runUpdate(deps: UpdateDeps = {}): Promise<void> {
   );
   const root = resolvePluginRoot();
   const cwd = leavePluginRoot(root);
-  const code = await runInstall([...INSTALL_ARGS], cwd);
+  const code = await runInstall(
+    ["plugin", "install", RELEASE_REPO, "--ref", latest.tag, "--yes"],
+    cwd,
+  );
   if (code !== 0) {
     process.stderr.write(`herdr plugin install failed with exit ${code}\n`);
     process.exit(code);

@@ -1,6 +1,5 @@
 import { unlink } from "node:fs/promises";
-import { EXAMPLES_URL } from "../init";
-import { notificationShow, openInBrowser } from "../herdr";
+import { notificationShow } from "../herdr";
 import { exportWorkflowBundle } from "../workflow/share";
 import type { WorkflowListEntry } from "../workflow/types";
 
@@ -72,10 +71,6 @@ async function copyTextToClipboard(text: string): Promise<void> {
   if (await trySpawn(["wl-copy"])) return;
   if (await trySpawn(["xclip", "-selection", "clipboard"])) return;
   throw new Error("no clipboard command (pbcopy, wl-copy, or xclip)");
-}
-
-export async function openExamplesInBrowser(): Promise<void> {
-  await openInBrowser(EXAMPLES_URL);
 }
 
 export async function shareWorkflowCopy(opts: {

@@ -1,5 +1,4 @@
 import { compareSemver, fetchLatestPublishedRelease } from "../update";
-import { PRODUCT_VERSION } from "../version";
 
 /** Width-bounded list-mode filter-row hint (printable ASCII only). */
 export const UPDATE_INDICATOR = "[run hwf update]";
@@ -55,8 +54,4 @@ export async function defaultPickerReleaseCheck(): Promise<{ version: string } |
   } catch {
     return null;
   }
-}
-
-export function embeddedPluginVersion(): string {
-  return PRODUCT_VERSION;
 }

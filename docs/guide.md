@@ -1,6 +1,6 @@
 # Write a workflow
 
-A workflow is a YAML file with a list of steps. The steps run in order, top to bottom. There are no loops, no branches, and no parallel groups. When you need one of those, write a shell script and call it from a `run:` step.
+A workflow is a YAML file with a list of steps. The steps run in order, top to bottom. There are no loops and no parallel groups. A step can skip with `when:`. For anything richer, write a shell script and call it from a `run:` step.
 
 This page covers the parts you write. [Reference](/reference) lists every field and limit.
 

@@ -2,6 +2,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { WORKFLOW_NAME_RE, WorkflowLoadError } from "./types";
 
+export const WORKFLOW_NAME_RULE = "workflow name must match [a-z0-9][a-z0-9-_]*";
+
 function globalDir(): string {
   return join(process.env.HOME ?? homedir(), ".hwf", "workflows");
 }
@@ -10,11 +12,17 @@ function repoDir(root: string): string {
   return join(root, ".hwf", "workflows");
 }
 
-export function workflowPath(scope: "repo" | "global", repoRoot: string, name: string): string {
-  if (!WORKFLOW_NAME_RE.test(name)) {
-    throw new WorkflowLoadError("workflow name must match [a-z0-9][a-z0-9-_]*");
+export function assertWorkflowName(name: string): string {
+  const n = name.trim();
+  if (!WORKFLOW_NAME_RE.test(n)) {
+    throw new WorkflowLoadError(WORKFLOW_NAME_RULE);
   }
-  return join(scope === "repo" ? repoDir(repoRoot) : globalDir(), `${name}.yaml`);
+  return n;
+}
+
+export function workflowPath(scope: "repo" | "global", repoRoot: string, name: string): string {
+  const n = assertWorkflowName(name);
+  return join(scope === "repo" ? repoDir(repoRoot) : globalDir(), `${n}.yaml`);
 }
 
 export async function resolveWorkflowFile(

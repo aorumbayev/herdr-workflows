@@ -250,6 +250,65 @@ steps:
     ).toThrow(/ready_when/);
   });
 
+  test("background and ready_when are mutually exclusive", () => {
+    expect(() =>
+      parse(`version: v1alpha1
+steps:
+  - run: sleep 1
+    pane: { open: tab }
+    background: true
+    ready_when: /ok/
+    timeout: 1s
+`),
+    ).toThrow(/background: and ready_when: are mutually exclusive/);
+  });
+
+  test("background rejects timeout", () => {
+    expect(() =>
+      parse(`version: v1alpha1
+steps:
+  - run: sleep 1
+    pane: { open: tab }
+    background: true
+    timeout: 1s
+`),
+    ).toThrow(/background: rejects timeout/);
+  });
+
+  test("placed run requires background or ready_when", () => {
+    expect(() =>
+      parse(`version: v1alpha1
+steps:
+  - run: sleep 1
+    pane: { open: tab }
+`),
+    ).toThrow(/placed run requires background: or ready_when:/);
+  });
+
+  test("ready_when rejects retry", () => {
+    expect(() =>
+      parse(`version: v1alpha1
+steps:
+  - run: sleep 1
+    pane: { open: tab }
+    ready_when: /ok/
+    timeout: 1s
+    retry:
+      attempts: 2
+`),
+    ).toThrow(/ready_when: rejects retry/);
+  });
+
+  test("background requires pane", () => {
+    expect(() =>
+      parse(`version: v1alpha1
+steps:
+  - run: sleep 1
+    background: true
+`),
+    ).toThrow(/background: requires pane:/);
+  });
+
   test("duration grammar", () => {
     expect(parseDurationMs("500ms")).toBe(500);
     expect(parseDurationMs("2s")).toBe(2000);
@@ -336,6 +395,19 @@ steps:
   - run: "true"
 `),
     ).toThrow(/on_failure rejects background/);
+  });
+
+  test("on_failure rejects retry", () => {
+    expect(() =>
+      parse(`version: v1alpha1
+on_failure:
+  run: "true"
+  retry:
+    attempts: 2
+steps:
+  - run: "true"
+`),
+    ).toThrow(/on_failure rejects retry/);
   });
 
   test("returns template and map", () => {
