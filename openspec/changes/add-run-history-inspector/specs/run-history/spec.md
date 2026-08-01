@@ -106,11 +106,15 @@ List data MUST contain only allowlisted scalar facts and safe labels. It MUST ex
 - **THEN** that text does not make the run match
 
 ### Requirement: Run storage and responses remain private
-The run-history directory and files MUST pass the existing private credential-store ownership and permission assertions. Authenticated workbench page, list, and detail responses MUST include `Cache-Control: no-store`. A permission mismatch MUST make history unavailable rather than weaken access checks.
+The run-history directory and files MUST pass the existing private credential-store ownership and permission assertions. Authenticated workbench page, list, and detail responses MUST include `Cache-Control: no-store`. A permission mismatch MUST make history unavailable rather than weaken access checks. When the state root or runs directory is a directory with permissive mode but no entries, the runner MUST tighten it to private (0700) and proceed. A non-empty permissive state root or runs directory MUST make history unavailable.
 
 #### Scenario: Run directory is group-readable
-- **WHEN** the run-history directory has unsafe permissions
+- **WHEN** a non-empty run-history state root has unsafe permissions
 - **THEN** history is unavailable and the runner does not change the permissions silently
+
+#### Scenario: Empty permissive state root
+- **WHEN** the state root exists with permissive mode and contains no entries
+- **THEN** the runner tightens it to private mode and history remains available
 
 ### Requirement: Recent history is bounded after filtering
 History projection MUST apply scope, status, and text predicates before sorting newest first and returning at most forty runs. Terminal snapshots MUST share a fixed 512,000-byte retention target. Cleanup MUST run only on creation and terminal persistence, delete oldest terminal snapshots first, and never delete an active or stale non-terminal snapshot.

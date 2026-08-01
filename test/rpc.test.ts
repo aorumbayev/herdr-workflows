@@ -3,7 +3,24 @@ import { createServer } from "node:net";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HerdrError, herdrRequest } from "../src/herdr";
+import { HerdrError, herdrBinPath, herdrRequest } from "../src/herdr";
+
+describe("herdrBinPath", () => {
+  test("empty or whitespace HERDR_BIN_PATH falls back to herdr", () => {
+    const prev = process.env.HERDR_BIN_PATH;
+    try {
+      process.env.HERDR_BIN_PATH = "";
+      expect(herdrBinPath()).toBe("herdr");
+      process.env.HERDR_BIN_PATH = "   ";
+      expect(herdrBinPath()).toBe("herdr");
+      delete process.env.HERDR_BIN_PATH;
+      expect(herdrBinPath()).toBe("herdr");
+    } finally {
+      if (prev === undefined) delete process.env.HERDR_BIN_PATH;
+      else process.env.HERDR_BIN_PATH = prev;
+    }
+  });
+});
 
 describe("herdrRequest socket failures", () => {
   test("rejects when socket closes without a response and names the address", async () => {

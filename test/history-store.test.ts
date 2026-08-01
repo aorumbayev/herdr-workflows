@@ -100,10 +100,22 @@ describe("run history store", () => {
     session.dispose();
   });
 
-  test("unsafe ACL makes history unavailable without changing permissions", async () => {
+  test("empty permissive state root is tightened and claimable", async () => {
     if (platform() === "win32") return;
     const session = new RunHistorySession();
     await mkdir(stateDir, { recursive: true });
+    await chmod(stateDir, 0o755);
+    const result = await session.claim(baseMeta());
+    expect(result).toMatchObject({ ok: true, state: "claimed" });
+    expect((await stat(stateDir)).mode & 0o777).toBe(0o700);
+    session.dispose();
+  });
+
+  test("non-empty permissive state root makes history unavailable", async () => {
+    if (platform() === "win32") return;
+    const session = new RunHistorySession();
+    await mkdir(stateDir, { recursive: true });
+    await writeFile(join(stateDir, "marker"), "x");
     await chmod(stateDir, 0o755);
     const result = await session.claim(baseMeta());
     expect(result).toMatchObject({ ok: true, state: "unavailable" });
@@ -706,6 +718,7 @@ steps:
     });
     const state = process.env.HERDR_PLUGIN_STATE_DIR!;
     await mkdir(state, { recursive: true });
+    await writeFile(join(state, "marker"), "x");
     await chmod(state, 0o755);
     const acks: string[] = [];
     const result = await runWorkflow({

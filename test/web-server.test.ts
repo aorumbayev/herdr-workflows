@@ -1116,6 +1116,7 @@ describe("run history web API", () => {
     const root = await repo();
     const state = process.env.HERDR_PLUGIN_STATE_DIR!;
     await mkdir(state, { recursive: true });
+    await writeFile(join(state, "marker"), "x");
     await chmod(state, 0o755);
     const server = await startWebServer({ repoRoot: root });
     try {

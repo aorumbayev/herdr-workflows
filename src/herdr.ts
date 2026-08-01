@@ -18,8 +18,8 @@ export class HerdrError extends Error {
   }
 }
 
-function bin(): string {
-  return process.env.HERDR_BIN_PATH ?? "herdr";
+export function herdrBinPath(): string {
+  return process.env.HERDR_BIN_PATH?.trim() || "herdr";
 }
 
 function socketPath(): string {
@@ -94,7 +94,7 @@ export async function herdrCall(
 async function herdrCli(
   args: string[],
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const proc = Bun.spawn([bin(), ...args], { stdout: "pipe", stderr: "pipe" });
+  const proc = Bun.spawn([herdrBinPath(), ...args], { stdout: "pipe", stderr: "pipe" });
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),

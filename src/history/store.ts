@@ -97,11 +97,13 @@ export function snapshotPath(id: string, env: NodeJS.ProcessEnv = process.env): 
   return join(runsDir(env), `${id}.json`);
 }
 
-/** Tighten only when already private-or-absent; never silently repair an unsafe mode. */
+/** Tighten private-or-absent paths; empty loose dirs only when mode is 0700. Never repair files or non-empty unsafe modes. */
 async function chmodIfPrivateOrNew(path: string, mode: number): Promise<void> {
   try {
     const st = await stat(path);
-    if ((st.mode & 0o077) !== 0) return;
+    if ((st.mode & 0o077) !== 0) {
+      if (mode !== 0o700 || !st.isDirectory() || (await readdir(path)).length !== 0) return;
+    }
   } catch {
     /* missing — mkdir/write will create */
   }
