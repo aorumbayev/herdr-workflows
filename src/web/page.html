@@ -266,6 +266,11 @@
         min-width: 9rem;
         cursor: text;
       }
+      input::placeholder,
+      textarea::placeholder {
+        color: var(--muted);
+        opacity: 1;
+      }
       input[type="checkbox"] {
         min-width: 0;
         padding: 0;
@@ -3010,6 +3015,7 @@
 
         function textInput(f, n, write) {
           const el = document.createElement("input");
+          if (f.placeholder) el.placeholder = f.placeholder;
           el.value = n.form[f.key] || "";
           el.oninput = () => write(el.value);
           return el;
@@ -3017,6 +3023,7 @@
 
         function areaControl(f, n, write) {
           const el = document.createElement("textarea");
+          if (f.placeholder) el.placeholder = f.placeholder;
           el.value = n.form[f.key] || "";
           el.oninput = () => write(el.value);
           return el;
@@ -3052,6 +3059,7 @@
           if (f.widget.min !== undefined) el.min = String(f.widget.min);
           if (f.widget.max !== undefined) el.max = String(f.widget.max);
           if (f.widget.integer) el.step = "1";
+          if (f.placeholder) el.placeholder = f.placeholder;
           el.value = n.form[f.key] || "";
           el.oninput = () => write(el.value);
           return el;
@@ -3132,6 +3140,7 @@
           bar.className = "segbar";
           const labels =
             f.key === "run" ? { text: "shell", list: "argv" } : { text: "one", list: "list" };
+          const listHint = f.key === "run" ? "one argv token per line" : "one entry per line";
           const btns = {};
           const setMode = (mode, snapshotFirst) => {
             if (snapshotFirst) ndv.ensureSnap();
@@ -3140,7 +3149,7 @@
               btns[key].setAttribute("aria-pressed", key === mode ? "true" : "false");
               btns[key].classList.toggle("on", key === mode);
             }
-            el.placeholder = mode === "list" ? "one entry per line" : "";
+            el.placeholder = mode === "list" ? listHint : f.placeholder || "";
             if (snapshotFirst) {
               relabel(n);
               refreshSummaries();
@@ -3220,7 +3229,13 @@
             if (open || String(n.form.params ?? "").trim())
               box.appendChild(
                 renderField(
-                  { key: "params", widget: { kind: "json" }, label: "params JSON", help: "" },
+                  {
+                    key: "params",
+                    widget: { kind: "json" },
+                    label: "params JSON",
+                    help: "",
+                    placeholder: '{"key": "value"}',
+                  },
                   n,
                 ),
               );
