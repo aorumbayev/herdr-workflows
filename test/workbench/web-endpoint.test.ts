@@ -13,9 +13,9 @@ import {
   readEndpointRecord,
   releaseEndpointLockSync,
   writeEndpointRecord,
-} from "../../src/web/endpoint";
-import { appendRouteHash, parseWebRoute } from "../../src/web/endpoint";
-import { startWebServer, type WebServer } from "../../src/web/server";
+} from "../../src/workbench";
+import { appendRouteHash, parseWebRoute } from "../../src/workbench";
+import { startWebServer, type WebServer } from "../../src/workbench";
 
 const dirs: string[] = [];
 const servers: WebServer[] = [];
@@ -352,7 +352,7 @@ describe("endpoint lifecycle", () => {
     const past = new Date(Date.now() - 60_000);
     await utimes(`${base}.${stale!.token}`, past, past);
 
-    const endpointSrc = join(import.meta.dir, "..", "..", "src", "web", "endpoint.ts");
+    const endpointSrc = join(import.meta.dir, "..", "..", "src", "workbench.ts");
     const runReclaimer = async (): Promise<string> => {
       const proc = Bun.spawn(
         [
@@ -398,7 +398,7 @@ describe("endpoint lifecycle", () => {
     const past = new Date(Date.now() - 60_000);
     await utimes(`${base}.${stale!.token}`, past, past);
 
-    const endpointSrc = join(import.meta.dir, "..", "..", "src", "web", "endpoint.ts");
+    const endpointSrc = join(import.meta.dir, "..", "..", "src", "workbench.ts");
     const gateDir = await mkdtemp(join(tmpdir(), "hwf-reclaim-gate-"));
     dirs.push(gateDir);
     const ready = join(gateDir, "ready");

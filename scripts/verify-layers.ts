@@ -29,7 +29,7 @@ const LAYER: Record<Module, number> = {
 const ENTRIES: Record<Module, ReadonlySet<string>> = {
   cli: new Set(["src/cli.ts", "src/console.ts", "src/init.ts", "src/update.ts", "src/setup.ts"]),
   picker: new Set(["src/tui/picker.ts"]),
-  workbench: new Set(["src/web/endpoint.ts"]),
+  workbench: new Set(["src/workbench.ts"]),
   workflows: new Set([
     "src/workflow/load.ts",
     "src/workflow/inputs.ts",
@@ -91,7 +91,7 @@ function repoPath(abs: string): string {
 
 function moduleOf(file: string): Module | undefined {
   if (file.startsWith("src/tui/")) return "picker";
-  if (file.startsWith("src/web/")) return "workbench";
+  if (file === "src/workbench.ts" || file.startsWith("src/web/")) return "workbench";
   if (file.startsWith("src/workflow/")) return "workflows";
   if (file.startsWith("src/run/")) return "engine";
   if (file === "src/history.ts") return "history";

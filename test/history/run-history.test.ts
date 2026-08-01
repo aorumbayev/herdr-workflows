@@ -10,7 +10,7 @@ import {
   loadRunsBrowser,
 } from "../../src/tui/run-history";
 import type { RunListItem } from "../../src/history";
-import { runWorkbenchRoute } from "../../src/web/endpoint";
+import { runWorkbenchRoute } from "../../src/workbench";
 import {
   createRunsBrowser,
   isDetailPollableStatus,

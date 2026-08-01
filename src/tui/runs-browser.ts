@@ -10,7 +10,7 @@ import {
 } from "../history";
 import { latest } from "../context";
 import type { LoadedWorkflow, WorkflowListEntry } from "../workflow/types";
-import { runWorkbenchRoute } from "../web/endpoint";
+import { runWorkbenchRoute } from "../workbench";
 import { LIST_VIEWPORT, type ChromeKeyEvent, type PickerChrome } from "./picker-chrome";
 import { formatDetailLines, truncate } from "./picker-rows";
 import {

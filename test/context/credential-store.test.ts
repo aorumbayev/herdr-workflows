@@ -9,7 +9,7 @@ import {
   parseDarwinAclListing,
   parseLinuxAclListing,
 } from "../../src/context";
-import { writeEndpointRecord } from "../../src/web/endpoint";
+import { writeEndpointRecord } from "../../src/workbench";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -122,7 +122,7 @@ describe("writeEndpointRecord privacy", () => {
       stateDir,
     );
     const { stat } = await import("node:fs/promises");
-    const { endpointRecordPath } = await import("../../src/web/endpoint");
+    const { endpointRecordPath } = await import("../../src/workbench");
     const mode = (await stat(endpointRecordPath("/repo", stateDir))).mode & 0o777;
     expect(mode).toBe(0o600);
   });

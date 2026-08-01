@@ -14,7 +14,7 @@ import {
 } from "../workflow/load";
 import { createInputSession, type InputSession } from "../workflow/inputs";
 import type { InputSpec, LoadedWorkflow, WorkflowListEntry } from "../workflow/types";
-import { parseWebRoute } from "../web/endpoint";
+import { parseWebRoute } from "../workbench";
 import {
   beginConfirmedDelete,
   deleteWorkflowFile,

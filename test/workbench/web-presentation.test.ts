@@ -12,7 +12,7 @@ import {
   stepFromForm,
   widgetFor,
 } from "../../src/web/field-model";
-import { startWebServer, type WebServer } from "../../src/web/server";
+import { startWebServer, type WebServer } from "../../src/workbench";
 
 const dirs: string[] = [];
 const servers: WebServer[] = [];

@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { pluginStateDir } from "../../src/context";
 import { allocateRunId, RunHistorySession } from "../../src/history";
 import { workflowSchemaUrl } from "../../src/context";
-import { parseWebRoute, runWorkbenchRoute } from "../../src/web/endpoint";
-import { dropSource, startWebServer, type WebServer } from "../../src/web/server";
+import { parseWebRoute, runWorkbenchRoute } from "../../src/workbench";
+import { dropSource, startWebServer, type WebServer } from "../../src/workbench";
 
 const dirs: string[] = [];
 const servers: WebServer[] = [];

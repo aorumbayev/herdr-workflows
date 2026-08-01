@@ -22,8 +22,8 @@ import {
 import { CaptureLimitError } from "./context";
 import { runWorkflow } from "./run/runner";
 import { buildIdentity, parseLaunchPayload, retireOnCodeChange } from "./run/launch";
-import { openWorkbench } from "./web/endpoint";
-import { appendRouteHash, parseWebRoute } from "./web/endpoint";
+import { openWorkbench } from "./workbench";
+import { appendRouteHash, parseWebRoute } from "./workbench";
 import { runSetup } from "./setup";
 import { runUpdate } from "./update";
 
