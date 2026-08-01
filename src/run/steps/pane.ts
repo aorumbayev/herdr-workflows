@@ -1,4 +1,4 @@
-import { HerdrError } from "../../herdr";
+import { HerdrError } from "../../host";
 import type { PaneOpen } from "../../workflow/types";
 import { sizeToFirstRatio, type RunnerDeps } from "../context";
 

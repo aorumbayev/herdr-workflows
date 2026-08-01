@@ -3,7 +3,7 @@ import { createServer } from "node:net";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HerdrError, herdrBinPath, herdrRequest, notificationShow } from "../../src/herdr";
+import { HerdrError, herdrBinPath, herdrRequest, notificationShow } from "../../src/host";
 import { isCoordinationError } from "../../src/run/context";
 
 describe("herdrBinPath", () => {

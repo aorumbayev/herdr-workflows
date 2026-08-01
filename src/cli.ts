@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { Command, InvalidArgumentError, Option } from "commander";
 import manifest from "../herdr-plugin.toml";
 import { die, openInBrowser, readLine, releaseStdinReader, tolerateClosedStdio } from "./console";
-import { ensureHerdrProtocol, HerdrError, notificationShow, pluginPaneOpen } from "./herdr";
+import { ensureHerdrProtocol, HerdrError, notificationShow, pluginPaneOpen } from "./host";
 import { loadContext, resolveRepoRoot } from "./config";
 import { runInit } from "./init";
 import { EXAMPLES_URL, PRODUCT_VERSION } from "./version";

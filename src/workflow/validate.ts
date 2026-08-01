@@ -1,4 +1,4 @@
-import { isMethodResultDotPath, RESULT_DOT_PATHS } from "../herdr-methods";
+import { isMethodResultDotPath, RESULT_DOT_PATHS } from "../host";
 import { clausesContain, evaluateWhen } from "./conditions";
 import {
   isWholeValueTemplate,

@@ -8,7 +8,7 @@ import {
   paneClose,
   reportToken,
   tabClose,
-} from "../herdr";
+} from "../host";
 import type { InvocationContext, WorkflowsConfig } from "../config";
 import type { RunStepOutcomeKind } from "../history/types";
 import { assertHwfEnvValues } from "../limits";

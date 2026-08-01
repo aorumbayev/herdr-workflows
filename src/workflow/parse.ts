@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { validateHerdrInvocation } from "../herdr-methods";
+import { validateHerdrInvocation } from "../host";
 import { isWholeValueTemplate, malformedTemplateSnippet, walkValueStrings } from "./template";
 import {
   bail,

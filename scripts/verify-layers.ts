@@ -39,7 +39,7 @@ const ENTRIES: Record<Module, ReadonlySet<string>> = {
   ]),
   engine: new Set(["src/run/runner.ts", "src/run/launch.ts"]),
   history: new Set(["src/history/store.ts", "src/history/recorder.ts", "src/history/types.ts"]),
-  host: new Set(["src/herdr.ts", "src/herdr-methods.ts", "src/herdr-methods.generated.ts"]),
+  host: new Set(["src/host.ts", "src/herdr-methods.generated.ts"]),
   context: new Set([
     "src/config.ts",
     "src/limits.ts",
@@ -72,7 +72,7 @@ const ALLOW: ReadonlySet<string> = new Set([
   "src/tui/update-indicator.ts -> src/update.ts",
   "src/tui/picker.ts -> src/console.ts",
   "src/config.ts -> src/workflow/types.ts",
-  "src/herdr-methods.ts -> src/workflow/types.ts",
+  "src/host.ts -> src/workflow/types.ts",
   "src/history/recorder.ts -> src/workflow/types.ts",
   ...engineTemplateAllows(),
 ]);
@@ -103,11 +103,7 @@ function moduleOf(file: string): Module | undefined {
   if (file.startsWith("src/workflow/")) return "workflows";
   if (file.startsWith("src/run/")) return "engine";
   if (file.startsWith("src/history/")) return "history";
-  if (
-    file === "src/herdr.ts" ||
-    file === "src/herdr-methods.ts" ||
-    file === "src/herdr-methods.generated.ts"
-  ) {
+  if (file === "src/host.ts" || file === "src/herdr-methods.generated.ts") {
     return "host";
   }
   if (ENTRIES.context.has(file)) return "context";

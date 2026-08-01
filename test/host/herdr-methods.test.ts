@@ -8,7 +8,7 @@ import {
   MIN_HERDR_VERSION,
   RESULT_DOT_PATHS,
   validateMethodParams,
-} from "../../src/herdr-methods";
+} from "../../src/host";
 
 describe("herdr method validators", () => {
   test("rejects unknown param key", () => {

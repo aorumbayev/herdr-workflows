@@ -1,7 +1,6 @@
 import { join } from "node:path";
 import type { InvocationContext, TranscriptExtractor, WorkflowsConfig } from "../config";
-import { validateHerdrInvocation } from "../herdr-methods";
-import { HerdrError } from "../herdr";
+import { HerdrError, validateHerdrInvocation } from "../host";
 import { assertUnderCaptureCap, CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../limits";
 import { substituteParams } from "../workflow/template";
 import type { TemplateNamespace, WorkflowStep } from "../workflow/types";

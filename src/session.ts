@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { TranscriptExtractor } from "./config";
-import { agentSessionInfo, HerdrError, type AgentSessionInfo } from "./herdr";
+import { agentSessionInfo, HerdrError, type AgentSessionInfo } from "./host";
 import { assertUnderCaptureCap, CAPTURE_BYTE_LIMIT, CaptureLimitError } from "./limits";
 import { spawnCapture } from "./run/steps/shell";
 

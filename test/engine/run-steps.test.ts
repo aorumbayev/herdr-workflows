@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HerdrError } from "../../src/herdr";
+import { assertFocusPolicy, HerdrError } from "../../src/host";
 import { CAPTURE_BYTE_LIMIT } from "../../src/limits";
 import {
   CoordinationError,
@@ -11,7 +11,7 @@ import {
   readManagedResponse,
   sizeToFirstRatio,
 } from "../../src/run/context";
-import { assertFocusPolicy } from "../../src/herdr-methods";
+
 import { buildHwfEnv, mergeStepEnv, runArgvStep, runShellStep } from "../../src/run/steps/shell";
 
 async function tempDir(): Promise<string> {

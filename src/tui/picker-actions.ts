@@ -1,5 +1,5 @@
 import { unlink } from "node:fs/promises";
-import { notificationShow } from "../herdr";
+import { notificationShow } from "../host";
 import { exportWorkflowBundle } from "../workflow/share";
 import type { WorkflowListEntry } from "../workflow/types";
 
