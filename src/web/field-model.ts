@@ -13,33 +13,62 @@ const FIELD_INFO = {
   run: {
     label: "command",
     help: "one command line, or argv one token per line",
+    placeholder: 'echo "hello"',
     group: "does",
     order: 1,
   },
   shell: { label: "shell", help: "command-line form only", group: "does", order: 2 },
-  agent: { label: "prompt", group: "does", order: 1 },
+  agent: { label: "prompt", placeholder: "what the agent should do", group: "does", order: 1 },
   herdr: { label: "method", group: "does", order: 1 },
   params: { label: "params", group: "does", order: 2 },
-  workflow: { label: "workflow", group: "does", order: 1 },
+  workflow: { label: "workflow", placeholder: "workflow name", group: "does", order: 1 },
   inputs: { label: "inputs", group: "does", order: 2 },
-  using: { label: "profile", help: "starts a new agent", group: "where", order: 1 },
+  using: {
+    label: "profile",
+    help: "starts a new agent",
+    placeholder: "profile name — empty with no target uses the default profile",
+    group: "where",
+    order: 1,
+  },
   target: {
     label: "target agent",
     help: "prompts an agent that already runs",
+    placeholder: "agent name or pane ID",
     group: "where",
     order: 2,
   },
-  cwd: { label: "working directory", group: "where", order: 3 },
+  cwd: {
+    label: "working directory",
+    placeholder: "path — empty uses the invocation directory",
+    group: "where",
+    order: 3,
+  },
   env: { label: "environment", group: "where", order: 4 },
   "pane.open": { label: "open pane", group: "where", order: 5 },
-  "pane.target": { label: "split anchor", group: "where", order: 6 },
-  "pane.workspace": { label: "workspace", group: "where", order: 7 },
-  "pane.size": { label: "pane size %", group: "where", order: 8 },
+  "pane.target": {
+    label: "split anchor",
+    placeholder: "pane ID — empty splits the invocation pane",
+    group: "where",
+    order: 6,
+  },
+  "pane.workspace": {
+    label: "workspace",
+    placeholder: "empty uses the invocation workspace",
+    group: "where",
+    order: 7,
+  },
+  "pane.size": {
+    label: "pane size %",
+    placeholder: "percent of the anchor pane",
+    group: "where",
+    order: 8,
+  },
   "pane.focus": { label: "focus the new pane", group: "where", order: 9 },
   "pane.close": { label: "close the pane", group: "where", order: 10 },
   when: {
     label: "condition",
     help: "one clause, or a list of clauses that all must hold",
+    placeholder: '{{steps.build.exit_code}} == "0"',
     group: "when",
     order: 1,
   },
@@ -47,15 +76,22 @@ const FIELD_INFO = {
   ready_when: {
     label: "ready when",
     help: "regex the pane output must match",
+    placeholder: "/regex/ such as /listening/",
     group: "when",
     order: 3,
   },
-  timeout: { label: "timeout", group: "fails", order: 1 },
-  "retry.attempts": { label: "attempts", group: "fails", order: 2 },
-  "retry.delay": { label: "delay between attempts", group: "fails", order: 3 },
+  timeout: { label: "timeout", placeholder: "30s, 5m, 1h", group: "fails", order: 1 },
+  "retry.attempts": {
+    label: "attempts",
+    placeholder: "includes the first try",
+    group: "fails",
+    order: 2,
+  },
+  "retry.delay": { label: "delay between attempts", placeholder: "5s", group: "fails", order: 3 },
   success_codes: {
     label: "exit codes that count as success",
     help: "one code per line",
+    placeholder: "0",
     group: "fails",
     order: 4,
   },
@@ -136,6 +172,7 @@ function pushFields(out, key, node) {
     widget,
     label: info.label,
     help: info.help || "",
+    placeholder: info.placeholder || "",
     group: info.group,
     order: info.order,
   });
@@ -152,6 +189,7 @@ export function stepFields(
   label: string;
   group: string;
   help?: string;
+  placeholder?: string;
 }> {
   const mine = PAYLOAD_KEYS[verb] || [];
   const out = [];

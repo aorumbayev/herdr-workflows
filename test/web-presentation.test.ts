@@ -479,6 +479,24 @@ describe("node form field model", () => {
     expect(back.step?.params).toEqual({ title: "done" });
   });
 
+  test("fields carry empty-state placeholders", async () => {
+    const { base, token } = await served();
+    const props = await stepProps(base, token);
+    const byKey: Record<string, { placeholder?: string }> = {};
+    for (const f of model.stepFields(props, "agent")) byKey[f.key] = f;
+    // Fields with a silent default say what empty means; format fields show an example.
+    expect(byKey.using?.placeholder).toContain("default profile");
+    expect(byKey.target?.placeholder).toContain("agent name");
+    expect(byKey.cwd?.placeholder).toContain("invocation directory");
+    expect(byKey["pane.target"]?.placeholder).toContain("pane");
+    expect(byKey["pane.workspace"]?.placeholder).toContain("workspace");
+    expect(byKey.timeout?.placeholder).toContain("30s");
+    // A key without a presentation entry still renders, with no placeholder.
+    const grown = Object.assign({ nudge: { type: "string" } }, props) as Props;
+    const nudge = model.stepFields(grown, "run").find((f) => f.key === "nudge");
+    expect(nudge?.placeholder).toBe("");
+  });
+
   test("issue paths address the field they name", async () => {
     expect(model.issueField(["steps", 2, "retry", "attempts"])).toEqual({
       index: 2,
