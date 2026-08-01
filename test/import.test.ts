@@ -34,7 +34,7 @@ import {
   withPinnedSchemaPointer,
 } from "../src/workflow/share";
 import { WorkflowLoadError } from "../src/workflow/types";
-import { PRODUCT_VERSION } from "../src/setup";
+import { PRODUCT_VERSION } from "../src/version";
 
 const dirs: string[] = [];
 const prevHome = process.env.HOME;

@@ -73,7 +73,7 @@ Three tabs:
 
 - **Workflows** lists your repo and global workflows and opens one in the editor.
 - **Config** edits `.hwf/config.yaml` or your global config, and checks the YAML before saving.
-- **Runs** is a location-filtered list plus selected-run inspector. Location defaults to the current checkout and resets there on reload. Search matches workflow identity, status, run id, and allowlisted failure facts. It does not match private failure explanation text. Deep link with `hwf web run=<uuid>`. Terminal snapshots share a fixed 512 KiB retention budget. Active and stale non-terminal snapshots are kept.
+- **Runs** is a location-filtered list plus selected-run inspector. Location defaults to the current checkout and resets there on reload. Search matches workflow identity, status, run id, and allowlisted failure facts. It does not match private failure explanation text. Deep link with `hwf web run=<uuid>`. Terminal snapshots share a fixed 500 KiB (512,000 bytes) retention budget. Active and stale non-terminal snapshots are kept.
 
 ### Editing
 

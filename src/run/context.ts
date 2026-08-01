@@ -62,6 +62,7 @@ export type StepRunOpts = {
   history?: RunHistorySession;
   onProgress?: (step: number, total: number, label: string, outcome?: string) => void;
   onStderr?: (text: string) => void;
+  runSteps: RunSteps;
 };
 
 export type StepCtx = {
@@ -82,7 +83,7 @@ export type StepsResult =
       failure?: StepFailure;
     };
 
-export type RunSteps = (
+type RunSteps = (
   steps: WorkflowStep[],
   opts: StepRunOpts,
   values: TemplateNamespace,

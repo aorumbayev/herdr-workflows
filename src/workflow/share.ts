@@ -1,14 +1,11 @@
 import { gunzipSync } from "node:zlib";
 import { z } from "zod";
 import { CAPTURE_BYTE_LIMIT, CaptureLimitError, assertUnderCaptureCap } from "../limits";
-import { workflowSchemaUrl } from "../setup";
-import { resolveWorkflowFile, workflowPath } from "./load";
+import { workflowSchemaUrl } from "../version";
+import { resolveWorkflowFile, workflowPath } from "./paths";
 import { parseRaw } from "./parse";
 import { referencedWorkflowChildren } from "./trust";
-import { WorkflowLoadError } from "./types";
-
-/** Same grammar as workbench deep-links / picker sources. */
-const WORKFLOW_NAME_RE = /^[a-z0-9][a-z0-9-_]*$/;
+import { WORKFLOW_NAME_RE, WorkflowLoadError } from "./types";
 
 const SCHEMA_POINTER_RE = /^#\s*yaml-language-server:\s*\$schema=\S+\s*$/;
 

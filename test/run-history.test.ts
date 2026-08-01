@@ -13,6 +13,7 @@ import type { RunListItem } from "../src/history/types";
 import { runWorkbenchRoute } from "../src/web/endpoint";
 import {
   createRunsBrowser,
+  isDetailPollableStatus,
   RUNS_LIST_VIEWPORT,
   runsSelectedIndex,
   scrollDetailLines,
@@ -54,6 +55,8 @@ type FakeList = {
   options: { name: string; description: string; value: { run: RunListItem } }[];
   getSelectedIndex: () => number;
   setSelectedIndex: (i: number) => void;
+  moveUp: (steps?: number) => void;
+  moveDown: (steps?: number) => void;
   focus: () => void;
 };
 
@@ -71,6 +74,14 @@ function fakeList(): FakeList {
     getSelectedIndex: () => selected,
     setSelectedIndex: (i: number) => {
       selected = i;
+    },
+    moveUp: (steps = 1) => {
+      if (options.length === 0) return;
+      selected = (selected - steps + options.length) % options.length;
+    },
+    moveDown: (steps = 1) => {
+      if (options.length === 0) return;
+      selected = (selected + steps) % options.length;
     },
     focus: () => undefined,
   };
@@ -97,7 +108,6 @@ function fakeFilter(): {
 function createTestRuns(repoRoot: string): {
   runs: RunsBrowser;
   list: FakeList;
-  mode: { current: string };
   status: { content: string };
   footer: { content: string };
 } {
@@ -106,7 +116,6 @@ function createTestRuns(repoRoot: string): {
   const footer = fakeText();
   const filter = fakeFilter();
   const filterRow = { visible: true };
-  const mode = { current: "runs" };
   const status = { content: "" };
   const deps: RunsBrowserDeps = {
     repoRoot,
@@ -116,29 +125,17 @@ function createTestRuns(repoRoot: string): {
     footer,
     filter,
     filterRow,
-    showBrowserChrome: () => {
-      list.height = RUNS_LIST_VIEWPORT;
+    chrome: {
+      show: (layout) => {
+        if (layout === "browser") list.height = RUNS_LIST_VIEWPORT;
+      },
+      status: (content) => {
+        status.content = content ?? "";
+      },
     },
-    showListChrome: () => undefined,
-    hideBrowserChrome: () => undefined,
-    hideListChrome: () => undefined,
-    hideUpdateHint: () => undefined,
-    showStatus: (content) => {
-      status.content = content;
-    },
-    hideStatus: () => undefined,
-    setListOptions: (options) => {
-      list.options = options as FakeList["options"];
-    },
-    formatDetailLines: (t) => t,
-    truncate: (t) => t,
     launchWorkbenchRoute: () => undefined,
-    setMode: (next) => {
-      mode.current = next;
-    },
-    getMode: () => mode.current,
   };
-  return { runs: createRunsBrowser(deps), list, mode, status, footer };
+  return { runs: createRunsBrowser(deps), list, status, footer };
 }
 
 describe("picker run history formatting", () => {
@@ -162,7 +159,7 @@ describe("picker run history formatting", () => {
     const keep = ids[7]!;
     const { runs, list } = createTestRuns(root);
     expect(list.height).toBe(99);
-    await runs.refresh();
+    await runs.enter();
     expect(list.height).toBe(RUNS_LIST_VIEWPORT);
     const keepIdx = runsSelectedIndex(
       list.options.map((o) => o.value.run),
@@ -184,18 +181,26 @@ describe("picker run history formatting", () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-pick-gen-"));
     dirs.push(root);
     const first = new RunHistorySession();
-    await first.claim({ workflow: "one", source: "repo", checkout_root: root });
+    await first.claim({
+      workflow: "one",
+      source: "repo",
+      checkout_root: root,
+      started_at: "2026-01-01T00:00:00.000Z",
+    });
     await first.finalize("succeeded");
     const firstId = first.id!;
     first.dispose();
-    await Bun.sleep(5);
     const second = new RunHistorySession();
-    await second.claim({ workflow: "two", source: "repo", checkout_root: root });
+    await second.claim({
+      workflow: "two",
+      source: "repo",
+      checkout_root: root,
+      started_at: "2026-01-01T00:00:01.000Z",
+    });
     await second.finalize("succeeded");
     const secondId = second.id!;
     second.dispose();
-    const { runs, mode, status } = createTestRuns(root);
-    mode.current = "run-detail";
+    const { runs, status } = createTestRuns(root);
     const older = runs.openDetail(firstId);
     await runs.openDetail(secondId);
     await older;
@@ -229,9 +234,10 @@ describe("picker run history formatting", () => {
     expect(shouldDropStdinLeakSequence("\x07")).toBe(false);
   });
 
-  test("escape while running detail detaches with zero", () => {
-    expect(pickerEscapeExitCode("run-detail", true)).toBe(0);
-    expect(pickerEscapeExitCode("run-detail", false)).toBe(1);
+  test("escape while a run is in flight dismisses with zero", () => {
+    expect(pickerEscapeExitCode("run", true)).toBe(0);
+    expect(pickerEscapeExitCode("run", false)).toBe(1);
+    expect(pickerEscapeExitCode("list", false)).toBe(0);
   });
 
   test("workbench route uses complete UUID", () => {
@@ -244,13 +250,22 @@ describe("picker run history formatting", () => {
     dirs.push(root);
     await mkdir(root, { recursive: true });
     const first = new RunHistorySession();
-    await first.claim({ workflow: "one", source: "repo", checkout_root: root });
+    await first.claim({
+      workflow: "one",
+      source: "repo",
+      checkout_root: root,
+      started_at: "2026-01-01T00:00:00.000Z",
+    });
     await first.finalize("succeeded");
     const keep = first.id!;
     first.dispose();
-    await Bun.sleep(5);
     const second = new RunHistorySession();
-    await second.claim({ workflow: "two", source: "repo", checkout_root: root });
+    await second.claim({
+      workflow: "two",
+      source: "repo",
+      checkout_root: root,
+      started_at: "2026-01-01T00:00:01.000Z",
+    });
     await second.finalize("succeeded");
     second.dispose();
 
@@ -298,32 +313,23 @@ describe("picker run history formatting", () => {
     await session.finalize("succeeded");
     const keep = session.id!;
     session.dispose();
-    const { runs, mode, list } = createTestRuns(root);
-    await runs.refresh();
-    mode.current = "run-detail";
-    await runs.openDetail(keep);
+    const { runs, list } = createTestRuns(root);
     await runs.enter();
-    expect(mode.current).toBe("runs");
+    await runs.openDetail(keep);
+    expect(runs.isDetail()).toBe(true);
+    await runs.enter();
+    expect(runs.isActive()).toBe(true);
+    expect(runs.isDetail()).toBe(false);
     const idx = list.getSelectedIndex();
     expect(list.options[idx]!.value.run.id).toBe(keep);
   });
 
-  test("terminal detail shows succeeded without further poll updates", async () => {
-    const root = await mkdtemp(join(tmpdir(), "hwf-pick-poll-"));
-    dirs.push(root);
-    const session = new RunHistorySession();
-    await session.claim({ workflow: "done", source: "repo", checkout_root: root });
-    await session.finalize("succeeded");
-    const id = session.id!;
-    session.dispose();
-    const { runs, status } = createTestRuns(root);
-    await runs.refresh();
-    await runs.openDetail(id);
-    const first = String(status.content);
-    expect(first).toContain("SUCCEEDED");
-    await Bun.sleep(10);
-    expect(String(status.content)).toBe(first);
-    runs.dispose();
+  test("detail poll targets only running and stale statuses", () => {
+    expect(isDetailPollableStatus("running")).toBe(true);
+    expect(isDetailPollableStatus("stale")).toBe(true);
+    expect(isDetailPollableStatus("succeeded")).toBe(false);
+    expect(isDetailPollableStatus("failed")).toBe(false);
+    expect(isDetailPollableStatus("interrupted")).toBe(false);
   });
 
   test("starting detail lines are distinct from failure", () => {
@@ -351,7 +357,7 @@ describe("picker run history formatting", () => {
       status: "interrupted",
     });
     const narrow = formatRunRow(row, 20);
-    expect(narrow).toMatch(/INTERRUPTED|INTR|I/);
-    expect(narrow.length).toBeLessThanOrEqual(24);
+    expect(narrow).toBe("INTERRUPTED · . · 1s");
+    expect(narrow.length).toBeLessThanOrEqual(20);
   });
 });

@@ -8,10 +8,10 @@ import {
   installKeybindings,
   stripDeadBindings,
   readOwnership,
-  PRODUCT_VERSION,
   resolveBinDir,
   resolveHerdrConfigPath,
 } from "../src/setup";
+import { PRODUCT_VERSION } from "../src/version";
 
 const dirs: string[] = [];
 afterEach(async () => {

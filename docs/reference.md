@@ -94,7 +94,7 @@ Other fields: `inputs`.
 
 ### `returns:`
 
-One whole-value template, or a named map of them. Keys match `[a-z][a-z0-9_]{0,31}`. A whole-value template may resolve to an object or array. Literal null and empty maps are rejected. `context.transcript` and `context.transcript_file` are rejected, so a transcript can't reach the run log through a result.
+One whole-value template, or a named map of them. Keys match `[a-z][a-z0-9_]{0,31}`. A whole-value template may resolve to an object or array. Literal null and empty maps are rejected. `context.transcript` and `context.transcript_file` are rejected, so a transcript can't reach private per-run snapshot history through a result.
 
 ## `pane:`
 
@@ -148,7 +148,7 @@ The loader rejects duplicate step IDs, unknown paths, forward references, and re
 
 Identity values are captured at the start and don't follow your focus. Referencing an identity or transcript value that isn't available fails preflight, before step 1.
 
-Transcripts never enter the automatic `HWF_` environment or the run log, and every review surface marks them. The transcript file is removed when the run ends.
+Transcripts never enter the automatic `HWF_` environment or private per-run snapshot history, and every review surface marks them. The transcript file is removed when the run ends.
 
 `context.error` carries `message`, `workflow`, `action`, `step_number`, `workflow_path`, `details`, and `step_id` when the step had one. A child failure names the child's own failing action and local step number. `details` holds what applies: `stdout`, `stderr`, and `exit_code` for commands. Pane, tab, and workspace IDs for placed steps. Profile, kind or target, and pane IDs for agents. `method` and reason for herdr calls. The child name for workflow steps.
 

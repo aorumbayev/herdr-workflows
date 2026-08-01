@@ -8,7 +8,7 @@ import {
   toDetail,
   type RunDetailBlock,
 } from "../src/history/project";
-import { allocateRunId, replaceSnapshotForTest, runsDir } from "../src/history/store";
+import { allocateRunId, runsDir } from "../src/history/store";
 import {
   RUN_HISTORY_STALE_MS,
   isSnapshot,
@@ -16,6 +16,7 @@ import {
   type RunSnapshot,
 } from "../src/history/types";
 import { formatRunDetailLines } from "../src/tui/run-history";
+import { writeTestSnapshot } from "./helpers/history-snapshot";
 
 function snapshot(
   partial: Partial<Extract<RunDetail, { kind: "snapshot" }>> &
@@ -237,7 +238,7 @@ describe("run history projection", () => {
       steps: [],
     };
     await mkdir(runsDir(), { recursive: true, mode: 0o700 });
-    await replaceSnapshotForTest(snap);
+    await writeTestSnapshot(snap);
     expect(projectStatus(snap, Date.parse(started) + 1_000)).toBe("running");
     expect(projectStatus(snap, Date.parse(started) + RUN_HISTORY_STALE_MS)).toBe("stale");
     const fresh = { ...snap, heartbeat_at: new Date().toISOString() };
@@ -323,7 +324,7 @@ describe("run history projection", () => {
     };
     expect(isSnapshot(snap)).toBe(true);
     await mkdir(runsDir(), { recursive: true, mode: 0o700 });
-    await replaceSnapshotForTest(snap);
+    await writeTestSnapshot(snap);
     const detail = toDetail(snap);
     expect(detail.kind).toBe("snapshot");
     if (detail.kind !== "snapshot") return;

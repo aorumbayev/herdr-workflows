@@ -313,7 +313,12 @@ export class RunHistorySession {
         }
         throw error;
       }
-      await assertPrivateCredentialFile(path, historyAclOpts);
+      try {
+        await assertPrivateCredentialFile(path, historyAclOpts);
+      } catch (error) {
+        await rm(path, { force: true }).catch(() => undefined);
+        throw error;
+      }
       this.snapshot = snapshot;
       this.available = true;
       this.startHeartbeat();
@@ -470,12 +475,4 @@ export async function getRunDetail(
 
 export function allocateRunId(): string {
   return randomUUID().toLowerCase();
-}
-
-/** Test helper: replace a snapshot atomically after claim. */
-export async function replaceSnapshotForTest(
-  snapshot: RunSnapshot,
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<void> {
-  await writeSnapshotAtomic(snapshot, env);
 }

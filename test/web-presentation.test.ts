@@ -2,6 +2,16 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  addressesField,
+  extraOf,
+  formFromStep,
+  issueField,
+  sectionSummary,
+  stepFields,
+  stepFromForm,
+  widgetFor,
+} from "../src/web/field-model";
 import { startWebServer, type WebServer } from "../src/web/server";
 
 const dirs: string[] = [];
@@ -26,46 +36,18 @@ async function servedPage(): Promise<string> {
   return (await served()).page;
 }
 
-type Widget = { kind: string; options?: string[]; item?: Widget };
-type Field = { key: string; widget: Widget; label: string; group: string };
 type Props = Record<string, Record<string, unknown>>;
 
-type FieldModel = {
-  widgetFor: (node: unknown) => Widget;
-  stepFields: (props: Props, verb: string) => Field[];
-  formFromStep: (
-    props: Props,
-    verb: string,
-    step: Record<string, unknown>,
-    methods: unknown,
-  ) => Record<string, unknown>;
-  stepFromForm: (
-    props: Props,
-    verb: string,
-    form: Record<string, unknown>,
-    extra: Record<string, unknown>,
-    methods: unknown,
-  ) => { step?: Record<string, unknown>; error?: string };
-  extraOf: (props: Props, verb: string, step: Record<string, unknown>) => Record<string, unknown>;
-  issueField: (path: unknown) => { index: number; key: string } | null;
-  addressesField: (issueKey: string, fieldKey: string) => boolean;
-  sectionSummary: (fields: Field[], form: Record<string, unknown>) => string[];
+const model = {
+  widgetFor,
+  stepFields,
+  formFromStep,
+  stepFromForm,
+  extraOf,
+  issueField,
+  addressesField,
+  sectionSummary,
 };
-
-const MODEL_START = "/* ---------- node form field model (pure) ---------- */";
-const MODEL_END = "/* ---------- end node form field model ---------- */";
-
-// The page is served as one file, so the field model is tested the way the browser gets it.
-function fieldModel(page: string): FieldModel {
-  const start = page.indexOf(MODEL_START);
-  const end = page.indexOf(MODEL_END);
-  expect(start).toBeGreaterThanOrEqual(0);
-  expect(end).toBeGreaterThan(start);
-  const block = page.slice(start, end);
-  const exports =
-    "return { widgetFor, stepFields, formFromStep, stepFromForm, extraOf, issueField, addressesField, sectionSummary };";
-  return new Function(`${block}\n${exports}`)() as FieldModel;
-}
 
 async function stepProps(base: string, token: string): Promise<Props> {
   const res = await fetch(`${base}/api/schema`, { headers: { "x-hwf-token": token } });
@@ -394,7 +376,6 @@ describe("web workbench presentation", () => {
 describe("node form field model", () => {
   test("every step key resolves to a typed widget, and the page restates no bound", async () => {
     const { page, base, token } = await served();
-    const model = fieldModel(page);
     const props = await stepProps(base, token);
     for (const [key, node] of Object.entries(props)) {
       const kind = model.widgetFor(node).kind;
@@ -423,8 +404,7 @@ describe("node form field model", () => {
   });
 
   test("step to form to step preserves every key the form renders", async () => {
-    const { page, base, token } = await served();
-    const model = fieldModel(page);
+    const { base, token } = await served();
     const props = await stepProps(base, token);
     const step = {
       id: "build",
@@ -447,8 +427,7 @@ describe("node form field model", () => {
   });
 
   test("an argv element keeps its own spacing", async () => {
-    const { page, base, token } = await served();
-    const model = fieldModel(page);
+    const { base, token } = await served();
     const props = await stepProps(base, token);
     // Empty and padded arguments are legal argv, and the line widget must not rewrite them.
     const step = { run: ["printf", "%s|%s|", "", "  padded  "] };
@@ -462,8 +441,7 @@ describe("node form field model", () => {
   });
 
   test("an argv element holding a newline stays in YAML", async () => {
-    const { page, base, token } = await served();
-    const model = fieldModel(page);
+    const { base, token } = await served();
     const props = await stepProps(base, token);
     const step = { run: ["python", "-c", "import sys\nprint(1)"] };
     // One line per element cannot express it, so the form carries the value instead of splitting it.
@@ -475,8 +453,7 @@ describe("node form field model", () => {
   });
 
   test("a placement value survives an unset required sibling", async () => {
-    const { page, base, token } = await served();
-    const model = fieldModel(page);
+    const { base, token } = await served();
     const props = await stepProps(base, token);
     const form = model.formFromStep(props, "run", { run: "echo hi" }, {});
     form["pane.size"] = "40";
@@ -486,8 +463,7 @@ describe("node form field model", () => {
   });
 
   test("herdr params round-trip through the generated method specification", async () => {
-    const { page, base, token } = await served();
-    const model = fieldModel(page);
+    const { base, token } = await served();
     const props = await stepProps(base, token);
     const res = await fetch(`${base}/api/methods`, { headers: { "x-hwf-token": token } });
     const { methods } = (await res.json()) as { methods: { method: string }[] };
@@ -504,7 +480,6 @@ describe("node form field model", () => {
   });
 
   test("issue paths address the field they name", async () => {
-    const model = fieldModel(await servedPage());
     expect(model.issueField(["steps", 2, "retry", "attempts"])).toEqual({
       index: 2,
       key: "retry.attempts",
@@ -519,8 +494,7 @@ describe("node form field model", () => {
   });
 
   test("an issue on a group addresses the fields that group renders", async () => {
-    const { page, base, token } = await served();
-    const model = fieldModel(page);
+    const { base, token } = await served();
     const props = await stepProps(base, token);
     // `background: rejects retry` names the group, and the form renders its parts.
     const at = model.issueField(["steps", 0, "retry"]);
@@ -541,8 +515,7 @@ describe("node form field model", () => {
   });
 
   test("a schema key with no presentation entry lands in the trailing section", async () => {
-    const { page, base, token } = await served();
-    const model = fieldModel(page);
+    const { base, token } = await served();
     const props = await stepProps(base, token);
     const grown = Object.assign({ nudge: { type: "string" } }, props) as Props;
     const fields = model.stepFields(grown, "run");
@@ -565,7 +538,6 @@ describe("node form field model", () => {
 
   test("a section summarises what is set and the form marks the field with an issue", async () => {
     const { page, base, token } = await served();
-    const model = fieldModel(page);
     const props = await stepProps(base, token);
     const form = model.formFromStep(
       props,
@@ -584,5 +556,23 @@ describe("node form field model", () => {
     expect(page).toContain('head.setAttribute("aria-expanded", on ? "true" : "false")');
     expect(page).toContain("function paintNdvIssues()");
     expect(page).toContain("canvas.setIssues(r.data.issues || [])");
+  });
+
+  test("served page inlines executable field-model JavaScript", async () => {
+    const page = await servedPage();
+    const start = page.indexOf("function widgetFor(");
+    const end = page.indexOf("// The two generated sources the field model reads");
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const js = page.slice(start, end);
+    expect(js).not.toMatch(/function\s+\w+\([^)]*\)\s*:/);
+    expect(js).not.toMatch(/^export /m);
+    const api = new Function(`${js}; return { widgetFor, addressesField };`)() as {
+      widgetFor: (node: unknown) => { kind: string };
+      addressesField: (issueKey: string, fieldKey: string) => boolean;
+    };
+    expect(api.widgetFor({ type: "string" })).toEqual({ kind: "text" });
+    expect(api.addressesField("timeout", "timeout")).toBe(true);
+    expect(api.addressesField("retry", "timeout")).toBe(false);
   });
 });

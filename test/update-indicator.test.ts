@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   formatFilterUpdateHint,
-  leaveManagedCheckout,
   startPickerUpdateCheck,
   UPDATE_INDICATOR,
   updateAvailable,
@@ -73,11 +72,5 @@ describe("update indicator", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(failures).toEqual([]);
-  });
-
-  test("leaveManagedCheckout changes cwd to the invocation repo", () => {
-    const calls: string[] = [];
-    leaveManagedCheckout("/repo/root", (p) => calls.push(p));
-    expect(calls).toEqual(["/repo/root"]);
   });
 });

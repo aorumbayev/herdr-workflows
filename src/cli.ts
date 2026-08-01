@@ -33,6 +33,7 @@ import { ensureWorkbench } from "./web/endpoint";
 import { appendRouteHash, parseWebRoute } from "./web/endpoint";
 import { runSetup } from "./setup";
 import { runUpdate } from "./update";
+import { PRODUCT_VERSION } from "./version";
 
 function collectInput(value: string, previous: Record<string, string>): Record<string, string> {
   const eq = value.indexOf("=");
@@ -388,7 +389,7 @@ function buildProgram(): Command {
   program
     .name("hwf")
     .description(manifest.description)
-    .version(manifest.version)
+    .version(PRODUCT_VERSION)
     .addHelpText("after", `\nWorkflow format: ${WORKFLOW_FORMAT}`);
 
   program

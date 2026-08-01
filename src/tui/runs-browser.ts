@@ -6,6 +6,7 @@ import { sanitizeDisplay } from "../herdr";
 import { latest } from "../latest";
 import type { LoadedWorkflow, WorkflowListEntry } from "../workflow/types";
 import { runWorkbenchRoute } from "../web/endpoint";
+import { formatDetailLines, truncate } from "./picker-rows";
 import {
   detailLines,
   formatRunListEmpty,
@@ -47,6 +48,8 @@ type ListLike = {
   options: SelectOption[];
   getSelectedIndex: () => number;
   setSelectedIndex: (i: number) => void;
+  moveUp: (steps?: number) => void;
+  moveDown: (steps?: number) => void;
   focus: () => void;
 };
 
@@ -82,23 +85,18 @@ export type RunsBrowserDeps = {
   footer: TextLike;
   filter: FilterLike;
   filterRow: { visible: boolean };
-  showBrowserChrome: () => void;
-  showListChrome: () => void;
-  hideBrowserChrome: () => void;
-  hideListChrome: () => void;
-  hideUpdateHint: () => void;
-  showStatus: (content: string, options?: { flexGrow?: number; warn?: boolean }) => void;
-  hideStatus: () => void;
-  setListOptions: (options: SelectOption[]) => void;
-  formatDetailLines: (description: string, contentWidth: number) => string;
-  truncate: (text: string, max: number) => string;
+  chrome: {
+    show(layout: "browser" | "detail"): void;
+    status(content: string | undefined): void;
+  };
   launchWorkbenchRoute: (route: string) => void;
-  setMode: (mode: "runs" | "run-detail") => void;
-  getMode: () => string;
 };
+
+type BrowserView = "list" | "detail";
 
 type RunsBrowserSession = {
   deps: RunsBrowserDeps;
+  view: BrowserView | null;
   scope: RunsScope;
   browserState?: RunsBrowserState;
   refreshToken: ReturnType<typeof latest>;
@@ -126,8 +124,19 @@ export type RunsBrowser = {
   startRun(entry: WorkflowListEntry, launch: StartRunLaunch): Promise<void>;
   openDetail(id: string): Promise<void>;
   openSelected(): void;
+  isActive(): boolean;
+  isDetail(): boolean;
   readonly running: boolean;
 };
+
+function applyListOptions(session: RunsBrowserSession, options: SelectOption[]): void {
+  session.deps.list.options = options;
+  if (options.length > 0) {
+    session.deps.list.setSelectedIndex(
+      Math.min(session.deps.list.getSelectedIndex(), options.length - 1),
+    );
+  }
+}
 
 function stopDetailPoll(session: RunsBrowserSession): void {
   if (session.detailPoll !== undefined) {
@@ -142,14 +151,17 @@ function detachRun(session: RunsBrowserSession): void {
   session.running = false;
 }
 
+/** Terminal snapshots do not poll; only live/stale snapshot detail refreshes. */
+export function isDetailPollableStatus(status: string): boolean {
+  return status === "running" || status === "stale";
+}
+
 function detailIsPollable(session: RunsBrowserSession): boolean {
-  if (session.deps.getMode() !== "run-detail") return false;
+  if (session.view !== "detail") return false;
   if (!session.activeRunId || !normalizeRunUuid(session.activeRunId)) return false;
   if (!session.detailView || session.detailView.kind !== "detail") return false;
   if (session.detailView.detail.kind !== "snapshot") return false;
-  return (
-    session.detailView.detail.status === "running" || session.detailView.detail.status === "stale"
-  );
+  return isDetailPollableStatus(session.detailView.detail.status);
 }
 
 function beginDetailPollRequest(
@@ -162,9 +174,7 @@ function beginDetailPollRequest(
 
 function detailPollResponseCurrent(session: RunsBrowserSession, id: string, gen: number): boolean {
   return (
-    session.deps.getMode() === "run-detail" &&
-    session.activeRunId === id &&
-    session.detailToken.current(gen)
+    session.view === "detail" && session.activeRunId === id && session.detailToken.current(gen)
   );
 }
 
@@ -175,7 +185,7 @@ function selectedRunSummary(session: RunsBrowserSession): string {
 }
 
 function paintRunsSelection(session: RunsBrowserSession, total: number): void {
-  session.deps.detail.content = session.deps.formatDetailLines(
+  session.deps.detail.content = formatDetailLines(
     selectedRunSummary(session),
     session.deps.getContentWidth(),
   );
@@ -199,9 +209,8 @@ function renderDetail(session: RunsBrowserSession): void {
   const lines = detailLines(session.detailView, session.deps.getContentWidth());
   const { visible, scroll } = scrollDetailLines(lines, session.detailScroll, 10);
   session.detailScroll = scroll;
-  session.deps.hideBrowserChrome();
-  session.deps.hideListChrome();
-  session.deps.showStatus(visible.join("\n"), { flexGrow: 1 });
+  session.deps.chrome.show("detail");
+  session.deps.chrome.status(visible.join("\n"));
   session.deps.footer.content = runDetailFooter({
     allowWorkbench: viewAllowsWorkbench(session.detailView),
   });
@@ -231,15 +240,16 @@ function startDetailPoll(session: RunsBrowserSession): void {
 }
 
 async function refresh(session: RunsBrowserSession): Promise<void> {
+  if (session.view !== "list") return;
   const gen = session.refreshToken.begin();
   const currentScope = session.scope;
   const filter = session.deps.filter.value;
-  const mode = session.deps.getMode();
+  const view = session.view;
   const preserveId = preserveSelectionId(session);
   const browser = await loadRunsBrowser(session.deps.repoRoot, currentScope, filter, preserveId);
   if (
     !session.refreshToken.current(gen) ||
-    session.deps.getMode() !== mode ||
+    session.view !== view ||
     session.scope !== currentScope ||
     session.deps.filter.value !== filter
   ) {
@@ -248,8 +258,8 @@ async function refresh(session: RunsBrowserSession): Promise<void> {
   session.browserState = browser;
   session.deps.list.height = RUNS_LIST_VIEWPORT;
   if (browser.unavailable || browser.items.length === 0) {
-    session.deps.setListOptions([]);
-    session.deps.detail.content = session.deps.formatDetailLines(
+    applyListOptions(session, []);
+    session.deps.detail.content = formatDetailLines(
       formatRunListEmpty({
         scope: browser.scope,
         hasMachineRuns: browser.hasMachineRuns,
@@ -262,7 +272,7 @@ async function refresh(session: RunsBrowserSession): Promise<void> {
     return;
   }
   const options = formatRunsOptions(browser.items, session.deps.getContentWidth(), session.scope);
-  session.deps.setListOptions(options);
+  applyListOptions(session, options);
   const idx = runsSelectedIndex(browser.items, browser.selectedId);
   session.deps.list.setSelectedIndex(idx);
   session.browserState.selectedId = browser.items[idx]?.id;
@@ -275,38 +285,36 @@ async function enter(session: RunsBrowserSession): Promise<void> {
   session.running = false;
   session.progressLines = [];
   session.workflow = undefined;
-  session.deps.setMode("runs");
+  session.view = "list";
   session.detailView = undefined;
   if (preserveFromDetail && session.browserState) {
     session.browserState.selectedId = preserveFromDetail;
   }
   session.activeRunId = undefined;
-  session.deps.showBrowserChrome();
+  session.deps.chrome.show("browser");
   session.deps.filter.placeholder = "filter runs...";
   session.deps.filter.value = session.savedFilter;
   session.deps.filterRow.visible = true;
   session.deps.filter.visible = true;
-  session.deps.showListChrome();
-  session.deps.hideStatus();
-  session.deps.hideUpdateHint();
   await refresh(session);
   session.deps.filter.focus();
 }
 
 function leave(session: RunsBrowserSession): void {
   stopDetailPoll(session);
+  session.view = null;
   session.detailView = undefined;
   session.activeRunId = undefined;
 }
 
 async function openDetail(session: RunsBrowserSession, id: string): Promise<void> {
-  session.deps.setMode("run-detail");
+  session.view = "detail";
   session.activeRunId = id;
   session.detailScroll = 0;
   const gen = session.detailToken.begin();
   const detail = await getRunDetail(id);
   if (
-    session.deps.getMode() !== "run-detail" ||
+    session.view !== "detail" ||
     session.activeRunId !== id ||
     !session.detailToken.current(gen)
   ) {
@@ -323,13 +331,13 @@ function openSelected(session: RunsBrowserSession): void {
 }
 
 function toggleScope(session: RunsBrowserSession): void {
-  if (session.deps.getMode() !== "runs") return;
+  if (session.view !== "list") return;
   session.scope = session.scope === "current" ? "all" : "current";
   void refresh(session);
 }
 
 function onSelectionChanged(session: RunsBrowserSession): void {
-  if (session.deps.getMode() !== "runs" || !session.browserState) return;
+  if (session.view !== "list" || !session.browserState) return;
   const selected = session.browserState.items[session.deps.list.getSelectedIndex()];
   if (selected) session.browserState.selectedId = selected.id;
   session.activeRunId = undefined;
@@ -342,9 +350,8 @@ function onFilterInput(session: RunsBrowserSession): void {
 }
 
 function onResize(session: RunsBrowserSession): void {
-  const mode = session.deps.getMode();
-  if (mode === "runs") void refresh(session);
-  else if (mode === "run-detail") renderDetail(session);
+  if (session.view === "list") void refresh(session);
+  else if (session.view === "detail") renderDetail(session);
 }
 
 function handleDetailKey(session: RunsBrowserSession, key: KeyEvent): boolean {
@@ -381,11 +388,21 @@ function handleDetailKey(session: RunsBrowserSession, key: KeyEvent): boolean {
 }
 
 function handleKey(session: RunsBrowserSession, key: KeyEvent): boolean {
-  if (session.deps.getMode() === "run-detail") return handleDetailKey(session, key);
-  if (session.deps.getMode() !== "runs") return false;
+  if (session.view === "detail") return handleDetailKey(session, key);
+  if (session.view !== "list") return false;
   if (key.ctrl && (key.name === "g" || key.sequence === "\x07")) {
     key.preventDefault();
     toggleScope(session);
+    return true;
+  }
+  if (key.name === "up") {
+    key.preventDefault();
+    session.deps.list.moveUp();
+    return true;
+  }
+  if (key.name === "down") {
+    key.preventDefault();
+    session.deps.list.moveDown();
     return true;
   }
   if (key.name === "return" || key.name === "linefeed") {
@@ -402,7 +419,7 @@ function setStartingDetail(
   runId: string,
 ): void {
   stopDetailPoll(session);
-  session.deps.setMode("run-detail");
+  session.view = "detail";
   session.running = true;
   session.activeRunId = runId;
   session.detailScroll = 0;
@@ -435,11 +452,7 @@ function launchCancelled(
   launch: StartRunLaunch,
   runId: string,
 ): boolean {
-  return (
-    Boolean(launch.getExit()) ||
-    session.deps.getMode() !== "run-detail" ||
-    session.activeRunId !== runId
-  );
+  return Boolean(launch.getExit()) || session.view !== "detail" || session.activeRunId !== runId;
 }
 
 function withProgress(
@@ -506,7 +519,7 @@ async function startRun(
       },
       onProgressLine: (line) => {
         if (launchCancelled(session, launch, runId)) return;
-        session.progressLines.push(session.deps.truncate(line, session.deps.getContentWidth()));
+        session.progressLines.push(truncate(line, session.deps.getContentWidth()));
         withProgress(session, runId, entry, checkoutRoot, history.state);
         renderDetail(session);
       },
@@ -542,7 +555,7 @@ async function startRun(
     const gen = session.detailToken.begin();
     const detail = await getRunDetail(runId);
     if (
-      session.deps.getMode() !== "run-detail" ||
+      session.view !== "detail" ||
       session.activeRunId !== runId ||
       !session.detailToken.current(gen)
     ) {
@@ -568,6 +581,7 @@ async function startRun(
 export function createRunsBrowser(deps: RunsBrowserDeps): RunsBrowser {
   const session: RunsBrowserSession = {
     deps,
+    view: null,
     scope: "current",
     refreshToken: latest(),
     detailScroll: 0,
@@ -583,6 +597,7 @@ export function createRunsBrowser(deps: RunsBrowserDeps): RunsBrowser {
     dispose: () => {
       detachRun(session);
       stopDetailPoll(session);
+      session.view = null;
     },
     refresh: () => refresh(session),
     onSelectionChanged: () => onSelectionChanged(session),
@@ -591,6 +606,8 @@ export function createRunsBrowser(deps: RunsBrowserDeps): RunsBrowser {
     startRun: (entry, launch) => startRun(session, entry, launch),
     openDetail: (id) => openDetail(session, id),
     openSelected: () => openSelected(session),
+    isActive: () => session.view !== null,
+    isDetail: () => session.view === "detail",
     get running() {
       return session.running;
     },

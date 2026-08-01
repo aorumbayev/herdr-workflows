@@ -8,7 +8,6 @@ import {
   attachRunsBrowser,
   launchWorkbenchRoute,
   LIST_HINT,
-  pickerEscapeExitCode,
   selectedListEntry,
   tryOpenActionsPalette,
   type PickerState,
@@ -266,7 +265,7 @@ describe("picker detached run", () => {
     });
     await Bun.sleep(10);
     expect(state.runs.running).toBe(true);
-    expect(state.mode).toBe("run-detail");
+    expect(state.runs.isDetail()).toBe(true);
     expect(String(state.footer.content)).toContain("esc back");
 
     state.runs.dispose();
@@ -328,7 +327,7 @@ describe("picker detached run", () => {
     });
     expect(String(state.status.content)).toContain("[1/1]");
     expect(String(state.status.content)).toContain("HISTORY UNAVAILABLE");
-    expect(state.mode).toBe("run-detail");
+    expect(state.runs.isDetail()).toBe(true);
     expect(state.exit).toBeUndefined();
     expect(state.runs.running).toBe(false);
   });
@@ -354,9 +353,8 @@ describe("picker detached run", () => {
     expect(seen?.domains).toEqual({ branch: ["one", "two"] });
     expect(seen?.runId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     expect(state.runs.running).toBe(false);
-    expect(state.mode).toBe("run-detail");
+    expect(state.runs.isDetail()).toBe(true);
     expect(String(state.status.content)).toMatch(/LAUNCH FAILED|FAILED|boom/);
-    expect(pickerEscapeExitCode(state.mode, state.runs.running)).toBe(1);
   });
 });
 

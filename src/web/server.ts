@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { globalConfigPath, loadConfig, parseConfigText, repoConfigPath } from "../config";
-import { workflowSchemaUrl } from "../setup";
+import { workflowSchemaUrl } from "../version";
 import { HERDR_METHOD_BY_NAME } from "../herdr-methods.generated";
 import { canonicalRepoRoot, getRunDetail, listRunHistory } from "../history/store";
 import { normalizeRunUuid, presentRunDetail } from "../history/project";
@@ -15,17 +15,27 @@ import {
   previewBundle,
   runImport,
 } from "../workflow/import";
-import { listWorkflows, parseWorkflowText, workflowPath } from "../workflow/load";
+import { listWorkflows, parseWorkflowText } from "../workflow/load";
+import { workflowPath } from "../workflow/paths";
 import { dumpWorkflow } from "../workflow/dump";
 import { parseRaw, parseRawWithDoc, rawWorkflowSchema } from "../workflow/parse";
 import { exportWorkflowBundle, withPinnedSchemaPointer } from "../workflow/share";
 import { analyzeYamlTree, sensitivityLabels, workflowDisplayTitle } from "../workflow/trust";
+import { WORKFLOW_NAME_RE } from "../workflow/types";
+// @ts-expect-error Bun `with { type: "text" }` yields the file text, not the module namespace
+// oxlint-disable-next-line import/default -- Bun text import embeds source; module has named exports only
+import fieldModelSource from "./field-model.ts" with { type: "text" };
 import pageHtml from "./page.html" with { type: "text" };
 import logoSvg from "../../docs/assets/logo.svg" with { type: "text" };
 
-const PAGE = pageHtml as unknown as string;
+const FIELD_MODEL_JS = new Bun.Transpiler({ loader: "ts" })
+  .transformSync(fieldModelSource as string)
+  .replace(/^export /gm, "");
+const PAGE = (pageHtml as unknown as string).replace("/* __HWF_FIELD_MODEL__ */", FIELD_MODEL_JS);
+if (!PAGE.includes("function addressesField")) {
+  throw new Error("field model failed to inline into the workbench page");
+}
 const LOGO = logoSvg as unknown as string;
-const WORKFLOW_NAME_RE = /^[a-z0-9][a-z0-9-_]*$/;
 // Same call `scripts/generate-schema.ts` commits, so the served copy cannot go stale.
 const WORKFLOW_JSON_SCHEMA = z.toJSONSchema(rawWorkflowSchema);
 const METHOD_TABLE = [...HERDR_METHOD_BY_NAME.values()];

@@ -1,5 +1,5 @@
 import { compareSemver, fetchLatestPublishedRelease } from "../update";
-import { PRODUCT_VERSION } from "../setup";
+import { PRODUCT_VERSION } from "../version";
 
 /** Width-bounded list-mode filter-row hint (printable ASCII only). */
 export const UPDATE_INDICATOR = "[run hwf update]";
@@ -59,12 +59,4 @@ export async function defaultPickerReleaseCheck(): Promise<{ version: string } |
 
 export function embeddedPluginVersion(): string {
   return PRODUCT_VERSION;
-}
-
-/** Move process CWD to the invocation repo so Herdr can rename the managed checkout. */
-export function leaveManagedCheckout(
-  repoRoot: string,
-  chdir: (path: string) => void = (p) => process.chdir(p),
-): void {
-  chdir(repoRoot);
 }

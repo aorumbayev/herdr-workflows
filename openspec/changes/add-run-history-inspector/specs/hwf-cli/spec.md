@@ -73,3 +73,18 @@
 #### Scenario: Detached picker handoff ignores launcher stdout
 - **WHEN** the picker launches a detached `hwf web <route>` child
 - **THEN** the child does not inherit the picker's stdout, so tearing down the picker popup cannot abort the child before it opens the browser, and the child's stderr is retained in plugin state when that path is writable (otherwise ignored without blocking the handoff)
+
+### Requirement: Detached self-launch argv compatibility
+Detached `hwf run` launches MUST keep argv shape `run <name> --launch-payload` with the launch payload on stdin, never on argv. Detached `hwf web` launches MUST keep argv shape `web <route>`. Compiled-binary and Bun script entry re-exec rules in the launch helper MUST stay unchanged. A detached run whose outcome the caller awaits MUST settle that outcome on every supported platform, including after the caller stops observing progress, and MUST NOT depend on an unreferenced child handle continuing to report exit or stream end. Detaching MUST still release the caller, so a launcher process MUST NOT stay alive for the remaining lifetime of its child.
+
+#### Scenario: Detached run argv omits secrets
+- **WHEN** the picker launches a detached run with secret inputs
+- **THEN** the child argv contains `--launch-payload` and does not contain input values
+
+#### Scenario: Completion resolves after mid-run detach
+- **WHEN** the picker detaches from an in-flight detached run on macOS or Linux
+- **THEN** the awaited outcome resolves and the child runs to completion
+
+#### Scenario: Launcher exits after detach
+- **WHEN** the picker dismisses while a detached run is still executing
+- **THEN** the picker process exits without waiting for the child, and the run outcome still reaches the private per-run snapshot history

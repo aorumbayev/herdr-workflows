@@ -9,7 +9,6 @@ import {
   getRunDetail,
   listRunHistory,
   readSnapshot,
-  replaceSnapshotForTest,
   RunHistorySession,
   runsDir,
   snapshotPath,
@@ -18,8 +17,7 @@ import { RUN_HISTORY_RETENTION_BYTES } from "../src/history/types";
 import type { RunnerDeps } from "../src/run/context";
 import { runWorkflow } from "../src/run/runner";
 import { assertCredentialStoreSafe } from "../src/fs-private";
-import { parseWebRoute, runWorkbenchRoute } from "../src/web/endpoint";
-import { startWebServer } from "../src/web/server";
+import { writeTestSnapshot } from "./helpers/history-snapshot";
 
 describe("run history store", () => {
   let stateDir: string;
@@ -171,7 +169,7 @@ describe("run history store", () => {
     for (let i = 0; i < 45; i++) {
       const id = allocateRunId();
       const started = new Date(now - i * 1000).toISOString();
-      await replaceSnapshotForTest({
+      await writeTestSnapshot({
         version: 1,
         id,
         workflow: "foreign",
@@ -186,7 +184,7 @@ describe("run history store", () => {
     }
     const currentId = allocateRunId();
     const currentStarted = new Date(now - 50_000).toISOString();
-    await replaceSnapshotForTest({
+    await writeTestSnapshot({
       version: 1,
       id: currentId,
       workflow: "mine",
@@ -214,7 +212,7 @@ describe("run history store", () => {
     for (let i = 0; i < 4; i++) {
       const id = allocateRunId();
       const started = new Date(Date.now() - (i + 1) * 10_000).toISOString();
-      await replaceSnapshotForTest({
+      await writeTestSnapshot({
         version: 1,
         id,
         workflow: "old",
@@ -325,13 +323,14 @@ describe("run history store", () => {
 
   test("deleted checkout remains listable under soft canonical filter", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-soft-root-"));
+    const canonical = await realpath(root);
     const session = new RunHistorySession();
     expect((await session.claim({ ...baseMeta(), checkout_root: root })).state).toBe("claimed");
     const id = session.id!;
     await session.finalize("succeeded");
     session.dispose();
     const snap = await readSnapshot(id);
-    expect(snap?.checkout_root).toBeTruthy();
+    expect(snap?.checkout_root).toBe(canonical);
     await rm(root, { recursive: true, force: true });
     const listed = await listRunHistory({ checkout_root: snap!.checkout_root });
     expect(listed.ok).toBe(true);
@@ -391,7 +390,7 @@ describe("run history store", () => {
     const newId = allocateRunId();
     const oldStarted = new Date(Date.now() - 20_000).toISOString();
     const newStarted = new Date(Date.now() - 5_000).toISOString();
-    await replaceSnapshotForTest({
+    await writeTestSnapshot({
       version: 1,
       id: oldId,
       workflow: "old",
@@ -404,7 +403,7 @@ describe("run history store", () => {
       status: "succeeded",
       steps: [],
     });
-    await replaceSnapshotForTest({
+    await writeTestSnapshot({
       version: 1,
       id: newId,
       workflow: "new",
@@ -423,6 +422,7 @@ describe("run history store", () => {
     trigger.dispose();
     expect(await readSnapshot(active.id!)).toBeDefined();
     expect(await readSnapshot(newId)).toBeDefined();
+    expect(await readSnapshot(oldId)).toBeUndefined();
     active.dispose();
   });
 
@@ -616,7 +616,7 @@ steps:
     expect(detail.steps.some((s) => s.workflow === "child")).toBe(true);
     expect(detail.steps.some((s) => s.label === "wrap" && s.outcome === "failed")).toBe(true);
     expect(detail.remaining).toBe(1);
-    expect(detail.failure_explanation).toBeTruthy();
+    expect(detail.failure_explanation).toBe("step 1: exit 3");
     expect(JSON.stringify(listed.runs[0])).not.toContain(detail.failure_explanation);
     const explained = detail.steps.filter((s) => s.explanation);
     expect(explained).toHaveLength(1);
@@ -745,229 +745,5 @@ steps:
     expect(listed.ok).toBe(true);
     if (!listed.ok) return;
     expect(listed.runs[0]?.checkout_root).toBe(await realpath(root));
-  });
-});
-
-describe("run history web API", () => {
-  const dirs: string[] = [];
-  let prevState: string | undefined;
-
-  beforeEach(async () => {
-    const state = await mkdtemp(join(tmpdir(), "hwf-hist-web-"));
-    dirs.push(state);
-    prevState = process.env.HERDR_PLUGIN_STATE_DIR;
-    process.env.HERDR_PLUGIN_STATE_DIR = state;
-  });
-
-  afterEach(async () => {
-    if (prevState === undefined) delete process.env.HERDR_PLUGIN_STATE_DIR;
-    else process.env.HERDR_PLUGIN_STATE_DIR = prevState;
-    await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
-  });
-
-  async function repo(): Promise<string> {
-    const root = await mkdtemp(join(tmpdir(), "hwf-hist-web-repo-"));
-    dirs.push(root);
-    await mkdir(join(root, ".hwf", "workflows"), { recursive: true });
-    await writeFile(
-      join(root, ".hwf", "workflows", "demo.yaml"),
-      "version: v1alpha1\nsteps:\n  - run: [printf, hi]\n",
-    );
-    return root;
-  }
-
-  function apiBase(server: { url: string }): string {
-    return new URL(server.url).origin;
-  }
-
-  test("unauthorized access is forbidden", async () => {
-    const root = await repo();
-    const server = await startWebServer({ repoRoot: root });
-    try {
-      const res = await fetch(`${apiBase(server)}/api/runs`);
-      expect(res.status).toBe(403);
-    } finally {
-      server.stop();
-    }
-  });
-
-  test("list and detail use no-store and exclude private output", async () => {
-    const root = await repo();
-    const session = new RunHistorySession();
-    await session.claim({
-      workflow: "demo",
-      source: "repo",
-      checkout_root: root,
-    });
-    await session.recordStep({
-      phase: "main",
-      workflow: "demo",
-      workflow_path: ["demo"],
-      ordinal: 1,
-      total: 1,
-      action: "run",
-      label: "boom",
-      finished_at: new Date().toISOString(),
-      outcome: "failed",
-      failure: { action: "run", exit_code: 2 },
-      explanation: "secret-stdout-body",
-    });
-    await session.finalize("failed");
-    session.dispose();
-
-    const server = await startWebServer({ repoRoot: root });
-    try {
-      const list = await fetch(`${apiBase(server)}/api/runs`, {
-        headers: { "x-hwf-token": server.token },
-      });
-      expect(list.headers.get("cache-control")).toBe("no-store");
-      const listBody = (await list.json()) as {
-        ok: boolean;
-        runs: { id: string; failure?: { exit_code?: number } }[];
-      };
-      expect(listBody.ok).toBe(true);
-      expect(JSON.stringify(listBody)).not.toContain("secret-stdout-body");
-      expect(listBody.runs[0]?.failure?.exit_code).toBe(2);
-
-      const detail = await fetch(`${apiBase(server)}/api/run?id=${listBody.runs[0]!.id}`, {
-        headers: { "x-hwf-token": server.token },
-      });
-      expect(detail.headers.get("cache-control")).toBe("no-store");
-      const detailBody = (await detail.json()) as {
-        ok: boolean;
-        detail: { failure_explanation?: string; open_workflow?: { name: string } };
-      };
-      expect(detailBody.detail.failure_explanation).toBe("secret-stdout-body");
-      expect(detailBody.detail.open_workflow?.name).toBe("demo");
-
-      const page = await fetch(server.url);
-      expect(page.headers.get("cache-control")).toBe("no-store");
-    } finally {
-      server.stop();
-    }
-  });
-
-  test("malformed UUID and foreign deep links", async () => {
-    const root = await repo();
-    const foreign = await mkdtemp(join(tmpdir(), "hwf-foreign-"));
-    dirs.push(foreign);
-    const session = new RunHistorySession();
-    await session.claim({
-      workflow: "other",
-      source: "global",
-      checkout_root: foreign,
-    });
-    await session.finalize("succeeded");
-    const id = session.id!;
-    session.dispose();
-
-    const server = await startWebServer({ repoRoot: root });
-    try {
-      const bad = await fetch(`${apiBase(server)}/api/run?id=550e8400`, {
-        headers: { "x-hwf-token": server.token },
-      });
-      expect(bad.status).toBe(400);
-      const body = (await bad.json()) as { detail: { kind: string } };
-      expect(body.detail.kind).toBe("invalid");
-
-      const foreignDetail = await fetch(`${apiBase(server)}/api/run?id=${id}`, {
-        headers: { "x-hwf-token": server.token },
-      });
-      const foreignBody = (await foreignDetail.json()) as {
-        ok: boolean;
-        detail: { checkout_root?: string; open_workflow?: unknown };
-      };
-      expect(foreignBody.ok).toBe(true);
-      expect(foreignBody.detail.checkout_root).toBe(await realpath(foreign));
-      expect(foreignBody.detail.open_workflow).toBeUndefined();
-    } finally {
-      server.stop();
-    }
-  });
-
-  test("unsafe storage returns unavailable", async () => {
-    const root = await repo();
-    const state = process.env.HERDR_PLUGIN_STATE_DIR!;
-    await mkdir(state, { recursive: true });
-    await chmod(state, 0o755);
-    const server = await startWebServer({ repoRoot: root });
-    try {
-      const list = await fetch(`${apiBase(server)}/api/runs`, {
-        headers: { "x-hwf-token": server.token },
-      });
-      expect(list.status).toBe(503);
-    } finally {
-      server.stop();
-    }
-  });
-
-  test("prior shared runs.jsonl does not appear in All", async () => {
-    const root = await repo();
-    const priorPath = join(pluginStateDir(), "runs.jsonl");
-    const body = `${JSON.stringify({
-      ts: "2020-01-01T00:00:00.000Z",
-      run: "abcd1234",
-      workflow: "old-log",
-      ok: true,
-    })}\n`;
-    await writeFile(priorPath, body, { mode: 0o600 });
-    const server = await startWebServer({ repoRoot: root });
-    try {
-      const base = apiBase(server);
-      const all = await fetch(`${base}/api/runs?location=all`, {
-        headers: { "x-hwf-token": server.token },
-      });
-      const allBody = (await all.json()) as { runs: { workflow: string }[] };
-      expect(allBody.runs.every((r) => r.workflow !== "old-log")).toBe(true);
-      expect(await Bun.file(priorPath).text()).toBe(body);
-    } finally {
-      server.stop();
-    }
-  });
-
-  test("route parsing requires complete UUID", () => {
-    const id = allocateRunId();
-    const parsed = parseWebRoute(runWorkbenchRoute(id));
-    expect(parsed).toEqual({
-      kind: "run",
-      id,
-      hash: `run=${id}`,
-    });
-    expect(parseWebRoute("run=550e8400")).toBeUndefined();
-    const upper = parseWebRoute(`run=${id.toUpperCase()}`);
-    expect(upper?.kind === "run" ? upper.id : undefined).toBe(id);
-  });
-
-  test("deleted root remains inspectable without open action", async () => {
-    const root = await repo();
-    const gone = join(tmpdir(), `hwf-gone-${Date.now()}`);
-    await mkdir(gone, { recursive: true });
-    const canonicalGone = await realpath(gone);
-    const session = new RunHistorySession();
-    await session.claim({
-      workflow: "demo",
-      source: "repo",
-      checkout_root: gone,
-    });
-    await session.finalize("succeeded");
-    const id = session.id!;
-    session.dispose();
-    await rm(gone, { recursive: true, force: true });
-
-    const server = await startWebServer({ repoRoot: root });
-    try {
-      const detail = await fetch(`${apiBase(server)}/api/run?id=${id}`, {
-        headers: { "x-hwf-token": server.token },
-      });
-      const body = (await detail.json()) as {
-        ok: boolean;
-        detail: { checkout_root?: string; open_workflow?: unknown };
-      };
-      expect(body.ok).toBe(true);
-      expect(body.detail.checkout_root).toBe(canonicalGone);
-      expect(body.detail.open_workflow).toBeUndefined();
-    } finally {
-      server.stop();
-    }
   });
 });

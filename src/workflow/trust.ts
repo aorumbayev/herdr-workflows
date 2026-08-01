@@ -1,7 +1,6 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { HERDR_METHOD_BY_NAME } from "../herdr-methods.generated";
 import { isSensitiveContextPath, parseRaw, workflowTemplateRefs, type RawWorkflow } from "./parse";
+import { resolveWorkflowFile } from "./paths";
 import type { RecoveryAction, ReturnsSpec, WorkflowStep } from "./types";
 
 /** Allowed methods that still deserve a visible authoring warning. */
@@ -83,15 +82,6 @@ export function referencedWorkflowChildren(raw: RawWorkflow): string[] {
   return [...new Set(childWorkflowNames(raw.steps, raw.onFailure))].sort();
 }
 
-/** Same repo-over-global resolution the loader uses. */
-async function resolveWorkflowFile(name: string, repoRoot: string): Promise<string | undefined> {
-  const repo = join(repoRoot, ".hwf", "workflows", `${name}.yaml`);
-  if (await Bun.file(repo).exists()) return repo;
-  const global = join(process.env.HOME ?? homedir(), ".hwf", "workflows", `${name}.yaml`);
-  if (await Bun.file(global).exists()) return global;
-  return undefined;
-}
-
 export function mergeSensitivity(into: WorkflowSensitivity, from: WorkflowSensitivity): void {
   into.hasCommands ||= from.hasCommands;
   into.hasTranscript ||= from.hasTranscript;
@@ -130,15 +120,15 @@ export async function analyzeResolvedSensitivity(
 
   for (const childName of childWorkflowNames(workflow.steps, workflow.onFailure)) {
     if (nextStack.includes(childName)) continue;
-    const file = await resolveWorkflowFile(childName, repoRoot);
-    if (!file) {
+    const resolved = await resolveWorkflowFile(childName, repoRoot);
+    if (!resolved) {
       if (!aggregated.unresolvedChildren.includes(childName)) {
         aggregated.unresolvedChildren.push(childName);
       }
       continue;
     }
     try {
-      const raw = parseRaw(file, await Bun.file(file).text());
+      const raw = parseRaw(resolved.file, await Bun.file(resolved.file).text());
       const child = await analyzeResolvedSensitivity(
         {
           name: childName,

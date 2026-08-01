@@ -3,9 +3,9 @@
 import { chdir } from "node:process";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import manifest from "../herdr-plugin.toml";
 import { die } from "./herdr";
 import { resolvePluginRoot } from "./setup";
+import { PRODUCT_VERSION } from "./version";
 
 const RELEASE_REPO = "aorumbayev/herdr-workflows";
 const LATEST_RELEASE_URL = `https://api.github.com/repos/${RELEASE_REPO}/releases/latest`;
@@ -109,14 +109,7 @@ export type PluginSourceInfo = {
 
 export type UpdateDeps = {
   fetchLatest?: (opts?: FetchLatestOptions) => Promise<{ version: string; tag: string }>;
-  resolveSource?: () => Promise<PluginSourceInfo>;
   runInstall?: (args: string[], cwd: string) => Promise<number>;
-  write?: (text: string) => void;
-  writeErr?: (text: string) => void;
-  fail?: (message: string) => never;
-  env?: NodeJS.ProcessEnv;
-  embeddedVersion?: string;
-  leaveDir?: (pluginRootPath: string, env: NodeJS.ProcessEnv) => string;
 };
 
 const INSTALL_ARGS = ["plugin", "install", RELEASE_REPO, "--yes"] as const;
@@ -126,50 +119,45 @@ const INSTALL_ARGS = ["plugin", "install", RELEASE_REPO, "--yes"] as const;
  * Must not import the picker module.
  */
 export async function runUpdate(deps: UpdateDeps = {}): Promise<void> {
-  const write = deps.write ?? ((t) => process.stdout.write(t));
-  const writeErr = deps.writeErr ?? ((t) => process.stderr.write(t));
-  const fail: (message: string) => never = deps.fail ?? die;
-  const env = deps.env ?? process.env;
-  const embedded = deps.embeddedVersion ?? String(manifest.version);
   const fetchLatest = deps.fetchLatest ?? fetchLatestPublishedRelease;
-  const resolveSource = deps.resolveSource ?? resolvePluginSource;
   const runInstall = deps.runInstall ?? runHerdrInstall;
-  const leaveDir = deps.leaveDir ?? leavePluginRoot;
 
   let latest: { version: string; tag: string };
   try {
     latest = await fetchLatest();
   } catch (error) {
     const msg = error instanceof ReleaseCheckError ? error.message : String(error);
-    fail(`update check failed: ${msg}`);
+    die(`update check failed: ${msg}`);
   }
 
-  if (compareSemver(embedded, latest.version) >= 0) {
-    write(`already up to date (${embedded})\n`);
+  if (compareSemver(PRODUCT_VERSION, latest.version) >= 0) {
+    process.stdout.write(`already up to date (${PRODUCT_VERSION})\n`);
     return;
   }
 
-  const source = await resolveSource();
+  const source = await resolvePluginSource();
   if (source.kind === "local") {
-    fail(
+    die(
       `refusing to update a linked development checkout — run bun run install:dev from the working tree instead`,
     );
   }
   if (source.kind === "unregistered") {
-    fail(
+    die(
       `this binary is not a Herdr-managed herdr-workflows install — run: herdr plugin install ${RELEASE_REPO}`,
     );
   }
 
-  write(`updating ${embedded} → ${latest.version} via herdr plugin install ${RELEASE_REPO}\n`);
-  const root = resolvePluginRoot(env);
-  const cwd = leaveDir(root, env);
+  process.stdout.write(
+    `updating ${PRODUCT_VERSION} → ${latest.version} via herdr plugin install ${RELEASE_REPO}\n`,
+  );
+  const root = resolvePluginRoot();
+  const cwd = leavePluginRoot(root);
   const code = await runInstall([...INSTALL_ARGS], cwd);
   if (code !== 0) {
-    writeErr(`herdr plugin install failed with exit ${code}\n`);
+    process.stderr.write(`herdr plugin install failed with exit ${code}\n`);
     process.exit(code);
   }
-  write(`updated to ${latest.version}\n`);
+  process.stdout.write(`updated to ${latest.version}\n`);
 }
 
 export function leavePluginRoot(

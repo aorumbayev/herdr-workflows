@@ -76,10 +76,10 @@ is a data-integrity defect, not a graceful degradation.
 ### How to measure
 
 - `rg -in "token|secret|password|api[_-]?key|authorization|bearer" src` returns roughly eighty-six
-  hits. Classify each as read, store, or emit. Only emits are findings. `src/web/credential-store.ts`
-  is the intended owner of the workbench token, so judge its file mode and its callers, never its
-  existence
-- Read `src/runlog.ts` and `src/session.ts` and name exactly what they write
+  hits. Classify each as read, store, or emit. Only emits are findings. `src/fs-private.ts`
+  is the intended owner of private credential ACL checks (including the workbench token path), so
+  judge its file mode and its callers, never its existence
+- Read `src/history/store.ts` and `src/session.ts` and name exactly what they write
 - For any credential file, require restrictive creation mode and a refusal to follow symlinks:
   `rg -n "0o600|O_NOFOLLOW|chmod|mode:" src`. A credential file created with default mode is a
   finding
@@ -100,7 +100,7 @@ is a data-integrity defect, not a graceful degradation.
 ### How to measure
 
 - `rg -n "listen|hostname|127\.0\.0\.1|0\.0\.0\.0|port" src/web`
-- For each route in `src/web/route.ts` and `src/web/server.ts`, list the file paths it can touch and
+- For each route in `src/web/endpoint.ts` and `src/web/server.ts`, list the file paths it can touch and
   the normalization applied. Cite the line that joins user input into a path
 - `rg -n "innerHTML|insertAdjacentHTML|outerHTML|document\.write" src/web/page.html`
 - Compare the route table against the documented surface in `docs/surfaces.md`. A route the docs do
@@ -122,8 +122,7 @@ is a data-integrity defect, not a graceful degradation.
   each URL for a version pin
 - `rg -n "main/docs|refs/heads/main|/latest/" src scripts docs herdr-plugin.toml`
 - `rg -n "uses:" .github/workflows/*.yml` and flag any tag-only pin
-- Read `src/update.ts` and `src/release-check.ts` and name the version comparison and what happens
-  on mismatch
+- Read `src/update.ts` and name the version comparison and what happens on mismatch
 
 ## 6. Dependency supply chain
 

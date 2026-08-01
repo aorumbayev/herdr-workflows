@@ -8,15 +8,9 @@ import type {
   TemplateNamespace,
 } from "../../workflow/types";
 import { loadWorkflow } from "../../workflow/load";
-import { errorText, type RunSteps, type StepCtx, type StepOutcome } from "../context";
+import { errorText, type StepCtx, type StepOutcome } from "../context";
 
 type WorkflowActionSpec = Extract<StepAction, { kind: "workflow" }>;
-
-let childRunSteps: RunSteps | undefined;
-
-export function bindIncludeRunSteps(fn: RunSteps): void {
-  childRunSteps = fn;
-}
 
 type ResolvedInputs = { ok: true; values: Record<string, string> } | { ok: false; error: string };
 
@@ -30,15 +24,10 @@ export function evaluateReturns(returns: ReturnsSpec, ns: TemplateNamespace): un
 export async function workflowStep(c: StepCtx): Promise<StepOutcome> {
   const action = c.step.action;
   if (action.kind !== "workflow") return { ok: false, error: "internal: not a workflow step" };
-  if (!childRunSteps) return { ok: false, error: "internal: child runner is not bound" };
-  return runChild(c, action, childRunSteps);
+  return runChild(c, action);
 }
 
-async function runChild(
-  c: StepCtx,
-  action: WorkflowActionSpec,
-  runSteps: RunSteps,
-): Promise<StepOutcome> {
+async function runChild(c: StepCtx, action: WorkflowActionSpec): Promise<StepOutcome> {
   const repoRoot = c.opts.repoRoot;
   let child: LoadedWorkflow;
   try {
@@ -79,7 +68,7 @@ async function runChild(
     steps: {},
     context: c.values.context,
   };
-  const result = await runSteps(
+  const result = await c.opts.runSteps(
     child.steps,
     {
       ...c.opts,

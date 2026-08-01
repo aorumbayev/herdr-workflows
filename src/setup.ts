@@ -15,19 +15,9 @@ import {
 } from "node:fs";
 import { basename, delimiter, dirname, join, resolve, sep } from "node:path";
 import { homedir } from "node:os";
-import manifest from "../herdr-plugin.toml";
+import { PRODUCT_VERSION } from "./version";
 
-export const PRODUCT_VERSION: string = manifest.version;
 const OWNERSHIP_FILE = ".herdr-workflows-cli.json";
-
-/**
- * Where the workflow contract this build implements is published. Pinned to the release tag for
- * `PRODUCT_VERSION`, because schemas diverge between versions: a pointer at a moving ref would
- * describe some other build's contract to the editor reading it.
- */
-export function workflowSchemaUrl(): string {
-  return `https://raw.githubusercontent.com/aorumbayev/herdr-workflows/v${PRODUCT_VERSION}/docs/workflow.schema.json`;
-}
 
 export function resolveBinDir(env: NodeJS.ProcessEnv = process.env): string {
   if (env.XDG_BIN_HOME?.trim()) return resolve(env.XDG_BIN_HOME.trim());

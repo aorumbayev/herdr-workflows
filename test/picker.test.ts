@@ -12,8 +12,11 @@ import {
   isCustomChoiceValue,
   LIST_HINT,
   PICKER_CHROME_STRINGS,
+  runPickerSession,
+  setListMode,
   shouldDropStdinLeakSequence,
   shouldRestoreCustomChoiceText,
+  tryOpenActionsPalette,
   type PickerState,
 } from "../src/tui/picker";
 import {
@@ -588,6 +591,8 @@ describe("adaptive picker helpers", () => {
 });
 
 function pickerState(): PickerState {
+  let selected = 0;
+  let options: { name: string; description: string; value: unknown }[] = [];
   const state = {
     mode: "list",
     entries: [],
@@ -618,21 +623,84 @@ function pickerState(): PickerState {
       visible: true,
       flexGrow: 0,
       height: 6,
-      options: [],
-      getSelectedIndex: () => 0,
-      setSelectedIndex: () => undefined,
+      get options() {
+        return options;
+      },
+      set options(next: typeof options) {
+        options = next;
+      },
+      getSelectedIndex: () => selected,
+      setSelectedIndex: (i: number) => {
+        selected = i;
+      },
       focus: () => undefined,
     },
-    status: { visible: false, flexGrow: 0, content: "" },
+    status: { visible: false, flexGrow: 0, content: "", fg: "", attributes: 0 },
     detail: { visible: false, content: "" },
     rule: { visible: false, content: "" },
-    promptInput: { visible: false },
+    promptInput: { visible: false, value: "" },
     footer: { content: "" },
     savedWorkflowFilter: "",
   } as unknown as PickerState;
   attachRunsBrowser(state);
   return state;
 }
+
+describe("picker session checkout", () => {
+  test("runPickerSession invokes injected chdir with repoRoot before mount", async () => {
+    const seen: string[] = [];
+    await expect(
+      runPickerSession({
+        entries: [],
+        repoRoot: "/managed/checkout",
+        config: { profiles: {}, transcripts: {} },
+        ctx: { selection: "", cwd: "/managed/checkout" },
+        checkLatestRelease: async () => null,
+        chdir: (path) => {
+          seen.push(path);
+          throw new Error("stop-after-chdir");
+        },
+      }),
+    ).rejects.toThrow("stop-after-chdir");
+    expect(seen).toEqual(["/managed/checkout"]);
+  });
+});
+
+describe("picker palette list restore", () => {
+  test("share round-trip restores filter text and selected entry", () => {
+    const state = pickerState();
+    state.entries = entries;
+    state.filter.value = "deploy";
+    const { valid, invalid } = filterWorkflowEntries(entries, "deploy");
+    state.list.options = [
+      ...buildPickerOptions(valid, state.contentWidth),
+      ...buildInvalidOptions(invalid, state.contentWidth),
+    ];
+    state.list.setSelectedIndex(0);
+    const key = {
+      ctrl: true,
+      name: "k",
+      preventDefault: () => undefined,
+    } as unknown as Parameters<typeof tryOpenActionsPalette>[1];
+    expect(tryOpenActionsPalette(state, key)).toBe(true);
+    expect(state.savedWorkflowFilter).toBe("deploy");
+    expect(state.savedListEntry?.name).toBe("deploy");
+    setListMode(state);
+    expect(state.filter.value).toBe("deploy");
+    expect(state.list.options[state.list.getSelectedIndex()]?.value).toMatchObject({
+      entry: { name: "deploy", source: "global" },
+    });
+  });
+
+  test("fresh list mode still clears an empty saved filter", () => {
+    const state = pickerState();
+    state.entries = entries;
+    state.filter.value = "stale";
+    state.savedWorkflowFilter = "";
+    setListMode(state);
+    expect(state.filter.value).toBe("");
+  });
+});
 
 describe("picker run handoff", () => {
   test("picker renders loader errors as terminal failures", async () => {
@@ -650,7 +718,7 @@ describe("picker run handoff", () => {
     );
 
     expect(state.runs.running).toBe(false);
-    expect(state.mode).toBe("run-detail");
+    expect(state.runs.isDetail()).toBe(true);
     expect(String(state.status.content)).toContain("LAUNCH FAILED");
     expect(String(state.status.content)).toContain("reload failed");
     expect(String(state.footer.content)).toContain("esc back");

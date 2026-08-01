@@ -41,7 +41,7 @@ import {
   type StepsResult,
 } from "./context";
 import { agentStep } from "./steps/agent";
-import { bindIncludeRunSteps, evaluateReturns, workflowStep } from "./steps/include";
+import { evaluateReturns, workflowStep } from "./steps/include";
 import { shellStep } from "./steps/shell";
 
 type StepRunner = (c: StepCtx) => Promise<StepOutcome>;
@@ -308,8 +308,6 @@ async function runSteps(
   return { ok: true };
 }
 
-bindIncludeRunSteps(runSteps);
-
 async function runRecovery(
   action: RecoveryAction,
   opts: StepRunOpts,
@@ -560,6 +558,7 @@ export async function runWorkflow(opts: RunOptions): Promise<StepsResult> {
     workflowPath: [workflow.name],
     isEntry: true,
     managedResponseFiles,
+    runSteps,
     ...(history.isAvailable ? { history } : {}),
     ...(opts.onProgress ? { onProgress: opts.onProgress } : {}),
     ...(opts.onStderr ? { onStderr: opts.onStderr } : {}),
