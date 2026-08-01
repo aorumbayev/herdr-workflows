@@ -5,6 +5,7 @@ import {
   repoConfigPath,
   type WorkflowsConfig,
 } from "../config";
+import { latest } from "../latest";
 import { evaluateWhen } from "./conditions";
 import { resolveDynamicChoices } from "./load";
 import type { InputSpec, LoadedWorkflow, TemplateNamespace } from "./types";
@@ -25,6 +26,39 @@ export type CollectInputsOpts = {
   resolveDynamic?: boolean;
 };
 
+type ActivePrompt = {
+  index: number;
+  spec: InputSpec;
+  options?: string[];
+};
+
+type CurrentPromptResult =
+  | { status: "prompt"; prompt: ActivePrompt }
+  | { status: "done" }
+  | { status: "error"; error: string }
+  | { status: "cancelled" };
+
+export type InputSession = {
+  current(): Promise<CurrentPromptResult>;
+  answer(value: string): { ok: true } | { ok: false; error: string };
+  back(): boolean;
+  result(): CollectedInputs;
+  cancelPending(): void;
+  readonly values: Record<string, string>;
+  readonly domains: Record<string, string[]>;
+  readonly cursor: number;
+};
+
+export type CreateInputSessionOpts = {
+  specs: InputSpec[];
+  file: string;
+  config: WorkflowsConfig;
+  repoRoot: string;
+  answers?: Record<string, string>;
+  domains?: Record<string, string[]>;
+  resolveDynamic?: boolean;
+};
+
 function optionsForSpec(spec: InputSpec, domains: Record<string, string[]>): string[] | undefined {
   if (domains[spec.name]) return domains[spec.name];
   if (spec.options) return spec.options;
@@ -33,9 +67,9 @@ function optionsForSpec(spec: InputSpec, domains: Record<string, string[]>): str
 
 async function resolveActiveOptions(
   spec: InputSpec,
-  opts: CollectInputsOpts,
+  opts: CreateInputSessionOpts,
   domains: Record<string, string[]>,
-): Promise<{ ok: true; options?: string[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; options?: string[]; cache?: boolean } | { ok: false; error: string }> {
   if (spec.type === "profile") {
     const profiles = profileNames(opts.config);
     if (profiles.length === 0) {
@@ -68,8 +102,7 @@ async function resolveActiveOptions(
       spec.dynamicOptions,
       opts.repoRoot,
     );
-    domains[spec.name] = options;
-    return { ok: true, options };
+    return { ok: true, options, cache: true };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
@@ -97,6 +130,127 @@ function validateActiveValue(
   return undefined;
 }
 
+/** Next active input given answers collected so far. */
+function nextActiveInput(
+  specs: InputSpec[],
+  values: Record<string, string>,
+  fromIndex = 0,
+): { index: number; spec: InputSpec } | undefined {
+  const ns: TemplateNamespace = { inputs: values, steps: {}, context: {} };
+  for (let i = fromIndex; i < specs.length; i++) {
+    const spec = specs[i]!;
+    if (evaluateWhen(spec.when, ns)) return { index: i, spec };
+  }
+  return undefined;
+}
+
+function previousActiveIndex(
+  specs: InputSpec[],
+  values: Record<string, string>,
+  beforeIndex: number,
+): number | undefined {
+  const kept: Record<string, string> = {};
+  let last: number | undefined;
+  for (let i = 0; i < beforeIndex; i++) {
+    const probe = nextActiveInput(specs, kept, i);
+    if (!probe || probe.index !== i) continue;
+    const spec = specs[i]!;
+    if (Object.hasOwn(values, spec.name)) kept[spec.name] = values[spec.name]!;
+    last = i;
+  }
+  return last;
+}
+
+function emptyOptionsError(spec: InputSpec): string {
+  return spec.type === "profile"
+    ? `input '${spec.name}': no profiles configured; run \`hwf init\` or \`hwf init --global\``
+    : `input '${spec.name}': choice produced no options`;
+}
+
+export function createInputSession(opts: CreateInputSessionOpts): InputSession {
+  const specs = opts.specs;
+  const values: Record<string, string> = { ...(opts.answers ?? {}) };
+  const domains: Record<string, string[]> = { ...(opts.domains ?? {}) };
+  const suppliedDomains = new Set(Object.keys(opts.domains ?? {}));
+  const usedDomains = new Set<string>();
+  const resolveToken = latest();
+  let cursor = 0;
+  let pending: ActivePrompt | undefined;
+
+  const session: InputSession = {
+    get values() {
+      return values;
+    },
+    get domains() {
+      return domains;
+    },
+    get cursor() {
+      return cursor;
+    },
+    cancelPending() {
+      resolveToken.bump();
+      pending = undefined;
+    },
+    back() {
+      const prev = previousActiveIndex(specs, values, cursor);
+      if (prev === undefined) return false;
+      resolveToken.bump();
+      for (const spec of specs.slice(prev + 1)) {
+        delete values[spec.name];
+        delete domains[spec.name];
+      }
+      cursor = prev;
+      pending = undefined;
+      return true;
+    },
+    answer(value: string) {
+      if (!pending) return { ok: false, error: "no active input" };
+      const err = validateActiveValue(pending.spec, value, pending.options);
+      if (err) return { ok: false, error: err };
+      for (const later of specs.slice(pending.index + 1)) {
+        delete values[later.name];
+        delete domains[later.name];
+      }
+      values[pending.spec.name] = value;
+      cursor = pending.index + 1;
+      pending = undefined;
+      return { ok: true };
+    },
+    async current() {
+      const token = resolveToken.begin();
+      const next = nextActiveInput(specs, values, cursor);
+      if (!next) return { status: "done" };
+      cursor = next.index;
+      if (Object.hasOwn(domains, next.spec.name)) usedDomains.add(next.spec.name);
+      const resolved = await resolveActiveOptions(next.spec, opts, domains);
+      if (!resolveToken.current(token)) return { status: "cancelled" };
+      if (!resolved.ok) return { status: "error", error: resolved.error };
+      if (resolved.options !== undefined && resolved.options.length === 0) {
+        return { status: "error", error: emptyOptionsError(next.spec) };
+      }
+      if (resolved.cache && resolved.options) domains[next.spec.name] = resolved.options;
+      if (Object.hasOwn(domains, next.spec.name)) usedDomains.add(next.spec.name);
+      pending = { index: next.index, spec: next.spec, options: resolved.options };
+      return { status: "prompt", prompt: pending };
+    },
+    result() {
+      for (const name of suppliedDomains) {
+        if (!usedDomains.has(name)) {
+          return {
+            ok: false,
+            error: `launch payload domain '${name}' belongs to an inactive or non-dynamic input`,
+          };
+        }
+      }
+      if (nextActiveInput(specs, values, cursor)) {
+        return { ok: false, error: "input collection is incomplete" };
+      }
+      return { ok: true, values: { ...values }, domains: { ...domains } };
+    },
+  };
+  return session;
+}
+
 /**
  * Sequential input collection shared by entry CLI, picker, and child workflows.
  * Skips inactive inputs, resolves active dynamic choices at most once, and rejects
@@ -104,12 +258,11 @@ function validateActiveValue(
  */
 export async function collectInputValues(opts: CollectInputsOpts): Promise<CollectedInputs> {
   const provided = opts.provided ?? {};
-  const domains: Record<string, string[]> = { ...opts.domains };
   const declared = new Set(opts.specs.map((spec) => spec.name));
   for (const name of Object.keys(provided)) {
     if (!declared.has(name)) return { ok: false, error: `unknown input '${name}'` };
   }
-  for (const name of Object.keys(domains)) {
+  for (const name of Object.keys(opts.domains ?? {})) {
     const spec = opts.specs.find((row) => row.name === name);
     if (!spec || spec.type !== "choice" || !spec.dynamicOptions) {
       return {
@@ -119,56 +272,39 @@ export async function collectInputValues(opts: CollectInputsOpts): Promise<Colle
     }
   }
 
-  const values: Record<string, string> = Object.create(null) as Record<string, string>;
-  const ns: TemplateNamespace = { inputs: values, steps: {}, context: {} };
-  const usedDomains = new Set<string>();
+  const session = createInputSession({
+    specs: opts.specs,
+    file: opts.file,
+    config: opts.config,
+    repoRoot: opts.repoRoot,
+    domains: opts.domains,
+    resolveDynamic: opts.resolveDynamic,
+  });
 
-  for (const spec of opts.specs) {
-    const active = evaluateWhen(spec.when, ns);
-    const supplied = Object.hasOwn(provided, spec.name);
-    if (!active) {
-      if (supplied) {
-        return {
-          ok: false,
-          error: `input '${spec.name}' is inactive under current answers`,
-        };
-      }
-      continue;
-    }
-
-    if (Object.hasOwn(domains, spec.name)) usedDomains.add(spec.name);
-
-    const resolved = await resolveActiveOptions(spec, opts, domains);
-    if (!resolved.ok) return resolved;
-    if (resolved.options !== undefined && resolved.options.length === 0) {
-      return {
-        ok: false,
-        error:
-          spec.type === "profile"
-            ? `input '${spec.name}': no profiles configured; run \`hwf init\` or \`hwf init --global\``
-            : `input '${spec.name}': choice produced no options`,
-      };
-    }
-
-    const value = supplied ? provided[spec.name]! : spec.default;
+  for (;;) {
+    const cur = await session.current();
+    if (cur.status === "cancelled") return { ok: false, error: "input collection cancelled" };
+    if (cur.status === "error") return { ok: false, error: cur.error };
+    if (cur.status === "done") break;
+    const name = cur.prompt.spec.name;
+    const value = Object.hasOwn(provided, name) ? provided[name]! : cur.prompt.spec.default;
     if (value === undefined) {
-      return { ok: false, error: `missing input '${spec.name}' (--input ${spec.name}=…)` };
+      return { ok: false, error: `missing input '${name}' (--input ${name}=…)` };
     }
-    const err = validateActiveValue(spec, value, resolved.options);
-    if (err) return { ok: false, error: err };
-    values[spec.name] = value;
+    const answered = session.answer(value);
+    if (!answered.ok) return answered;
   }
 
-  for (const name of Object.keys(opts.domains ?? {})) {
-    if (!usedDomains.has(name)) {
+  for (const name of Object.keys(provided)) {
+    if (!Object.hasOwn(session.values, name)) {
       return {
         ok: false,
-        error: `launch payload domain '${name}' belongs to an inactive or non-dynamic input`,
+        error: `input '${name}' is inactive under current answers`,
       };
     }
   }
 
-  return { ok: true, values, domains };
+  return session.result();
 }
 
 export async function collectWorkflowInputs(
@@ -180,18 +316,4 @@ export async function collectWorkflowInputs(
     specs: workflow.inputs,
     file: workflow.file,
   });
-}
-
-/** Next active input given answers collected so far (picker incremental path). */
-export function nextActiveInput(
-  specs: InputSpec[],
-  values: Record<string, string>,
-  fromIndex = 0,
-): { index: number; spec: InputSpec } | undefined {
-  const ns: TemplateNamespace = { inputs: values, steps: {}, context: {} };
-  for (let i = fromIndex; i < specs.length; i++) {
-    const spec = specs[i]!;
-    if (evaluateWhen(spec.when, ns)) return { index: i, spec };
-  }
-  return undefined;
 }

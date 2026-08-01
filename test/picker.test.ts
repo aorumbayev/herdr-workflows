@@ -4,7 +4,6 @@ import {
   acceptWorkflow,
   attachRunsBrowser,
   beginConfirmedDelete,
-  commitResolvedOptions,
   filterWorkflowEntries,
   formatInputAnswers,
   formatInputPrompt,
@@ -19,6 +18,7 @@ import {
   tryOpenActionsPalette,
   type PickerState,
 } from "../src/tui/picker";
+import { createInputSession } from "../src/workflow/inputs";
 import {
   EMPTY_CATALOG_MESSAGE,
   EMPTY_LIST_HINT,
@@ -38,7 +38,7 @@ import {
 } from "../src/tui/picker-rows";
 import { themeFromPalette } from "../src/tui/theme";
 import { humanizeWorkflowName, workflowDisplayTitle } from "../src/workflow/trust";
-import { latest } from "../src/latest";
+import { fakePickerChrome, type FakePickerChrome } from "./picker-chrome-fake";
 
 const entries: WorkflowListEntry[] = [
   {
@@ -577,22 +577,30 @@ describe("adaptive picker helpers", () => {
     expect(shouldRestoreCustomChoiceText(true, "feature/x", ["main"], false)).toBe(false);
   });
 
-  test("stale async option completion is ignored after generation bump", () => {
-    const resolveToken = latest();
-    const stale = resolveToken.begin();
-    resolveToken.bump();
-    const state = { resolveToken, inputDomains: {} as Record<string, string[]> };
-    expect(commitResolvedOptions(state, stale, "branch", ["stale"])).toBe(false);
-    expect(state.inputDomains).toEqual({});
-    const fresh = resolveToken.begin();
-    expect(commitResolvedOptions(state, fresh, "branch", ["fresh"])).toBe(true);
-    expect(state.inputDomains).toEqual({ branch: ["fresh"] });
+  test("stale async option completion is ignored after session cancel", async () => {
+    const root = "/tmp";
+    const session = createInputSession({
+      specs: [
+        {
+          name: "branch",
+          type: "choice",
+          dynamicOptions: { run: ["sh", "-c", "sleep 0.15; echo fresh"] },
+        },
+      ],
+      file: "x.yaml",
+      config: { profiles: {}, transcripts: {} },
+      repoRoot: root,
+      resolveDynamic: true,
+    });
+    const pending = session.current();
+    session.cancelPending();
+    expect(await pending).toEqual({ status: "cancelled" });
+    expect(session.domains).toEqual({});
   });
 });
 
-function pickerState(): PickerState {
-  let selected = 0;
-  let options: { name: string; description: string; value: unknown }[] = [];
+function pickerState(): PickerState & { chrome: FakePickerChrome } {
+  const chrome = fakePickerChrome();
   const state = {
     mode: "list",
     entries: [],
@@ -600,7 +608,6 @@ function pickerState(): PickerState {
     inputIndex: 0,
     inputValues: {},
     inputDomains: {},
-    resolveToken: latest(),
     choiceOptions: [],
     customChoice: false,
     running: false,
@@ -614,34 +621,9 @@ function pickerState(): PickerState {
     reloadEntries: async () => [],
     contentWidth: 80,
     theme: themeFromPalette(null),
-    renderer: { destroy: () => undefined },
-    filterRow: { visible: true },
-    filter: { visible: true, value: "", placeholder: "", focus: () => undefined },
-    updateHint: { visible: false, content: "" },
-    listBlock: { visible: true },
-    list: {
-      visible: true,
-      flexGrow: 0,
-      height: 6,
-      get options() {
-        return options;
-      },
-      set options(next: typeof options) {
-        options = next;
-      },
-      getSelectedIndex: () => selected,
-      setSelectedIndex: (i: number) => {
-        selected = i;
-      },
-      focus: () => undefined,
-    },
-    status: { visible: false, flexGrow: 0, content: "", fg: "", attributes: 0 },
-    detail: { visible: false, content: "" },
-    rule: { visible: false, content: "" },
-    promptInput: { visible: false, value: "" },
-    footer: { content: "" },
+    chrome,
     savedWorkflowFilter: "",
-  } as unknown as PickerState;
+  } as unknown as PickerState & { chrome: FakePickerChrome };
   attachRunsBrowser(state);
   return state;
 }
@@ -670,13 +652,13 @@ describe("picker palette list restore", () => {
   test("share round-trip restores filter text and selected entry", () => {
     const state = pickerState();
     state.entries = entries;
-    state.filter.value = "deploy";
+    state.chrome.setFilterValue("deploy");
     const { valid, invalid } = filterWorkflowEntries(entries, "deploy");
-    state.list.options = [
+    state.chrome.setOptions([
       ...buildPickerOptions(valid, state.contentWidth),
       ...buildInvalidOptions(invalid, state.contentWidth),
-    ];
-    state.list.setSelectedIndex(0);
+    ]);
+    state.chrome.setSelectedIndex(0);
     const key = {
       ctrl: true,
       name: "k",
@@ -686,8 +668,8 @@ describe("picker palette list restore", () => {
     expect(state.savedWorkflowFilter).toBe("deploy");
     expect(state.savedListEntry?.name).toBe("deploy");
     setListMode(state);
-    expect(state.filter.value).toBe("deploy");
-    expect(state.list.options[state.list.getSelectedIndex()]?.value).toMatchObject({
+    expect(state.chrome.filterValue()).toBe("deploy");
+    expect(state.chrome.options()[state.chrome.selectedIndex()]?.value).toMatchObject({
       entry: { name: "deploy", source: "global" },
     });
   });
@@ -695,10 +677,10 @@ describe("picker palette list restore", () => {
   test("fresh list mode still clears an empty saved filter", () => {
     const state = pickerState();
     state.entries = entries;
-    state.filter.value = "stale";
+    state.chrome.setFilterValue("stale");
     state.savedWorkflowFilter = "";
     setListMode(state);
-    expect(state.filter.value).toBe("");
+    expect(state.chrome.filterValue()).toBe("");
   });
 });
 
@@ -719,9 +701,9 @@ describe("picker run handoff", () => {
 
     expect(state.runs.running).toBe(false);
     expect(state.runs.isDetail()).toBe(true);
-    expect(String(state.status.content)).toContain("LAUNCH FAILED");
-    expect(String(state.status.content)).toContain("reload failed");
-    expect(String(state.footer.content)).toContain("esc back");
+    expect(state.chrome.lastStatus()).toContain("LAUNCH FAILED");
+    expect(state.chrome.lastStatus()).toContain("reload failed");
+    expect(state.chrome.lastFooter()).toContain("esc back");
   });
 
   test("picker loads selected workflows without a second confirmation gate", async () => {

@@ -1,4 +1,4 @@
-import type { KeyEvent, SelectOption } from "@opentui/core";
+import type { KeyEvent } from "@opentui/core";
 import type { InvocationContext, WorkflowsConfig } from "../config";
 import { optimisticRunningDetail, normalizeRunUuid } from "../history/project";
 import { allocateRunId, canonicalRepoRoot, getRunDetail, parseHistoryAck } from "../history/store";
@@ -6,6 +6,7 @@ import { sanitizeDisplay } from "../herdr";
 import { latest } from "../latest";
 import type { LoadedWorkflow, WorkflowListEntry } from "../workflow/types";
 import { runWorkbenchRoute } from "../web/endpoint";
+import { LIST_VIEWPORT, type PickerChrome } from "./picker-chrome";
 import { formatDetailLines, truncate } from "./picker-rows";
 import {
   detailLines,
@@ -23,7 +24,7 @@ import {
 import { launchDetachedRun, type DetachedRunHandle, type LaunchRunRequest } from "./run-launch";
 
 /** Shared with picker Select height — six visible rows, scroll for the rest. */
-export const RUNS_LIST_VIEWPORT = 6;
+export const RUNS_LIST_VIEWPORT = LIST_VIEWPORT;
 
 export function runsSelectedIndex(
   items: readonly { id: string }[],
@@ -43,25 +44,6 @@ export function scrollDetailLines(
   return { visible: lines.slice(next, next + viewport), scroll: next };
 }
 
-type ListLike = {
-  height: number;
-  options: SelectOption[];
-  getSelectedIndex: () => number;
-  setSelectedIndex: (i: number) => void;
-  moveUp: (steps?: number) => void;
-  moveDown: (steps?: number) => void;
-  focus: () => void;
-};
-
-type TextLike = { content: unknown; visible?: boolean };
-
-type FilterLike = {
-  value: string;
-  placeholder: string;
-  visible: boolean;
-  focus: () => void;
-};
-
 type StartRunLaunch = {
   ctx: InvocationContext;
   config: WorkflowsConfig;
@@ -80,15 +62,7 @@ type StartRunLaunch = {
 export type RunsBrowserDeps = {
   repoRoot: string;
   getContentWidth: () => number;
-  list: ListLike;
-  detail: TextLike;
-  footer: TextLike;
-  filter: FilterLike;
-  filterRow: { visible: boolean };
-  chrome: {
-    show(layout: "browser" | "detail"): void;
-    status(content: string | undefined): void;
-  };
+  chrome: PickerChrome;
   launchWorkbenchRoute: (route: string) => void;
 };
 
@@ -129,13 +103,11 @@ export type RunsBrowser = {
   readonly running: boolean;
 };
 
-function applyListOptions(session: RunsBrowserSession, options: SelectOption[]): void {
-  session.deps.list.options = options;
-  if (options.length > 0) {
-    session.deps.list.setSelectedIndex(
-      Math.min(session.deps.list.getSelectedIndex(), options.length - 1),
-    );
-  }
+function applyListOptions(
+  session: RunsBrowserSession,
+  options: Parameters<PickerChrome["setOptions"]>[0],
+): void {
+  session.deps.chrome.setOptions(options);
 }
 
 function stopDetailPoll(session: RunsBrowserSession): void {
@@ -179,27 +151,24 @@ function detailPollResponseCurrent(session: RunsBrowserSession, id: string, gen:
 }
 
 function selectedRunSummary(session: RunsBrowserSession): string {
-  const selected = session.browserState?.items[session.deps.list.getSelectedIndex()];
+  const selected = session.browserState?.items[session.deps.chrome.selectedIndex()];
   if (!selected) return "";
   return formatRunSummary(selected);
 }
 
 function paintRunsSelection(session: RunsBrowserSession, total: number): void {
-  session.deps.detail.content = formatDetailLines(
-    selectedRunSummary(session),
-    session.deps.getContentWidth(),
+  session.deps.chrome.setDetail(
+    formatDetailLines(selectedRunSummary(session), session.deps.getContentWidth()),
   );
-  session.deps.footer.content = runsFooter(
-    session.scope,
-    session.deps.list.getSelectedIndex(),
-    total,
+  session.deps.chrome.setFooter(
+    runsFooter(session.scope, session.deps.chrome.selectedIndex(), total),
   );
 }
 
 function preserveSelectionId(session: RunsBrowserSession): string | undefined {
   return (
     session.browserState?.selectedId ??
-    session.browserState?.items[session.deps.list.getSelectedIndex()]?.id ??
+    session.browserState?.items[session.deps.chrome.selectedIndex()]?.id ??
     session.activeRunId
   );
 }
@@ -209,11 +178,13 @@ function renderDetail(session: RunsBrowserSession): void {
   const lines = detailLines(session.detailView, session.deps.getContentWidth());
   const { visible, scroll } = scrollDetailLines(lines, session.detailScroll, 10);
   session.detailScroll = scroll;
-  session.deps.chrome.show("detail");
-  session.deps.chrome.status(visible.join("\n"));
-  session.deps.footer.content = runDetailFooter({
-    allowWorkbench: viewAllowsWorkbench(session.detailView),
-  });
+  session.deps.chrome.showDetailLayout();
+  session.deps.chrome.status(visible.join("\n"), { flexGrow: 1 });
+  session.deps.chrome.setFooter(
+    runDetailFooter({
+      allowWorkbench: viewAllowsWorkbench(session.detailView),
+    }),
+  );
 }
 
 async function refreshOpenDetail(session: RunsBrowserSession): Promise<void> {
@@ -243,7 +214,7 @@ async function refresh(session: RunsBrowserSession): Promise<void> {
   if (session.view !== "list") return;
   const gen = session.refreshToken.begin();
   const currentScope = session.scope;
-  const filter = session.deps.filter.value;
+  const filter = session.deps.chrome.filterValue();
   const view = session.view;
   const preserveId = preserveSelectionId(session);
   const browser = await loadRunsBrowser(session.deps.repoRoot, currentScope, filter, preserveId);
@@ -251,30 +222,38 @@ async function refresh(session: RunsBrowserSession): Promise<void> {
     !session.refreshToken.current(gen) ||
     session.view !== view ||
     session.scope !== currentScope ||
-    session.deps.filter.value !== filter
+    session.deps.chrome.filterValue() !== filter
   ) {
     return;
   }
   session.browserState = browser;
-  session.deps.list.height = RUNS_LIST_VIEWPORT;
+  session.deps.chrome.showBrowser({
+    filterPlaceholder: "filter runs...",
+    filterValue: filter,
+    showFilter: true,
+    listHeight: RUNS_LIST_VIEWPORT,
+  });
+  session.deps.chrome.showList("");
   if (browser.unavailable || browser.items.length === 0) {
     applyListOptions(session, []);
-    session.deps.detail.content = formatDetailLines(
-      formatRunListEmpty({
-        scope: browser.scope,
-        hasMachineRuns: browser.hasMachineRuns,
-        filterActive: browser.filter.trim().length > 0,
-        unavailable: browser.unavailable,
-      }),
-      session.deps.getContentWidth(),
+    session.deps.chrome.setDetail(
+      formatDetailLines(
+        formatRunListEmpty({
+          scope: browser.scope,
+          hasMachineRuns: browser.hasMachineRuns,
+          filterActive: browser.filter.trim().length > 0,
+          unavailable: browser.unavailable,
+        }),
+        session.deps.getContentWidth(),
+      ),
     );
-    session.deps.footer.content = runsFooter(session.scope, 0, 0);
+    session.deps.chrome.setFooter(runsFooter(session.scope, 0, 0));
     return;
   }
   const options = formatRunsOptions(browser.items, session.deps.getContentWidth(), session.scope);
   applyListOptions(session, options);
   const idx = runsSelectedIndex(browser.items, browser.selectedId);
-  session.deps.list.setSelectedIndex(idx);
+  session.deps.chrome.setSelectedIndex(idx);
   session.browserState.selectedId = browser.items[idx]?.id;
   paintRunsSelection(session, options.length);
 }
@@ -291,13 +270,15 @@ async function enter(session: RunsBrowserSession): Promise<void> {
     session.browserState.selectedId = preserveFromDetail;
   }
   session.activeRunId = undefined;
-  session.deps.chrome.show("browser");
-  session.deps.filter.placeholder = "filter runs...";
-  session.deps.filter.value = session.savedFilter;
-  session.deps.filterRow.visible = true;
-  session.deps.filter.visible = true;
+  session.deps.chrome.clearStatus();
+  session.deps.chrome.showBrowser({
+    filterPlaceholder: "filter runs...",
+    filterValue: session.savedFilter,
+    showFilter: true,
+  });
+  session.deps.chrome.showList("");
   await refresh(session);
-  session.deps.filter.focus();
+  session.deps.chrome.focusFilter();
 }
 
 function leave(session: RunsBrowserSession): void {
@@ -326,7 +307,7 @@ async function openDetail(session: RunsBrowserSession, id: string): Promise<void
 }
 
 function openSelected(session: RunsBrowserSession): void {
-  const selected = session.browserState?.items[session.deps.list.getSelectedIndex()];
+  const selected = session.browserState?.items[session.deps.chrome.selectedIndex()];
   if (selected) void openDetail(session, selected.id);
 }
 
@@ -338,14 +319,14 @@ function toggleScope(session: RunsBrowserSession): void {
 
 function onSelectionChanged(session: RunsBrowserSession): void {
   if (session.view !== "list" || !session.browserState) return;
-  const selected = session.browserState.items[session.deps.list.getSelectedIndex()];
+  const selected = session.browserState.items[session.deps.chrome.selectedIndex()];
   if (selected) session.browserState.selectedId = selected.id;
   session.activeRunId = undefined;
-  paintRunsSelection(session, session.deps.list.options.length);
+  paintRunsSelection(session, session.deps.chrome.options().length);
 }
 
 function onFilterInput(session: RunsBrowserSession): void {
-  session.savedFilter = session.deps.filter.value;
+  session.savedFilter = session.deps.chrome.filterValue();
   void refresh(session);
 }
 
@@ -381,7 +362,7 @@ function handleDetailKey(session: RunsBrowserSession, key: KeyEvent): boolean {
     if (!session.detailView || !viewAllowsWorkbench(session.detailView)) return true;
     stopDetailPoll(session);
     session.deps.launchWorkbenchRoute(runWorkbenchRoute(id));
-    session.deps.footer.content = runDetailFooter();
+    session.deps.chrome.setFooter(runDetailFooter());
     return true;
   }
   return true;
@@ -397,12 +378,12 @@ function handleKey(session: RunsBrowserSession, key: KeyEvent): boolean {
   }
   if (key.name === "up") {
     key.preventDefault();
-    session.deps.list.moveUp();
+    session.deps.chrome.moveUp();
     return true;
   }
   if (key.name === "down") {
     key.preventDefault();
-    session.deps.list.moveDown();
+    session.deps.chrome.moveDown();
     return true;
   }
   if (key.name === "return" || key.name === "linefeed") {

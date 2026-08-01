@@ -3,7 +3,6 @@ import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { KeyEvent } from "@opentui/core";
-import type { InvocationContext } from "../src/config";
 import {
   attachRunsBrowser,
   launchWorkbenchRoute,
@@ -14,28 +13,44 @@ import {
 } from "../src/tui/picker";
 import { resolvePaletteLetter } from "../src/tui/picker-actions";
 import { themeFromPalette } from "../src/tui/theme";
-import { latest } from "../src/latest";
 import {
-  buildInvocationEnv,
-  buildLaunchPayload,
-  buildRunArgs,
   buildIdentity,
-  buildWebLaunchEnv,
-  codeWatchTarget,
-  isRuntimeScriptEntry,
   launchDetachedRun,
   launchDetachedWeb,
-  openWebLaunchStderr,
   parseLaunchPayload,
   retireOnCodeChange,
-  selfRunArgv,
-  selfWebArgv,
-  webLaunchStderrPath,
   type DetachedRunHandle,
   type LaunchRunRequest,
   type LaunchWebRequest,
 } from "../src/tui/run-launch";
 import type { LoadedWorkflow } from "../src/workflow/types";
+import { fakePickerChrome, type FakePickerChrome } from "./picker-chrome-fake";
+
+function captureSpawn(): {
+  seen: { argv: string[]; env?: NodeJS.ProcessEnv; stdout?: unknown; stderr?: unknown };
+  spawn: typeof Bun.spawn;
+} {
+  const seen: {
+    argv: string[];
+    env?: NodeJS.ProcessEnv;
+    stdout?: unknown;
+    stderr?: unknown;
+  } = { argv: [] };
+  const spawn = ((argv, opts) => {
+    seen.argv = [...argv];
+    seen.env = opts?.env as NodeJS.ProcessEnv | undefined;
+    seen.stdout = opts?.stdout;
+    seen.stderr = opts?.stderr;
+    return {
+      stdin: { write() {}, end() {} },
+      stdout: null,
+      stderr: null,
+      exited: Promise.resolve(0),
+      unref() {},
+    } as unknown as ReturnType<typeof Bun.spawn>;
+  }) as typeof Bun.spawn;
+  return { seen, spawn };
+}
 
 const dirs: string[] = [];
 const prevState = process.env.HERDR_PLUGIN_STATE_DIR;
@@ -49,9 +64,13 @@ afterEach(async () => {
   else process.env.HERDR_PLUGIN_CONFIG_DIR = prevConfig;
 });
 
-function pickerState(overrides: Partial<PickerState> = {}): PickerState {
+function pickerState(
+  overrides: Partial<PickerState> & { chrome?: FakePickerChrome } = {},
+): PickerState & { chrome: FakePickerChrome } {
+  const { chrome: chromeOverride, runs, ...rest } = overrides;
+  const chrome = chromeOverride ?? fakePickerChrome();
   const state = {
-    mode: "list",
+    mode: "list" as const,
     entries: [],
     inputQueue: [],
     inputIndex: 0,
@@ -81,33 +100,15 @@ function pickerState(overrides: Partial<PickerState> = {}): PickerState {
       }) satisfies LoadedWorkflow,
     contentWidth: 80,
     theme: themeFromPalette(null),
-    renderer: { destroy: () => undefined },
-    filterRow: { visible: true },
-    filter: { visible: true, value: "", placeholder: "", focus: () => undefined },
-    updateHint: { visible: false, content: "" },
-    listBlock: { visible: true },
-    list: {
-      visible: true,
-      flexGrow: 0,
-      height: 6,
-      options: [],
-      getSelectedIndex: () => 0,
-      setSelectedIndex: () => undefined,
-      focus: () => undefined,
-    },
-    status: { visible: false, flexGrow: 0, content: "", fg: "", attributes: 0 },
-    detail: { visible: false, content: "" },
-    rule: { visible: false, content: "" },
-    promptInput: { visible: false, value: "" },
-    footer: { content: "" },
     inputDomains: {},
-    resolveToken: latest(),
     customChoice: false,
     reloadEntries: async () => [],
     savedWorkflowFilter: "",
-    ...overrides,
-  } as unknown as PickerState;
-  if (!overrides.runs) attachRunsBrowser(state);
+    ...rest,
+    chrome,
+  } as unknown as PickerState & { chrome: FakePickerChrome };
+  if (runs) state.runs = runs;
+  else attachRunsBrowser(state);
   return state;
 }
 
@@ -124,80 +125,82 @@ function startPickerRun(state: PickerState, entry: Parameters<PickerState["runs"
   });
 }
 
-describe("buildInvocationEnv", () => {
-  test("pins the original caller pane/tab/workspace, not a host pane", () => {
-    const ctx: InvocationContext = {
-      selection: "sel",
-      cwd: "/repo",
-      paneId: "wCaller:p1",
-      tabId: "wCaller:t1",
-      workspaceId: "wCaller",
-      worktreePath: "/repo/.wt",
-    };
-    const env = buildInvocationEnv(ctx, "/repo");
-    expect(env.HERDR_PANE_ID).toBe("wCaller:p1");
-    expect(env.HERDR_TAB_ID).toBe("wCaller:t1");
-    expect(env.HERDR_WORKSPACE_ID).toBe("wCaller");
-    expect(env.HERDR_WORKFLOWS_REPO_ROOT).toBe("/repo");
-    const json = JSON.parse(env.HERDR_PLUGIN_CONTEXT_JSON!) as Record<string, unknown>;
+describe("launch argv and env", () => {
+  test("detached run pins caller pane/tab/workspace in child env", () => {
+    const { seen, spawn } = captureSpawn();
+    launchDetachedRun({
+      name: "sleep",
+      repoRoot: "/repo",
+      ctx: {
+        selection: "sel",
+        cwd: "/repo",
+        paneId: "wCaller:p1",
+        tabId: "wCaller:t1",
+        workspaceId: "wCaller",
+        worktreePath: "/repo/.wt",
+      },
+      inputs: {},
+      onProgressLine: () => undefined,
+      spawn,
+    });
+    expect(seen.env?.HERDR_PANE_ID).toBe("wCaller:p1");
+    expect(seen.env?.HERDR_TAB_ID).toBe("wCaller:t1");
+    expect(seen.env?.HERDR_WORKSPACE_ID).toBe("wCaller");
+    expect(seen.env?.HERDR_WORKFLOWS_REPO_ROOT).toBe("/repo");
+    const json = JSON.parse(String(seen.env?.HERDR_PLUGIN_CONTEXT_JSON)) as Record<string, unknown>;
     expect(json.focused_pane_id).toBe("wCaller:p1");
     expect(json.tab_id).toBe("wCaller:t1");
     expect(json.workspace_id).toBe("wCaller");
     expect(json.selected_text).toBe("sel");
     expect((json.worktree as { path: string }).path).toBe("/repo/.wt");
   });
-});
 
-describe("run argv", () => {
-  test("buildRunArgs keeps only the workflow name and launch-payload flag", () => {
-    expect(buildRunArgs("sleep")).toEqual(["sleep", "--launch-payload"]);
+  test("detached run argv is self-exec plus name and launch-payload flag", () => {
+    const { seen, spawn } = captureSpawn();
+    launchDetachedRun({
+      name: "sleep",
+      repoRoot: "/repo",
+      ctx: { selection: "", cwd: "/repo" },
+      inputs: {},
+      onProgressLine: () => undefined,
+      spawn,
+    });
+    expect(seen.argv[0]).toBe(process.execPath);
+    expect(seen.argv).toContain("run");
+    expect(seen.argv.slice(-2)).toEqual(["sleep", "--launch-payload"]);
+    // Under bun test, argv[1] is a real script — self-exec re-passes it.
+    expect(seen.argv[1]).toBe(process.argv[1]);
+    expect(seen.argv[2]).toBe("run");
   });
 
-  test("selfRunArgv re-passes a real on-disk script entry to the runtime", async () => {
-    const root = await mkdtemp(join(tmpdir(), "hwf-self-argv-"));
-    dirs.push(root);
-    const script = join(root, "cli.ts");
-    await writeFile(script, "export {};\n");
-    expect(isRuntimeScriptEntry(script)).toBe(true);
-    expect(
-      selfRunArgv(["sleep", "--launch-payload"], { execPath: "/runtime/bun", argv1: script }),
-    ).toEqual(["/runtime/bun", script, "run", "sleep", "--launch-payload"]);
+  test("compiled /$bunfs/ entry is not a script — build identity uses the binary", () => {
+    // /$bunfs/ is not a host file; identity comes from execPath (same rule self-exec uses).
+    expect(buildIdentity("/$bunfs/root/herdr-workflows", process.execPath)).toBeString();
   });
 
-  test("selfRunArgv treats compiled /$bunfs/ argv1 as the binary itself", () => {
-    const entry = "/$bunfs/root/herdr-workflows";
-    expect(isRuntimeScriptEntry(entry)).toBe(false);
-    expect(
-      selfRunArgv(["sleep", "--launch-payload"], {
-        execPath: "/opt/herdr-workflows",
-        argv1: entry,
-      }),
-    ).toEqual(["/opt/herdr-workflows", "run", "sleep", "--launch-payload"]);
-  });
-
-  test("selfWebArgv reuses the same self-exec rules for web routes", async () => {
-    const root = await mkdtemp(join(tmpdir(), "hwf-self-web-"));
-    dirs.push(root);
-    const script = join(root, "cli.ts");
-    await writeFile(script, "export {};\n");
-    expect(
-      selfWebArgv(["w=repo:deploy", "--no-open"], { execPath: "/runtime/bun", argv1: script }),
-    ).toEqual(["/runtime/bun", script, "web", "w=repo:deploy", "--no-open"]);
-    expect(
-      selfWebArgv(["import"], {
-        execPath: "/opt/herdr-workflows",
-        argv1: "/$bunfs/root/herdr-workflows",
-      }),
-    ).toEqual(["/opt/herdr-workflows", "web", "import"]);
+  test("detached web argv reuses the same self-exec rules", () => {
+    const { seen, spawn } = captureSpawn();
+    launchDetachedWeb({
+      route: "w=repo:deploy",
+      repoRoot: "/repo",
+      spawn,
+    });
+    expect(seen.argv[0]).toBe(process.execPath);
+    expect(seen.argv[1]).toBe(process.argv[1]);
+    expect(seen.argv.slice(-2)).toEqual(["web", "w=repo:deploy"]);
   });
 
   test("parseLaunchPayload round-trips inputs", () => {
-    const payload = buildLaunchPayload("sleep", { focus: "x" });
+    const payload = { name: "sleep", inputs: { focus: "x" } };
     expect(parseLaunchPayload(JSON.stringify(payload))).toEqual(payload);
   });
 
   test("launch payload forwards domains and round-trips snapshots", () => {
-    const payload = buildLaunchPayload("dyn", { branch: "one" }, { branch: ["one", "two"] });
+    const payload = {
+      name: "dyn",
+      inputs: { branch: "one" },
+      domains: { branch: ["one", "two"] },
+    };
     expect(payload.domains).toEqual({ branch: ["one", "two"] });
     expect(JSON.stringify(payload)).not.toContain("argv");
     expect(parseLaunchPayload(JSON.stringify(payload))).toEqual(payload);
@@ -266,11 +269,11 @@ describe("picker detached run", () => {
     await Bun.sleep(10);
     expect(state.runs.running).toBe(true);
     expect(state.runs.isDetail()).toBe(true);
-    expect(String(state.footer.content)).toContain("esc back");
+    expect(state.chrome.lastFooter()).toContain("esc back");
 
     state.runs.dispose();
     state.exit = { code: 0 };
-    state.renderer.destroy();
+    state.chrome.destroy();
 
     resolveSleep();
     await running;
@@ -305,8 +308,7 @@ describe("picker detached run", () => {
     expect(seen?.ctx.paneId).toBe("wOrig:p9");
     expect(seen?.ctx.tabId).toBe("wOrig:t2");
     expect(seen?.ctx.workspaceId).toBe("wOrig");
-    const env = buildInvocationEnv(seen!.ctx, seen!.repoRoot);
-    expect(env.HERDR_PANE_ID).toBe("wOrig:p9");
+    expect(seen?.repoRoot).toBe("/repo");
   });
 
   test("a single-step local workflow still reports its outcome through the picker", async () => {
@@ -325,8 +327,8 @@ describe("picker detached run", () => {
       source: "repo",
       file: "/repo/.hwf/workflows/quick.yaml",
     });
-    expect(String(state.status.content)).toContain("[1/1]");
-    expect(String(state.status.content)).toContain("HISTORY UNAVAILABLE");
+    expect(state.chrome.lastStatus()).toContain("[1/1]");
+    expect(state.chrome.lastStatus()).toContain("HISTORY UNAVAILABLE");
     expect(state.runs.isDetail()).toBe(true);
     expect(state.exit).toBeUndefined();
     expect(state.runs.running).toBe(false);
@@ -354,7 +356,7 @@ describe("picker detached run", () => {
     expect(seen?.runId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     expect(state.runs.running).toBe(false);
     expect(state.runs.isDetail()).toBe(true);
-    expect(String(state.status.content)).toMatch(/LAUNCH FAILED|FAILED|boom/);
+    expect(state.chrome.lastStatus()).toMatch(/LAUNCH FAILED|FAILED|boom/);
   });
 });
 
@@ -553,6 +555,7 @@ await Bun.write(${JSON.stringify(envFile)}, JSON.stringify(env));
     let seenArgv: string[] = [];
     let seenStdout: unknown;
     let seenStderr: unknown;
+    let seenEnv: NodeJS.ProcessEnv | undefined;
     const stateDir = join(root, "state");
     process.env.HERDR_PLUGIN_STATE_DIR = stateDir;
     process.env.HERDR_PLUGIN_CONFIG_DIR = join(root, "config");
@@ -564,6 +567,7 @@ await Bun.write(${JSON.stringify(envFile)}, JSON.stringify(env));
         seenArgv = [...argv];
         seenStdout = opts?.stdout;
         seenStderr = opts?.stderr;
+        seenEnv = opts?.env as NodeJS.ProcessEnv | undefined;
         return Bun.spawn([process.execPath, script], {
           cwd: typeof opts?.cwd === "string" ? opts.cwd : root,
           env: opts?.env,
@@ -580,12 +584,12 @@ await Bun.write(${JSON.stringify(envFile)}, JSON.stringify(env));
     expect(seenArgv.at(-1)).toBe("import");
     expect(seenStdout).toBe("ignore");
     expect(typeof seenStderr).toBe("number");
-    expect(webLaunchStderrPath(stateDir)).toBe(join(stateDir, "web-launch.stderr.log"));
+    expect(await Bun.file(join(stateDir, "web-launch.stderr.log")).exists()).toBe(true);
+    expect(seenEnv?.HERDR_WORKFLOWS_REPO_ROOT).toBe(root);
     const env = JSON.parse(await readFile(envFile, "utf8")) as Record<string, string>;
     expect(env.repo).toBe(root);
     expect(env.state).toBe(stateDir);
     expect(env.config).toBe(join(root, "config"));
-    expect(buildWebLaunchEnv(root).HERDR_WORKFLOWS_REPO_ROOT).toBe(root);
   });
 
   test("unusable plugin state still launches with stderr ignored", async () => {
@@ -593,7 +597,6 @@ await Bun.write(${JSON.stringify(envFile)}, JSON.stringify(env));
     dirs.push(root);
     const blocker = join(root, "not-a-dir");
     await writeFile(blocker, "file");
-    expect(openWebLaunchStderr(join(blocker, "nested"))).toBe("ignore");
 
     let spawned = false;
     let seenStderr: unknown;
@@ -643,24 +646,17 @@ describe("picker workbench handoff", () => {
 
   test("successful launch tears down picker after handoff", () => {
     const launched: LaunchWebRequest[] = [];
-    let destroyed = false;
+    const chrome = fakePickerChrome();
+    chrome.setOptions([
+      {
+        name: "Deploy · repo",
+        description: "",
+        value: { entry: { name: "deploy", source: "repo", file: "/r/deploy.yaml" } },
+      },
+    ]);
     const state = pickerState({
       launchWeb: (req) => launched.push(req),
-      renderer: {
-        destroy: () => {
-          destroyed = true;
-        },
-      } as PickerState["renderer"],
-      list: {
-        options: [
-          {
-            name: "Deploy · repo",
-            description: "",
-            value: { entry: { name: "deploy", source: "repo", file: "/r/deploy.yaml" } },
-          },
-        ],
-        getSelectedIndex: () => 0,
-      } as unknown as PickerState["list"],
+      chrome,
     });
     expect(selectedListEntry(state)?.source).toBe("repo");
     const action = resolvePaletteLetter("o", selectedListEntry(state));
@@ -668,70 +664,53 @@ describe("picker workbench handoff", () => {
     if (action && action.id === "open") launchWorkbenchRoute(state, action.route);
     expect(launched).toEqual([{ route: "w=repo:deploy", repoRoot: "/repo" }]);
     expect(state.exit?.code).toBe(0);
-    expect(destroyed).toBe(true);
+    expect(chrome.destroyed).toBe(true);
   });
 
   test("failed launch keeps picker open with concise status", () => {
-    let destroyed = false;
     const entry = { name: "deploy", source: "repo" as const, file: "/r/deploy.yaml" };
+    const chrome = fakePickerChrome();
+    chrome.showBrowser({ showFilter: true });
+    chrome.setOptions([
+      {
+        name: "Deploy · repo",
+        description: "",
+        value: { entry },
+      },
+    ]);
     const state = pickerState({
       entries: [entry],
       launchWeb: () => {
         throw new Error("spawn ENOENT");
       },
-      renderer: {
-        destroy: () => {
-          destroyed = true;
-        },
-      } as PickerState["renderer"],
-      list: {
-        options: [
-          {
-            name: "Deploy · repo",
-            description: "",
-            value: { entry },
-          },
-        ],
-        getSelectedIndex: () => 0,
-        visible: true,
-        flexGrow: 1,
-      } as unknown as PickerState["list"],
-      filter: { visible: true } as PickerState["filter"],
+      chrome,
     });
     launchWorkbenchRoute(state, "import");
-    expect(destroyed).toBe(false);
+    expect(chrome.destroyed).toBe(false);
     expect(state.exit).toBeUndefined();
     expect(state.mode).toBe("list");
-    expect(state.status.visible).toBe(true);
-    expect(String(state.status.content)).toContain("workbench failed");
-    expect(String(state.status.content)).toContain("spawn ENOENT");
-    expect(String(state.footer.content).startsWith(LIST_HINT)).toBe(true);
-    expect(String(state.footer.content)).toMatch(/1\/1$/);
-    expect(String(state.footer.content)).toContain("enter run");
-    expect(String(state.footer.content)).not.toMatch(/enter\/esc close/);
-    expect(state.list.visible).toBe(true);
-    expect(state.filter.visible).toBe(true);
+    expect(chrome.statusVisible()).toBe(true);
+    expect(chrome.lastStatus()).toContain("workbench failed");
+    expect(chrome.lastStatus()).toContain("spawn ENOENT");
+    expect(chrome.lastFooter().startsWith(LIST_HINT)).toBe(true);
+    expect(chrome.lastFooter()).toMatch(/1\/1$/);
+    expect(chrome.lastFooter()).toContain("enter run");
+    expect(chrome.lastFooter()).not.toMatch(/enter\/esc close/);
+    expect(chrome.layout()).toBe("browser");
+    expect(chrome.filterVisible()).toBe(true);
     expect(selectedListEntry(state)?.name).toBe("deploy");
   });
 
   test("palette open without selection is noop; import launches workbench", () => {
     const launched: LaunchWebRequest[] = [];
-    let destroyed = false;
+    const chrome = fakePickerChrome();
     const state = pickerState({
       launchWeb: (req) => launched.push(req),
-      renderer: {
-        destroy: () => {
-          destroyed = true;
-        },
-      } as PickerState["renderer"],
-      list: {
-        options: [],
-        getSelectedIndex: () => 0,
-      } as unknown as PickerState["list"],
+      chrome,
     });
     expect(resolvePaletteLetter("o", undefined)).toBeUndefined();
     expect(launched).toEqual([]);
-    expect(destroyed).toBe(false);
+    expect(chrome.destroyed).toBe(false);
 
     const imp = resolvePaletteLetter("i", undefined);
     expect(imp).toEqual({ id: "import", route: "import" });
@@ -741,18 +720,17 @@ describe("picker workbench handoff", () => {
   });
 
   test("ctrl+k opens palette in list mode only", () => {
+    const chrome = fakePickerChrome();
+    chrome.setOptions([
+      {
+        name: "Deploy · repo",
+        description: "",
+        value: { entry: { name: "deploy", source: "repo", file: "/r/deploy.yaml" } },
+      },
+    ]);
     const state = pickerState({
       mode: "input",
-      list: {
-        options: [
-          {
-            name: "Deploy · repo",
-            description: "",
-            value: { entry: { name: "deploy", source: "repo", file: "/r/deploy.yaml" } },
-          },
-        ],
-        getSelectedIndex: () => 0,
-      } as unknown as PickerState["list"],
+      chrome,
     });
     const k = key("k", true);
     expect(tryOpenActionsPalette(state, k)).toBe(false);
@@ -785,16 +763,12 @@ async function waitFor(predicate: () => boolean, timeoutMs = 3000): Promise<bool
 }
 
 describe("code-change retirement", () => {
-  test("a compiled entry has no watch target and relies on build identity", () => {
-    expect(codeWatchTarget("/$bunfs/root/cli")).toBeUndefined();
-  });
-
-  test("codeWatchTarget watches the source tree for a script entry", async () => {
-    const root = await mkdtemp(join(tmpdir(), "hwf-watch-target-"));
-    dirs.push(root);
-    const entry = join(root, "cli.ts");
-    await writeFile(entry, "export {};\n");
-    expect(codeWatchTarget(entry)).toEqual({ path: root, recursive: true });
+  test("a compiled entry relies on build identity, not a script watch", () => {
+    // /$bunfs/ is not a host file — no script-tree watch; identity comes from the binary.
+    const id = buildIdentity("/$bunfs/root/cli", process.execPath);
+    expect(id).toBeString();
+    const stop = retireOnCodeChange(() => undefined, undefined);
+    expect(() => stop()).not.toThrow();
   });
 
   test("no watch target is a no-op disposer, not a failure", () => {

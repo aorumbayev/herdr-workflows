@@ -33,11 +33,11 @@ export type LaunchRunRequest = {
   spawn?: typeof Bun.spawn;
 };
 
+const SELF_EXEC = process.execPath;
+const SELF_ENTRY = process.argv[1];
+
 /** Env the detached `hwf run` child must inherit so context.* stays the caller's. */
-export function buildInvocationEnv(
-  ctx: InvocationContext,
-  repoRoot: string,
-): Record<string, string> {
+function buildInvocationEnv(ctx: InvocationContext, repoRoot: string): Record<string, string> {
   const json: Record<string, unknown> = {
     selected_text: ctx.selection,
     cwd: ctx.cwd,
@@ -58,7 +58,7 @@ export function buildInvocationEnv(
 }
 
 /** True when argv[1] is a real on-disk script the runtime must re-pass (dev `bun src/cli.ts`). */
-export function isRuntimeScriptEntry(entry: string | undefined): boolean {
+function isRuntimeScriptEntry(entry: string | undefined): boolean {
   if (typeof entry !== "string" || entry.length === 0) return false;
   // Compiled bun binaries expose an embedded virtual path — not a host file to re-exec.
   if (entry.startsWith("/$bunfs/")) return false;
@@ -100,7 +100,7 @@ export function buildIdentity(
  * an upgrade renames the whole managed checkout, and a filesystem watch cannot see a rename of an
  * ancestor on Linux, where watches are bound to inodes rather than paths.
  */
-export function codeWatchTarget(entry: string | undefined = Bun.main): CodeWatchTarget | undefined {
+function codeWatchTarget(entry: string | undefined = Bun.main): CodeWatchTarget | undefined {
   if (entry !== undefined && isRuntimeScriptEntry(entry)) {
     return { path: dirname(entry), recursive: true };
   }
@@ -130,39 +130,14 @@ export function retireOnCodeChange(
   return () => watcher.close();
 }
 
-function selfCommandArgv(
-  command: string,
-  commandArgs: string[],
-  opts?: { execPath?: string; argv1?: string },
-): string[] {
-  const execPath = opts?.execPath ?? process.execPath;
-  const entry = opts?.argv1 ?? process.argv[1];
-  if (entry !== undefined && isRuntimeScriptEntry(entry)) {
-    return [execPath, entry, command, ...commandArgs];
+function selfArgv(command: string, commandArgs: string[]): string[] {
+  if (SELF_ENTRY !== undefined && isRuntimeScriptEntry(SELF_ENTRY)) {
+    return [SELF_EXEC, SELF_ENTRY, command, ...commandArgs];
   }
-  return [execPath, command, ...commandArgs];
+  return [SELF_EXEC, command, ...commandArgs];
 }
 
-export function selfRunArgv(
-  runArgs: string[],
-  opts?: { execPath?: string; argv1?: string },
-): string[] {
-  return selfCommandArgv("run", runArgs, opts);
-}
-
-export function selfWebArgv(
-  webArgs: string[],
-  opts?: { execPath?: string; argv1?: string },
-): string[] {
-  return selfCommandArgv("web", webArgs, opts);
-}
-
-/** Argv after `run` — workflow name + flag only; inputs travel on stdin. */
-export function buildRunArgs(name: string): string[] {
-  return [name, "--launch-payload"];
-}
-
-export function buildLaunchPayload(
+function buildLaunchPayload(
   name: string,
   inputs: Record<string, string>,
   domains?: Record<string, string[]>,
@@ -234,7 +209,7 @@ function decodeLines(
 /** Spawn `hwf run` in its own process group so the picker popup can exit freely. */
 export function launchDetachedRun(req: LaunchRunRequest): DetachedRunHandle {
   const spawn = req.spawn ?? Bun.spawn.bind(Bun);
-  const argv = selfRunArgv(buildRunArgs(req.name));
+  const argv = selfArgv("run", [req.name, "--launch-payload"]);
   const payload = JSON.stringify(buildLaunchPayload(req.name, req.inputs, req.domains, req.runId));
   const env = {
     ...process.env,
@@ -313,7 +288,7 @@ export type LaunchWebRequest = {
 };
 
 /** Env the detached `hwf web` child needs for the same repo workbench. */
-export function buildWebLaunchEnv(
+function buildWebLaunchEnv(
   repoRoot: string,
   base: NodeJS.ProcessEnv = process.env,
 ): Record<string, string | undefined> {
@@ -324,7 +299,7 @@ export function buildWebLaunchEnv(
 }
 
 /** Append-only log for detached `hwf web` stderr (picker dismisses before the child settles). */
-export function webLaunchStderrPath(stateDir: string = pluginStateDir()): string {
+function webLaunchStderrPath(stateDir: string = pluginStateDir()): string {
   return join(stateDir, "web-launch.stderr.log");
 }
 
@@ -338,7 +313,7 @@ export function webLaunchStderrPath(stateDir: string = pluginStateDir()): string
  */
 export function launchDetachedWeb(req: LaunchWebRequest): void {
   const spawn = req.spawn ?? Bun.spawn.bind(Bun);
-  const argv = selfWebArgv([req.route]);
+  const argv = selfArgv("web", [req.route]);
   const env = buildWebLaunchEnv(req.repoRoot, { ...process.env, ...req.env });
   const stderr = openWebLaunchStderr(pluginStateDir(env));
   try {
@@ -357,7 +332,7 @@ export function launchDetachedWeb(req: LaunchWebRequest): void {
 }
 
 /** Best-effort stderr sink; `"ignore"` when the state log cannot be opened. */
-export function openWebLaunchStderr(stateDir: string): number | "ignore" {
+function openWebLaunchStderr(stateDir: string): number | "ignore" {
   try {
     mkdirSync(stateDir, { recursive: true });
     return openSync(webLaunchStderrPath(stateDir), "a");

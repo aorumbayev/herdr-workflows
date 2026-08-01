@@ -21,6 +21,7 @@ import {
   type RunsBrowserDeps,
 } from "../src/tui/runs-browser";
 import { pickerEscapeExitCode, shouldDropStdinLeakSequence } from "../src/tui/picker";
+import { fakePickerChrome, type FakePickerChrome } from "./picker-chrome-fake";
 
 const dirs: string[] = [];
 let prevState: string | undefined;
@@ -50,92 +51,18 @@ function item(partial: Partial<RunListItem> & Pick<RunListItem, "id" | "workflow
   };
 }
 
-type FakeList = {
-  height: number;
-  options: { name: string; description: string; value: { run: RunListItem } }[];
-  getSelectedIndex: () => number;
-  setSelectedIndex: (i: number) => void;
-  moveUp: (steps?: number) => void;
-  moveDown: (steps?: number) => void;
-  focus: () => void;
-};
-
-function fakeList(): FakeList {
-  let selected = 0;
-  let options: FakeList["options"] = [];
-  return {
-    height: 99,
-    get options() {
-      return options;
-    },
-    set options(next) {
-      options = next;
-    },
-    getSelectedIndex: () => selected,
-    setSelectedIndex: (i: number) => {
-      selected = i;
-    },
-    moveUp: (steps = 1) => {
-      if (options.length === 0) return;
-      selected = (selected - steps + options.length) % options.length;
-    },
-    moveDown: (steps = 1) => {
-      if (options.length === 0) return;
-      selected = (selected + steps) % options.length;
-    },
-    focus: () => undefined,
-  };
-}
-
-function fakeText(content = ""): { content: string; visible: boolean } {
-  return { content, visible: true };
-}
-
-function fakeFilter(): {
-  value: string;
-  placeholder: string;
-  visible: boolean;
-  focus: () => void;
-} {
-  return {
-    value: "",
-    placeholder: "",
-    visible: true,
-    focus: () => undefined,
-  };
-}
-
 function createTestRuns(repoRoot: string): {
   runs: RunsBrowser;
-  list: FakeList;
-  status: { content: string };
-  footer: { content: string };
+  chrome: FakePickerChrome;
 } {
-  const list = fakeList();
-  const detail = fakeText();
-  const footer = fakeText();
-  const filter = fakeFilter();
-  const filterRow = { visible: true };
-  const status = { content: "" };
+  const chrome = fakePickerChrome();
   const deps: RunsBrowserDeps = {
     repoRoot,
     getContentWidth: () => 80,
-    list,
-    detail,
-    footer,
-    filter,
-    filterRow,
-    chrome: {
-      show: (layout) => {
-        if (layout === "browser") list.height = RUNS_LIST_VIEWPORT;
-      },
-      status: (content) => {
-        status.content = content ?? "";
-      },
-    },
+    chrome,
     launchWorkbenchRoute: () => undefined,
   };
-  return { runs: createRunsBrowser(deps), list, status, footer };
+  return { runs: createRunsBrowser(deps), chrome };
 }
 
 describe("picker run history formatting", () => {
@@ -157,24 +84,24 @@ describe("picker run history formatting", () => {
       session.dispose();
     }
     const keep = ids[7]!;
-    const { runs, list } = createTestRuns(root);
-    expect(list.height).toBe(99);
+    const { runs, chrome } = createTestRuns(root);
+    expect(chrome.listHeight).toBe(99);
     await runs.enter();
-    expect(list.height).toBe(RUNS_LIST_VIEWPORT);
+    expect(chrome.listHeight).toBe(RUNS_LIST_VIEWPORT);
     const keepIdx = runsSelectedIndex(
-      list.options.map((o) => o.value.run),
+      chrome.options().map((o) => (o.value as { run: RunListItem }).run),
       keep,
     );
-    list.setSelectedIndex(keepIdx);
+    chrome.setSelectedIndex(keepIdx);
     runs.onSelectionChanged();
     await runs.refresh();
-    expect(list.options.length).toBe(8);
+    expect(chrome.options().length).toBe(8);
     const idx = runsSelectedIndex(
-      list.options.map((o) => o.value.run),
+      chrome.options().map((o) => (o.value as { run: RunListItem }).run),
       keep,
     );
-    expect(list.getSelectedIndex()).toBe(idx);
-    expect(list.options[idx]!.value.run.id).toBe(keep);
+    expect(chrome.selectedIndex()).toBe(idx);
+    expect((chrome.options()[idx]!.value as { run: RunListItem }).run.id).toBe(keep);
   });
 
   test("overlapping detail opens keep the latest status content", async () => {
@@ -200,12 +127,12 @@ describe("picker run history formatting", () => {
     await second.finalize("succeeded");
     const secondId = second.id!;
     second.dispose();
-    const { runs, status } = createTestRuns(root);
+    const { runs, chrome } = createTestRuns(root);
     const older = runs.openDetail(firstId);
     await runs.openDetail(secondId);
     await older;
-    expect(String(status.content)).toContain("two");
-    expect(String(status.content)).not.toContain("one");
+    expect(chrome.lastStatus()).toContain("two");
+    expect(chrome.lastStatus()).not.toContain("one");
     runs.dispose();
   });
 
@@ -313,15 +240,15 @@ describe("picker run history formatting", () => {
     await session.finalize("succeeded");
     const keep = session.id!;
     session.dispose();
-    const { runs, list } = createTestRuns(root);
+    const { runs, chrome } = createTestRuns(root);
     await runs.enter();
     await runs.openDetail(keep);
     expect(runs.isDetail()).toBe(true);
     await runs.enter();
     expect(runs.isActive()).toBe(true);
     expect(runs.isDetail()).toBe(false);
-    const idx = list.getSelectedIndex();
-    expect(list.options[idx]!.value.run.id).toBe(keep);
+    const idx = chrome.selectedIndex();
+    expect((chrome.options()[idx]!.value as { run: RunListItem }).run.id).toBe(keep);
   });
 
   test("detail poll targets only running and stale statuses", () => {

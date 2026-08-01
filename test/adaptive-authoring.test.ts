@@ -6,7 +6,7 @@ import { evaluateWhen } from "../src/workflow/conditions";
 import { collectInputValues } from "../src/workflow/inputs";
 import { parseWorkflowText } from "../src/workflow/load";
 import { parseRaw as parseDoc } from "../src/workflow/parse";
-import { buildLaunchPayload, parseLaunchPayload } from "../src/tui/run-launch";
+import { parseLaunchPayload } from "../src/tui/run-launch";
 import { runArgvStep } from "../src/run/steps/shell";
 
 async function tempRepo(): Promise<string> {
@@ -391,7 +391,11 @@ steps:
   });
 
   test("launch payload domains reuse snapshot and reject mismatches", async () => {
-    const payload = buildLaunchPayload("w", { branch: "one" }, { branch: ["one", "two"] });
+    const payload = {
+      name: "w",
+      inputs: { branch: "one" },
+      domains: { branch: ["one", "two"] },
+    };
     expect(JSON.stringify(payload)).not.toContain("argv");
     const parsed = parseLaunchPayload(JSON.stringify(payload));
     expect(parsed.domains).toEqual({ branch: ["one", "two"] });
