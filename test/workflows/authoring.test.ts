@@ -2,14 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { evaluateWhen } from "../../src/workflow/conditions";
-import { createInputSession } from "../../src/workflow/inputs";
-import { parseWorkflowText } from "../../src/workflow/load";
-import { parseRaw as parseDoc } from "../../src/workflow/parse";
+import { evaluateWhen } from "../../src/workflow/grammar";
+import { createInputSession } from "../../src/workflow/inputs-exchange";
+import { parseWorkflowText } from "../../src/workflow/inputs-exchange";
+import { parseRaw as parseDoc } from "../../src/workflow/grammar";
 import { parseLaunchPayload } from "../../src/engine";
 import { runArgvStep } from "../../src/engine";
 import type { WorkflowsConfig } from "../../src/context";
-import type { InputSpec } from "../../src/workflow/types";
+import type { InputSpec } from "../../src/workflow/grammar";
 
 async function collectInputValues(opts: {
   specs: InputSpec[];

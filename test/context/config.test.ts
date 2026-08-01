@@ -25,9 +25,9 @@ import {
   completeWorkflowInputs,
   parseDynamicChoiceStdout,
   resolveDynamicChoices,
-} from "../../src/workflow/inputs";
-import { parseWorkflowText } from "../../src/workflow/load";
-import { buildTemplateNamespace, workflowNeedsTranscript } from "../../src/workflow/template";
+} from "../../src/workflow/inputs-exchange";
+import { parseWorkflowText } from "../../src/workflow/inputs-exchange";
+import { buildTemplateNamespace, workflowNeedsTranscript } from "../../src/workflow/grammar";
 
 const dirs: string[] = [];
 const prevPluginDir = process.env.HERDR_PLUGIN_CONFIG_DIR;

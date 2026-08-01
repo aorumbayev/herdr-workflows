@@ -125,8 +125,8 @@ examples stay unchanged.
   `bun test ./test -t 'example'`, or run `hwf` against the file when a built binary exists. Quote
   the result
 - `rg -n '```yaml' -A20 docs/*.md README.md` and compare each snippet's keys against the Zod schema
-  in `src/workflow/parse.ts`. Cite both sides
-- For key coverage, list `.strict()` object keys in `src/workflow/parse.ts` and grep each in
+  in `src/workflow/grammar.ts`. Cite both sides
+- For key coverage, list `.strict()` object keys in `src/workflow/grammar.ts` and grep each in
   `docs/reference.md`
 
 ### Not a finding

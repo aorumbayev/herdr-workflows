@@ -2,13 +2,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listWorkflows } from "../../src/workflow/load";
+import { listWorkflows } from "../../src/workflow/inputs-exchange";
 import {
   analyzeRawWorkflow,
   analyzeResolvedSensitivity,
   sensitivityLabels,
-} from "../../src/workflow/trust";
-import { parseRaw } from "../../src/workflow/parse";
+} from "../../src/workflow/grammar";
+import { parseRaw } from "../../src/workflow/grammar";
 
 const dirs: string[] = [];
 afterEach(async () => {

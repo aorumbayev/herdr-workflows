@@ -1,14 +1,13 @@
 import { isMethodResultDotPath, RESULT_DOT_PATHS } from "../host";
-import { clausesContain, evaluateWhen } from "./conditions";
 import {
+  bail,
+  clausesContain,
+  evaluateWhen,
+  IDENT_RE,
   isWholeValueTemplate,
   parseTemplatePath,
   textTemplates,
   walkValueStrings,
-} from "./template";
-import {
-  bail,
-  IDENT_RE,
   type InputSpec,
   type LoadedWorkflow,
   type RecoveryAction,
@@ -18,7 +17,7 @@ import {
   type TemplateNamespace,
   type WhenSpec,
   type WorkflowStep,
-} from "./types";
+} from "./grammar";
 
 type ProducerKind = "agent" | "command" | "readiness" | "herdr" | "child" | "none";
 

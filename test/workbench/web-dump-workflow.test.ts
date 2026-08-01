@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { dumpWorkflow } from "../../src/workflow/dump";
-import { parseRaw, rawStepKeyOrder, type RawWorkflowDoc } from "../../src/workflow/parse";
+import { dumpWorkflow } from "../../src/workflow/inputs-exchange";
+import { parseRaw, rawStepKeyOrder, type RawWorkflowDoc } from "../../src/workflow/grammar";
 
 function roundTrip(doc: RawWorkflowDoc) {
   return parseRaw("buf.yaml", dumpWorkflow(doc));

@@ -15,7 +15,7 @@ This skill belongs to the herdr-workflows repository. From any cwd inside it, de
 ## What makes this eval trustworthy
 
 **The oracle is the loader, not a rubric.** Every ```yaml fence the agent emits is loaded through
-`src/workflow/load.ts` with the fixture's own `.hwf/workflows/` seeded so `workflow:` children
+`src/workflow/inputs-exchange.ts` with the fixture's own `.hwf/workflows/` seeded so `workflow:` children
 resolve. A workflow either loads or it does not. Do not replace this with an LLM judge — the whole
 point is that this repository can answer the question objectively.
 

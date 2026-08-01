@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { z } from "zod";
 import { workflowSchemaUrl } from "../src/context";
-import { rawWorkflowSchema } from "../src/workflow/parse";
+import { rawWorkflowSchema } from "../src/workflow/grammar";
 
 const OUT = join(import.meta.dir, "..", "docs", "workflow.schema.json");
 

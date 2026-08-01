@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { InputSpec, LoadedWorkflow, WorkflowListEntry } from "../../src/workflow/types";
+import type { InputSpec, LoadedWorkflow, WorkflowListEntry } from "../../src/workflow/grammar";
 import { pickerSeams, runPickerSession, type PickerState } from "../../src/picker";
-import { createInputSession } from "../../src/workflow/inputs";
+import { createInputSession } from "../../src/workflow/inputs-exchange";
 import {
   beginConfirmedDelete,
   EMPTY_CATALOG_MESSAGE,
@@ -30,7 +30,7 @@ import {
   truncate,
 } from "../../src/picker";
 import { themeFromPalette } from "../../src/chrome";
-import { humanizeWorkflowName, workflowDisplayTitle } from "../../src/workflow/trust";
+import { humanizeWorkflowName, workflowDisplayTitle } from "../../src/workflow/grammar";
 import { fakePickerChrome, type FakePickerChrome } from "../fakes/picker-chrome-fake";
 
 const { acceptWorkflow, attachRunsBrowser, setListMode, tryOpenActionsPalette } = pickerSeams;

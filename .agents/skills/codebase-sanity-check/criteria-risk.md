@@ -83,9 +83,9 @@ is a data-integrity defect, not a graceful degradation.
 - For any credential file, require restrictive creation mode and a refusal to follow symlinks:
   `rg -n "0o600|O_NOFOLLOW|chmod|mode:" src`. A credential file created with default mode is a
   finding
-- Read `src/workflow/share.ts` and `src/workflow/import.ts` and name
-  exactly what a shared, exported, or `--launch-payload` workflow carries. Do not grep for `import`
-  here — it matches every ES import in the tree
+- Read `src/workflow/inputs-exchange.ts` and name exactly what a shared, exported, or
+  `--launch-payload` workflow carries. Do not grep for `import` here — it matches every ES import
+  in the tree
 
 ## 4. Web workbench surface
 
@@ -226,7 +226,7 @@ judge it.
 
 - For each new export in the diff, grep for a call site outside its own file
 - `git diff origin/<base>...HEAD --name-only` and check the pairings the repository requires:
-  a `src/workflow/parse.ts` schema change with no `docs/workflow.schema.json` change, an
+  a `src/workflow/grammar.ts` schema change with no `docs/workflow.schema.json` change, an
   `examples/*.yaml` change with no `examples.generated.ts` change, or a behavior change with no
   change under `openspec/`
 - `git diff origin/<base>...HEAD | rg "^\+.*catch\s*\([^)]*\)\s*\{\s*\}"`

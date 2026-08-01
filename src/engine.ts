@@ -20,7 +20,7 @@ import {
   type WorkflowsConfig,
   type AgentProfile,
 } from "./context";
-import { completeWorkflowInputs, evaluateWhen } from "./workflow/inputs";
+import { completeWorkflowInputs, evaluateWhen } from "./workflow/inputs-exchange";
 import { createRunRecorder, type RunRecorder, type RunStepOutcomeKind } from "./history";
 import {
   HerdrError,
@@ -32,13 +32,17 @@ import {
   reportToken,
   tabClose,
 } from "./host";
-import { loadWorkflow, buildTemplateNamespace, workflowTemplateRefs } from "./workflow/load";
+import {
+  loadWorkflow,
+  buildTemplateNamespace,
+  workflowTemplateRefs,
+} from "./workflow/inputs-exchange";
 import {
   substituteParams,
   renderScalar,
   substituteText,
   substituteValue,
-} from "./workflow/template";
+} from "./workflow/grammar";
 import type {
   TemplateNamespace,
   WorkflowStep,
@@ -48,7 +52,7 @@ import type {
   LoadedWorkflow,
   ReturnsSpec,
   RecoveryAction,
-} from "./workflow/types";
+} from "./workflow/grammar";
 
 type StepFailure = {
   message: string;

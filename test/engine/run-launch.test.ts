@@ -19,7 +19,7 @@ import {
   type LaunchRunRequest,
   type LaunchWebRequest,
 } from "../../src/engine";
-import type { LoadedWorkflow } from "../../src/workflow/types";
+import type { LoadedWorkflow } from "../../src/workflow/grammar";
 import { fakePickerChrome, type FakePickerChrome } from "../fakes/picker-chrome-fake";
 
 function captureSpawn(): {

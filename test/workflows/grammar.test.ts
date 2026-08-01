@@ -8,8 +8,8 @@ import {
   loadWorkflow,
   loadWorkflowEntry,
   parseWorkflowText,
-} from "../../src/workflow/load";
-import { parseDurationMs, parseRaw } from "../../src/workflow/parse";
+} from "../../src/workflow/inputs-exchange";
+import { parseDurationMs, parseRaw } from "../../src/workflow/grammar";
 import {
   isWholeValueTemplate,
   parseTemplatePath,
@@ -18,8 +18,8 @@ import {
   substituteText,
   substituteValue,
   textTemplates,
-} from "../../src/workflow/template";
-import type { TemplateNamespace } from "../../src/workflow/types";
+} from "../../src/workflow/grammar";
+import type { TemplateNamespace } from "../../src/workflow/grammar";
 
 const dirs: string[] = [];
 afterEach(async () => {

@@ -38,7 +38,7 @@ import {
   preflightConflicts,
   previewBundle,
   runImport,
-} from "./workflow/import";
+} from "./workflow/inputs-exchange";
 import {
   analyzeYamlTree,
   dumpWorkflow,
@@ -50,9 +50,9 @@ import {
   sensitivityLabels,
   workflowDisplayTitle,
   workflowPath,
-} from "./workflow/load";
-import { exportWorkflowBundle, withPinnedSchemaPointer } from "./workflow/share";
-import { WORKFLOW_NAME_RE } from "./workflow/types";
+} from "./workflow/inputs-exchange";
+import { exportWorkflowBundle, withPinnedSchemaPointer } from "./workflow/inputs-exchange";
+import { WORKFLOW_NAME_RE } from "./workflow/grammar";
 // @ts-expect-error Bun `with { type: "text" }` yields the file text, not the module namespace
 // oxlint-disable-next-line import/default -- Bun text import embeds source; module has named exports only
 import fieldModelSource from "./web/field-model.ts" with { type: "text" };

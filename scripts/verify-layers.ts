@@ -31,11 +31,9 @@ const ENTRIES: Record<Module, ReadonlySet<string>> = {
   picker: new Set(["src/picker.ts"]),
   workbench: new Set(["src/workbench.ts"]),
   workflows: new Set([
-    "src/workflow/load.ts",
-    "src/workflow/inputs.ts",
-    "src/workflow/types.ts",
-    "src/workflow/import.ts",
-    "src/workflow/share.ts",
+    "src/workflow/grammar.ts",
+    "src/workflow/validate.ts",
+    "src/workflow/inputs-exchange.ts",
   ]),
   engine: new Set(["src/engine.ts"]),
   history: new Set(["src/history.ts"]),
@@ -52,18 +50,14 @@ const SIDEWAYS = new Set([
 ]);
 
 /**
- * context: Residual edges the layer rule tolerates until Phase 3 consolidation.
- * - engine → workflow/template: step rendering deep-imports the template engine.
- * - host/context/history → workflow/types: shared grammar types still live under workflows.
- * - context + workflows/inputs dynamic-import engine for spawnCapture (breaks cycles).
+ * context: Residual edges the layer rule tolerates after Phase 3 consolidation.
+ * - history → workflow/grammar: shared step/workflow types for run snapshots.
+ * - workflows/inputs-exchange dynamic-imports engine for spawnCapture (breaks cycles).
  * - picker → cli: update indicator and browser open from the TUI.
  */
 const ALLOW: ReadonlySet<string> = new Set([
   "src/picker.ts -> src/cli.ts",
-  "src/context.ts -> src/workflow/types.ts",
-  "src/host.ts -> src/workflow/types.ts",
-  "src/history.ts -> src/workflow/types.ts",
-  "src/engine.ts -> src/workflow/template.ts",
+  "src/history.ts -> src/workflow/grammar.ts",
 ]);
 
 function walk(dir: string, out: string[] = []): string[] {

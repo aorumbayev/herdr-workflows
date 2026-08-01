@@ -8,7 +8,7 @@ import {
   CredentialStoreError,
   pluginStateDir,
 } from "./context";
-import type { LoadedWorkflow, WorkflowStep } from "./workflow/types";
+import type { LoadedWorkflow, WorkflowStep } from "./workflow/grammar";
 
 /** Versioned private run snapshot and allowlisted projections. */
 

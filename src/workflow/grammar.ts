@@ -1,26 +1,468 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { z } from "zod";
+import { HERDR_METHOD_BY_NAME } from "../herdr-methods.generated";
+import { platformName, sanitizeDisplay, type InvocationContext } from "../context";
 import { validateHerdrInvocation } from "../host";
-import { isWholeValueTemplate, malformedTemplateSnippet, walkValueStrings } from "./template";
-import {
-  bail,
-  DURATION_RE,
-  IDENT_RE,
-  positioned,
-  TEMPLATE_INNER,
-  WHOLE_TEMPLATE_RE,
-  WORKFLOW_FORMAT,
-  WorkflowLoadError,
-  type PaneSpec,
-  type RawInputValue,
-  type RecoveryAction,
-  type ReturnsSpec,
-  type RetrySpec,
-  type RunPayload,
-  type ShellName,
-  type StepAction,
-  type WhenSpec,
-  type WorkflowStep,
-} from "./types";
+
+export class WorkflowLoadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WorkflowLoadError";
+  }
+}
+
+function positioned(
+  file: string,
+  step: number | undefined,
+  key: string | undefined,
+  message: string,
+): string {
+  const parts = [file];
+  if (step !== undefined) parts.push(`step ${step}`);
+  if (key) parts.push(key);
+  return `${parts.join(", ")}: ${message}`;
+}
+
+export function bail(
+  file: string,
+  step: number | undefined,
+  key: string | undefined,
+  message: string,
+): never {
+  throw new WorkflowLoadError(positioned(file, step, key, message));
+}
+
+export const WORKFLOW_FORMAT = "v1alpha1" as const;
+type WorkflowFormat = typeof WORKFLOW_FORMAT;
+
+export const IDENT_RE = /^[a-z][a-z0-9_]{0,31}$/;
+export const WORKFLOW_NAME_RE = /^[a-z0-9][a-z0-9-_]*$/;
+const DURATION_RE = /^([1-9]\d*)(ms|s|m|h)$/;
+const TEMPLATE_INNER = "(?:inputs|steps|context)(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)+";
+const WHOLE_TEMPLATE_RE = new RegExp(`^\\{\\{\\s*(${TEMPLATE_INNER})\\s*\\}\\}$`);
+
+export type ShellName = "sh" | "bash" | "zsh" | "pwsh" | "powershell" | "cmd";
+export type PaneOpen = "tab" | "beside" | "below";
+type PaneClose = "success" | "always";
+
+type PaneSpec = {
+  open: PaneOpen | string;
+  target?: string;
+  workspace?: string;
+  size?: number;
+  focus?: boolean;
+  close?: PaneClose;
+};
+
+type RetrySpec = {
+  attempts: number;
+  delayMs?: number;
+};
+
+export type WhenSpec =
+  | { kind: "truthy"; path: string }
+  | { kind: "eq"; path: string; value: string; negate: boolean };
+
+type RunPayload =
+  | { form: "shell"; command: string; shell?: ShellName }
+  | { form: "argv"; argv: string[] };
+
+type AgentAction = {
+  kind: "agent";
+  prompt: string;
+  using?: string;
+  target?: string;
+  cwd?: string;
+  env?: Record<string, string>;
+  pane?: PaneSpec;
+  background?: boolean;
+  timeoutMs?: number;
+};
+
+type RunAction = {
+  kind: "run";
+  payload: RunPayload;
+  cwd?: string;
+  env?: Record<string, string>;
+  pane?: PaneSpec;
+  background?: boolean;
+  readyWhen?: string;
+  timeoutMs?: number;
+  retry?: RetrySpec;
+  successCodes?: number[];
+};
+
+type HerdrAction = {
+  kind: "herdr";
+  method: string;
+  params?: Record<string, unknown>;
+  retry?: RetrySpec;
+};
+
+type WorkflowAction = {
+  kind: "workflow";
+  name: string;
+  inputs?: Record<string, string>;
+};
+
+export type StepAction = AgentAction | RunAction | HerdrAction | WorkflowAction;
+
+export type WorkflowStep = {
+  id?: string;
+  when?: WhenSpec[];
+  continueOnError?: boolean;
+  action: StepAction;
+};
+
+export type RecoveryAction =
+  | Omit<AgentAction, "background">
+  | Omit<RunAction, "background" | "retry">
+  | Omit<HerdrAction, "retry">
+  | WorkflowAction;
+
+type InputType = "text" | "choice" | "profile";
+
+export type DynamicChoice = { run: string[] };
+
+export type InputSpec = {
+  name: string;
+  type: InputType;
+  description?: string;
+  default?: string;
+  options?: string[];
+  dynamicOptions?: DynamicChoice;
+  when?: WhenSpec[];
+  allowCustom?: boolean;
+  minLength?: number;
+};
+
+export type RawInputValue =
+  | "text"
+  | "profile"
+  | string[]
+  | {
+      type?: InputType;
+      description?: string;
+      default?: string;
+      options?: string[] | DynamicChoice;
+      when?: string | string[];
+      allow_custom?: boolean;
+      min_length?: number;
+    };
+
+export type ReturnsSpec =
+  | { kind: "template"; template: string }
+  | { kind: "map"; fields: Record<string, string> };
+
+type TemplateRoot = "inputs" | "steps" | "context";
+
+export type TemplatePath = {
+  root: TemplateRoot;
+  segments: string[];
+};
+
+export type TemplateNamespace = {
+  inputs: Record<string, unknown>;
+  steps: Record<string, unknown>;
+  context: Record<string, unknown>;
+};
+
+export type LoadedWorkflow = {
+  name: string;
+  file: string;
+  version: WorkflowFormat;
+  title?: string;
+  description?: string;
+  hidden: boolean;
+  steps: WorkflowStep[];
+  inputs: InputSpec[];
+  returns?: ReturnsSpec;
+  onFailure?: RecoveryAction;
+  repoOwned: boolean;
+  needsTranscript: boolean;
+};
+
+export type WorkflowListEntry = {
+  name: string;
+  source: "repo" | "global";
+  file: string;
+  error?: string;
+  hidden?: boolean;
+  title?: string;
+  description?: string;
+  needsTranscript?: boolean;
+  hasCommands?: boolean;
+  sensitiveMethods?: string[];
+  unresolvedChildren?: string[];
+  inputs?: InputSpec[];
+  repoOwned?: boolean;
+  dynamicOptions?: boolean;
+};
+
+export const WORKFLOW_NAME_RULE = "workflow name must match [a-z0-9][a-z0-9-_]*";
+
+function globalDir(): string {
+  return join(process.env.HOME ?? homedir(), ".hwf", "workflows");
+}
+
+function repoDir(root: string): string {
+  return join(root, ".hwf", "workflows");
+}
+
+export function assertWorkflowName(name: string): string {
+  const n = name.trim();
+  if (!WORKFLOW_NAME_RE.test(n)) {
+    throw new WorkflowLoadError(WORKFLOW_NAME_RULE);
+  }
+  return n;
+}
+
+export function workflowPath(scope: "repo" | "global", repoRoot: string, name: string): string {
+  const n = assertWorkflowName(name);
+  return join(scope === "repo" ? repoDir(repoRoot) : globalDir(), `${n}.yaml`);
+}
+
+export async function resolveWorkflowFile(
+  name: string,
+  repoRoot: string,
+): Promise<{ file: string; source: "repo" | "global" } | undefined> {
+  const repo = workflowPath("repo", repoRoot, name);
+  if (await Bun.file(repo).exists()) return { file: repo, source: "repo" };
+  const global = workflowPath("global", repoRoot, name);
+  if (await Bun.file(global).exists()) return { file: global, source: "global" };
+  return undefined;
+}
+
+const PATH_SEGMENT_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+const TEMPLATE_PATH_RE = new RegExp(`^${TEMPLATE_INNER}$`);
+const TEMPLATE_FIND_RE = new RegExp(`\\{\\{\\s*(${TEMPLATE_INNER})\\s*\\}\\}`, "g");
+
+export function parseTemplatePath(path: string): TemplatePath | undefined {
+  const trimmed = path.trim();
+  if (!TEMPLATE_PATH_RE.test(trimmed)) return undefined;
+  const parts = trimmed.split(".");
+  const root = parts[0] as TemplateRoot;
+  const segments = parts.slice(1);
+  if (segments.length === 0 || !segments.every((s) => PATH_SEGMENT_RE.test(s))) return undefined;
+  return { root, segments };
+}
+
+export function isWholeValueTemplate(text: string): boolean {
+  return WHOLE_TEMPLATE_RE.test(text);
+}
+
+export function textTemplates(text: string): TemplatePath[] {
+  TEMPLATE_FIND_RE.lastIndex = 0;
+  const out: TemplatePath[] = [];
+  for (let m = TEMPLATE_FIND_RE.exec(text); m; m = TEMPLATE_FIND_RE.exec(text)) {
+    const parsed = parseTemplatePath(m[1]!);
+    if (parsed) out.push(parsed);
+  }
+  return out;
+}
+
+function malformedTemplateSnippet(text: string): string | undefined {
+  let from = 0;
+  while (from < text.length) {
+    const start = text.indexOf("{{", from);
+    if (start === -1) return undefined;
+    const close = text.indexOf("}}", start + 2);
+    if (close === -1) return text.slice(start);
+    const snippet = text.slice(start, close + 2);
+    if (!parseTemplatePath(text.slice(start + 2, close))) return snippet;
+    from = close + 2;
+  }
+  return undefined;
+}
+
+/** Recurse string/array/object leaves; visit may map or assert. */
+export function walkValueStrings(
+  value: unknown,
+  key: string,
+  visit: (text: string, key: string) => unknown,
+): unknown {
+  if (typeof value === "string") return visit(value, key);
+  if (Array.isArray(value)) {
+    return value.map((item, i) => walkValueStrings(item, `${key}[${i}]`, visit));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([k, item]) => [k, walkValueStrings(item, `${key}.${k}`, visit)]),
+    );
+  }
+  return value;
+}
+
+function resolvePath(ns: TemplateNamespace, path: TemplatePath): unknown {
+  let cur: unknown = ns[path.root];
+  for (const seg of path.segments) {
+    if (cur === null || cur === undefined || typeof cur !== "object") return undefined;
+    cur = (cur as Record<string, unknown>)[seg];
+  }
+  return cur;
+}
+
+export function renderScalar(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return "";
+    return String(value);
+  }
+  return JSON.stringify(value);
+}
+
+export function substituteText(template: string, ns: TemplateNamespace): string {
+  return template.replace(TEMPLATE_FIND_RE, (_match, path: string) => {
+    const parsed = parseTemplatePath(path);
+    if (!parsed) return _match;
+    return renderScalar(resolvePath(ns, parsed));
+  });
+}
+
+export function substituteValue(template: string, ns: TemplateNamespace): unknown {
+  const whole = WHOLE_TEMPLATE_RE.exec(template);
+  if (whole) {
+    const parsed = parseTemplatePath(whole[1]!);
+    if (!parsed) return template;
+    return resolvePath(ns, parsed);
+  }
+  return substituteText(template, ns);
+}
+
+export function substituteParams(
+  params: Record<string, unknown> | undefined,
+  ns: TemplateNamespace,
+): Record<string, unknown> | undefined {
+  if (!params) return undefined;
+  return walkValueStrings(params, "", (text) => substituteValue(text, ns)) as Record<
+    string,
+    unknown
+  >;
+}
+
+function collectTemplatesFromValue(value: unknown, out: TemplatePath[]): void {
+  walkValueStrings(value, "", (text) => {
+    out.push(...textTemplates(text));
+    return text;
+  });
+}
+
+function stepTemplates(step: WorkflowStep): TemplatePath[] {
+  const out: TemplatePath[] = [];
+  for (const clause of step.when ?? []) {
+    const p = parseTemplatePath(clause.path);
+    if (p) out.push(p);
+  }
+  const a = step.action;
+  if (a.kind === "agent") {
+    out.push(...textTemplates(a.prompt));
+    if (a.using) out.push(...textTemplates(a.using));
+    if (a.target) out.push(...textTemplates(a.target));
+    if (a.cwd) out.push(...textTemplates(a.cwd));
+    if (a.env) collectTemplatesFromValue(a.env, out);
+    if (a.pane) collectTemplatesFromValue(a.pane, out);
+  } else if (a.kind === "run") {
+    if (a.payload.form === "argv") for (const el of a.payload.argv) out.push(...textTemplates(el));
+    if (a.cwd) out.push(...textTemplates(a.cwd));
+    if (a.env) collectTemplatesFromValue(a.env, out);
+    if (a.pane) collectTemplatesFromValue(a.pane, out);
+  } else if (a.kind === "herdr") {
+    collectTemplatesFromValue(a.params, out);
+  } else {
+    if (a.inputs) collectTemplatesFromValue(a.inputs, out);
+  }
+  return out;
+}
+
+const SENSITIVE_CONTEXT_KEYS = new Set(["transcript", "transcript_file"]);
+
+function isSensitiveContextPath(path: TemplatePath): boolean {
+  return path.root === "context" && SENSITIVE_CONTEXT_KEYS.has(path.segments[0] ?? "");
+}
+
+export function workflowTemplateRefs(
+  steps: WorkflowStep[],
+  returns?: ReturnsSpec,
+  onFailure?: RecoveryAction,
+): TemplatePath[] {
+  const refs = steps.flatMap(stepTemplates);
+  if (returns?.kind === "template") refs.push(...textTemplates(returns.template));
+  if (returns?.kind === "map") {
+    for (const t of Object.values(returns.fields)) refs.push(...textTemplates(t));
+  }
+  if (onFailure) refs.push(...stepTemplates({ action: onFailure }));
+  return refs;
+}
+
+export function workflowNeedsTranscript(steps: WorkflowStep[], returns?: ReturnsSpec): boolean {
+  return workflowTemplateRefs(steps, returns).some(isSensitiveContextPath);
+}
+
+export function buildTemplateNamespace(opts: {
+  ctx: InvocationContext;
+  inputs?: Record<string, string>;
+  steps?: Record<string, unknown>;
+  agent?: string;
+  transcript?: string;
+  transcriptFile?: string;
+}): TemplateNamespace {
+  return {
+    inputs: { ...opts.inputs },
+    steps: { ...opts.steps },
+    context: {
+      workspace: opts.ctx.workspaceId ?? "",
+      tab: opts.ctx.tabId ?? "",
+      pane: opts.ctx.paneId ?? "",
+      worktree: opts.ctx.worktreePath ?? "",
+      agent: opts.agent ?? "",
+      selection: sanitizeDisplay(opts.ctx.selection),
+      platform: platformName(),
+      ...(opts.transcript !== undefined ? { transcript: opts.transcript } : {}),
+      ...(opts.transcriptFile !== undefined ? { transcript_file: opts.transcriptFile } : {}),
+    },
+  };
+}
+
+function clauseEqual(a: WhenSpec, b: WhenSpec): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "truthy" && b.kind === "truthy") return a.path === b.path;
+  if (a.kind === "eq" && b.kind === "eq") {
+    return a.path === b.path && a.value === b.value && a.negate === b.negate;
+  }
+  return false;
+}
+
+/** True when every required clause appears among proven clauses (structural, no inference). */
+export function clausesContain(proven: WhenSpec[], required: WhenSpec[]): boolean {
+  return required.every((need) => proven.some((have) => clauseEqual(have, need)));
+}
+
+function isTruthyScalar(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0 && Number.isFinite(value);
+  if (typeof value === "string") return value !== "";
+  return true;
+}
+
+function evaluateWhenClause(when: WhenSpec, values: TemplateNamespace): boolean {
+  const resolved = substituteValue(`{{${when.path}}}`, values);
+  if (when.kind === "truthy") return isTruthyScalar(resolved);
+  const left = renderScalar(resolved);
+  return when.negate ? left !== when.value : left === when.value;
+}
+
+/** Ordered short-circuit AND over clauses. Empty/undefined is true. */
+export function evaluateWhen(when: WhenSpec[] | undefined, values: TemplateNamespace): boolean {
+  if (!when || when.length === 0) return true;
+  for (const clause of when) {
+    if (!evaluateWhenClause(clause, values)) return false;
+  }
+  return true;
+}
 
 const SHELLS = ["sh", "bash", "zsh", "pwsh", "powershell", "cmd"] as const;
 const ACTION_KEYS = ["agent", "run", "herdr", "workflow"] as const;
@@ -1133,4 +1575,181 @@ export function parseRawWithDoc(
       steps: raw.steps.map((step, i) => toStep(file, i + 1, step)),
     },
   };
+}
+
+/** Allowed methods that still deserve a visible authoring warning. */
+const SENSITIVE_ALLOWED = new Set([
+  "pane.close",
+  "tab.close",
+  "workspace.close",
+  "agent.send_keys",
+  "pane.send_keys",
+  "pane.send_text",
+  "pane.send_input",
+  "worktree.create",
+  "layout.apply",
+]);
+
+export type WorkflowSensitivity = {
+  hasCommands: boolean;
+  hasTranscript: boolean;
+  sensitiveMethods: string[];
+  unresolvedChildren: string[];
+};
+
+export function humanizeWorkflowName(name: string): string {
+  const spaced = name.replace(/[-_]+/g, " ").trim();
+  if (!spaced) return name;
+  return spaced.replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+export function workflowDisplayTitle(name: string, title?: string): string {
+  return title?.trim() || humanizeWorkflowName(name);
+}
+
+function isSensitiveHerdrMethod(method: string): boolean {
+  const entry = HERDR_METHOD_BY_NAME.get(method);
+  if (entry && !entry.allowed) return true;
+  return SENSITIVE_ALLOWED.has(method);
+}
+
+function collectHerdrMethods(steps: WorkflowStep[], onFailure?: RecoveryAction): string[] {
+  const methods: string[] = [];
+  const visit = (action: WorkflowStep["action"] | RecoveryAction) => {
+    if (action.kind === "herdr") methods.push(action.method);
+  };
+  for (const step of steps) visit(step.action);
+  if (onFailure) visit(onFailure);
+  return methods;
+}
+
+function childWorkflowNames(steps: WorkflowStep[], onFailure?: RecoveryAction): string[] {
+  const names: string[] = [];
+  for (const step of steps) {
+    if (step.action.kind === "workflow") names.push(step.action.name);
+  }
+  if (onFailure?.kind === "workflow") names.push(onFailure.name);
+  return names;
+}
+
+function analyzeWorkflowSensitivity(
+  steps: WorkflowStep[],
+  returns?: ReturnsSpec,
+  onFailure?: RecoveryAction,
+): WorkflowSensitivity {
+  const hasCommands = steps.some((s) => s.action.kind === "run") || onFailure?.kind === "run";
+  const hasTranscript = workflowTemplateRefs(steps, returns, onFailure).some(
+    isSensitiveContextPath,
+  );
+  const sensitiveMethods = [
+    ...new Set(collectHerdrMethods(steps, onFailure).filter(isSensitiveHerdrMethod)),
+  ].sort();
+  return { hasCommands, hasTranscript, sensitiveMethods, unresolvedChildren: [] };
+}
+
+export function analyzeRawWorkflow(raw: RawWorkflow): WorkflowSensitivity {
+  return analyzeWorkflowSensitivity(raw.steps, raw.returns, raw.onFailure);
+}
+
+/** `workflow:` names referenced by a single shared payload (never included in the payload itself). */
+export function referencedWorkflowChildren(raw: RawWorkflow): string[] {
+  return [...new Set(childWorkflowNames(raw.steps, raw.onFailure))].sort();
+}
+
+export function mergeSensitivity(into: WorkflowSensitivity, from: WorkflowSensitivity): void {
+  into.hasCommands ||= from.hasCommands;
+  into.hasTranscript ||= from.hasTranscript;
+  for (const method of from.sensitiveMethods) {
+    if (!into.sensitiveMethods.includes(method)) into.sensitiveMethods.push(method);
+  }
+  for (const name of from.unresolvedChildren) {
+    if (!into.unresolvedChildren.includes(name)) into.unresolvedChildren.push(name);
+  }
+}
+
+/**
+ * Aggregate sensitivity across resolvable `workflow:` children (and recovery), with cycle
+ * safety. Unresolvable children are listed rather than treated as clean.
+ */
+export async function analyzeResolvedSensitivity(
+  workflow: {
+    name: string;
+    steps: WorkflowStep[];
+    returns?: ReturnsSpec;
+    onFailure?: RecoveryAction;
+  },
+  repoRoot: string,
+  stack: string[] = [],
+): Promise<WorkflowSensitivity> {
+  const local = analyzeWorkflowSensitivity(workflow.steps, workflow.returns, workflow.onFailure);
+  if (stack.includes(workflow.name)) return local;
+
+  const nextStack = [...stack, workflow.name];
+  const aggregated: WorkflowSensitivity = {
+    hasCommands: local.hasCommands,
+    hasTranscript: local.hasTranscript,
+    sensitiveMethods: [...local.sensitiveMethods],
+    unresolvedChildren: [],
+  };
+
+  for (const childName of childWorkflowNames(workflow.steps, workflow.onFailure)) {
+    if (nextStack.includes(childName)) continue;
+    const resolved = await resolveWorkflowFile(childName, repoRoot);
+    if (!resolved) {
+      if (!aggregated.unresolvedChildren.includes(childName)) {
+        aggregated.unresolvedChildren.push(childName);
+      }
+      continue;
+    }
+    try {
+      const raw = parseRaw(resolved.file, await Bun.file(resolved.file).text());
+      const child = await analyzeResolvedSensitivity(
+        {
+          name: childName,
+          steps: raw.steps,
+          returns: raw.returns,
+          onFailure: raw.onFailure,
+        },
+        repoRoot,
+        nextStack,
+      );
+      mergeSensitivity(aggregated, child);
+    } catch {
+      if (!aggregated.unresolvedChildren.includes(childName)) {
+        aggregated.unresolvedChildren.push(childName);
+      }
+    }
+  }
+
+  aggregated.sensitiveMethods.sort();
+  aggregated.unresolvedChildren.sort();
+  return aggregated;
+}
+
+export async function analyzeYamlTree(
+  file: string,
+  body: string,
+  name: string,
+  repoRoot: string,
+): Promise<WorkflowSensitivity> {
+  const raw = parseRaw(file, body);
+  return analyzeResolvedSensitivity(
+    { name, steps: raw.steps, returns: raw.returns, onFailure: raw.onFailure },
+    repoRoot,
+  );
+}
+
+export function sensitivityLabels(flags: WorkflowSensitivity): string[] {
+  const labels: string[] = [];
+  if (flags.hasCommands) labels.push("commands");
+  if (flags.hasTranscript) labels.push("transcript");
+  for (const method of flags.sensitiveMethods) labels.push(`herdr:${method}`);
+  for (const name of flags.unresolvedChildren) labels.push(`unresolved:${name}`);
+  return labels;
+}
+
+export function formatSensitivityBanner(flags: WorkflowSensitivity, label = "sensitive"): string {
+  const labels = sensitivityLabels(flags);
+  if (labels.length === 0) return "";
+  return `⚠ ${label}: ${labels.join(" · ")}\n`;
 }

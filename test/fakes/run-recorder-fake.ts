@@ -1,5 +1,5 @@
 import type { RunRecorder, RunStepOutcomeKind, RunTerminalStatus } from "../../src/history";
-import type { WorkflowStep } from "../../src/workflow/types";
+import type { WorkflowStep } from "../../src/workflow/grammar";
 
 type RunStepPhase = "main" | "recovery";
 

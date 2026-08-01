@@ -22,7 +22,7 @@ import {
   publishStaged,
   recoverInterruptedImport,
   runImport,
-} from "../../src/workflow/import";
+} from "../../src/workflow/inputs-exchange";
 import {
   decodePayload,
   encodePayload,
@@ -32,8 +32,8 @@ import {
   looksLikeWorkflowYaml,
   schemaPointer,
   withPinnedSchemaPointer,
-} from "../../src/workflow/share";
-import { WorkflowLoadError } from "../../src/workflow/types";
+} from "../../src/workflow/inputs-exchange";
+import { WorkflowLoadError } from "../../src/workflow/grammar";
 import { PRODUCT_VERSION } from "../../src/context";
 
 const dirs: string[] = [];
@@ -442,8 +442,8 @@ steps:
         process.execPath,
         "-e",
         `
-        import { runImport } from ${JSON.stringify(join(import.meta.dir, "../../src/workflow/import.ts"))};
-        import { encodePayload } from ${JSON.stringify(join(import.meta.dir, "../../src/workflow/share.ts"))};
+        import { runImport } from ${JSON.stringify(join(import.meta.dir, "../../src/workflow/inputs-exchange.ts"))};
+        import { encodePayload } from ${JSON.stringify(join(import.meta.dir, "../../src/workflow/inputs-exchange.ts"))};
         import { writeFile } from "node:fs/promises";
         const exactBody = ${JSON.stringify(exactBody)};
         await runImport(encodePayload([

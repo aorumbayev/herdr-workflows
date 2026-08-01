@@ -847,7 +847,8 @@ describe("web share and import APIs", () => {
   test("import preview accepts command text and rejects old payloads", async () => {
     const root = await repo();
     const { base, token } = await serve(root);
-    const { encodePayload, formatImportCommand } = await import("../../src/workflow/share");
+    const { encodePayload, formatImportCommand } =
+      await import("../../src/workflow/inputs-exchange");
     const payload = encodePayload([{ name: "demo", yaml: `${V1}steps:\n  - run: x\n` }]);
     const ok = await fetch(`${base}/api/import/preview`, {
       method: "POST",
@@ -883,7 +884,7 @@ describe("web share and import APIs", () => {
     const root = await repo();
     await writeFile(join(root, ".hwf", "workflows", "demo.yaml"), `${V1}steps:\n  - run: mine\n`);
     const { base, token } = await serve(root);
-    const { encodePayload } = await import("../../src/workflow/share");
+    const { encodePayload } = await import("../../src/workflow/inputs-exchange");
     const text = encodePayload([{ name: "demo", yaml: `${V1}steps:\n  - run: new\n` }]);
     const conflict = await fetch(`${base}/api/import`, {
       method: "POST",

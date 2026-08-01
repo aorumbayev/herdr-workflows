@@ -1,7 +1,7 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { encodePayload } from "../src/workflow/share";
-import { parseRaw } from "../src/workflow/parse";
+import { encodePayload } from "../src/workflow/inputs-exchange";
+import { parseRaw } from "../src/workflow/grammar";
 
 const EXAMPLES_DIR = join(import.meta.dir, "..", "examples");
 const OUT = join(import.meta.dir, "..", "docs", ".vitepress", "theme", "examples.generated.ts");

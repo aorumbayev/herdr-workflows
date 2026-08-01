@@ -6,7 +6,8 @@ import { basename, dirname, join } from "node:path";
 import { z } from "zod";
 import manifest from "../herdr-plugin.toml";
 import { agentSessionInfo, HerdrError, type AgentSessionInfo } from "./host";
-import type { PlatformName, TemplateNamespace } from "./workflow/types";
+
+export type PlatformName = "macos" | "linux";
 
 export const PRODUCT_VERSION: string = manifest.version;
 
@@ -605,7 +606,11 @@ export type AppContext = {
   ctx: InvocationContext;
   platform: PlatformName;
   /** Base template namespace (inputs/steps empty; context from invocation). */
-  namespace: TemplateNamespace;
+  namespace: {
+    inputs: Record<string, unknown>;
+    steps: Record<string, unknown>;
+    context: Record<string, unknown>;
+  };
 };
 
 /** Resolve config layers, repo root, invocation context, platform, and base namespace once. */

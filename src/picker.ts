@@ -1,8 +1,8 @@
 import { basename } from "node:path";
 import { unlink } from "node:fs/promises";
 import { compareSemver, fetchLatestPublishedRelease } from "./cli";
-import { createInputSession, type InputSession } from "./workflow/inputs";
-import { exportWorkflowBundle } from "./workflow/share";
+import { createInputSession, type InputSession } from "./workflow/inputs-exchange";
+import { exportWorkflowBundle } from "./workflow/inputs-exchange";
 import {
   formatElapsed,
   listRuns,
@@ -52,8 +52,8 @@ import {
   analyzeResolvedSensitivity,
   listWorkflows,
   loadWorkflowEntry,
-} from "./workflow/load";
-import type { WorkflowListEntry, InputSpec, LoadedWorkflow } from "./workflow/types";
+} from "./workflow/inputs-exchange";
+import type { WorkflowListEntry, InputSpec, LoadedWorkflow } from "./workflow/grammar";
 
 export const EMPTY_CATALOG_MESSAGE =
   "Hi there, looks like you got no runnable workflows, start by creating a new one, browsing examples or importing an existing workflow.";

@@ -9,9 +9,9 @@ import {
   RESULT_DOT_PATHS,
   type PropSpec,
 } from "./herdr-methods.generated";
-import { WHOLE_TEMPLATE_RE } from "./workflow/types";
-
 export { HERDR_PROTOCOL, METHOD_RESULT_VARIANTS, MIN_HERDR_VERSION, RESULT_DOT_PATHS };
+
+const WHOLE_TEMPLATE_RE = /^\{\{\s*(?:inputs|steps|context)(?:\.[a-zA-Z_][a-zA-Z0-9_]*)+\s*\}\}$/;
 
 type Params = Record<string, unknown>;
 

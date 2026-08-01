@@ -24,9 +24,9 @@ import manifest from "../herdr-plugin.toml";
 import { appendRouteHash, openWorkbench, parseWebRoute } from "./workbench";
 import { buildIdentity, parseLaunchPayload, retireOnCodeChange, runWorkflow } from "./engine";
 import { ensureHerdrProtocol, HerdrError, notificationShow, pluginPaneOpen } from "./host";
-import { evaluateWhen, resolveDynamicChoices } from "./workflow/inputs";
-import { IMPORT_DISCLAIMER, parseImportScope, runImport } from "./workflow/import";
-import { listWorkflows, loadWorkflow } from "./workflow/load";
+import { evaluateWhen, resolveDynamicChoices } from "./workflow/inputs-exchange";
+import { IMPORT_DISCLAIMER, parseImportScope, runImport } from "./workflow/inputs-exchange";
+import { listWorkflows, loadWorkflow } from "./workflow/inputs-exchange";
 import {
   PRODUCT_VERSION,
   ensureLocalConfigGitignored,
@@ -46,7 +46,7 @@ import {
   WorkflowLoadError,
   type InputSpec,
   type WhenSpec,
-} from "./workflow/types";
+} from "./workflow/grammar";
 
 /**
  * Survive a reader that left. A detached `hwf run` outlives the picker holding the read end of its
