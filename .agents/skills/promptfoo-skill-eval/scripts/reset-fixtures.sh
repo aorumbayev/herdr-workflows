@@ -35,7 +35,7 @@ MARKER="$EVAL_ROOT/$MARKER_NAME"
 
 # Refuse when any path component from $1 down to $2 is a symlink.
 # Ancestors above the owned root are ignored (macOS /var → /private/var).
-assert_no_symlink_under() {
+assert_no_symlink_under() (
   base=$1
   target=$2
   case "$target" in
@@ -67,9 +67,9 @@ assert_no_symlink_under() {
       exit 2
     fi
   done
-}
+)
 
-assert_under_eval_root() {
+assert_under_eval_root() (
   target=$1
   real_eval=$(CDPATH='' cd -- "$EVAL_ROOT" && pwd -P)
   real_target=$(CDPATH='' cd -- "$target" && pwd -P)
@@ -80,7 +80,7 @@ assert_under_eval_root() {
       exit 2
       ;;
   esac
-}
+)
 
 assert_owned_eval_root() {
   if [ ! -f "$MARKER" ]; then
@@ -159,9 +159,12 @@ guard_check() {
   if (
     EVAL_ROOT=$(CDPATH='' cd -- "$tmp/good" && pwd)
     MARKER="$EVAL_ROOT/$MARKER_NAME"
+    base=caller-base
+    target=caller-target
     assert_owned_eval_root
     assert_no_symlink_under "$EVAL_ROOT" "$EVAL_ROOT/fixtures/v1/.hwf"
     assert_no_symlink_under "$EVAL_ROOT" "$EVAL_ROOT/fixtures/v2/.hwf"
+    [ "$base" = caller-base ] && [ "$target" = caller-target ]
   ) 2>"$tmp/good.err"; then
     echo "guard-check ok: complete owned tree accepted"
   else

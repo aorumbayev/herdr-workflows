@@ -54,9 +54,9 @@ import {
   workflowPath,
 } from "./workflow/inputs";
 import { WORKFLOW_NAME_RE } from "./workflow/grammar";
-// @ts-expect-error Bun `with { type: "text" }` yields the file text, not the module namespace
+// @ts-expect-error Bun text import embeds source; noncanonical path avoids named-import cache collision
 // oxlint-disable-next-line import/default -- Bun text import embeds source; module has named exports only
-import fieldModelSource from "./web/field-model.ts" with { type: "text" };
+import fieldModelSource from "./web/../web/field-model.ts" with { type: "text" };
 import pageHtml from "./web/page.html" with { type: "text" };
 import logoSvg from "../docs/assets/logo.svg" with { type: "text" };
 

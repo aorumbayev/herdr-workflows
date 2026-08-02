@@ -47,7 +47,7 @@ assert_sandbox_path() {
 assert_owned_sentinel() {
   local root="${1:-$SANDBOX}"
   local sentinel="$root/$SENTINEL_NAME"
-  if [ ! -f "$sentinel" ]; then
+  if [ ! -f "$sentinel" ] || [ -L "$sentinel" ]; then
     echo "refusing: $root exists without ownership sentinel $sentinel" >&2
     exit 2
   fi
@@ -303,7 +303,20 @@ guard_check() {
     failed=1
   fi
 
-  # 5) kill_sandbox_tmux requires exact HERDR_SOCKET_PATH match (sentinel insufficient).
+  # 5) Symlink sentinel → refuse even when its target has complete contents.
+  mkdir -p "$tmp/symlink"
+  ln -s "$tmp/good/$SENTINEL_NAME" "$tmp/symlink/$SENTINEL_NAME"
+  if ( assert_owned_sentinel "$tmp/symlink" ) 2>"$tmp/symlink.err"; then
+    echo "guard-check fail: symlink sentinel unexpectedly accepted" >&2
+    failed=1
+  elif grep -q 'without ownership sentinel' "$tmp/symlink.err"; then
+    echo "guard-check ok: symlink sentinel refused"
+  else
+    echo "guard-check fail: unexpected symlink-sentinel error: $(cat "$tmp/symlink.err")" >&2
+    failed=1
+  fi
+
+  # 6) kill_sandbox_tmux requires exact HERDR_SOCKET_PATH match (sentinel insufficient).
   if tmux has-session -t "$FIXED_SESSION" 2>/dev/null; then
     local sock_env
     sock_env="$(tmux show-environment -t "$FIXED_SESSION" HERDR_SOCKET_PATH 2>/dev/null || true)"
@@ -336,7 +349,7 @@ guard_check() {
     fi
   fi
 
-  # 6) Live canonical sandbox: never claim/overwrite unknown contents.
+  # 7) Live canonical sandbox: never claim/overwrite unknown contents.
   if [ -e "$SANDBOX" ]; then
     if ( assert_owned_sentinel ) 2>/dev/null; then
       echo "guard-check ok: canonical $SANDBOX has complete sentinel (reuse allowed)"
