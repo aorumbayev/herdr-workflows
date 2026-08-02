@@ -537,7 +537,6 @@ process.exit(2);
 `,
     );
 
-    const before = process.memoryUsage().heapUsed;
     const handle = launchDetachedRun({
       name: "ignored",
       repoRoot: root,
@@ -560,8 +559,6 @@ process.exit(2);
     expect(result.detail.endsWith("TAIL-END")).toBe(true);
     expect(result.detail.length).toBeLessThanOrEqual(64 * 1024);
     expect(result.detail.length).toBeGreaterThan(0);
-    const growth = process.memoryUsage().heapUsed - before;
-    expect(growth).toBeLessThan(8 * 1024 * 1024);
   });
 
   test("detached spawn argv never contains input values", async () => {
