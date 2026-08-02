@@ -1,9 +1,13 @@
-import { isMethodResultDotPath, RESULT_DOT_PATHS } from "../herdr-methods";
-import { clausesContain, evaluateWhen } from "./conditions";
-import { isWholeValueTemplate, parseTemplatePath, textTemplates } from "./parse";
+import { isMethodResultDotPath, RESULT_DOT_PATHS } from "../host";
 import {
   bail,
+  clausesContain,
+  evaluateWhen,
   IDENT_RE,
+  isWholeValueTemplate,
+  parseTemplatePath,
+  textTemplates,
+  walkValueStrings,
   type InputSpec,
   type LoadedWorkflow,
   type RecoveryAction,
@@ -13,11 +17,11 @@ import {
   type TemplateNamespace,
   type WhenSpec,
   type WorkflowStep,
-} from "./types";
+} from "./grammar";
 
 type ProducerKind = "agent" | "command" | "readiness" | "herdr" | "child" | "none";
 
-export type StepProducer = {
+type StepProducer = {
   id: string;
   index: number;
   kind: ProducerKind;
@@ -500,19 +504,10 @@ function assertValueTemplates(
   value: unknown,
   opts: TemplateOpts,
 ): void {
-  if (typeof value === "string") {
-    assertTemplates(file, stepIndex, key, value, opts);
-    return;
-  }
-  if (Array.isArray(value)) {
-    value.forEach((item, i) => assertValueTemplates(file, stepIndex, `${key}[${i}]`, item, opts));
-    return;
-  }
-  if (value && typeof value === "object") {
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      assertValueTemplates(file, stepIndex, `${key}.${k}`, v, opts);
-    }
-  }
+  walkValueStrings(value, key, (text, path) => {
+    assertTemplates(file, stepIndex, path, text, opts);
+    return text;
+  });
 }
 
 function assertUsingProfile(

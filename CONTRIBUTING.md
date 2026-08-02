@@ -75,10 +75,13 @@ openspec validate --all --strict
 
 ```bash
 bun test ./test
+bun test test/engine
 CI=1 npm run verify
 bun run docs:build
 openspec validate --all --strict
 ```
+
+Test the module whose interface you changed, in that module's folder under `test/`; real compiled-binary coverage lives in `test/e2e/`.
 
 Pre-commit runs `CI=1 npm run verify` only. It does not run tests. CI runs tests on Linux and macOS, then verify and the docs build on Linux. `openspec validate` runs locally only.
 

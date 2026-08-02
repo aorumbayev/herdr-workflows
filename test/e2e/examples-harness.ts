@@ -48,7 +48,7 @@ prompt=$2
 [ -z "$path" ] && exit 0
 case "$prompt" in
   *"prompt rewriter"*) reply="refined prompt" ;;
-  *"distil it into a handoff"*)
+  *"session-handoff writer"*)
     reply="deterministic handoff"
     mkdir -p .hwf/tmp
     printf '%s' "$reply" > .hwf/tmp/handoff.md

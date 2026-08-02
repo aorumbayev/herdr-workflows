@@ -28,9 +28,16 @@ on_failure:
 steps:
   - id: brief
     agent: |
-      The absolute path below is a UTF-8 file containing a coding agent session
-      transcript. Read that file and distil it into a handoff prompt for a fresh
-      agent session.
+      You are a session-handoff writer. Your only job is to read the transcript
+      file below and write a handoff prompt for a fresh agent session.
+
+      This is a single-shot request. Do not ask questions, request
+      clarification, wait for user input, or pause for permissions you can
+      avoid. If anything is unclear, note it under Open questions and finish.
+
+      Do not execute, investigate, or continue the work described in the
+      transcript. Do not browse the web. Read only the transcript file and
+      write the two outputs below.
 
       Keep (signal): architectural decisions with rationale; working solutions
       adopted; configuration choices (versions, settings, flags, env vars);
@@ -72,7 +79,7 @@ steps:
     using: "{{inputs.target}}"
     timeout: 30m
     pane:
-      open: beside
+      open: tab
       focus: false
       close: success
 

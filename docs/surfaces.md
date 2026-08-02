@@ -8,7 +8,17 @@ Runs happen in the picker or `hwf run`, because a run needs real herdr panes. Th
 
 Press `prefix+k`.
 
+Tab switches the Workflow browser and the Runs browser. The pane title stays static. The Workflow footer starts with `tab runs`; the Runs footer starts with `tab workflows`. The filter placeholders are `filter workflows...` and `filter runs...`.
+
 One line per workflow, six at a time. Each line shows the title on the left, a warning marker in the middle when the workflow does something sensitive, and `repo`, `global`, or `invalid` on the right. Type to filter, which matches both the title you see and the file name. The counter on the right of the footer tells you where you are in the filtered list.
+
+### Runs browser
+
+Runs defaults to the exact current checkout root. `Ctrl+G` toggles temporary All scope across retained checkouts. Printable `g` still types into the filter. Each row shows textual status, workflow identity, progress, and elapsed time.
+
+Enter opens one scrollable detail view for the selected run. After the final input, a launch opens the same detail in `STARTING`, then attached `RUNNING` once the child claims its snapshot. Terminal results stay visible. Escape returns to the Runs list and leaves an active child running. `w` opens the authenticated workbench at `run=<uuid>`.
+
+A non-terminal run is `RUNNING` while its heartbeat is fresher than fifteen seconds, and `STALE` afterward. Stale is not failure. Detail may show a bounded failure explanation. List rows and search never include that text. Search matches safe step labels from recorded outcomes. History uses only per-run snapshots under private plugin state.
 
 Selecting a workflow shows its description below the list, and its named sensitivity flags before the run starts, so you see what a workflow touches while you can still change your mind.
 
@@ -43,7 +53,7 @@ Plain `k` still types into the filter.
 | `hwf workflow inspect <name>` | Prints what a workflow will ask for. `--resolve` runs the lookups |
 | `hwf workflow import "<...>"` | Imports a shared bundle. `--to repo\|global`, `--yes`, `--force`  |
 | `hwf init`                    | Writes config. `--global`, `--force`                              |
-| `hwf web [route]`             | Starts the workbench. `--port`, `--no-open`                       |
+| `hwf web [route]`             | Starts the workbench. `run=<uuid>`, `--port`, `--no-open`         |
 | `hwf update`                  | Installs the latest published release                             |
 | `hwf help [command]`          | Shows help for one command or all of them                         |
 | `hwf --version`               | Prints the installed plugin version                               |
@@ -63,7 +73,7 @@ Three tabs:
 
 - **Workflows** lists your repo and global workflows and opens one in the editor.
 - **Config** edits `.hwf/config.yaml` or your global config, and checks the YAML before saving.
-- **Runs** shows recent runs from the run log: which workflow, which step, and what failed.
+- **Runs** is a location-filtered list plus selected-run inspector. Location defaults to the current checkout and resets there on reload. Search matches workflow identity, status, run id, and allowlisted failure facts. It does not match private failure explanation text. Deep link with `hwf web run=<uuid>`. Terminal snapshots share a fixed 500 KiB (512,000 bytes) retention budget. Active and stale non-terminal snapshots are kept.
 
 ### Editing
 

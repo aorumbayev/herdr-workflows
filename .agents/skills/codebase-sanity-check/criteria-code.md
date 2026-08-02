@@ -17,11 +17,12 @@ it can pass locally and fail in CI.
 
 ## 1. The splitting trap
 
-Read the "Splitting" constraint in `AGENTS.md` before this section. It owns the formula, the
-threshold, and the current ceiling. Take the numbers from there, not from here.
+Read the "Splitting" constraint in `AGENTS.md` before this section. It owns the file-length cap,
+the per-function cyclomatic ceiling, and the nesting gates. Take the numbers from there, not from
+here.
 
-The one conclusion you must carry: a low complexity score never means "this function is complex", so
-never propose a split to raise a score.
+The one conclusion you must carry: never propose a split only to satisfy a line budget or a
+complexity number when the code already names one concept.
 
 ### What to check
 
@@ -32,9 +33,9 @@ never propose a split to raise a score.
 
 ### How to measure
 
-- Quote the `npm run verify:complexity` line for the file in question. Compare it against the ceiling
-  `AGENTS.md` names for `src/workflow/parse.ts`
-- `npm run verify:lint` reports the `max-depth` and `max-nested-callbacks` violations configured in
+- Quote `npm run verify:file-length` for any `src/**/*.ts` near the 2,500-line cap (`*.generated.ts`
+  exempt)
+- `npm run verify:lint` reports `eslint/complexity`, `max-depth`, and `max-nested-callbacks` from
   `.oxlintrc.json`. Those are findings in the function, not in the file. `.oxlintrc.json` turns
   `max-nested-callbacks` off under `test/`, so that gate does not cover the suite
 - `git log --diff-filter=A --name-only --oneline -20 -- src` for recently added files. For each,
@@ -43,9 +44,10 @@ never propose a split to raise a score.
 
 ### Not a finding
 
-- A file that `verify:complexity` fails on today. Shrinking it is required, and shrinking may mean
-  deleting rather than splitting
-- A long but linear function or file, such as a parser or a schema. Length alone is ungated by design
+- A file that `verify:file-length` or `eslint/complexity` fails on today. Shrinking it is required,
+  and shrinking may mean deleting rather than splitting
+- A long but linear function under the file-length cap, such as a parser or a schema. Function
+  length alone is ungated by design
 
 ## 2. Abstractions with one user
 
@@ -106,8 +108,8 @@ never propose a split to raise a score.
 ### How to measure
 
 - `npm run verify:unused-code` for exports
-- For an unreachable branch, trace backward to the entry point in `src/cli.ts`, `src/tui/`, or
-  `src/web/`. If no entry point can produce the input, quote the entry-point line as evidence
+- For an unreachable branch, trace backward to the entry point in `src/cli.ts`, `src/picker.ts`, or
+  `src/workbench.ts`. If no entry point can produce the input, quote the entry-point line as evidence
 - A gate whose scope makes it impossible to fire is the same defect in the tooling. That one belongs
   to Group B, which audits the gates
 
@@ -145,7 +147,7 @@ durable fact the code cannot express and which pages a human for approval.
 ### What to check
 
 - One abstraction loads and validates workflows, one runs them, one per step type. Verify
-  `src/workflow/` and `src/run/steps/` still hold that shape
+  `src/workflow/` and `src/engine.ts` still hold that shape
 - A concept that lives in two folders
 - A folder holding one file with no sibling planned
 - `AGENTS.md` Layout rows that name a path that no longer exists, or paths under `src/` with no row
@@ -217,7 +219,7 @@ refactor away from silently disappearing.
 ### What to check
 
 - Each constraint that says a construct "is a load error" has a test asserting the rejection
-- Each cap in `src/limits.ts` has a test asserting the failure names the source and the limit, and
+- Each cap in `src/context.ts` has a test asserting the failure names the source and the limit, and
   that it does not truncate
 - Each denied herdr method fails at load with its invariant
 - Placement rules, `when:` forms, `retry` restrictions, and `success_codes` each have at least one
@@ -227,7 +229,7 @@ refactor away from silently disappearing.
 
 - List the constraints from `AGENTS.md`. For each, grep the test suite for the error text:
   `rg -n "<distinctive words from the error>" test`
-- `rg -n "export const [A-Z_]+" src/limits.ts` and grep each name in `test`
+- `rg -n "export const [A-Z_]+_(LIMIT|BYTE)" src/context.ts` and grep each name in `test`
 - Report a constraint with no hit as High. This is a FIX when the assertion belongs in an existing
   test file, and an ADD only when a new file is unavoidable
 
@@ -240,7 +242,7 @@ refactor away from silently disappearing.
 
 ### What to check
 
-- A test file that is a dumping ground rather than a suite. `test/runner.test.ts` is the largest.
+- A test file that is a dumping ground rather than a suite. `test/engine/runner.test.ts` is the largest.
   Judge it by whether a maintainer can find the test for a given behavior, not by line count
 - Duplicate tests asserting the same behavior in two files
 - Helpers copied between test files

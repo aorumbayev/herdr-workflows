@@ -116,7 +116,7 @@ describe("shipped examples through isolated CLI and fake Herdr", () => {
         }
 
         if (placement === "tab") {
-          expect(calls.filter((call) => call.method === "tab.create")).toHaveLength(1);
+          expect(calls.filter((call) => call.method === "tab.create")).toHaveLength(2);
         } else {
           const expectedDirection = placement === "beside" ? "right" : "down";
           expect(

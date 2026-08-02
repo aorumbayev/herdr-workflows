@@ -42,41 +42,49 @@ assert_sandbox_path() {
   fi
 }
 
-write_sentinel() {
-  mkdir -p "$SANDBOX"
-  printf 'hwf-sandbox\nsession=%s\nplugin_root=%s\n' "$FIXED_SESSION" "$PLUGIN_ROOT" > "$SENTINEL"
-}
-
-assert_valid_sentinel() {
-  if [ ! -f "$SENTINEL" ]; then
-    echo "refusing: $SANDBOX exists without ownership sentinel $SENTINEL" >&2
+# Complete ownership proof for sandbox root $1 (default: $SANDBOX).
+# Lines required: hwf-sandbox, session=<fixed>, plugin_root=<this checkout>.
+assert_owned_sentinel() {
+  local root="${1:-$SANDBOX}"
+  local sentinel="$root/$SENTINEL_NAME"
+  if [ ! -f "$sentinel" ] || [ -L "$sentinel" ]; then
+    echo "refusing: $root exists without ownership sentinel $sentinel" >&2
     exit 2
   fi
-  if ! grep -qx 'hwf-sandbox' "$SENTINEL"; then
+  if ! grep -Fqx 'hwf-sandbox' "$sentinel"; then
     echo "refusing: sentinel does not claim hwf-sandbox ownership" >&2
     exit 2
   fi
+  if ! grep -Fqx "session=$FIXED_SESSION" "$sentinel"; then
+    echo "refusing: sentinel session identity mismatch (want session=$FIXED_SESSION)" >&2
+    exit 2
+  fi
+  if ! grep -Fqx "plugin_root=$PLUGIN_ROOT" "$sentinel"; then
+    echo "refusing: sentinel plugin_root mismatch (want plugin_root=$PLUGIN_ROOT)" >&2
+    exit 2
+  fi
 }
 
-# Reuse only when a valid sentinel already owns the tree; never claim unknown contents.
+write_sentinel() {
+  printf 'hwf-sandbox\nsession=%s\nplugin_root=%s\n' "$FIXED_SESSION" "$PLUGIN_ROOT" > "$SENTINEL"
+}
+
+# Exclusive mkdir claims an absent path. Existing trees must already carry a complete sentinel.
+# Never claim or overwrite unknown contents.
 claim_or_reuse_sandbox() {
-  if [ -e "$SANDBOX" ]; then
-    assert_valid_sentinel
-  else
+  if mkdir "$SANDBOX" 2>/dev/null; then
     write_sentinel
+  elif [ -e "$SANDBOX" ]; then
+    assert_owned_sentinel
+  else
+    echo "refusing: cannot create sandbox directory $SANDBOX" >&2
+    exit 2
   fi
 }
 
 assert_owned_for_delete() {
   assert_sandbox_path
-  if [ ! -f "$SENTINEL" ]; then
-    echo "refusing rm: missing ownership sentinel $SENTINEL" >&2
-    exit 2
-  fi
-  if ! grep -qx 'hwf-sandbox' "$SENTINEL"; then
-    echo "refusing rm: sentinel does not claim hwf-sandbox ownership" >&2
-    exit 2
-  fi
+  assert_owned_sentinel
 }
 
 kill_sandbox_tmux() {
@@ -245,36 +253,70 @@ guard_check() {
   cleanup_guard() { rm -rf -- "$tmp"; }
   trap cleanup_guard EXIT
 
-  # 1) Existing tree without sentinel → refuse (logic mirrored; do not touch /tmp/hwf-sandbox).
+  # 1) Existing tree without sentinel → refuse.
   mkdir -p "$tmp/no-sentinel"
-  if [ -f "$tmp/no-sentinel/$SENTINEL_NAME" ]; then
-    echo "guard-check fail: unexpected sentinel in fixture" >&2
+  if ( assert_owned_sentinel "$tmp/no-sentinel" ) 2>"$tmp/no-sentinel.err"; then
+    echo "guard-check fail: missing sentinel unexpectedly accepted" >&2
     failed=1
+  elif grep -q 'without ownership sentinel' "$tmp/no-sentinel.err"; then
+    echo "guard-check ok: missing-sentinel path refused"
   else
-    echo "guard-check ok: missing-sentinel path would refuse reuse"
+    echo "guard-check fail: unexpected missing-sentinel error: $(cat "$tmp/no-sentinel.err")" >&2
+    failed=1
   fi
 
-  # 2) Invalid sentinel contents → refuse.
-  mkdir -p "$tmp/bad-sentinel"
-  printf 'not-ours\n' > "$tmp/bad-sentinel/$SENTINEL_NAME"
-  if grep -qx 'hwf-sandbox' "$tmp/bad-sentinel/$SENTINEL_NAME"; then
-    echo "guard-check fail: invalid sentinel unexpectedly matched" >&2
+  # 2) Marker line only, missing session/plugin_root → refuse.
+  mkdir -p "$tmp/partial-sentinel"
+  printf 'hwf-sandbox\n' > "$tmp/partial-sentinel/$SENTINEL_NAME"
+  if ( assert_owned_sentinel "$tmp/partial-sentinel" ) 2>"$tmp/partial.err"; then
+    echo "guard-check fail: partial sentinel unexpectedly accepted" >&2
     failed=1
+  elif grep -q 'session identity mismatch' "$tmp/partial.err"; then
+    echo "guard-check ok: partial sentinel refused"
   else
-    echo "guard-check ok: invalid sentinel would refuse reuse"
+    echo "guard-check fail: unexpected partial-sentinel error: $(cat "$tmp/partial.err")" >&2
+    failed=1
   fi
 
-  # 3) Valid sentinel → reusable.
+  # 3) Wrong plugin_root → refuse.
+  mkdir -p "$tmp/wrong-root"
+  printf 'hwf-sandbox\nsession=%s\nplugin_root=/not/this/checkout\n' "$FIXED_SESSION" \
+    > "$tmp/wrong-root/$SENTINEL_NAME"
+  if ( assert_owned_sentinel "$tmp/wrong-root" ) 2>"$tmp/wrong.err"; then
+    echo "guard-check fail: wrong plugin_root unexpectedly accepted" >&2
+    failed=1
+  elif grep -q 'plugin_root mismatch' "$tmp/wrong.err"; then
+    echo "guard-check ok: wrong plugin_root refused"
+  else
+    echo "guard-check fail: unexpected wrong-root error: $(cat "$tmp/wrong.err")" >&2
+    failed=1
+  fi
+
+  # 4) Complete sentinel → accepted.
   mkdir -p "$tmp/good"
-  printf 'hwf-sandbox\nsession=%s\n' "$FIXED_SESSION" > "$tmp/good/$SENTINEL_NAME"
-  if ! grep -qx 'hwf-sandbox' "$tmp/good/$SENTINEL_NAME"; then
-    echo "guard-check fail: valid sentinel rejected" >&2
-    failed=1
+  printf 'hwf-sandbox\nsession=%s\nplugin_root=%s\n' "$FIXED_SESSION" "$PLUGIN_ROOT" \
+    > "$tmp/good/$SENTINEL_NAME"
+  if ( assert_owned_sentinel "$tmp/good" ) 2>"$tmp/good.err"; then
+    echo "guard-check ok: complete sentinel accepted"
   else
-    echo "guard-check ok: valid sentinel allows reuse"
+    echo "guard-check fail: complete sentinel rejected: $(cat "$tmp/good.err")" >&2
+    failed=1
   fi
 
-  # 4) kill_sandbox_tmux requires exact HERDR_SOCKET_PATH match (sentinel insufficient).
+  # 5) Symlink sentinel → refuse even when its target has complete contents.
+  mkdir -p "$tmp/symlink"
+  ln -s "$tmp/good/$SENTINEL_NAME" "$tmp/symlink/$SENTINEL_NAME"
+  if ( assert_owned_sentinel "$tmp/symlink" ) 2>"$tmp/symlink.err"; then
+    echo "guard-check fail: symlink sentinel unexpectedly accepted" >&2
+    failed=1
+  elif grep -q 'without ownership sentinel' "$tmp/symlink.err"; then
+    echo "guard-check ok: symlink sentinel refused"
+  else
+    echo "guard-check fail: unexpected symlink-sentinel error: $(cat "$tmp/symlink.err")" >&2
+    failed=1
+  fi
+
+  # 6) kill_sandbox_tmux requires exact HERDR_SOCKET_PATH match (sentinel insufficient).
   if tmux has-session -t "$FIXED_SESSION" 2>/dev/null; then
     local sock_env
     sock_env="$(tmux show-environment -t "$FIXED_SESSION" HERDR_SOCKET_PATH 2>/dev/null || true)"
@@ -307,15 +349,15 @@ guard_check() {
     fi
   fi
 
-  # 5) Live canonical sandbox: never claim/overwrite unknown contents.
+  # 7) Live canonical sandbox: never claim/overwrite unknown contents.
   if [ -e "$SANDBOX" ]; then
-    if [ -f "$SENTINEL" ] && grep -qx 'hwf-sandbox' "$SENTINEL"; then
-      echo "guard-check ok: canonical $SANDBOX has valid sentinel (reuse allowed)"
+    if ( assert_owned_sentinel ) 2>/dev/null; then
+      echo "guard-check ok: canonical $SANDBOX has complete sentinel (reuse allowed)"
     else
-      echo "guard-check ok: canonical $SANDBOX present without valid sentinel (up would refuse)"
+      echo "guard-check ok: canonical $SANDBOX present without complete sentinel (up/down would refuse)"
     fi
   else
-    echo "guard-check ok: canonical $SANDBOX absent (up would create + claim)"
+    echo "guard-check ok: canonical $SANDBOX absent (up would mkdir + claim)"
   fi
 
   trap - EXIT

@@ -2,8 +2,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { z } from "zod";
-import { workflowSchemaUrl } from "../src/setup/paths";
-import { rawWorkflowSchema } from "../src/workflow/parse";
+import { workflowSchemaUrl } from "../src/context";
+import { rawWorkflowSchema } from "../src/workflow/grammar";
 
 const OUT = join(import.meta.dir, "..", "docs", "workflow.schema.json");
 

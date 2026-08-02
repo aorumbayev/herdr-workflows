@@ -266,6 +266,11 @@
         min-width: 9rem;
         cursor: text;
       }
+      input::placeholder,
+      textarea::placeholder {
+        color: var(--muted);
+        opacity: 1;
+      }
       input[type="checkbox"] {
         min-width: 0;
         padding: 0;
@@ -1197,45 +1202,127 @@
       }
 
       /* runs */
-      #runs-list {
+      .runs-shell {
+        display: grid;
+        grid-template-columns: minmax(16rem, 22rem) 1fr;
+        grid-template-rows: auto minmax(0, 1fr);
+        gap: 1rem;
+        flex: 1;
+        min-height: 0;
+        align-self: stretch;
+      }
+      .runs-shell > .runs-controls {
+        grid-column: 1 / -1;
+      }
+      .runs-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.6rem;
+        align-self: start;
+      }
+      .runs-controls label {
         display: flex;
         flex-direction: column;
-        gap: 0.5rem;
+        gap: 0.25rem;
+        font-size: 0.8rem;
+        color: var(--muted);
+        min-width: 10rem;
+        flex: 1;
       }
-      .run {
-        display: flex;
-        align-items: center;
-        gap: 0.7rem;
+      .runs-controls select,
+      .runs-controls input {
+        font: inherit;
+        color: var(--text);
+        background: var(--bg-elevated);
         border: 1px solid var(--line);
         border-radius: var(--radius);
-        padding: 0.6rem 0.8rem;
+        padding: 0.4rem 0.55rem;
+      }
+      .runs-list-pane {
+        min-height: 0;
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+      }
+      .runs-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        overflow: auto;
+        min-height: 0;
+        flex: 1;
+      }
+      .runs-list button.run-row {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 0.35rem 0.7rem;
+        text-align: left;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 0.55rem 0.7rem;
         background: var(--bg-elevated);
+        color: inherit;
+        cursor: pointer;
       }
-      .run .dot {
-        width: 0.55rem;
-        height: 0.55rem;
-        border-radius: 50%;
-        flex: none;
-        background: var(--muted);
+      .runs-list button.run-row:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
       }
-      .run .dot.ok {
-        background: var(--green);
+      .runs-list button.run-row.on {
+        border-color: var(--accent);
+        background: var(--accent-soft);
       }
-      .run .dot.bad {
-        background: var(--red);
+      .runs-list .run-status {
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
       }
-      .run .name {
-        font-weight: 600;
-      }
-      .run .when {
+      .runs-list .run-meta {
         color: var(--muted);
         font-size: 0.8rem;
-        margin-left: auto;
-        white-space: nowrap;
       }
-      .run .err {
-        color: var(--red);
-        font-size: 0.8rem;
+      .runs-inspector {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 0.8rem 1rem;
+        overflow: auto;
+        min-height: 0;
+        background: var(--bg-elevated);
+      }
+      .runs-inspector .step {
+        margin: 0.35rem 0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.85rem;
+      }
+      .runs-inspector .nested {
+        margin-left: 1rem;
+      }
+      .runs-narrow-only {
+        display: none;
+      }
+      @media (max-width: 820px) {
+        .runs-shell {
+          grid-template-columns: 1fr;
+        }
+        .runs-shell.narrow-detail .runs-list-pane {
+          display: none;
+        }
+        .runs-shell.narrow-list .runs-inspector {
+          display: none;
+        }
+        .runs-narrow-only {
+          display: inline-flex;
+        }
+      }
+      .sr-live {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        border: 0;
       }
 
       /* share / import routes */
@@ -1482,7 +1569,18 @@
       <aside id="list"></aside>
       <section id="pane"></section>
     </main>
+    <div id="live" class="sr-live" aria-live="polite" aria-atomic="true"></div>
     <script>
+      /**
+       * Workbench page script — section map (approx. line ranges in this file):
+       *   state / helpers       ~1570–2080  (globals, api, list/tabs, open/new)
+       *   schema form engine    ~2080–2570  (step fields, encode/decode, summaries)
+       *   canvas editor         ~2570–3725  (makeCanvas, NDV, pan/zoom, palette)
+       *   YAML editor           ~3725–4610  (highlight, code editor, validate/sync)
+       *   run inspector         ~1610–1690, ~4610–4935  (pure state + list/detail paint)
+       *   import / share        ~4935–5280  (share payload, import preview/write)
+       *   boot                  ~5280–end   (hash routes, live tick, theme, listeners)
+       */
       const TOKEN = "__HWF_TOKEN__";
       const $ = (id) => document.getElementById(id);
       const THEME_KEY = "hwf-theme";
@@ -1490,14 +1588,119 @@
       let state = { entries: [], profiles: [], repoRoot: "" };
       let tab = "workflows";
       let current = null; // {name, scope}
-      let openSeq = 0; // last-click-wins token for openWorkflow
       let configDirty = false;
       let editorDirty = false;
       let editorFileText = ""; // open workflow as last read from disk — live reload compares to it
       let editorMode = "text"; // desired mode, kept across live reloads
       let wantOpen = null; // {name, scope} from the URL hash; opened as soon as the file exists
-      let routeView = null; // null | {kind:"share",scope,name} | {kind:"import"} | {kind:"new"}
+      let routeView = null; // null | {kind:"share",scope,name} | {kind:"import"} | {kind:"new"} | {kind:"run",id,state}
       let listCollapsed = false;
+      let runsLocation = "current";
+      let runsQuery = "";
+      let runsSelectedId = null;
+      let runsNarrowPane = "list";
+      let runsAbort = null;
+      let runsSelectedStatusId = null;
+      let runsSelectedStatus = null;
+
+      function latest() {
+        let gen = 0;
+        return {
+          begin() {
+            return ++gen;
+          },
+          current(token) {
+            return token === gen;
+          },
+          bump() {
+            return ++gen;
+          },
+        };
+      }
+      const openWorkflowToken = latest();
+      const runsPoll = latest();
+      const runsRoute = latest();
+
+      /* ---------- runs inspector pure state ---------- */
+      function runRowFocusId(id) {
+        return "run-row-" + String(id || "");
+      }
+
+      function runsBackFocusId() {
+        return "runs-back";
+      }
+
+      function parseRunHash(hash) {
+        if (!String(hash || "").startsWith("run=")) return { kind: "absent" };
+        const id = String(hash).slice(4).trim().toLowerCase();
+        const complete = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id);
+        return { kind: "run", id: id, complete: complete };
+      }
+
+      function seedSelectedStatus(id, status) {
+        runsSelectedStatusId = id || null;
+        runsSelectedStatus = status || null;
+      }
+
+      function terminalAnnouncement(id, nextStatus) {
+        if (!id || !nextStatus) return null;
+        if (nextStatus !== "succeeded" && nextStatus !== "failed" && nextStatus !== "interrupted") {
+          return null;
+        }
+        if (runsSelectedStatusId !== id) {
+          seedSelectedStatus(id, nextStatus);
+          return null;
+        }
+        if (!runsSelectedStatus || runsSelectedStatus === nextStatus) {
+          runsSelectedStatus = nextStatus;
+          return null;
+        }
+        const prev = runsSelectedStatus;
+        runsSelectedStatus = nextStatus;
+        return prev;
+      }
+
+      /** Retain nonterminal observation; announce only after a known prior status. */
+      function observeRunStatus(id, status) {
+        if (!id || !status) return null;
+        if (status === "running" || status === "stale") {
+          seedSelectedStatus(id, status);
+          return null;
+        }
+        return terminalAnnouncement(id, status);
+      }
+
+      function resolveFocusAfterPaint(savedFocusId, selectedId) {
+        if (savedFocusId) return savedFocusId;
+        if (selectedId) return runRowFocusId(selectedId);
+        return null;
+      }
+
+      /** Invalidate an in-flight run deep link, then clear route state. */
+      function exitRouteView(view) {
+        if (view && view.kind === "run") runsRoute.bump();
+        return null;
+      }
+
+      function resolveRunsListSelection(runs, selectedId, forceList, hasRouteView) {
+        let next = selectedId;
+        if (next && !runs.some((r) => r.id === next) && !hasRouteView) {
+          next = runs[0] ? runs[0].id : null;
+        }
+        if (!next && runs[0] && !forceList) next = runs[0].id;
+        return next || null;
+      }
+
+      /** Adopt list selection and seed status when the selected id changes or is unobserved. */
+      function adoptRunsSelection(runs, selectedId, forceList, hasRouteView) {
+        const next = resolveRunsListSelection(runs, selectedId, forceList, hasRouteView);
+        if (next !== selectedId || (next && runsSelectedStatusId !== next)) {
+          const row = next ? runs.find((r) => r.id === next) : null;
+          seedSelectedStatus(next, row && row.status ? row.status : null);
+        }
+        return next;
+      }
+      /* ---------- end runs inspector pure state ---------- */
 
       function errMsg(e) {
         return (e && e.message) || String(e);
@@ -1584,16 +1787,20 @@
       }
 
       function clearRouteHash() {
-        if (!/^#(share=|import|new)/.test(location.hash)) return;
+        if (!/^#(share=|import|new|run=)/.test(location.hash)) return;
         history.replaceState(null, "", location.pathname + location.search);
       }
 
       function currentRouteHash() {
+        if (tab === "runs" && runsSelectedId) {
+          return "#run=" + runsSelectedId;
+        }
         if (tab !== "workflows") return "";
         if (routeView) {
           if (routeView.kind === "import") return "#import";
           if (routeView.kind === "new") return "#new";
           if (routeView.kind === "share") return "#share=" + routeView.scope + ":" + routeView.name;
+          if (routeView.kind === "run") return "#run=" + routeView.id;
         }
         if (current && current.name) return "#w=" + current.scope + ":" + current.name;
         return "";
@@ -1634,15 +1841,19 @@
         syncListToggle();
       }
 
+      function syncTabs() {
+        document
+          .querySelectorAll(".tab")
+          .forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+      }
+
       function setListCollapsed(on) {
         listCollapsed = !!on;
         syncWorkflowLayout();
       }
 
       function render() {
-        document
-          .querySelectorAll(".tab")
-          .forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+        syncTabs();
         syncWorkflowLayout();
         if (routeView) return;
         if (tab === "workflows") return renderWorkflows();
@@ -1731,8 +1942,8 @@
       }
 
       async function openWorkflow(name, scope) {
-        const seq = ++openSeq;
-        routeView = null;
+        const seq = openWorkflowToken.begin();
+        routeView = exitRouteView(routeView);
         current = { name, scope };
         wantOpen = null;
         if (narrowViewport()) listCollapsed = true;
@@ -1742,7 +1953,7 @@
         const pane = $("pane");
         pane.innerHTML = "<p class=hint>loading…</p>";
         const r = await api("/api/workflow?name=" + encodeURIComponent(name) + "&scope=" + scope);
-        if (seq !== openSeq) return;
+        if (!openWorkflowToken.current(seq)) return;
         // A stored file that fails to parse still opens: the text came back, the error is pinned.
         if (r.status !== 200) {
           pane.innerHTML = "";
@@ -1764,7 +1975,8 @@
 
       function newWorkflow() {
         if (!confirmLeave()) return;
-        openSeq += 1; // cancel any in-flight openWorkflow
+        openWorkflowToken.bump(); // cancel any in-flight openWorkflow
+        routeView = exitRouteView(routeView);
         routeView = { kind: "new" };
         current = { name: "", scope: "repo" };
         setHash("new");
@@ -1794,38 +2006,6 @@
 
       const VERBS = ["run", "agent", "herdr", "workflow"];
 
-      // Mirrors the Zod schema in src/workflow/parse.ts.
-      const TOP_KEYS = [
-        "version",
-        "title",
-        "description",
-        "hidden",
-        "inputs",
-        "returns",
-        "on_failure",
-        "steps",
-      ];
-      const STEP_KEYS = [
-        "agent",
-        "run",
-        "herdr",
-        "workflow",
-        "id",
-        "using",
-        "target",
-        "shell",
-        "params",
-        "inputs",
-        "cwd",
-        "env",
-        "pane",
-        "background",
-        "ready_when",
-        "timeout",
-        "retry",
-        "when",
-        "continue_on_error",
-      ];
       const CONTEXT_HINTS = [
         "context.workspace",
         "context.tab",
@@ -1885,449 +2065,22 @@
         return "run";
       }
 
-      /* ---------- node form field model (pure) ---------- */
-
-      const SECTIONS = [
-        { id: "does", title: "what it does" },
-        { id: "where", title: "where it runs" },
-        { id: "when", title: "when it runs" },
-        { id: "fails", title: "if it fails" },
-        { id: "other", title: "other keys" },
-      ];
-
-      // Words and placement only. Types, bounds, and enumerations come from the served schema,
-      // so this table cannot contradict it, and a key missing here still renders.
-      const FIELD_INFO = {
-        run: {
-          label: "command",
-          help: "one command line, or argv one token per line",
-          group: "does",
-          order: 1,
-        },
-        shell: { label: "shell", help: "command-line form only", group: "does", order: 2 },
-        agent: { label: "prompt", group: "does", order: 1 },
-        herdr: { label: "method", group: "does", order: 1 },
-        params: { label: "params", group: "does", order: 2 },
-        workflow: { label: "workflow", group: "does", order: 1 },
-        inputs: { label: "inputs", group: "does", order: 2 },
-        using: { label: "profile", help: "starts a new agent", group: "where", order: 1 },
-        target: {
-          label: "target agent",
-          help: "prompts an agent that already runs",
-          group: "where",
-          order: 2,
-        },
-        cwd: { label: "working directory", group: "where", order: 3 },
-        env: { label: "environment", group: "where", order: 4 },
-        "pane.open": { label: "open pane", group: "where", order: 5 },
-        "pane.target": { label: "split anchor", group: "where", order: 6 },
-        "pane.workspace": { label: "workspace", group: "where", order: 7 },
-        "pane.size": { label: "pane size %", group: "where", order: 8 },
-        "pane.focus": { label: "focus the new pane", group: "where", order: 9 },
-        "pane.close": { label: "close the pane", group: "where", order: 10 },
-        when: {
-          label: "condition",
-          help: "one clause, or a list of clauses that all must hold",
-          group: "when",
-          order: 1,
-        },
-        background: { label: "run in the background", group: "when", order: 2 },
-        ready_when: {
-          label: "ready when",
-          help: "regex the pane output must match",
-          group: "when",
-          order: 3,
-        },
-        timeout: { label: "timeout", group: "fails", order: 1 },
-        "retry.attempts": { label: "attempts", group: "fails", order: 2 },
-        "retry.delay": { label: "delay between attempts", group: "fails", order: 3 },
-        success_codes: {
-          label: "exit codes that count as success",
-          help: "one code per line",
-          group: "fails",
-          order: 4,
-        },
-        continue_on_error: { label: "continue on error", group: "fails", order: 5 },
-      };
-
-      // The only per-verb knowledge left: which payload keys belong to which action.
-      const PAYLOAD_KEYS = {
-        run: ["run", "shell"],
-        agent: ["agent", "using", "target"],
-        herdr: ["herdr", "params"],
-        workflow: ["workflow", "inputs"],
-      };
-      const ANY_PAYLOAD_KEY = [
-        "run",
-        "shell",
-        "agent",
-        "using",
-        "target",
-        "herdr",
-        "params",
-        "workflow",
-        "inputs",
-      ];
-      const MODE_SUFFIX = "::mode";
-
-      function widgetFor(node) {
-        if (!node || typeof node !== "object") return { kind: "json" };
-        if (Array.isArray(node.enum)) return { kind: "enum", options: node.enum.map(String) };
-        if (Array.isArray(node.anyOf)) return anyOfWidget(node.anyOf);
-        if (node.type === "boolean") return { kind: "check" };
-        if (node.type === "integer" || node.type === "number")
-          return {
-            kind: "number",
-            min: node.minimum,
-            max: node.maximum,
-            integer: node.type === "integer",
-          };
-        if (node.type === "array") return { kind: "list", item: widgetFor(node.items) };
-        if (node.type === "object") {
-          if (node.properties && Object.keys(node.properties).length)
-            return { kind: "group", properties: node.properties };
-          const values = node.additionalProperties;
-          if (values && values.type === "string") return { kind: "map" };
-          return { kind: "json" };
-        }
-        if (node.type === "string") return { kind: "text" };
-        return { kind: "json" };
-      }
-
-      // A branch set that only adds a template pattern to an enumeration keeps the enumeration
-      // and stays typeable, so a whole-value template is still an option.
-      function anyOfWidget(branches) {
-        const kinds = branches.map(widgetFor);
-        const enumerated = kinds.find((k) => k.kind === "enum");
-        if (enumerated && kinds.every((k) => k.kind === "enum" || k.kind === "text"))
-          return { kind: "enumText", options: enumerated.options };
-        const text = kinds.find((k) => k.kind === "text");
-        const list = kinds.find((k) => k.kind === "list");
-        if (text && list) return { kind: "textOrList", item: list.item };
-        return kinds[0] || { kind: "json" };
-      }
-
-      function fieldInfo(key) {
-        return FIELD_INFO[key] || { label: key, group: "other", order: 0 };
-      }
-
-      function pushFields(out, key, node) {
-        const widget = key === "params" ? { kind: "params" } : widgetFor(node);
-        if (widget.kind === "group") {
-          for (const child of Object.keys(widget.properties))
-            pushFields(out, key + "." + child, widget.properties[child]);
-          return;
-        }
-        const info = fieldInfo(key);
-        out.push({
-          key,
-          widget,
-          label: info.label,
-          help: info.help || "",
-          group: info.group,
-          order: info.order,
-        });
-      }
-
-      // Every schema key renders for every verb except another action's payload keys.
-      // The loader judges the combination; this form never anticipates a rule.
-      function stepFields(props, verb) {
-        const mine = PAYLOAD_KEYS[verb] || [];
-        const out = [];
-        for (const key of Object.keys(props || {})) {
-          if (key === "id") continue;
-          if (ANY_PAYLOAD_KEY.includes(key) && !mine.includes(key)) continue;
-          pushFields(out, key, props[key]);
-        }
-        const rank = (f) => SECTIONS.findIndex((s) => s.id === f.group);
-        return out.sort(
-          (a, b) => rank(a) - rank(b) || a.order - b.order || a.key.localeCompare(b.key),
-        );
-      }
-
-      function valueAt(obj, key) {
-        let cur = obj;
-        for (const part of key.split(".")) {
-          if (!cur || typeof cur !== "object") return undefined;
-          cur = cur[part];
-        }
-        return cur;
-      }
-
-      function setAt(obj, key, value) {
-        const parts = key.split(".");
-        let cur = obj;
-        while (parts.length > 1) {
-          const part = parts.shift();
-          if (!cur[part] || typeof cur[part] !== "object") cur[part] = {};
-          cur = cur[part];
-        }
-        cur[parts[0]] = value;
-      }
-
-      function listText(v) {
-        if (!Array.isArray(v)) return v == null ? "" : String(v);
-        return v.map((item) => (typeof item === "string" ? item : JSON.stringify(item))).join("\n");
-      }
-
-      function encodeValue(widget, v) {
-        if (widget.kind === "check") return v === true;
-        if (widget.kind === "map")
-          return v && typeof v === "object"
-            ? Object.keys(v).map((k) => ({ k, v: String(v[k]) }))
-            : [];
-        if (v === undefined || v === null) return "";
-        if (widget.kind === "list" || widget.kind === "textOrList") return listText(v);
-        if (widget.kind === "json") return typeof v === "object" ? JSON.stringify(v) : String(v);
-        return typeof v === "string" ? v : JSON.stringify(v);
-      }
-
-      // One line per element. A string element keeps its own spacing, including an empty or
-      // padded argument, so only the trailing line the editor leaves behind is dropped.
-      function listValue(raw, item) {
-        const scalar = item && (item.kind === "number" || item.kind === "json");
-        const lines = String(raw ?? "").split("\n");
-        if (lines.length && lines[lines.length - 1] === "") lines.pop();
-        const kept = scalar
-          ? lines.map((line) => line.trim()).filter((line) => line !== "")
-          : lines;
-        if (!kept.length) return undefined;
-        return kept.map((line) => {
-          if (item && item.kind === "number") return numberValue(line);
-          if (item && item.kind === "json") {
-            try {
-              return JSON.parse(line);
-            } catch (e) {
-              return line;
-            }
-          }
-          return line;
-        });
-      }
-
-      // An element holding a newline has no one-line-per-element form, so the step keeps its own
-      // value instead of being split into different elements.
-      function rendersValue(widget, raw) {
-        if (widget.kind !== "list" && widget.kind !== "textOrList") return true;
-        if (!Array.isArray(raw)) return true;
-        return !raw.some((item) => typeof item === "string" && item.indexOf("\n") >= 0);
-      }
-
-      // A value the schema cannot accept is passed through so the loader answers on the field,
-      // instead of the form inventing its own message.
-      function numberValue(raw) {
-        const text = String(raw ?? "").trim();
-        if (text === "") return undefined;
-        const n = Number(text);
-        return Number.isFinite(n) ? n : text;
-      }
-
-      function jsonValue(raw, label) {
-        const text = String(raw ?? "").trim();
-        if (text === "") return undefined;
-        try {
-          return JSON.parse(text);
-        } catch (e) {
-          throw new Error(label + " must be valid JSON");
-        }
-      }
-
-      function decodeValue(widget, form, key, label) {
-        const raw = form[key];
-        if (widget.kind === "check") return raw === true ? true : undefined;
-        if (widget.kind === "map") {
-          const out = {};
-          for (const row of Array.isArray(raw) ? raw : []) {
-            const name = String(row.k ?? "").trim();
-            if (name) out[name] = String(row.v ?? "");
-          }
-          return Object.keys(out).length ? out : undefined;
-        }
-        if (widget.kind === "list") return listValue(raw, widget.item);
-        if (widget.kind === "textOrList")
-          return form[key + MODE_SUFFIX] === "list"
-            ? listValue(raw, widget.item)
-            : trimmedValue(raw);
-        if (widget.kind === "number") return numberValue(raw);
-        if (widget.kind === "json") return jsonValue(raw, label);
-        return trimmedValue(raw);
-      }
-
-      function trimmedValue(raw) {
-        const text = String(raw ?? "");
-        return text.trim() === "" ? undefined : text;
-      }
-
-      function methodSpec(methods, name) {
-        const entry = methods ? methods[String(name ?? "")] : null;
-        return entry && entry.params ? entry : null;
-      }
-
-      // A herdr parameter's own specification is the schema for that field.
-      function paramNode(spec) {
-        if (spec.enumValues && spec.enumValues.length)
-          return { type: "string", enum: spec.enumValues.map(String) };
-        const kind = (spec.kinds && spec.kinds[0]) || "string";
-        if (kind === "boolean") return { type: "boolean" };
-        if (kind === "integer" || kind === "number") return { type: kind };
-        if (kind === "array") return { type: "array", items: {} };
-        if (kind === "object") return {};
-        return { type: "string" };
-      }
-
-      function paramFields(entry) {
-        const props = (entry && entry.params && entry.params.properties) || {};
-        const required = (entry && entry.params && entry.params.required) || [];
-        return Object.keys(props)
-          .sort((a, b) => required.indexOf(b) - required.indexOf(a) || a.localeCompare(b))
-          .map((name) => ({
-            key: "params." + name,
-            name,
-            required: required.includes(name),
-            widget: widgetFor(paramNode(props[name])),
-          }));
-      }
-
-      function paramsIntoForm(form, step, methods) {
-        const params = step.params && typeof step.params === "object" ? step.params : {};
-        const entry = methodSpec(methods, step.herdr);
-        const rest = {};
-        const named = new Set(paramFields(entry).map((f) => f.name));
-        for (const f of paramFields(entry)) form[f.key] = encodeValue(f.widget, params[f.name]);
-        for (const name of Object.keys(params)) if (!named.has(name)) rest[name] = params[name];
-        form.params = Object.keys(rest).length ? JSON.stringify(rest) : "";
-      }
-
-      function paramsFromForm(form, methods) {
-        const out = jsonValue(form.params, "params") || {};
-        for (const f of paramFields(methodSpec(methods, form.herdr))) {
-          const v = decodeValue(f.widget, form, f.key, f.name);
-          if (v !== undefined) out[f.name] = v;
-        }
-        return Object.keys(out).length ? out : undefined;
-      }
-
-      function formFromStep(props, verb, step, methods) {
-        const form = { id: typeof step.id === "string" ? step.id : "" };
-        for (const f of stepFields(props, verb)) {
-          if (f.widget.kind === "params") {
-            paramsIntoForm(form, step, methods);
-            continue;
-          }
-          const raw = valueAt(step, f.key);
-          if (!rendersValue(f.widget, raw)) continue;
-          form[f.key] = encodeValue(f.widget, raw);
-          if (f.widget.kind === "textOrList")
-            form[f.key + MODE_SUFFIX] = Array.isArray(raw) ? "list" : "text";
-        }
-        return form;
-      }
-
-      // Live form values → a raw step the /api/format endpoint judges. Nothing entered is
-      // dropped: a group with an unset required key is still submitted, and the loader answers.
-      function stepFromForm(props, verb, form, extra, methods) {
-        const step = Object.assign({}, extra);
-        try {
-          for (const f of stepFields(props, verb)) {
-            if (f.widget.kind === "params") {
-              const params = paramsFromForm(form, methods);
-              if (params) step.params = params;
-              continue;
-            }
-            if (!(f.key in form)) continue; // a value the form left in YAML stays as it was
-            let v = decodeValue(f.widget, form, f.key, f.label);
-            if (v === undefined && f.key === verb)
-              v = form[f.key + MODE_SUFFIX] === "list" ? [] : "";
-            if (v === undefined) continue;
-            setAt(step, f.key, v);
-          }
-        } catch (e) {
-          return { error: (e && e.message) || String(e) };
-        }
-        const id = String(form.id ?? "").trim();
-        if (id) step.id = id;
-        return { step };
-      }
-
-      // Keys this form does not render: carried through untouched and reported as from YAML.
-      function extraOf(props, verb, step) {
-        const shown = new Set(["id"]);
-        for (const f of stepFields(props, verb)) {
-          if (!rendersValue(f.widget, valueAt(step, f.key))) continue;
-          shown.add(f.key.split(".")[0]);
-        }
-        const extra = {};
-        for (const key of Object.keys(step)) if (!shown.has(key)) extra[key] = step[key];
-        return extra;
-      }
-
-      function rowNames(rows) {
-        return (Array.isArray(rows) ? rows : [])
-          .map((row) => String(row.k ?? "").trim())
-          .filter((name) => name !== "");
-      }
-
-      function isFieldSet(widget, form, key) {
-        if (widget.kind === "check") return form[key] === true;
-        if (widget.kind === "map") return rowNames(form[key]).length > 0;
-        if (widget.kind === "params")
-          return Object.keys(form).some(
-            (k) => k.indexOf("params") === 0 && String(form[k] ?? "").trim() !== "",
-          );
-        return String(form[key] ?? "").trim() !== "";
-      }
-
-      function sectionSummary(fields, form) {
-        const bits = [];
-        for (const f of fields) {
-          if (!isFieldSet(f.widget, form, f.key)) continue;
-          if (f.widget.kind === "check") {
-            bits.push(f.label);
-            continue;
-          }
-          if (f.widget.kind === "map") {
-            bits.push(rowNames(form[f.key]).join(" "));
-            continue;
-          }
-          const text = String(form[f.key] ?? "")
-            .trim()
-            .replace(/\s+/g, " ");
-          if (f.widget.kind === "number") bits.push(f.label + " " + text);
-          else bits.push(text.length > 0 && text.length <= 24 ? text : f.label);
-        }
-        return bits;
-      }
-
-      // ["steps", 2, "retry", "attempts"] → step 2, field "retry.attempts". A path that names
-      // no step, or an item inside a field's value, addresses the step alone.
-      function issueField(path) {
-        if (!Array.isArray(path) || path[0] !== "steps" || typeof path[1] !== "number") return null;
-        const keys = [];
-        for (const part of path.slice(2)) {
-          if (typeof part !== "string") break;
-          keys.push(part);
-        }
-        return { index: path[1], key: keys.join(".") };
-      }
-
-      // A loader path and a form key need not agree on depth: "retry" addresses the fields the
-      // group renders, and "env.LANG" addresses the field that holds the whole mapping.
-      function addressesField(issueKey, fieldKey) {
-        if (!issueKey || !fieldKey) return false;
-        return (
-          issueKey === fieldKey ||
-          fieldKey.indexOf(issueKey + ".") === 0 ||
-          issueKey.indexOf(fieldKey + ".") === 0
-        );
-      }
-
-      /* ---------- end node form field model ---------- */
+      /* __HWF_FIELD_MODEL__ */
 
       // The two generated sources the field model reads, as the page caches them.
       function stepSchemaProps() {
         const steps = state.schema && state.schema.properties && state.schema.properties.steps;
         const items = steps && steps.items;
         return (items && items.properties) || {};
+      }
+
+      function topSchemaKeys() {
+        const props = state.schema && state.schema.properties;
+        return props ? Object.keys(props) : [];
+      }
+
+      function stepSchemaKeys() {
+        return Object.keys(stepSchemaProps());
       }
 
       function methodTable() {
@@ -3239,6 +2992,7 @@
 
         function textInput(f, n, write) {
           const el = document.createElement("input");
+          if (f.placeholder) el.placeholder = f.placeholder;
           el.value = n.form[f.key] || "";
           el.oninput = () => write(el.value);
           return el;
@@ -3246,6 +3000,7 @@
 
         function areaControl(f, n, write) {
           const el = document.createElement("textarea");
+          if (f.placeholder) el.placeholder = f.placeholder;
           el.value = n.form[f.key] || "";
           el.oninput = () => write(el.value);
           return el;
@@ -3281,6 +3036,7 @@
           if (f.widget.min !== undefined) el.min = String(f.widget.min);
           if (f.widget.max !== undefined) el.max = String(f.widget.max);
           if (f.widget.integer) el.step = "1";
+          if (f.placeholder) el.placeholder = f.placeholder;
           el.value = n.form[f.key] || "";
           el.oninput = () => write(el.value);
           return el;
@@ -3361,6 +3117,7 @@
           bar.className = "segbar";
           const labels =
             f.key === "run" ? { text: "shell", list: "argv" } : { text: "one", list: "list" };
+          const listHint = f.key === "run" ? "one argv token per line" : "one entry per line";
           const btns = {};
           const setMode = (mode, snapshotFirst) => {
             if (snapshotFirst) ndv.ensureSnap();
@@ -3369,7 +3126,7 @@
               btns[key].setAttribute("aria-pressed", key === mode ? "true" : "false");
               btns[key].classList.toggle("on", key === mode);
             }
-            el.placeholder = mode === "list" ? "one entry per line" : "";
+            el.placeholder = mode === "list" ? listHint : f.placeholder || "";
             if (snapshotFirst) {
               relabel(n);
               refreshSummaries();
@@ -3449,7 +3206,13 @@
             if (open || String(n.form.params ?? "").trim())
               box.appendChild(
                 renderField(
-                  { key: "params", widget: { kind: "json" }, label: "params JSON", help: "" },
+                  {
+                    key: "params",
+                    widget: { kind: "json" },
+                    label: "params JSON",
+                    help: "",
+                    placeholder: '{"key": "value"}',
+                  },
                   n,
                 ),
               );
@@ -3648,7 +3411,7 @@
           if (!key) return null;
           const prefix = key[3] || "";
           if (!prefix) return null;
-          const pool = key[1].length === 0 && !key[2] ? TOP_KEYS : STEP_KEYS;
+          const pool = key[1].length === 0 && !key[2] ? topSchemaKeys() : stepSchemaKeys();
           return { start: p - prefix.length, prefix, pool, suffix: ": " };
         }
 
@@ -3977,29 +3740,20 @@
 
         canvas.onHistoryChange(updateHistoryBtns);
 
+        let validateSeq = 0;
         function runValidate() {
           clearTimeout(validateTimer);
           validateTimer = setTimeout(async () => {
+            const seq = ++validateSeq;
+            const submitted = ta.value;
             const r = await api("/api/validate", {
               method: "POST",
-              body: JSON.stringify({ name: nameIn.value.trim() || "buffer", text: ta.value }),
+              body: JSON.stringify({ name: nameIn.value.trim() || "buffer", text: submitted }),
             });
             if (!ta.isConnected) return; // editor was replaced while the request was in flight
+            if (seq !== validateSeq || ta.value !== submitted) return; // stale response
             showProblem(r.data.ok, r.data.ok ? "" : r.data.error);
-            const t = ta.value;
-            const next = [];
-            if (/^\s*-\s*run\s*:/m.test(t) || /\n\s*-\s*run\s*:/.test(t)) next.push("commands");
-            if (/context\.transcript(?:_file)?/.test(t)) next.push("transcript");
-            for (const m of t.matchAll(/^\s*herdr:\s*(\S+)/gm)) {
-              const method = m[1];
-              if (
-                /^(pane\.close|tab\.close|workspace\.close|agent\.send_keys|pane\.send_keys|pane\.send_text|pane\.send_input|worktree\.create|layout\.apply)$/.test(
-                  method,
-                )
-              )
-                next.push("herdr:" + method);
-            }
-            paintFlags([...new Set(next)]);
+            paintFlags(r.data.flags || []);
           }, 350);
         }
 
@@ -4420,53 +4174,327 @@
         });
       }
 
+      function announce(text) {
+        const live = $("live");
+        if (!live) return;
+        live.textContent = "";
+        live.textContent = text;
+      }
+
+      function statusText(status) {
+        return String(status || "").toUpperCase();
+      }
+
+      function runsEmptyCopy(data) {
+        if (data && data.unavailable) return "run history storage is unavailable";
+        const runs = (data && data.runs) || [];
+        if (runsQuery.trim()) return "no matching runs";
+        if (runsLocation === "current") return "no runs in this worktree — try All folders";
+        return "no workflow has run yet";
+      }
+
+      function appendRunBlock(host, block) {
+        if (block.kind === "head") {
+          const head = document.createElement("div");
+          head.innerHTML =
+            "<strong>" +
+            esc(block.status) +
+            "</strong> · " +
+            esc(block.title || "") +
+            " · <code>" +
+            esc(block.display_id || "") +
+            "</code> · " +
+            esc(block.elapsed || "");
+          host.appendChild(head);
+          return;
+        }
+        if (block.kind === "note") {
+          const note = document.createElement("p");
+          note.className = "hint";
+          note.textContent = block.text;
+          host.appendChild(note);
+          return;
+        }
+        if (block.kind === "error") {
+          const err = document.createElement("p");
+          err.className = "err";
+          err.textContent = block.text;
+          host.appendChild(err);
+          return;
+        }
+        const row = document.createElement("div");
+        row.className = "step" + (block.depth > 0 ? " nested" : "");
+        row.style.paddingLeft = block.depth ? block.depth * 12 + "px" : "";
+        row.textContent =
+          block.ordinal +
+          "/" +
+          block.total +
+          " " +
+          block.label +
+          (block.outcome ? " · " + block.outcome : "");
+        host.appendChild(row);
+        if (block.explanation) {
+          const expl = document.createElement("p");
+          expl.className = "err";
+          expl.style.paddingLeft = (block.depth + 1) * 12 + "px";
+          expl.textContent = block.explanation;
+          host.appendChild(expl);
+        }
+      }
+
+      function renderRunInspector(host, detail, blocks) {
+        host.innerHTML = "";
+        if (!detail) {
+          host.innerHTML = "<p class=hint>select a run</p>";
+          return;
+        }
+        if (detail.kind === "invalid" || detail.kind === "missing" || detail.kind === "expired") {
+          for (const block of blocks || []) appendRunBlock(host, block);
+          if (!blocks || !blocks.length) {
+            const p = document.createElement("p");
+            p.className = "hint";
+            p.textContent = detail.message || detail.kind;
+            host.appendChild(p);
+          }
+          const back = document.createElement("button");
+          back.type = "button";
+          back.textContent = "Back to runs";
+          back.id = runsBackFocusId();
+          back.onclick = () => {
+            runsSelectedId = null;
+            routeView = exitRouteView(routeView);
+            runsNarrowPane = "list";
+            history.replaceState(null, "", location.pathname + location.search + "#");
+            void refreshRuns(true);
+          };
+          host.appendChild(back);
+          return;
+        }
+        if (detail.kind === "unavailable") {
+          for (const block of blocks || []) appendRunBlock(host, block);
+          if (!blocks || !blocks.length) {
+            host.innerHTML = "<p class=hint>run history storage is unavailable</p>";
+          }
+          return;
+        }
+        for (const block of blocks || []) appendRunBlock(host, block);
+        if (detail.open_workflow) {
+          const open = document.createElement("button");
+          open.type = "button";
+          open.textContent = "Open current workflow";
+          open.onclick = () => openWorkflow(detail.open_workflow.name, detail.open_workflow.source);
+          host.appendChild(open);
+        }
+      }
+
+      async function fetchRunDetail(id) {
+        const r = await api("/api/run?id=" + encodeURIComponent(id));
+        if (r.data && r.data.detail) {
+          return { detail: r.data.detail, blocks: r.data.blocks || [] };
+        }
+        const detail = {
+          kind: "unavailable",
+          id,
+          message: "run detail unavailable",
+        };
+        return {
+          detail,
+          blocks: [{ kind: "error", text: detail.message }],
+        };
+      }
+
+      function paintInspectorBody(payload) {
+        const body = document.getElementById("runs-inspector-body");
+        if (!body) return;
+        const scroll = body.scrollTop;
+        renderRunInspector(body, payload && payload.detail, payload && payload.blocks);
+        body.scrollTop = scroll;
+      }
+
+      async function refreshRuns(forceList) {
+        if (tab !== "runs" || document.hidden) return;
+        if (runsAbort) runsAbort.abort();
+        const ac = new AbortController();
+        runsAbort = ac;
+        const gen = runsPoll.begin();
+        const params = new URLSearchParams();
+        params.set("location", runsLocation);
+        if (runsQuery.trim()) params.set("q", runsQuery.trim());
+        const prevList = document.querySelector(".runs-list");
+        const prevBody = document.getElementById("runs-inspector-body");
+        const saved = {
+          listScrollTop: prevList ? prevList.scrollTop : 0,
+          inspectorScrollTop: prevBody ? prevBody.scrollTop : 0,
+          focusId: document.activeElement && document.activeElement.id,
+        };
+        const listRes = await fetch("/api/runs?" + params.toString(), {
+          headers: { "x-hwf-token": TOKEN },
+          signal: ac.signal,
+        }).catch(() => null);
+        if (!listRes || !runsPoll.current(gen) || tab !== "runs") return;
+        const data = await listRes.json().catch(() => ({ runs: [] }));
+        if (!runsPoll.current(gen) || tab !== "runs") return;
+        paintRuns(data, forceList, saved);
+        if (runsSelectedId) {
+          const selectedId = runsSelectedId;
+          const payload = await fetchRunDetail(selectedId);
+          if (!runsPoll.current(gen) || tab !== "runs" || runsSelectedId !== selectedId) return;
+          paintInspectorBody(payload);
+          const detail = payload.detail;
+          const nextStatus = detail && detail.status;
+          if (observeRunStatus(selectedId, nextStatus)) {
+            announce((detail.workflow || "run") + " " + statusText(nextStatus));
+          }
+        }
+      }
+
+      function paintRuns(data, forceList, saved) {
+        const pane = $("pane");
+        const focusId = resolveFocusAfterPaint(
+          (saved && saved.focusId) || (document.activeElement && document.activeElement.id),
+          runsSelectedId,
+        );
+        const locations = (data && data.locations) || [
+          { id: "current", label: "Current" },
+          { id: "all", label: "All folders" },
+        ];
+        const runs = (data && data.runs) || [];
+        runsSelectedId = adoptRunsSelection(runs, runsSelectedId, forceList, !!routeView);
+        const shell = document.createElement("div");
+        shell.className =
+          "runs-shell" + (runsNarrowPane === "detail" ? " narrow-detail" : " narrow-list");
+        const controls = document.createElement("div");
+        controls.className = "runs-controls";
+        const locLabel = document.createElement("label");
+        locLabel.textContent = "Location";
+        const loc = document.createElement("select");
+        loc.id = "runs-location";
+        for (const item of locations) {
+          const opt = document.createElement("option");
+          opt.value = item.id;
+          opt.textContent = item.label;
+          if (item.id === runsLocation) opt.selected = true;
+          loc.appendChild(opt);
+        }
+        loc.onchange = () => {
+          runsLocation = loc.value;
+          void refreshRuns(true);
+        };
+        locLabel.appendChild(loc);
+        const searchLabel = document.createElement("label");
+        searchLabel.textContent = "Search";
+        const search = document.createElement("input");
+        search.id = "runs-search";
+        search.type = "search";
+        search.value = runsQuery;
+        search.placeholder = "workflow, status, id…";
+        search.oninput = () => {
+          runsQuery = search.value;
+          void refreshRuns(true);
+        };
+        searchLabel.appendChild(search);
+        controls.appendChild(locLabel);
+        controls.appendChild(searchLabel);
+        shell.appendChild(controls);
+
+        const listPane = document.createElement("div");
+        listPane.className = "runs-list-pane";
+        const list = document.createElement("div");
+        list.className = "runs-list";
+        list.setAttribute("role", "listbox");
+        list.setAttribute("aria-label", "Runs");
+        if (!runs.length) {
+          const empty = document.createElement("p");
+          empty.className = "hint";
+          empty.textContent = runsEmptyCopy(data);
+          list.appendChild(empty);
+        } else {
+          for (const r of runs) {
+            const row = document.createElement("button");
+            row.type = "button";
+            row.id = runRowFocusId(r.id);
+            row.className = "run-row" + (r.id === runsSelectedId ? " on" : "");
+            row.setAttribute("role", "option");
+            row.setAttribute("aria-selected", r.id === runsSelectedId ? "true" : "false");
+            row.innerHTML =
+              '<span class="run-status">' +
+              esc(statusText(r.status)) +
+              "</span><span><strong>" +
+              esc(r.title || r.workflow) +
+              "</strong><div class=run-meta>" +
+              esc(r.display_id || "") +
+              (r.progress ? " · " + r.progress.done + "/" + r.progress.total : "") +
+              "</div></span><span class=run-meta>" +
+              esc(fmtWhen(r.started_at)) +
+              "</span>";
+            row.onclick = () => {
+              runsSelectedId = r.id;
+              seedSelectedStatus(r.id, r.status);
+              runsNarrowPane = "detail";
+              setHash("run=" + r.id);
+              void refreshRuns(false);
+            };
+            list.appendChild(row);
+          }
+        }
+        listPane.appendChild(list);
+        shell.appendChild(listPane);
+
+        const inspector = document.createElement("div");
+        inspector.className = "runs-inspector";
+        inspector.id = "runs-inspector";
+        const back = document.createElement("button");
+        back.type = "button";
+        back.id = runsBackFocusId();
+        back.className = "runs-narrow-only";
+        back.textContent = "Back to runs";
+        back.onclick = () => {
+          runsNarrowPane = "list";
+          paintRuns(data, true, {
+            listScrollTop: list.scrollTop,
+            inspectorScrollTop: 0,
+            focusId: "runs-search",
+          });
+        };
+        inspector.appendChild(back);
+        const body = document.createElement("div");
+        body.id = "runs-inspector-body";
+        if (!runsSelectedId) {
+          body.innerHTML = "<p class=hint>select a run</p>";
+        } else {
+          body.innerHTML = "<p class=hint>loading…</p>";
+        }
+        inspector.appendChild(body);
+        shell.appendChild(inspector);
+        pane.innerHTML = "";
+        pane.appendChild(shell);
+        if (saved) {
+          list.scrollTop = saved.listScrollTop || 0;
+          body.scrollTop = saved.inspectorScrollTop || 0;
+        }
+        if (focusId && $(focusId)) $(focusId).focus();
+      }
+
       async function renderRuns() {
         $("list").classList.add("hide");
         const pane = $("pane");
         pane.innerHTML = "<p class=hint>loading…</p>";
-        const { data } = await api("/api/runs");
-        const runs = data.runs || [];
-        pane.innerHTML = "";
-        if (!runs.length) {
-          pane.innerHTML = "<p class=hint>no runs yet</p>";
-          return;
-        }
-        const wrap = document.createElement("div");
-        wrap.id = "runs-list";
-        for (const r of runs) {
-          const row = document.createElement("div");
-          row.className = "run";
-          const status = r.ok ? "ok" : "failed";
-          row.innerHTML =
-            '<span class="dot ' +
-            (r.ok ? "ok" : "bad") +
-            '"></span>' +
-            '<span class="name">' +
-            esc(r.workflow) +
-            "</span>" +
-            '<span class="' +
-            (r.ok ? "hint" : "err") +
-            '">' +
-            esc(status) +
-            "</span>" +
-            (r.error ? '<span class="err">— ' + esc(r.error) + "</span>" : "") +
-            '<span class="when">' +
-            esc(fmtWhen(r.ts)) +
-            "</span>";
-          wrap.appendChild(row);
-        }
-        pane.appendChild(wrap);
+        await refreshRuns(runsNarrowPane === "list");
       }
+
+      setInterval(() => {
+        if (tab === "runs" && !document.hidden) void refreshRuns(false);
+      }, 3000);
 
       async function renderShare(scope, name) {
         syncWorkflowLayout();
         const pane = $("pane");
-        const seq = ++openSeq;
+        const seq = openWorkflowToken.begin();
         pane.innerHTML = "<p class=hint>loading share…</p>";
         const r = await api(
           "/api/share?name=" + encodeURIComponent(name) + "&scope=" + encodeURIComponent(scope),
         );
-        if (seq !== openSeq) return;
+        if (!openWorkflowToken.current(seq)) return;
         if (!routeView || routeView.kind !== "share") return;
         pane.innerHTML = "";
         const head = document.createElement("div");
@@ -4764,29 +4792,27 @@
       }
 
       function openShare(scope, name) {
-        openSeq += 1;
+        openWorkflowToken.bump();
+        routeView = exitRouteView(routeView);
         routeView = { kind: "share", scope, name };
         current = null;
         wantOpen = null;
         tab = "workflows";
         setHash("share=" + scope + ":" + name);
-        document
-          .querySelectorAll(".tab")
-          .forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+        syncTabs();
         syncWorkflowLayout();
         void renderShare(scope, name);
       }
 
       function openImport() {
-        openSeq += 1;
+        openWorkflowToken.bump();
+        routeView = exitRouteView(routeView);
         routeView = { kind: "import" };
         current = null;
         wantOpen = null;
         tab = "workflows";
         setHash("import");
-        document
-          .querySelectorAll(".tab")
-          .forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+        syncTabs();
         syncWorkflowLayout();
         renderImport();
       }
@@ -4795,7 +4821,7 @@
         (b) =>
           (b.onclick = () => {
             if (!confirmLeave()) return;
-            routeView = null;
+            routeView = exitRouteView(routeView);
             clearRouteHash();
             tab = b.dataset.tab;
             if (tab === "workflows") current = null;
@@ -4825,11 +4851,12 @@
             restoreRouteHash();
             return;
           }
-          openSeq += 1;
-          routeView = null;
+          openWorkflowToken.bump();
+          routeView = exitRouteView(routeView);
           current = null;
           wantOpen = null;
           tab = "workflows";
+          syncTabs();
           syncWorkflowLayout();
           renderWorkflows();
           return;
@@ -4870,6 +4897,63 @@
           openShare(scope, name);
           return;
         }
+        if (hash.startsWith("run=")) {
+          const parsed = parseRunHash(hash);
+          const id = parsed.id;
+          const complete = parsed.complete === true;
+          const routeGen = runsRoute.begin();
+          tab = "runs";
+          routeView = { kind: "run", id, state: complete ? "ok" : "invalid" };
+          runsSelectedId = complete ? id : null;
+          seedSelectedStatus(complete ? id : null, null);
+          runsNarrowPane = "detail";
+          runsLocation = "current";
+          syncTabs();
+          syncWorkflowLayout();
+          void (async () => {
+            if (!complete) {
+              if (!runsRoute.current(routeGen)) return;
+              $("pane").innerHTML = "";
+              const shell = document.createElement("div");
+              shell.className = "runs-shell narrow-detail";
+              const inspector = document.createElement("div");
+              inspector.className = "runs-inspector";
+              inspector.id = "runs-inspector";
+              const back = document.createElement("button");
+              back.type = "button";
+              back.id = runsBackFocusId();
+              back.className = "runs-narrow-only";
+              back.textContent = "Back to runs";
+              back.onclick = () => {
+                runsSelectedId = null;
+                routeView = exitRouteView(routeView);
+                runsNarrowPane = "list";
+                history.replaceState(null, "", location.pathname + location.search + "#");
+                void refreshRuns(true);
+              };
+              inspector.appendChild(back);
+              const body = document.createElement("div");
+              body.id = "runs-inspector-body";
+              renderRunInspector(
+                body,
+                { kind: "invalid", message: "run link is not a complete UUID" },
+                [{ kind: "error", text: "run link is not a complete UUID" }],
+              );
+              inspector.appendChild(body);
+              shell.appendChild(inspector);
+              $("pane").appendChild(shell);
+              return;
+            }
+            const payload = await fetchRunDetail(id);
+            if (!runsRoute.current(routeGen)) return;
+            const detail = payload.detail;
+            if (detail.kind === "snapshot") runsLocation = detail.checkout_root;
+            observeRunStatus(id, detail.status || null);
+            await refreshRuns(false);
+            if (!runsRoute.current(routeGen)) return;
+          })();
+          return;
+        }
         const m = /^w=(repo|global):([a-z0-9][a-z0-9-_]*)$/.exec(hash);
         if (!m) return;
         const [, scope, name] = m;
@@ -4878,13 +4962,13 @@
           restoreRouteHash();
           return;
         }
-        routeView = null;
         tab = "workflows";
         const entry = state.entries.find((e) => e.name === name);
         if (entry) {
           const has = scope === "repo" ? entry.inRepo : entry.inGlobal;
           return openWorkflow(name, has ? scope : entry.source);
         }
+        routeView = exitRouteView(routeView);
         wantOpen = { name, scope }; // not written yet — liveTick opens it once it appears
         current = null;
         syncWorkflowLayout();
