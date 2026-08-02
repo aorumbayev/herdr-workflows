@@ -91,6 +91,7 @@ function pickerState(
         inputs: [],
         repoOwned: true,
         needsTranscript: false,
+        children: new Map(),
       }) satisfies LoadedWorkflow,
     contentWidth: 80,
     inputDomains: {},
@@ -108,11 +109,8 @@ function pickerState(
 function startPickerRun(state: PickerState, entry: Parameters<PickerState["runs"]["startRun"]>[0]) {
   return state.runs.startRun(entry, {
     ctx: state.ctx,
-    config: state.config,
     inputValues: state.inputValues,
     inputDomains: state.inputDomains,
-    workflow: state.workflow,
-    loadWorkflow: state.loadWorkflow,
     launchRun: state.launchRun,
     getExit: () => state.exit,
   });

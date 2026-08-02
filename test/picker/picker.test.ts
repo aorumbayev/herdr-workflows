@@ -665,23 +665,13 @@ describe("picker palette list restore", () => {
 describe("picker run handoff", () => {
   test("picker renders loader errors as terminal failures", async () => {
     const state = pickerState();
-    await state.runs.startRun(
-      { name: "broken", source: "global", file: "/global/broken.yaml" },
-      {
-        ctx: state.ctx,
-        config: state.config,
-        inputValues: state.inputValues,
-        inputDomains: state.inputDomains,
-        loadWorkflow: state.loadWorkflow,
-        getExit: () => state.exit,
-      },
-    );
+    acceptWorkflow(state, { name: "broken", source: "global", file: "/global/broken.yaml" });
+    await Bun.sleep(0);
 
-    expect(state.runs.running).toBe(false);
-    expect(state.runs.isDetail()).toBe(true);
-    expect(state.chrome.lastStatus()).toContain("LAUNCH FAILED");
+    expect(state.running).toBe(false);
+    expect(state.chrome.lastStatus()).toContain("Failed");
     expect(state.chrome.lastStatus()).toContain("reload failed");
-    expect(state.chrome.lastFooter()).toContain("esc back");
+    expect(state.chrome.lastFooter()).toContain("enter/esc close");
   });
 
   test("picker loads selected workflows without a second confirmation gate", async () => {
@@ -698,6 +688,7 @@ describe("picker run handoff", () => {
         inputs: [],
         repoOwned: entry.source === "repo",
         needsTranscript: false,
+        children: new Map(),
       };
       return workflow;
     };

@@ -799,6 +799,8 @@ steps:
 
     const parent = await loadWorkflow("parent", root, config);
     expect(parent.steps[0]?.action).toMatchObject({ kind: "workflow", name: "inspect" });
+    expect(parent.children.get("inspect")?.name).toBe("inspect");
+    expect(parent.children.get("inspect")?.children.size).toBe(0);
 
     await expect(loadWorkflow("leak", root, config)).rejects.toThrow(/unknown step id 'diff'/);
     await expect(loadWorkflow("uses_bare", root, config)).rejects.toThrow(
@@ -815,6 +817,35 @@ steps:
     await expect(loadWorkflow("bad_type", root, config)).rejects.toThrow(
       /must resolve to text \(source type object\)/,
     );
+  });
+
+  test("retained child graph pins repo-over-global source resolution", async () => {
+    const home = await mkdtemp(join(tmpdir(), "hwf-home-"));
+    dirs.push(home);
+    const prevHome = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      await mkdir(join(home, ".hwf", "workflows"), { recursive: true });
+      await writeFile(
+        join(home, ".hwf", "workflows", "child.yaml"),
+        `version: v1alpha1\nreturns: "{{steps.mark.stdout}}"\nsteps:\n  - id: mark\n    run: [printf, global]\n`,
+      );
+      const { root, config } = await repoWith({
+        child: `version: v1alpha1\nreturns: "{{steps.mark.stdout}}"\nsteps:\n  - id: mark\n    run: [printf, repo]\n`,
+        parent: `version: v1alpha1\nsteps:\n  - id: call\n    workflow: child\n  - id: nest\n    workflow: mid\n`,
+        mid: `version: v1alpha1\nreturns: "{{steps.call}}"\nsteps:\n  - id: call\n    workflow: child\n`,
+      });
+      const parent = await loadWorkflow("parent", root, config);
+      const direct = parent.children.get("child");
+      const viaMid = parent.children.get("mid")?.children.get("child");
+      expect(direct?.repoOwned).toBe(true);
+      expect(direct?.file).toContain(join(root, ".hwf", "workflows", "child.yaml"));
+      expect(viaMid?.file).toBe(direct?.file);
+      expect(viaMid).toBe(direct);
+    } finally {
+      if (prevHome === undefined) delete process.env.HOME;
+      else process.env.HOME = prevHome;
+    }
   });
 
   test("returns reject transcript and require whole-value templates", async () => {

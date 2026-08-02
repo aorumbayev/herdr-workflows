@@ -426,7 +426,8 @@ export async function resolvePluginConfigDir(
 ): Promise<string> {
   const injected = env.HERDR_PLUGIN_CONFIG_DIR?.trim();
   if (injected) return injected;
-  const bin = env.HERDR_BIN_PATH?.trim() || "herdr";
+  const { herdrBinPath } = await import("./host");
+  const bin = herdrBinPath(env);
   const proc = Bun.spawn([bin, "plugin", "config-dir", PLUGIN_ID], {
     stdout: "pipe",
     stderr: "pipe",

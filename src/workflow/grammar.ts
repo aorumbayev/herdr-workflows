@@ -185,6 +185,8 @@ export type LoadedWorkflow = {
   onFailure?: RecoveryAction;
   repoOwned: boolean;
   needsTranscript: boolean;
+  /** Validated direct children retained for this process; not serialized. */
+  children: Map<string, LoadedWorkflow>;
 };
 
 export type WorkflowListEntry = {

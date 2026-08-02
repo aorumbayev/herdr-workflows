@@ -4,6 +4,7 @@ import { chdir } from "node:process";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { PRODUCT_VERSION } from "./context";
+import { herdrBinPath } from "./host";
 
 const RELEASE_REPO = "aorumbayev/herdr-workflows";
 const LATEST_RELEASE_URL = `https://api.github.com/repos/${RELEASE_REPO}/releases/latest`;
@@ -192,7 +193,7 @@ export function leavePluginRoot(
 async function resolvePluginSource(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<PluginSourceInfo> {
-  const herdr = env.HERDR_BIN_PATH?.trim() || "herdr";
+  const herdr = herdrBinPath(env);
   const proc = Bun.spawn([herdr, "plugin", "list", "--json", "--plugin", "herdr-workflows"], {
     stdout: "pipe",
     stderr: "pipe",
@@ -262,7 +263,7 @@ function str(value: unknown): string | undefined {
 }
 
 async function runHerdrInstall(args: string[], cwd: string): Promise<number> {
-  const herdr = process.env.HERDR_BIN_PATH?.trim() || "herdr";
+  const herdr = herdrBinPath();
   const proc = Bun.spawn([herdr, ...args], {
     cwd,
     stdout: "inherit",

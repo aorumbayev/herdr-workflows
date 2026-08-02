@@ -242,8 +242,8 @@ export class HerdrError extends Error {
   }
 }
 
-export function herdrBinPath(): string {
-  return process.env.HERDR_BIN_PATH?.trim() || "herdr";
+export function herdrBinPath(env: NodeJS.ProcessEnv = process.env): string {
+  return env.HERDR_BIN_PATH?.trim() || "herdr";
 }
 
 function socketPath(): string {
@@ -254,6 +254,13 @@ function socketPath(): string {
 
 /** Transport-loss codes the runner treats as uncertain coordination. */
 export const TRANSPORT_LOSS_CODES = ["closed", "no_socket", "unreachable"] as const;
+
+const TRANSPORT_LOSS = new Set<string>(TRANSPORT_LOSS_CODES);
+
+/** True when a typed Herdr failure means the socket/CLI transport was lost. */
+export function isTransportLoss(err: unknown): boolean {
+  return err instanceof HerdrError && TRANSPORT_LOSS.has(err.code);
+}
 
 function unreachableFailure(method: string, address: string, reason: string): HerdrError {
   return new HerdrError("unreachable", `unreachable herdr at ${address}: ${method}: ${reason}`);

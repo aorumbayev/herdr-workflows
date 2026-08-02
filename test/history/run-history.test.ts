@@ -225,6 +225,34 @@ describe("picker run history formatting", () => {
     expect(all.items.length).toBeGreaterThanOrEqual(2);
   });
 
+  test("current scope with only foreign runs still reports machine history", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-pick-empty-"));
+    dirs.push(root);
+    await mkdir(root, { recursive: true });
+    const foreignRoot = await mkdtemp(join(tmpdir(), "hwf-foreign-only-"));
+    dirs.push(foreignRoot);
+    const foreignOk = new RunHistorySession();
+    await foreignOk.claim({
+      workflow: "there",
+      source: "repo",
+      checkout_root: foreignRoot,
+    });
+    await foreignOk.finalize("succeeded");
+    foreignOk.dispose();
+
+    const current = await loadRunsBrowser(root, "current", "");
+    expect(current.unavailable).toBe(false);
+    expect(current.items).toHaveLength(0);
+    expect(current.hasMachineRuns).toBe(true);
+    expect(
+      formatRunListEmpty({
+        scope: "current",
+        hasMachineRuns: current.hasMachineRuns,
+        filterActive: false,
+      }),
+    ).toContain("Ctrl+G");
+  });
+
   test("non-UUID detail ids are invalid not legacy summaries", async () => {
     const { detail } = await runDetail("not-a-uuid");
     expect(detail.kind).toBe("invalid");

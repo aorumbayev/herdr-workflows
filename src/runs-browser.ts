@@ -23,9 +23,9 @@ import {
   type ChromeKeyEvent,
   type PickerChrome,
 } from "./chrome";
-import { sanitizeDisplay, latest, type InvocationContext, type WorkflowsConfig } from "./context";
+import { sanitizeDisplay, latest, type InvocationContext } from "./context";
 import { runWorkbenchRoute } from "./workbench";
-import type { WorkflowListEntry, LoadedWorkflow } from "./workflow/grammar";
+import type { WorkflowListEntry } from "./workflow/grammar";
 
 const SEP = " · ";
 
@@ -180,17 +180,6 @@ export async function loadRunsBrowser(
   filter: string,
   preserveId?: string,
 ): Promise<RunsBrowserState> {
-  const allProbe = await listRuns({ checkout_root: null });
-  const hasMachineRuns = allProbe.ok && allProbe.runs.length > 0;
-  if (!allProbe.ok) {
-    return {
-      scope,
-      filter,
-      items: [],
-      hasMachineRuns: false,
-      unavailable: true,
-    };
-  }
   const listed = await listRuns({
     checkout_root: scope === "current" ? checkoutRoot : null,
     text: filter,
@@ -200,10 +189,11 @@ export async function loadRunsBrowser(
       scope,
       filter,
       items: [],
-      hasMachineRuns,
+      hasMachineRuns: false,
       unavailable: true,
     };
   }
+  const hasMachineRuns = listed.checkout_roots.length > 0;
   const selectedId =
     preserveId !== undefined && listed.runs.some((r) => r.id === preserveId)
       ? preserveId
@@ -264,15 +254,8 @@ export function scrollDetailLines(
 
 type StartRunLaunch = {
   ctx: InvocationContext;
-  config: WorkflowsConfig;
   inputValues: Record<string, string>;
   inputDomains: Record<string, string[]>;
-  workflow?: LoadedWorkflow;
-  loadWorkflow: (
-    entry: WorkflowListEntry,
-    repoRoot: string,
-    config: WorkflowsConfig,
-  ) => Promise<LoadedWorkflow>;
   launchRun?: (req: LaunchRunRequest) => DetachedRunHandle;
   getExit: () => { code: number } | undefined;
 };
@@ -300,7 +283,6 @@ type RunsBrowserSession = {
   savedFilter: string;
   running: boolean;
   progressLines: string[];
-  workflow?: LoadedWorkflow;
   runHandle?: DetachedRunHandle;
 };
 
@@ -481,7 +463,6 @@ async function enter(session: RunsBrowserSession): Promise<void> {
   const preserveFromDetail = session.activeRunId;
   session.running = false;
   session.progressLines = [];
-  session.workflow = undefined;
   session.view = "list";
   session.detailView = undefined;
   if (preserveFromDetail && session.browserState) {
@@ -682,10 +663,6 @@ async function startRun(
   const checkoutRoot = await canonicalRepoRoot(session.deps.repoRoot);
   setStartingDetail(session, entry, runId);
   try {
-    session.workflow =
-      launch.workflow ??
-      session.workflow ??
-      (await launch.loadWorkflow(entry, session.deps.repoRoot, launch.config));
     const launchFn = launch.launchRun ?? launchDetachedRun;
     const history = { state: "pending" as "pending" | "claimed" | "unavailable" };
     const handle = launchFn({

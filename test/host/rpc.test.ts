@@ -3,7 +3,14 @@ import { createServer } from "node:net";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HerdrError, herdrBinPath, herdrRequest, notificationShow } from "../../src/host";
+import {
+  HerdrError,
+  TRANSPORT_LOSS_CODES,
+  herdrBinPath,
+  herdrRequest,
+  isTransportLoss,
+  notificationShow,
+} from "../../src/host";
 import { isCoordinationError } from "../../src/engine";
 
 describe("herdrBinPath", () => {
@@ -20,6 +27,29 @@ describe("herdrBinPath", () => {
       if (prev === undefined) delete process.env.HERDR_BIN_PATH;
       else process.env.HERDR_BIN_PATH = prev;
     }
+  });
+
+  test("optional env overrides process.env for executable selection", () => {
+    expect(herdrBinPath({ HERDR_BIN_PATH: "/custom/herdr" })).toBe("/custom/herdr");
+    expect(herdrBinPath({ HERDR_BIN_PATH: "  " })).toBe("herdr");
+    expect(herdrBinPath({})).toBe("herdr");
+  });
+});
+
+describe("isTransportLoss", () => {
+  test("matches only TRANSPORT_LOSS_CODES on HerdrError", () => {
+    for (const code of TRANSPORT_LOSS_CODES) {
+      expect(isTransportLoss(new HerdrError(code, `${code} detail`))).toBe(true);
+    }
+    expect(isTransportLoss(new HerdrError("internal", "boom"))).toBe(false);
+    expect(isTransportLoss(new HerdrError("protocol_mismatch", "bad"))).toBe(false);
+    expect(isTransportLoss(new Error("closed"))).toBe(false);
+    expect(isTransportLoss("closed")).toBe(false);
+  });
+
+  test("engine coordination check delegates to host transport-loss", () => {
+    expect(isCoordinationError(new HerdrError("closed", "x"))).toBe(true);
+    expect(isCoordinationError(new HerdrError("internal", "x"))).toBe(false);
   });
 });
 

@@ -981,6 +981,82 @@ steps:
     expect(notify[0]?.params).toMatchObject({ title: "child", body: "boom" });
   });
 
+  test("repeated child calls keep the entry-load definition after mid-run edit", async () => {
+    const root = await repoWith({
+      child: `version: v1alpha1
+returns: "{{steps.mark.stdout}}"
+steps:
+  - id: mark
+    run: [printf, original]
+`,
+      parent: `version: v1alpha1
+steps:
+  - id: first
+    workflow: child
+  - id: rewrite
+    run:
+      - sh
+      - -c
+      - |
+        printf '%s\\n' 'version: v1alpha1' 'steps:' '  - run: "false"' > .hwf/workflows/child.yaml
+  - id: second
+    workflow: child
+  - id: check
+    run: [sh, -c, 'test "{{steps.first}}" = original -a "{{steps.second}}" = original']
+`,
+    });
+    const { deps } = mockDeps();
+    const result = await runWorkflow({
+      name: "parent",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  test("recursive child graph stays frozen for nested mid-run edits", async () => {
+    const root = await repoWith({
+      leaf: `version: v1alpha1
+returns: "{{steps.mark.stdout}}"
+steps:
+  - id: mark
+    run: [printf, leaf-v1]
+`,
+      mid: `version: v1alpha1
+returns: "{{steps.call}}"
+steps:
+  - id: call
+    workflow: leaf
+`,
+      parent: `version: v1alpha1
+steps:
+  - id: first
+    workflow: mid
+  - id: rewrite
+    run:
+      - sh
+      - -c
+      - |
+        printf '%s\\n' 'version: v1alpha1' 'steps:' '  - run: "false"' > .hwf/workflows/leaf.yaml
+  - id: second
+    workflow: mid
+  - id: check
+    run: [sh, -c, 'test "{{steps.first}}" = leaf-v1 -a "{{steps.second}}" = leaf-v1']
+`,
+    });
+    const { deps } = mockDeps();
+    const result = await runWorkflow({
+      name: "parent",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    expect(result.ok).toBe(true);
+  });
+
   test("transport loss skips on_failure", async () => {
     const root = await repoWith({
       m: `version: v1alpha1

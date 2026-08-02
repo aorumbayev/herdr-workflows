@@ -1,16 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { gzipSync } from "node:zlib";
-import {
-  link,
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  rename,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../../src/context";
@@ -25,7 +15,6 @@ import {
   looksLikeWorkflowYaml,
   parseImportScope,
   previewBundle,
-  publishStaged,
   recoverInterruptedImport,
   runImport,
 } from "../../src/workflow/exchange";
@@ -582,39 +571,5 @@ describe("workflow bundle export", () => {
     await expect(
       exportWorkflowBundle({ name: "bad", scope: "repo", repoRoot: root }),
     ).rejects.toThrow();
-  });
-});
-
-describe("publication without hard-link support", () => {
-  const unsupported = async () => {
-    const error: NodeJS.ErrnoException = new Error("link unsupported");
-    error.code = "EOPNOTSUPP";
-    throw error;
-  };
-
-  test("falls back to exclusive copy when links are unsupported", async () => {
-    const { root } = await scratch();
-    const tmp = join(root, "staged.tmp");
-    const dest = join(root, "demo.yaml");
-    await writeFile(tmp, exactBody);
-
-    await publishStaged(tmp, dest, unsupported as unknown as typeof link);
-
-    expect(await readFile(dest, "utf8")).toBe(exactBody);
-    expect(await Bun.file(tmp).exists()).toBe(false);
-  });
-
-  test("exclusive-copy fallback cannot overwrite a destination created before copy", async () => {
-    const { root } = await scratch();
-    const tmp = join(root, "staged.tmp");
-    const dest = join(root, "demo.yaml");
-    await writeFile(tmp, exactBody);
-    await writeFile(dest, "version: v1alpha1\nsteps:\n  - run: mine\n");
-
-    await expect(
-      publishStaged(tmp, dest, unsupported as unknown as typeof link),
-    ).rejects.toMatchObject({ code: "EEXIST" });
-    expect(await readFile(dest, "utf8")).toContain("run: mine");
-    expect(await Bun.file(tmp).exists()).toBe(true);
   });
 });

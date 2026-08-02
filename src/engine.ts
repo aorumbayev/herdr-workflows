@@ -30,6 +30,7 @@ import {
 import { createRunRecorder, type RunRecorder, type RunStepOutcomeKind } from "./history";
 import {
   HerdrError,
+  isTransportLoss,
   validateHerdrInvocation,
   agentStatus,
   herdrCall,
@@ -102,6 +103,8 @@ type StepRunOpts = {
   deps: RunnerDeps;
   runId: string;
   workflowPath: string[];
+  /** Direct children retained with the current workflow's entry load. */
+  children: Map<string, LoadedWorkflow>;
   managedResponseFiles: string[];
   recorder: RunRecorder;
   onProgress?: (step: number, total: number, label: string, outcome?: string) => void;
@@ -133,8 +136,6 @@ type RunSteps = (
   values: TemplateNamespace,
 ) => Promise<StepsResult>;
 
-const COORDINATION_CODES = new Set(["closed", "no_socket", "unreachable"]);
-
 export class CoordinationError extends Error {
   constructor(action: string, detail: string) {
     super(
@@ -145,7 +146,7 @@ export class CoordinationError extends Error {
 }
 
 export function isCoordinationError(err: unknown): boolean {
-  return err instanceof HerdrError && COORDINATION_CODES.has(err.code);
+  return isTransportLoss(err);
 }
 
 function errorText(err: unknown): string {
@@ -1207,13 +1208,15 @@ async function workflowStep(c: StepCtx): Promise<StepOutcome> {
 }
 
 async function runChild(c: StepCtx, action: WorkflowActionSpec): Promise<StepOutcome> {
-  const repoRoot = c.opts.repoRoot;
-  let child: LoadedWorkflow;
-  try {
-    child = await loadWorkflow(action.name, repoRoot, c.opts.config);
-  } catch (error) {
-    return { ok: false, error: errorText(error), details: { workflow: action.name } };
+  const child = c.opts.children.get(action.name);
+  if (!child) {
+    return {
+      ok: false,
+      error: `workflow '${action.name}' missing from loaded child graph`,
+      details: { workflow: action.name },
+    };
   }
+  const repoRoot = c.opts.repoRoot;
   const passed = Object.fromEntries(
     Object.entries(action.inputs ?? {}).map(([name, template]) => [
       name,
@@ -1254,6 +1257,7 @@ async function runChild(c: StepCtx, action: WorkflowActionSpec): Promise<StepOut
       ...c.opts,
       name: child.name,
       workflowPath: childPath,
+      children: child.children,
       recorder: c.opts.recorder.child({
         name: child.name,
         workflowPath: childPath,
@@ -2038,6 +2042,7 @@ export async function runWorkflow(opts: RunOptions): Promise<StepsResult> {
     deps,
     runId,
     workflowPath: [workflow.name],
+    children: workflow.children,
     managedResponseFiles,
     runSteps,
     recorder,

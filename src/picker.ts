@@ -653,11 +653,8 @@ function attachRunsBrowser(state: PickerState): RunsBrowser {
 function launchFromPicker(state: PickerState, entry: WorkflowListEntry): Promise<void> {
   return state.runs.startRun(entry, {
     ctx: state.ctx,
-    config: state.config,
     inputValues: state.inputValues,
     inputDomains: state.inputDomains,
-    workflow: state.workflow,
-    loadWorkflow: state.loadWorkflow,
     launchRun: state.launchRun,
     getExit: () => state.exit,
   });

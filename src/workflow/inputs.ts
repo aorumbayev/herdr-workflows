@@ -737,6 +737,7 @@ function loadFromRaw(
     onFailure: raw.onFailure,
     repoOwned: source === "repo",
     needsTranscript: workflowNeedsTranscript(raw.steps, raw.returns),
+    children: new Map(),
   };
 }
 
@@ -828,7 +829,7 @@ async function finalizeWorkflow(
     );
   }
 
-  return withInputs;
+  return { ...withInputs, children };
 }
 
 export async function parseWorkflowText(

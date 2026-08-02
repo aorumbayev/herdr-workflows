@@ -1,4 +1,3 @@
-import { constants } from "node:fs";
 import {
   copyFile,
   link,
@@ -350,27 +349,6 @@ const LINK_UNSUPPORTED = new Set(["EOPNOTSUPP", "ENOTSUP", "ENOSYS", "EPERM", "E
 
 function linkUnsupported(error: unknown): boolean {
   return LINK_UNSUPPORTED.has((error as NodeJS.ErrnoException).code ?? "");
-}
-
-/**
- * `link` is the atomic create-if-absent primitive: EEXIST is how publication detects a conflict.
- * Where links are unsupported, fall back to `copyFile(..., COPYFILE_EXCL)` then unlink tmp —
- * same create-if-absent semantics without a TOCTOU overwrite window.
- */
-export async function publishStaged(
-  tmp: string,
-  dest: string,
-  linkImpl: typeof link = link,
-): Promise<void> {
-  try {
-    await linkImpl(tmp, dest);
-    await unlink(tmp);
-    return;
-  } catch (error) {
-    if (!linkUnsupported(error)) throw error;
-  }
-  await copyFile(tmp, dest, constants.COPYFILE_EXCL);
-  await unlink(tmp);
 }
 
 async function linkOrCopy(src: string, dest: string): Promise<void> {

@@ -22,7 +22,13 @@ import { Command, InvalidArgumentError, Option } from "commander";
 import manifest from "../herdr-plugin.toml";
 import { appendRouteHash, openWorkbench, parseWebRoute } from "./workbench";
 import { buildIdentity, parseLaunchPayload, retireOnCodeChange, runWorkflow } from "./engine";
-import { ensureHerdrProtocol, HerdrError, notificationShow, pluginPaneOpen } from "./host";
+import {
+  ensureHerdrProtocol,
+  HerdrError,
+  herdrBinPath,
+  notificationShow,
+  pluginPaneOpen,
+} from "./host";
 import { evaluateWhen, resolveDynamicChoices } from "./workflow/inputs";
 import { IMPORT_DISCLAIMER, parseImportScope, runImport } from "./workflow/exchange";
 import { listWorkflows, loadWorkflow } from "./workflow/inputs";
@@ -354,16 +360,12 @@ export type KeybindingInstallResult = {
   path: string;
 };
 
-function herdrBin(env: NodeJS.ProcessEnv): string {
-  return env.HERDR_BIN_PATH?.trim() || "herdr";
-}
-
 function spawnHerdr(
   args: string[],
   env: NodeJS.ProcessEnv,
   opts: { encoding?: "utf8"; stdio?: "ignore" } = {},
 ) {
-  return spawnSync(herdrBin(env), args, {
+  return spawnSync(herdrBinPath(env), args, {
     ...opts,
     env,
   });

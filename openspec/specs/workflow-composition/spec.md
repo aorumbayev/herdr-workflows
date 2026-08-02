@@ -15,6 +15,17 @@ Explicit child `workflow:` invocation with isolated namespaces, typed inputs, an
 - **WHEN** workflow `a` invokes `b` and `b` invokes `a`
 - **THEN** loading fails and names the full cycle
 
+### Requirement: Frozen child graph per execution process
+After the entry workflow loads, every `workflow:` step and recovery workflow action in that process MUST execute the complete child graph that load resolved and validated with the entry. Repeated and recursive child calls MUST reuse those retained definitions. Mid-run edits to child workflow files on disk MUST affect only a later load, not the active run. Dynamic child input choices MUST still resolve per child invocation. The retained graph MUST NOT be serialized into launch payloads or run history.
+
+#### Scenario: Mid-run child file edit
+- **WHEN** an entry workflow invokes the same child twice and the child's YAML file changes on disk between those invocations
+- **THEN** both invocations execute the child definition resolved at entry load
+
+#### Scenario: Recursive retained children
+- **WHEN** a retained child itself invokes another workflow
+- **THEN** that nested child also comes from the graph validated with the entry load
+
 ### Requirement: Explicit child inputs
 A workflow action MUST pass values through its `inputs:` map. When the parent supplies a key, that key MUST exactly match an input the child declares. The parent MUST NOT need to pass optional inputs. The parent MUST supply every required child input. Omitted inputs with defaults MUST use those defaults. Passed values MUST resolve in the parent's namespaces. Child and recovery workflows MUST never prompt. Every passed value MUST resolve to text. A text input MUST accept any text. A static choice MUST require membership after runtime template resolution. A dynamic choice MUST run its argv at child invocation and require membership before child step 1. A profile input MUST name a merged profile. Load validation MUST check keys and template source types, but it MUST NOT claim runtime values are known. Objects, arrays, numbers, booleans, and null MUST fail child input validation.
 
