@@ -13,7 +13,7 @@ steps:
   - run: [bun, test]
 ```
 
-Save it in `.hwf/workflows/` for this repo, or `~/.hwf/workflows/` for every repo. If both have a `tests.yaml`, the repo one wins.
+Save it in `.hwf/workflows/` for this repo, or `~/.hwf/workflows/` for every repo. Workflow names must match `[a-z0-9][a-z0-9-_]*`. Use `<name>.yaml`. `hwf` does not discover `.yml` files. If both scopes have a `tests.yaml`, the repo one wins.
 
 Run it with `prefix+k` or `hwf run tests`.
 
@@ -41,11 +41,11 @@ Each step does exactly one of these four things. Mixing two in one step is an er
 ```yaml
 steps:
   - id: diff
-    run: [git, diff, HEAD] # list form: no shell involved
+    run: [git, diff, HEAD] # list form: argv
   - run: bun test | tee out.log # string form: runs through sh
 ```
 
-Use the **list form** by default. Each item is one argument, so a branch name with spaces stays one argument and nothing gets word-split. Templates work in list items.
+Use the **list form** by default. Each item is one argument, so a branch name with spaces stays one argument and nothing gets word-split. Templates work in list items. Local list-form commands and `pane.open: tab` run without a shell. `beside` and `below` submit one shell-quoted line to the new pane.
 
 Use the **string form** only when you need shell features like pipes or redirects. The string form rejects templates on purpose, so a value can't be spliced into shell source. Pass values through `env:` instead:
 
@@ -55,7 +55,7 @@ Use the **string form** only when you need shell features like pipes or redirect
     BASE: "{{inputs.base}}"
 ```
 
-A command gives you `stdout`, `stderr`, `exit_code`, and `failed`.
+A blocking local command gives you `stdout`, `stderr`, `exit_code`, and `failed`. A readiness run returns native wait data plus pane, tab, and workspace IDs. A background command has no result.
 
 ### Prompt an agent
 
@@ -227,7 +227,7 @@ on_failure:
 
 - **`when:`** takes one condition or an ordered list of them, joined by AND and evaluated left to right. A condition is either a template read for truthiness or a comparison with `==` or `!=` against a quoted string. Empty string, `0`, `false`, and null are false. There's no OR, no parentheses, and no expressions. A false condition marks the step skipped and moves on.
 - **`success_codes:`** lists the exit codes you count as success. Probes that report a fact through their exit code, like `git diff --quiet`, need this.
-- **`continue_on_error: true`** records the failure, keeps going, and skips `on_failure`. The run still exits nonzero at the end.
+- **`continue_on_error: true`** records the failure, keeps going, and does not trigger `on_failure` for that tolerated failure. A later non-tolerated failure can still trigger entry recovery. The run still exits nonzero at the end.
 - **`retry:`** takes `attempts` (2 or more, counting the first) and an optional `delay`. Commands and `herdr:` calls only, never agents.
 - **`on_failure:`** runs one action, once, after the first real failure anywhere in the run, including inside a child. Only the workflow you started gets to recover. `{{context.error}}` tells it what broke: message, workflow, action, step number, and details. The run still counts as failed.
 

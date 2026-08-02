@@ -947,6 +947,46 @@ steps:
     });
   });
 
+  test("herdr failure details include method and reason in recovery", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+on_failure:
+  herdr: notification.show
+  params:
+    title: "{{context.error.details.method}}"
+    body: "{{context.error.details.reason}}"
+steps:
+  - herdr: pane.focus
+    params: { pane_id: "missing-pane" }
+`,
+    });
+    const { deps, calls } = mockDeps();
+    const baseCall = deps.herdrCall;
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      deps: {
+        ...deps,
+        herdrCall: async (method, params = {}) => {
+          if (method === "pane.focus") {
+            calls.push({ method, params });
+            throw new HerdrError("not_found", "pane not found: missing-pane");
+          }
+          return baseCall(method, params);
+        },
+      },
+    });
+    expect(result.ok).toBe(false);
+    const notify = calls.filter((c) => c.method === "notification.show");
+    expect(notify).toHaveLength(1);
+    expect(notify[0]?.params).toMatchObject({
+      title: "pane.focus",
+      body: expect.stringMatching(/pane not found: missing-pane/),
+    });
+  });
+
   test("child failure bubbles to entry recovery with child attribution", async () => {
     const root = await repoWith({
       child: `version: v1alpha1
@@ -1262,6 +1302,56 @@ steps:
     const err = failed(result);
     expect(err.error).toMatch(/no recognized agent in this pane/);
     expect(err.error).toMatch(/run this from a pane running a recognized agent/);
+  });
+
+  test("child-only transcript reference fails entry preflight before step 1", async () => {
+    const root = await repoWith({
+      child: `version: v1alpha1
+steps:
+  - agent: "see {{context.transcript}}"
+    using: claude
+`,
+      parent: `version: v1alpha1
+steps:
+  - workflow: child
+`,
+    });
+    const { deps, calls } = mockDeps();
+    const result = await runWorkflow({
+      name: "parent",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    const err = failed(result);
+    expect(err.error).toMatch(/context\.transcript needs an invoking herdr pane/);
+    expect(calls).toEqual([]);
+  });
+
+  test("child-only unavailable identity fails entry preflight before step 1", async () => {
+    const root = await repoWith({
+      child: `version: v1alpha1
+steps:
+  - herdr: tab.create
+    params: { workspace_id: "{{context.workspace}}" }
+`,
+      parent: `version: v1alpha1
+steps:
+  - workflow: child
+`,
+    });
+    const { deps, calls } = mockDeps();
+    const result = await runWorkflow({
+      name: "parent",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root },
+      deps,
+    });
+    const err = failed(result);
+    expect(err.error).toMatch(/context\.workspace is not available in this invocation/);
+    expect(calls).toEqual([]);
   });
 
   test("target-mode step prompts the pane id from a null-named context.agent", async () => {

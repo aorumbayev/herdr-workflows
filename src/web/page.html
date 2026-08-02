@@ -454,10 +454,47 @@
         margin: 0.35rem 0 0.6rem;
       }
       .chip {
+        position: relative;
         white-space: nowrap;
         max-width: 16rem;
+      }
+      .chip-label {
+        display: block;
         overflow: hidden;
         text-overflow: ellipsis;
+      }
+      .chip[data-tooltip]::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        z-index: 20;
+        top: calc(100% + 0.35rem);
+        left: 0;
+        width: max-content;
+        max-width: min(28rem, calc(100vw - 2rem));
+        padding: 0.4rem 0.55rem;
+        border: 1px solid var(--line-strong);
+        border-radius: var(--radius);
+        background: var(--bg-elevated);
+        box-shadow: var(--node-shadow);
+        color: var(--ink-soft);
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+        white-space: normal;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(-0.2rem);
+        transition:
+          opacity 120ms ease,
+          transform 120ms ease;
+      }
+      .chip:hover::after,
+      .chip:focus-visible::after {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      .chip:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
       }
       .flags.warn,
       .chip.warn {
@@ -1944,10 +1981,12 @@
       async function openWorkflow(name, scope) {
         const seq = openWorkflowToken.begin();
         routeView = exitRouteView(routeView);
+        tab = "workflows";
         current = { name, scope };
         wantOpen = null;
         if (narrowViewport()) listCollapsed = true;
         setHash("w=" + scope + ":" + name);
+        syncTabs();
         syncWorkflowLayout();
         renderWorkflows();
         const pane = $("pane");
@@ -3646,17 +3685,27 @@
 
         const flagBox = document.createElement("span");
         flagBox.className = "chip";
+        flagBox.tabIndex = 0;
+        flagBox.setAttribute("role", "note");
+        const flagLabel = document.createElement("span");
+        flagLabel.className = "chip-label";
+        flagBox.append(flagLabel);
         function paintFlags(list) {
           const items = list || [];
           if (!items.length) {
             flagBox.classList.remove("warn");
-            flagBox.textContent = "";
+            flagLabel.textContent = "";
+            delete flagBox.dataset.tooltip;
+            flagBox.removeAttribute("aria-label");
             flagBox.classList.add("hide");
             return;
           }
+          const label = "sensitive: " + items.join(" · ");
           flagBox.classList.remove("hide");
           flagBox.classList.add("warn");
-          flagBox.textContent = "sensitive: " + items.join(" · ");
+          flagLabel.textContent = label;
+          flagBox.dataset.tooltip = label;
+          flagBox.setAttribute("aria-label", label);
         }
         paintFlags(flags);
 
@@ -4187,9 +4236,14 @@
 
       function runsEmptyCopy(data) {
         if (data && data.unavailable) return "run history storage is unavailable";
-        const runs = (data && data.runs) || [];
         if (runsQuery.trim()) return "no matching runs";
-        if (runsLocation === "current") return "no runs in this worktree — try All folders";
+        const locations = (data && data.locations) || [];
+        const hasMachineHistory = locations.some(
+          (item) => item.id !== "current" && item.id !== "all",
+        );
+        if (runsLocation === "current" && hasMachineHistory) {
+          return "no runs in this worktree — try All folders";
+        }
         return "no workflow has run yet";
       }
 

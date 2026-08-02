@@ -214,7 +214,7 @@ navigation.
 - **THEN** the collected-answer line no longer lists the discarded inputs
 
 ### Requirement: Empty catalog shows a friendly empty state without a filter
-When the picker has no visible workflows, it MUST mount list mode with a friendly empty-state message explaining that there are no runnable workflows and that the user can create, browse examples, or import via the actions palette. It MUST NOT show the workflow filter input. The footer MUST identify only the actions palette and dismiss controls.
+When the picker has no visible workflows, it MUST mount list mode with a friendly empty state. The message MUST explain that no runnable workflows exist and that the actions palette can create, browse examples, or import. The picker MUST NOT show the workflow filter input. The footer MUST identify `tab runs`, the actions palette (`ctrl+k`), and dismiss. It MUST NOT list per-action chords.
 
 #### Scenario: Hotkey with no workflows
 - **WHEN** the user opens the picker and neither the repository nor global workflow directories contain a visible workflow
@@ -222,7 +222,7 @@ When the picker has no visible workflows, it MUST mount list mode with a friendl
 
 #### Scenario: Empty footer
 - **WHEN** the empty state is shown
-- **THEN** the footer identifies `ctrl+k` and `esc` and does not claim run, edit, share, or import chords
+- **THEN** the footer identifies `tab runs`, `ctrl+k`, and `esc` and does not claim run, edit, share, or import chords
 
 ### Requirement: Filter miss is distinct from an empty catalog
 When visible workflows exist but the current filter matches none, the picker MUST keep the filter visible and MUST show a message that no workflows match the filter text. It MUST NOT reuse the empty-catalog copy.
@@ -336,4 +336,3 @@ After the final input is accepted, the picker MUST allocate a full run UUID, lau
 #### Scenario: Leave an active launch
 - **WHEN** a directly launched run is still active and the user presses Escape
 - **THEN** the picker detaches direct child observation, returns to the Runs root, and the workflow continues
-

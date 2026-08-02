@@ -41,10 +41,11 @@ hwf update
 
 The picker also tells you: when a newer release exists, list mode shows a `run hwf update` hint in the filter row. The hint never blocks you, and a failed check shows nothing at all.
 
-Two cases where `hwf update` won't run:
+Cases where `hwf update` won't run:
 
 - **Your install predates the command.** Run `herdr plugin install aorumbayev/herdr-workflows` once more to get it. After that, `hwf update` works.
 - **You linked a development checkout.** Use `bun run install:dev`, which compiles your working tree and relinks it.
+- **Your binary is unregistered or directly copied.** Install it through herdr with `herdr plugin install aorumbayev/herdr-workflows`.
 
 ## Tell it about your agents
 

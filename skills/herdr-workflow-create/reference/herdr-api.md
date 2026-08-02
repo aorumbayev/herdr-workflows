@@ -41,8 +41,9 @@ Selector required in `params:`
   `destination.workspace_id`) — `pane.move`
 
 **exactly one** means exactly that: giving `worktree.create` both `workspace_id` and `cwd` fails to
-load. Selector presence is checked by key, so a template value (`"{{context.workspace}}"`)
-satisfies it, and a template on some unrelated param does not.
+load. Selector values must be non-null and non-empty at runtime. A whole-value template such as
+`"{{context.workspace}}"` satisfies load-time presence. The runner checks it again after substitution.
+A template on an unrelated param does not satisfy the requirement.
 
 Usual selector sources: `{{context.workspace}}`, `{{context.tab}}`, `{{context.pane}}`,
 `{{context.worktree}}`, `{{context.agent}}`.
@@ -53,11 +54,10 @@ This skill is installed outside the herdr-workflows checkout, so its `src/`, `do
 `schemas/` are **not readable** — do not try to read them. Two runtime sources exist instead:
 
 1. The workbench: `GET /api/methods` with the `x-hwf-token` header, on the `hwf web` instance you
-   already started. Returns `{method, allowed, reason?, params:{required, properties}}` for all 89
-   known methods. Authoritative for **param names**. Reach for it only when a method is missing
-   from the table above — the table already covers every method a workflow normally uses, and a
-   lookup per step just costs turns. The selector rules above are an extra load-time check layered
-   on top of that schema and do not appear in the payload.
+   already started. It returns `{methods: [{method, allowed, reason?, params:{required, properties}}]}`
+   for all 89 known methods. Use it as the authority for **param names**. Use the endpoint when the
+   table above omits a method. The table covers every method a workflow normally uses. The selector
+   rules above are an extra load-time check and do not appear in the payload.
 2. `scripts/validate.sh` — its error text names the exact missing selector, e.g.
    `pane.split: params.target_pane_id is required`.
 

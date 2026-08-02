@@ -568,6 +568,137 @@ describe("node form field model", () => {
     expect(api.addressesField("retry", "timeout")).toBe(false);
   });
 
+  test("Runs empty copy distinguishes no machine history from empty Current", async () => {
+    const page = await servedPage();
+    const start = page.indexOf("function runsEmptyCopy(");
+    expect(start).toBeGreaterThanOrEqual(0);
+    const from = page.slice(start);
+    const open = from.indexOf("{");
+    let depth = 0;
+    let end = -1;
+    for (let i = open; i < from.length; i++) {
+      if (from[i] === "{") depth++;
+      else if (from[i] === "}") {
+        depth--;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+    expect(end).toBeGreaterThan(open);
+    const body = from.slice(open + 1, end);
+    const base = [
+      { id: "current", label: "Current" },
+      { id: "all", label: "All folders" },
+    ];
+    const foreign = [...base, { id: "/other", label: "/other" }];
+    const api = new Function(
+      "runsQuery",
+      "runsLocation",
+      `function runsEmptyCopy(data) { ${body} }
+       return { runsEmptyCopy };`,
+    ) as (runsQuery: string, runsLocation: string) => { runsEmptyCopy: (data: unknown) => string };
+
+    expect(api("", "current").runsEmptyCopy({ locations: base })).toBe("no workflow has run yet");
+    expect(api("", "current").runsEmptyCopy({ locations: foreign })).toBe(
+      "no runs in this worktree — try All folders",
+    );
+    expect(api("", "all").runsEmptyCopy({ locations: foreign })).toBe("no workflow has run yet");
+    expect(api("review", "current").runsEmptyCopy({ locations: foreign })).toBe("no matching runs");
+    expect(api("", "current").runsEmptyCopy({ unavailable: true, locations: [] })).toBe(
+      "run history storage is unavailable",
+    );
+  });
+
+  test("opening a workflow from Runs stays on the Workflows tab", async () => {
+    const page = await servedPage();
+    const openWorkflow = extractBlock(page, /async function openWorkflow\(/);
+    const applyHash = extractBlock(page, /function applyHash\(/);
+    const run = new Function(`
+      let tab = "runs";
+      let routeView = { kind: "run", id: "550e8400-e29b-41d4-a716-446655440000" };
+      let current = null;
+      let wantOpen = null;
+      let listCollapsed = false;
+      const location = { hash: "#run=550e8400-e29b-41d4-a716-446655440000" };
+      const pane = { innerHTML: "", appendChild() {} };
+      let syncTabsCalls = 0;
+      const openWorkflowToken = { begin: () => 1, current: () => true };
+      const $ = () => pane;
+      const api = async () => ({ status: 200, data: { text: "version: v1alpha1\\nsteps:\\n  - run: [true]\\n" } });
+      const exitRouteView = () => null;
+      const narrowViewport = () => false;
+      const setHash = (hash) => { location.hash = "#" + hash; };
+      const syncTabs = () => { syncTabsCalls++; };
+      const syncWorkflowLayout = () => {};
+      const renderWorkflows = () => {};
+      const renderEditor = () => {};
+      async function openWorkflow(name, scope) { ${openWorkflow} }
+      function applyHash() { ${applyHash} }
+      return async () => {
+        await openWorkflow("handoff", "global");
+        applyHash();
+        return { tab, hash: location.hash, current, syncTabsCalls };
+      };
+    `)() as () => Promise<{
+      tab: string;
+      hash: string;
+      current: { name: string; scope: string };
+      syncTabsCalls: number;
+    }>;
+
+    expect(await run()).toEqual({
+      tab: "workflows",
+      hash: "#w=global:handoff",
+      current: { name: "handoff", scope: "global" },
+      syncTabsCalls: 1,
+    });
+  });
+
+  test("truncated sensitivity chips disclose their full label on hover and focus", async () => {
+    const page = await servedPage();
+    const paintFlags = extractBlock(page, /function paintFlags\(/);
+    const result = new Function(`
+      const classes = new Set();
+      const attributes = new Map();
+      const flagBox = {
+        classList: {
+          add: (...names) => names.forEach((name) => classes.add(name)),
+          remove: (...names) => names.forEach((name) => classes.delete(name)),
+        },
+        dataset: {},
+        setAttribute: (name, value) => attributes.set(name, value),
+        removeAttribute: (name) => attributes.delete(name),
+      };
+      const flagLabel = { textContent: "" };
+      function paintFlags(list) { ${paintFlags} }
+      paintFlags(["commands", "transcript", "unresolved:missing-child"]);
+      const populated = {
+        label: flagLabel.textContent,
+        tooltip: flagBox.dataset.tooltip,
+        accessibleName: attributes.get("aria-label"),
+      };
+      paintFlags([]);
+      return { populated, cleared: !flagBox.dataset.tooltip && !attributes.has("aria-label") };
+    `)() as {
+      populated: { label: string; tooltip: string; accessibleName: string };
+      cleared: boolean;
+    };
+
+    expect(result).toEqual({
+      populated: {
+        label: "sensitive: commands · transcript · unresolved:missing-child",
+        tooltip: "sensitive: commands · transcript · unresolved:missing-child",
+        accessibleName: "sensitive: commands · transcript · unresolved:missing-child",
+      },
+      cleared: true,
+    });
+    expect(page).toMatch(/\.chip:hover::after,\s*\.chip:focus-visible::after/);
+    expect(page).toContain("content: attr(data-tooltip)");
+    expect(page).toMatch(/\.chip:focus-visible\s*{/);
+  });
+
   test("YAML key autocomplete and sensitivity come from the served schema and validate API", async () => {
     const { page, base, token } = await served();
     const headers = { "x-hwf-token": token, "content-type": "application/json" };

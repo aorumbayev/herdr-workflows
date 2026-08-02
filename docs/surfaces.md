@@ -1,6 +1,6 @@
 # Run and manage
 
-Three places to work: the picker for running, the CLI for scripting, and the browser workbench for editing.
+Use the picker to run workflows and the CLI to script them. Use the browser workbench for workflows, configuration, and run history.
 
 Runs happen in the picker or `hwf run`, because a run needs real herdr panes. The workbench never runs anything.
 
@@ -53,7 +53,9 @@ Plain `k` still types into the filter.
 | `hwf workflow inspect <name>` | Prints what a workflow will ask for. `--resolve` runs the lookups |
 | `hwf workflow import "<...>"` | Imports a shared bundle. `--to repo\|global`, `--yes`, `--force`  |
 | `hwf init`                    | Writes config. `--global`, `--force`                              |
-| `hwf web [route]`             | Starts the workbench. `run=<uuid>`, `--port`, `--no-open`         |
+| `hwf launch`                  | Opens the workflow picker popup                                   |
+| `hwf picker`                  | Runs the picker in the current terminal                           |
+| `hwf web [route]`             | Starts the workbench                                              |
 | `hwf update`                  | Installs the latest published release                             |
 | `hwf help [command]`          | Shows help for one command or all of them                         |
 | `hwf --version`               | Prints the installed plugin version                               |
@@ -61,6 +63,8 @@ Plain `k` still types into the filter.
 Bare `hwf` in a terminal is the same as `hwf web`. Without a terminal it prints help and exits nonzero, so a script can't accidentally start a server.
 
 `hwf` and `herdr-workflows` are the same command under two names.
+
+`hwf web` accepts `w=<repo|global>:<name>`, `share=<repo|global>:<name>`, `run=<uuid>`, `import`, and `new`. It also accepts `--port` and `--no-open`.
 
 ## The workbench
 
@@ -73,15 +77,17 @@ Three tabs:
 
 - **Workflows** lists your repo and global workflows and opens one in the editor.
 - **Config** edits `.hwf/config.yaml` or your global config, and checks the YAML before saving.
-- **Runs** is a location-filtered list plus selected-run inspector. Location defaults to the current checkout and resets there on reload. Search matches workflow identity, status, run id, and allowlisted failure facts. It does not match private failure explanation text. Deep link with `hwf web run=<uuid>`. Terminal snapshots share a fixed 500 KiB (512,000 bytes) retention budget. Active and stale non-terminal snapshots are kept.
+- **Runs** is a location-filtered list plus selected-run inspector.
+
+Location defaults to Current and offers All folders plus retained checkout roots. A valid `run=<complete-uuid>` deep link selects that run's retained root. Invalid, missing, and expired links have distinct states. Search matches workflow identity, status, complete or displayed run ID, and allowlisted failure facts. It does not match private failure explanation text. Terminal snapshots share a fixed 500 KiB (512,000 bytes) retention budget. Retention keeps active and stale non-terminal snapshots.
 
 ### Editing
 
 The editor has two modes over the same file. **YAML mode** is a text editor with highlighting. **Canvas mode** draws your steps as connected nodes you can add, reorder, and fill in through forms.
 
-The node forms come from the same schema the loader uses, so a field offers exactly the values the format accepts: a closed list where the format has a fixed set, a number with real bounds, rows for environment variables, lines for command arguments. `herdr:` steps pick from the generated method list, and a method the plugin refuses shows up as unavailable with the reason. A key the schema doesn't know is kept as-is and flagged as carried over from your YAML.
+The node forms derive shape, fixed values, and bounds from the schema. They show closed lists, bounded numbers, environment-variable rows, and command-argument lines. `herdr:` steps use the generated method list. A method the plugin refuses appears as unavailable with the reason. The workbench preserves an unknown key and marks it as carried over from YAML.
 
-Validation runs through this plugin's own loader, and each message lands on the field it's about.
+Validation runs through this plugin's loader, which enforces cross-field rules. The status area shows general errors. Canvas forms attach addressable shape errors to fields.
 
 Undo and redo cover both modes. Save appears only when something differs from the file on disk, and disappears again if you undo back to it.
 
@@ -99,7 +105,7 @@ The canvas also has zoom, fit, expand-to-viewport, and a shortcuts panel you ope
 
 Picker actions and `hwf web` reuse one live workbench per repository, as long as its recorded address still answers an authenticated check. A stale record is replaced. Another repository's workbench is never reused.
 
-A workbench also stops itself when the code it was built from changes, so an upgrade or a development edit can't leave a server serving the previous build.
+Development script workbenches stop when served source changes. Compiled installs use build identity. A current caller refuses an older server and starts its own.
 
 ## Share a workflow
 
@@ -111,7 +117,7 @@ hwf workflow import "<bundle>"
 
 Get it from the picker palette with `Ctrl+K` then `s`, or from **Share** in the editor's overflow menu.
 
-The bundle is a gzip-compressed, base64-encoded list of `{name, yaml}` entries. It holds the workflow you picked plus every `workflow:` child it reaches, found the same way a run finds them: repo first, then global. A missing child or a cycle fails the export rather than shipping something incomplete. The bundle carries names, YAML, and the `$schema` pointer the file was saved with — no local paths, no config, and no scope record. The importing build re-pins that pointer to its own contract.
+The bundle is a gzip-compressed, base64-encoded list of `{name, yaml}` entries. It holds the workflow you picked plus every `workflow:` child it reaches, found the same way a run finds them: repo first, then global. A missing child or a cycle fails the export rather than shipping something incomplete. Export carries each exact YAML body, including an existing `$schema` pointer, with no local paths, config, or scope record. Import pins written files to its own contract.
 
 ## Import a workflow
 

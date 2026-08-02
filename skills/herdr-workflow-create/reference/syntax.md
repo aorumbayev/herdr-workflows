@@ -54,11 +54,11 @@ can be referenced by `{{steps.<id>.…}}`.
 
 ### `run:`
 
-- argv list — no shell; templates per element OK
-- string — shell (`sh` by default, override with `shell:`); no templates in the command text; use
+- argv list — local and tab placement avoid a shell. Split placement submits one shell-quoted line. Each element accepts templates
+- string — shell (`sh` by default, override with `shell:`). No templates in the command text. Use
   `env:` / `HWF_*`
 
-Result: `{stdout, stderr, exit_code, failed}`.
+Blocking local result: `{stdout, stderr, exit_code, failed}`. A readiness run returns native wait data plus pane, tab, and workspace IDs. A background run has no result.
 
 ### `agent:`
 
@@ -107,7 +107,7 @@ child that declares no `returns:` fails to load.
 
 Context keys: `workspace`, `tab`, `pane`, `worktree`, `agent`, `selection`, `platform`,
 `transcript`, `transcript_file`, and recovery-only `error` (`error.message`, `error.workflow`,
-`error.action`, `error.step_id`).
+`error.action`, `error.step_number`, `error.workflow_path`, `error.details`, optional `error.step_id`).
 
 ## Pane / background / readiness
 

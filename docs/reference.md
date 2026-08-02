@@ -27,10 +27,10 @@ Every step carries exactly one action: `run`, `agent`, `herdr`, or `workflow`. E
 
 | Form   | Behavior                                                             |
 | ------ | -------------------------------------------------------------------- |
-| list   | Argv. No shell. Templates allowed in each item                       |
-| string | Shell source, `sh` unless `shell:` says otherwise. Templates refused |
+| list   | Argv. Each item accepts templates. See placement behavior below      |
+| string | Shell source, `sh` unless `shell:` says otherwise. Rejects templates |
 
-Result: `{stdout, stderr, exit_code, failed}`.
+Blocking local result: `{stdout, stderr, exit_code, failed}`. A readiness run returns the native wait payload plus pane, tab, and workspace IDs. A background run has no result.
 
 Other fields: `shell`, `cwd`, `env`, `pane`, `background`, `ready_when`, `timeout`, `retry`, `success_codes`.
 
@@ -87,6 +87,7 @@ Method names, parameter types, and result paths are checked against the vendored
 Other fields: `inputs`.
 
 - The repo scope shadows the global scope. An unknown name or a cycle fails at load, naming the path.
+- The entry load freezes the complete child graph for that run. Mid-run edits apply to the next run. Dynamic child choices still resolve for each invocation.
 - The child sees only its own inputs and context. Its step IDs stay private.
 - Every key you pass has to be an input the child declares, and every required child input has to get a value. Passed values must resolve to text: objects, arrays, numbers, booleans, and null are rejected.
 - The child's `returns:` becomes this step's result. Without `returns:`, the step has no result and referencing it fails at load.
@@ -94,7 +95,7 @@ Other fields: `inputs`.
 
 ### `returns:`
 
-One whole-value template, or a named map of them. Keys match `[a-z][a-z0-9_]{0,31}`. A whole-value template may resolve to an object or array. Literal null and empty maps are rejected. `context.transcript` and `context.transcript_file` are rejected, so a transcript can't reach private per-run snapshot history through a result.
+One whole-value template, or a named map of them. Keys match `[a-z][a-z0-9_]{0,31}`. A whole-value template may resolve to an object or array. Literal null and empty maps are rejected. Returns cannot reference conditional step results because `returns:` has no guard that proves they are available. `context.transcript` and `context.transcript_file` are rejected, so a transcript can't reach private per-run snapshot history through a result.
 
 ## `pane:`
 
@@ -148,7 +149,7 @@ The loader rejects duplicate step IDs, unknown paths, forward references, and re
 
 Identity values are captured at the start and don't follow your focus. Referencing an identity or transcript value that isn't available fails preflight, before step 1.
 
-Transcripts never enter the automatic `HWF_` environment or private per-run snapshot history, and every review surface marks them. The transcript file is removed when the run ends.
+Transcripts never enter the automatic `HWF_` environment or private per-run snapshot history, and every review surface marks them. Transcript files are always removed. Successful runs also remove managed response and prompt spill files. Failed runs retain that managed output in gitignored `.hwf/tmp` for diagnosis.
 
 `context.error` carries `message`, `workflow`, `action`, `step_number`, `workflow_path`, `details`, and `step_id` when the step had one. A child failure names the child's own failing action and local step number. `details` holds what applies: `stdout`, `stderr`, and `exit_code` for commands. Pane, tab, and workspace IDs for placed steps. Profile, kind or target, and pane IDs for agents. `method` and reason for herdr calls. The child name for workflow steps.
 
@@ -183,15 +184,15 @@ Without `--resolve`, dynamic argv is printed, not run. With it, only active dyna
 
 ## Control flow
 
-| Construct           | Behavior                                                                                          |
-| ------------------- | ------------------------------------------------------------------------------------------------- |
-| `when:`             | One clause or an ordered list. Short-circuit AND. Truthiness, or `==` / `!=`. False means skipped |
-| Guarded results     | A conditional step's result may be read only where every one of its clauses is also present       |
-| `success_codes`     | Blocking local commands only. Listed exit codes count as success. Default `[0]`                   |
-| `continue_on_error` | Records the failure, continues, skips recovery. The run still exits nonzero                       |
-| `retry`             | `attempts` (2 or more, counting the first) plus optional `delay`. Local `run:` and `herdr:` only  |
-| `on_failure`        | One action, once, after the first non-tolerated failure anywhere in the run                       |
-| Connection loss     | Stop, keep panes, skip recovery, report that the step may still be running                        |
+| Construct           | Behavior                                                                                                                    |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `when:`             | One clause or an ordered list. Short-circuit AND. Truthiness, or `==` / `!=`. False means skipped                           |
+| Guarded results     | A conditional step's result may be read only where every one of its clauses is also present                                 |
+| `success_codes`     | Blocking local commands only. Listed exit codes count as success. Default `[0]`                                             |
+| `continue_on_error` | Records and continues. Does not trigger recovery for that failure. A later non-tolerated failure can trigger entry recovery |
+| `retry`             | `attempts` (2 or more, counting the first) plus optional `delay`. Local `run:` and `herdr:` only                            |
+| `on_failure`        | One action, once, after the first non-tolerated failure anywhere in the run                                                 |
+| Connection loss     | Stop, keep panes, skip recovery, report that the step may still be running                                                  |
 
 A condition is a whole-value template read for truthiness, or a comparison of one whole-value template with a quoted string using `==` or `!=`. Empty string, `0`, `false`, and null are false. Every other scalar is true. Comparison uses the value's canonical text form. Shell commands, arbitrary expressions, OR, parentheses, and structured values are load errors.
 

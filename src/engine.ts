@@ -1706,7 +1706,9 @@ function failureOf(
     ...(step.id ? { step_id: step.id } : {}),
     details: {
       ...outcome.details,
-      ...(step.action.kind === "herdr" ? { method: step.action.method } : {}),
+      ...(step.action.kind === "herdr"
+        ? { method: step.action.method, reason: outcome.error }
+        : {}),
       ...(step.action.kind === "workflow" ? { workflow: step.action.name } : {}),
     },
   };
@@ -1898,10 +1900,16 @@ async function finalizeEntryRun(
 const IDENTITY_KEYS = ["workspace", "tab", "pane", "worktree"] as const;
 const TRANSCRIPT_KEYS = ["transcript", "transcript_file"];
 
-function referencedContextKeys(workflow: LoadedWorkflow): Set<string> {
+/** Aggregate context keys over the retained child graph (cycle-safe). */
+function referencedContextKeys(workflow: LoadedWorkflow, stack: string[] = []): Set<string> {
   const keys = new Set<string>();
+  if (stack.includes(workflow.name)) return keys;
+  const next = [...stack, workflow.name];
   for (const ref of workflowTemplateRefs(workflow.steps, workflow.returns, workflow.onFailure)) {
     if (ref.root === "context" && ref.segments[0] !== undefined) keys.add(ref.segments[0]);
+  }
+  for (const child of workflow.children.values()) {
+    for (const key of referencedContextKeys(child, next)) keys.add(key);
   }
   return keys;
 }

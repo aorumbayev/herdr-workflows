@@ -20,7 +20,7 @@ Where files go:
 | `.hwf/config.local.yaml`       | gitignored whole-entry overrides               |
 
 `<name>`: lowercase, `[a-z0-9][a-z0-9-_]*` (hyphens allowed). Step `id:` is a _different_,
-stricter rule — see Rules. Run with `prefix+k`, `hwf run <name> [--input k=v]`, or `hwf web`.
+stricter rule — see Rules. Edit in `hwf web`. Run with `prefix+k` or `hwf run <name> [--input k=v]`.
 
 ## Workflow
 
@@ -110,9 +110,10 @@ Recipes: **[reference/recipes.md](reference/recipes.md)**.
 ### 5. Validate — mandatory gate
 
 Run it **from the project root** (the directory holding `.hwf/`), with an absolute path to the
-script. The loader resolves `workflow:` children, `using:` profiles and dynamic `options: {run:}`
-relative to the current directory, so validating from anywhere else — including this skill's own
-install directory — reports false errors such as `workflow '<child>' not found`.
+script. The loader resolves `workflow:` children and `using:` profiles relative to the current
+directory. It validates dynamic `options: {run:}` declarations without running discovery. Validate
+from the project root so child and profile resolution uses the project configuration. Validation from
+this skill's install directory can report false errors such as `workflow '<child>' not found`.
 
 ```bash
 draft=$(mktemp -t hwf-draft.XXXXXX)   # unique path; never a shared /tmp/draft.yaml
@@ -151,7 +152,7 @@ version. If a file needs one before its first workbench save, pin the tag:
 7. **`pane.size` and `pane.target` are valid only for `open: beside`/`below`**; `pane.workspace` only for `open: tab`. A tab has no size, so "a tab at 40%" must become `open: beside, size: 40` — say so instead of silently dropping the size.
 8. **`ready_when`** is a `/regex/` with **no flags**, requires `timeout:`, scrapes the recent 80 rows, does not detect process exit, and rejects `retry:`.
 9. **`herdr:` steps need that method's exact selector** (table in reference/herdr-api.md). Nothing is autofilled from live UI focus; a template on an unrelated param does not waive it; for an `exactly one of` method, passing _both_ selectors also fails.
-10. **`on_failure`** is entry-only, one action, once. `{{context.error.*}}` (`message`, `workflow`, `action`, `step_id`) exists only there.
+10. **`on_failure`** is entry-only, one action, once. `{{context.error.*}}` has `message`, `workflow`, `action`, `step_number`, `workflow_path`, `details`, and optional `step_id`, only there.
 11. **Denied Herdr methods fail at load** — the allowlist is a misuse rail, not a sandbox.
 12. **`when:`** lists are ordered AND; they reject structured sources (use a scalar field). `allow_custom` only on choices. A closed choice's `default:` must be one of its `options:`.
 13. **No `out:`, `wait:`, `in:`, `use:`, `with:`, `for:`/`as:`, `allow_fail`, `on_error`, dotted method keys, flat `{name}`.**

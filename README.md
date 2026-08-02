@@ -80,15 +80,15 @@ Workflows live in `.hwf/workflows/` for one repo, or `~/.hwf/workflows/` for eve
 
 ## Ways to work
 
-| Command or key   | What it's for                                                |
-| ---------------- | ------------------------------------------------------------ |
-| `prefix+k`       | Pick and run a workflow. `Ctrl+K` opens the actions palette  |
-| `hwf run <name>` | Run from a terminal or a script, with `--input name=value`   |
-| `hwf web`        | Open the browser workbench to build, edit, share, and import |
-| `hwf update`     | Install the latest published release                         |
-| `hwf help`       | List every command                                           |
+| Command or key   | What it's for                                                                          |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| `prefix+k`       | Pick and run a workflow. `Ctrl+K` opens the actions palette                            |
+| `hwf run <name>` | Run from a terminal or a script, with `--input name=value`                             |
+| `hwf web`        | Build, edit, share, and import workflows. Manage configuration and inspect run history |
+| `hwf update`     | Install the latest published release                                                   |
+| `hwf help`       | List every command                                                                     |
 
-Runs happen in the picker or `hwf run`, because they need real herdr panes. The workbench edits workflows and never runs them.
+Run workflows from the picker or with `hwf run`. Runs need real herdr panes. The workbench edits and shares workflows, manages configuration, and inspects run history. It never runs workflows.
 
 ## Build workflows with your agent
 
