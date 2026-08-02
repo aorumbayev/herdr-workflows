@@ -736,8 +736,8 @@ async function writeSnapshotAtomic(
   const target = snapshotPath(snapshot.id, env);
   const tmp = join(dir, `.${snapshot.id}.${randomBytes(6).toString("hex")}.tmp`);
   const body = `${JSON.stringify(snapshot)}\n`;
-  await writeFile(tmp, body, { mode: 0o600 });
   try {
+    await writeFile(tmp, body, { mode: 0o600 });
     await assertPrivateCredentialFile(tmp, historyAclOpts);
     await rename(tmp, target);
   } catch (error) {
