@@ -10,7 +10,7 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
 
-const SKILL_ROOT = join(import.meta.dir, "..", "..", "skills", "herdr-workflow-create");
+const SKILL_ROOT = join(import.meta.dir, "..", "..", "skills");
 const FENCE_RE = /```yaml\n([\s\S]*?)```/g;
 
 const config: WorkflowsConfig = {
@@ -92,7 +92,7 @@ async function extractSnippets(): Promise<Snippet[]> {
   return snippets;
 }
 
-describe("herdr-workflow-create skill snippets", () => {
+describe("user-facing skill snippets", () => {
   test("every v1alpha1 yaml fence loads through the real loader", async () => {
     const snippets = await extractSnippets();
     expect(snippets.length).toBeGreaterThan(0);
