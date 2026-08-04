@@ -2,9 +2,7 @@
 
 ## Purpose
 Durable private per-run snapshot history: exclusive run identity, atomic recoverable snapshots, heartbeat-based liveness, exact-checkout scoping, bounded retention, and privacy-preserving list/detail projection.
-
 ## Requirements
-
 ### Requirement: Runs have durable exclusive identity
 After an entry workflow loads, the runner MUST use a complete canonical UUID and exclusively create one versioned snapshot for that run. The snapshot MUST identify the entry workflow, its source, the exact canonical checkout root, start time, heartbeat time, current step, ordered recorded outcomes, private returns, and optional terminal state. A picker-supplied UUID MUST arrive through the private launch payload and MUST fail before execution if its snapshot is already claimed.
 
@@ -54,7 +52,7 @@ Current scope MUST include only snapshots whose canonical checkout root equals t
 - **THEN** Location returns to the current checkout
 
 ### Requirement: Step history records dispatch outcomes
-Before dispatch the runner MUST persist the current step. After an outcome it MUST append an ordered record and clear the current step. Outcomes MUST distinguish skipped, succeeded, failed-and-continued, launched, hard failed, and coordination interrupted. Recovery MUST be identified by phase. Nested records (workflow path longer than the entry path) MUST carry a positive `parent_ordinal` for the invoking step. Top-level entry records MUST omit `parent_ordinal`. Snapshots that omit or invent that identity for nested records MUST be rejected. Detail projection MUST group nested outcomes only under the matching workflow wrapper via `parent_ordinal` and MUST NOT attach nested outcomes by path alone. The projection MUST NOT invent identities for steps that did not start. it MAY report a known remaining count.
+Before dispatch the runner MUST persist the current step. After an outcome it MUST append an ordered record and clear the current step. Outcomes MUST distinguish skipped, succeeded, failed-and-continued, launched, hard failed, and coordination interrupted. A successful outcome whose action result reported omitted older terminal rows MUST persist `truncated: true`, and detail projection MUST present that flag with the step outcome. Recovery MUST be identified by phase. Nested records (workflow path longer than the entry path) MUST carry a positive `parent_ordinal` for the invoking step. Top-level entry records MUST omit `parent_ordinal`. Snapshots that omit or invent that identity for nested records MUST be rejected. Detail projection MUST group nested outcomes only under the matching workflow wrapper via `parent_ordinal` and MUST NOT attach nested outcomes by path alone. The projection MUST NOT invent identities for steps that did not start. it MAY report a known remaining count.
 
 #### Scenario: Failure continues
 - **WHEN** a step fails under continue behavior and later steps execute
@@ -79,6 +77,10 @@ Before dispatch the runner MUST persist the current step. After an outcome it MU
 #### Scenario: Nested record omits parent identity
 - **WHEN** a snapshot stores a nested step without a positive `parent_ordinal`
 - **THEN** the snapshot is rejected as malformed and is not listed or projected
+
+#### Scenario: Truncated read is visible in detail
+- **WHEN** a `herdr:` read step succeeds with `read.truncated: true`
+- **THEN** the persisted step record carries `truncated: true` and detail projection presents the flag with the succeeded outcome
 
 ### Requirement: Claim identity uses a resolvable checkout root
 A durable claim MUST store a realpath-canonical checkout root. When the checkout path cannot be resolved at claim time, history MUST be unavailable for that run rather than storing a non-canonical path. List and detail MAY keep soft-canonical lookup so a deleted checkout's retained snapshot remains inspectable under All.
@@ -142,3 +144,4 @@ New runs MUST NOT write, read, migrate, or delete a prior shared `runs.jsonl`. H
 #### Scenario: Shared log file remains on disk
 - **WHEN** a prior `runs.jsonl` exists under plugin state
 - **THEN** list and detail omit every row from that file and leave the file unchanged
+

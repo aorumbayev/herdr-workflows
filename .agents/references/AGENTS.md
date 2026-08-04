@@ -4,12 +4,12 @@ This directory holds local checkouts for agent and developer use. Only this file
 
 Herdr runtime behavior for this plugin comes from the checkout at `.agents/references/herdr/`. Read docs, schema, and code there. Do not invent Herdr API behavior from memory.
 
-Pinned docs path for the current plugin floor: `.agents/references/herdr/docs/versions/0.7.5/`.
+Pinned docs path for the current plugin floor: `.agents/references/herdr/website/src/content/docs/` with the checkout detached at the release tag (currently `v0.8.0`). The repo tag no longer ships `docs/versions/<new>` snapshots; the live docs tree at the tag is the source of record.
 
 ## Clone when absent
 
 ```bash
-git clone https://github.com/ogulcancelik/herdr .agents/references/herdr
+git clone https://github.com/herdrdev/herdr .agents/references/herdr
 ```
 
 Use that URL only. Do not invent a fork path.
@@ -75,7 +75,7 @@ Always report upcoming upstream changes that can break herdr-workflows compatibi
 - socket method add, remove, or rename
 - param or result shape changes
 - pane, agent, layout, or worktree behavior changes
-- docs under `docs/versions/` that diverge from the pinned `0.7.5` tree
+- docs under `website/src/content/docs/` that diverge from the pinned release-tag tree (currently `v0.8.0`)
 - protocol or minimum-version changes
 
 If nothing relevant changed, say that clearly.

@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from "vue";
+import { onBeforeUnmount, ref, watch } from "vue";
 import examples from "./examples.generated";
 
 const open = ref("");
@@ -17,9 +17,34 @@ async function copy(card) {
   }, 2000);
 }
 
-function toggle(name) {
-  open.value = open.value === name ? "" : name;
+function show(name) {
+  open.value = name;
 }
+
+function close() {
+  open.value = "";
+}
+
+function onKeydown(event) {
+  if (event.key === "Escape") close();
+}
+
+watch(open, (value) => {
+  if (typeof document === "undefined") return;
+  if (value) {
+    document.addEventListener("keydown", onKeydown);
+    document.body.style.overflow = "hidden";
+  } else {
+    document.removeEventListener("keydown", onKeydown);
+    document.body.style.overflow = "";
+  }
+});
+
+onBeforeUnmount(() => {
+  if (typeof document === "undefined") return;
+  document.removeEventListener("keydown", onKeydown);
+  document.body.style.overflow = "";
+});
 </script>
 
 <template>
@@ -34,17 +59,34 @@ function toggle(name) {
       </p>
       <div class="hwf-actions">
         <button type="button" class="hwf-copy" @click="copy(card)">
-          {{ copied === card.name ? "copied ✓" : "copy import command" }}
+          {{ copied === card.name ? "copied" : "copy" }}
         </button>
-        <button type="button" class="hwf-peek" @click="toggle(card.name)">
-          {{ open === card.name ? "hide YAML" : "show YAML" }}
-        </button>
-      </div>
-      <div v-if="open === card.name" class="hwf-yaml">
-        <p class="hwf-filename">{{ card.name }}.yaml</p>
-        <pre>{{ card.body.trimEnd() }}</pre>
+        <button type="button" class="hwf-peek" @click="show(card.name)">show YAML</button>
       </div>
     </article>
+
+    <Teleport to="body">
+      <template v-for="card in examples" :key="`modal-${card.name}`">
+        <div
+          v-if="open === card.name"
+          class="hwf-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="`${card.name}.yaml`"
+          @click.self="close"
+        >
+          <div class="hwf-modal">
+            <header class="hwf-modal-head">
+              <code>{{ card.name }}.yaml</code>
+              <button type="button" class="hwf-modal-close" aria-label="Close" @click="close">
+                ✕
+              </button>
+            </header>
+            <pre class="hwf-modal-yaml">{{ card.body.trimEnd() }}</pre>
+          </div>
+        </div>
+      </template>
+    </Teleport>
   </div>
 </template>
 
@@ -119,23 +161,64 @@ function toggle(name) {
   color: var(--on-accent);
   border-color: transparent;
 }
-.hwf-yaml {
-  overflow-x: auto;
+.hwf-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  background: color-mix(in srgb, var(--vp-c-bg) 35%, rgba(0, 0, 0, 0.55));
+  backdrop-filter: blur(2px);
 }
-.hwf-filename {
-  margin: 0.5rem 0 0.2rem;
-  font-family: var(--mono, var(--vp-font-family-mono));
-  font-size: 0.72rem;
-  color: var(--muted, var(--vp-c-text-3));
+.hwf-modal {
+  display: flex;
+  flex-direction: column;
+  width: fit-content;
+  min-width: min(28rem, 92vw);
+  max-width: min(60rem, 92vw);
+  max-height: 85vh;
+  border: 1px solid var(--line-strong, var(--vp-c-border));
+  border-radius: var(--radius-lg, 8px);
+  background: var(--bg-elevated, var(--vp-c-bg-soft));
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
 }
-.hwf-yaml pre {
+.hwf-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--line, var(--vp-c-divider));
+}
+.hwf-modal-head code {
+  font-size: 0.78rem;
+  background: transparent;
+  padding: 0;
+}
+.hwf-modal-close {
+  border: 1px solid var(--line-strong, var(--vp-c-border));
+  border-radius: var(--radius-sm, 3px);
+  background: transparent;
+  color: var(--ink-soft, var(--vp-c-text-2));
+  font-size: 0.75rem;
+  line-height: 1;
+  padding: 0.35rem 0.5rem;
+  cursor: pointer;
+}
+.hwf-modal-close:hover {
+  border-color: var(--accent, var(--vp-c-brand-1));
+  color: var(--accent, var(--vp-c-brand-1));
+  background: var(--accent-soft, var(--vp-c-brand-soft));
+}
+.hwf-modal-yaml {
   margin: 0;
-  padding: 0.6rem;
-  border: 1px solid var(--line, var(--vp-c-divider));
-  border-radius: var(--radius-md, 4px);
+  padding: 0.85rem 1rem;
+  overflow: auto;
   background: var(--code-bg, var(--vp-code-bg));
-  font-size: 0.72rem;
-  line-height: 1.4;
-  overflow-x: auto;
+  font-size: 0.78rem;
+  line-height: 1.45;
 }
 </style>

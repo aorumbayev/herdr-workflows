@@ -2,7 +2,6 @@
 
 ## Purpose
 Explicit `herdr:` socket actions with generated params and result validation, no autofill targeting, and an accidental-misuse denylist.
-
 ## Requirements
 ### Requirement: Explicit Herdr action
 `herdr: <method>` MUST invoke the named Herdr socket RPC method. `params:` MUST contain the request object for that method. Authors MUST omit `params:` or leave it empty only when the method needs no required params. Raw calls MUST mirror the exact Socket API. They MUST NOT infer target params from workflow context. Dotted YAML action keys MUST NOT invoke methods.
@@ -23,7 +22,7 @@ Strings inside `params:` MUST support v1alpha1 templates recursively. A whole-va
 - **THEN** the exact identifier is sent as the string param
 
 ### Requirement: Generated request and result validation
-The loader MUST generate method existence, params, protocol number, and success-result checks from the vendored Herdr API schema. Loading MUST reject unknown params, wrong types, and missing required params. Before input collection or execution, startup MUST reject a live Herdr version below the plugin manifest minimum or a protocol mismatch. The rejection MUST name the installed and required versions and both protocols. Socket calls MUST address the Unix domain socket Herdr serves at `HERDR_SOCKET_PATH`. A transport failure MUST name the unreachable Herdr and the resolved address, and MUST be distinguishable from a version rejection, a protocol rejection, and a workflow authoring error. Workflow YAML MUST NOT duplicate a Herdr version requirement. A successful action MUST keep the complete structured result as its natural step result.
+The loader MUST generate method existence, params, protocol number, and success-result checks from the vendored Herdr API schema. Loading MUST reject unknown params, wrong types, and missing required params. Before input collection or execution, startup MUST reject a live Herdr version below the plugin manifest minimum or a protocol mismatch. The rejection MUST name the installed and required versions and both protocols. Socket calls MUST address the Unix domain socket Herdr serves at `HERDR_SOCKET_PATH`. A transport failure MUST name the unreachable Herdr and the resolved address, and MUST be distinguishable from a version rejection, a protocol rejection, and a workflow authoring error. Workflow YAML MUST NOT duplicate a Herdr version requirement. A successful action MUST keep the complete structured result as its natural step result. When a success result reports omitted older terminal rows through `read.truncated`, the runner MUST mark the step outcome truncated. It MUST NOT fail the step and MUST NOT alter the captured result. A placed readiness read that reports omitted rows MUST mark its step outcome the same way.
 
 #### Scenario: Wrong param type
 - **WHEN** `pane.split` receives text for numeric `ratio`
@@ -45,12 +44,16 @@ The loader MUST generate method existence, params, protocol number, and success-
 - **WHEN** the configured socket address cannot be reached
 - **THEN** the failure identifies an unreachable Herdr and the resolved address rather than a version mismatch or a workflow error
 
+#### Scenario: Truncated read succeeds with a marked outcome
+- **WHEN** a `pane.read` or `agent.read` action succeeds with `read.truncated: true`
+- **THEN** the step succeeds, keeps the complete structured result, and its outcome is marked truncated
+
 ### Requirement: Explicit raw method targets
 Authors MUST supply every required or behavior-selecting target under `params:`, using the method's exact schema field. Authors MUST use canonical context explicitly when they want it. The loader MUST validate mutually exclusive selectors through generated or cross-field rules. It MUST never let an omitted raw target fall through to mutable Herdr UI focus.
 
 The loader MUST reject any allowed `herdr:` call that omits a schema parameter Herdr would otherwise resolve from live UI state. That required-selector set MUST be derived from the generated schema so a regenerated method is rejected until policy classifies it. An unclassified allowed method MUST NOT load. Genuine list/filter scopes MAY omit their scope selectors when policy explicitly opts them out.
 
-Non-normative illustration for pinned Herdr 0.7.5 (derived output, not the completeness guarantee): `tab.create` requires `workspace_id`; `pane.split` requires `target_pane_id`; `pane.swap` requires its direction+`pane_id` form or both source/target IDs; `layout.apply` and `layout.set_split_ratio` require exactly one of their paired selectors; `worktree.list` / `create` / `open` require exactly one of `workspace_id` or `cwd`; `pane.list` and `tab.list` keep optional filter scopes.
+Non-normative illustration for pinned Herdr 0.8.0 (derived output, not the completeness guarantee): `tab.create` requires `workspace_id`; `pane.split` requires `target_pane_id`; `pane.swap` requires its direction+`pane_id` form or both source/target IDs; `layout.apply` and `layout.set_split_ratio` require exactly one of their paired selectors; `worktree.list` / `create` / `open` require exactly one of `workspace_id` or `cwd`; `pane.list` and `tab.list` keep optional filter scopes.
 
 #### Scenario: Invocation tab rename
 - **WHEN** a workflow intends to rename its invocation tab
@@ -66,3 +69,4 @@ The loader MUST deny every `server.*` and `plugin.*` method, `events.subscribe`,
 #### Scenario: Server shutdown denied
 - **WHEN** a workflow declares `herdr: server.stop`
 - **THEN** loading fails because the method would stop the server running the workflow
+

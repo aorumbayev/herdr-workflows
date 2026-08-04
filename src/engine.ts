@@ -67,7 +67,7 @@ type StepFailure = {
 };
 
 type StepOutcome =
-  | { ok: true; result?: unknown; launched?: boolean }
+  | { ok: true; result?: unknown; launched?: boolean; truncated?: boolean }
   | {
       ok: false;
       error: string;
@@ -151,6 +151,12 @@ export function isCoordinationError(err: unknown): boolean {
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** herdr 0.8.0 read results set `read.truncated` when older scrollback rows were omitted. */
+function readTruncated(result: unknown): boolean {
+  const read = (result as { read?: { truncated?: unknown } } | null | undefined)?.read;
+  return read?.truncated === true;
 }
 
 /** Wrap a dispatched herdr operation so transport loss becomes an uncertain-coordination outcome. */
@@ -239,7 +245,7 @@ async function herdrStep(c: StepCtx): Promise<StepOutcome> {
   if (invalid) return { ok: false, error: invalid, details: { method: action.method } };
   try {
     const result = await c.opts.deps.herdrCall(action.method, params);
-    return { ok: true, result };
+    return { ok: true, result, ...(readTruncated(result) ? { truncated: true } : {}) };
   } catch (error) {
     const failure = dispatchFailure(`herdr ${action.method}`, error);
     return failure.ok ? failure : { ...failure, details: { method: action.method } };
@@ -743,7 +749,11 @@ async function placedRun(
     match: { type: "regex", value: action.readyWhen },
     timeout_ms: action.timeoutMs,
   });
-  return { ok: true, result: { ...waited, ...placed } };
+  return {
+    ok: true,
+    result: { ...waited, ...placed },
+    ...(readTruncated(waited) ? { truncated: true } : {}),
+  };
 }
 
 async function shellStep(c: StepCtx & { env: NodeJS.ProcessEnv }): Promise<StepOutcome> {

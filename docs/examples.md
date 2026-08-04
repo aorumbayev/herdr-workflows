@@ -13,6 +13,7 @@ The files themselves live in [`examples/`](https://github.com/aorumbayev/herdr-w
 - **`branch-check`** is the one to read first. It shows guarded inputs, a custom-value choice, ordered `when:` conditions, and `success_codes` for a command that reports its answer through the exit code.
 - **`handoff`** shows passing your session transcript to an agent.
 - **`prompt-enhance`** shows reading a result back out of an agent and using it.
+- **`worktree`** shows dynamic choice options from commands, raw `herdr:` worktree and tab calls, a hidden child workflow shared by two paths, `retry:` on a herdr action, and per-pane unique agent names.
 
 ## Tips
 

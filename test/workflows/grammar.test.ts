@@ -11,6 +11,7 @@ import {
 } from "../../src/workflow/inputs";
 import { parseDurationMs, parseRaw } from "../../src/workflow/grammar";
 import {
+  buildTemplateNamespace,
   isWholeValueTemplate,
   parseTemplatePath,
   renderScalar,
@@ -891,6 +892,33 @@ steps:
         `version: v1alpha1\nsteps:\n  - id: boot\n    run: [echo, ready]\n    pane: { open: tab }\n    ready_when: "/ready/"\n    timeout: 5s\n  - run: [echo, "{{steps.boot.worktree.path}}"]\n`,
       ),
     ).rejects.toThrow(/unknown readiness result field 'worktree\.path'/);
+  });
+
+  test("context.cwd is a stable string; unknown context paths still fail", async () => {
+    const ok = await parseWorkflowText(
+      "cwd-ok",
+      `version: v1alpha1\nsteps:\n  - run: [echo, "{{context.cwd}}"]\n`,
+    );
+    expect(ok.steps).toHaveLength(1);
+
+    const ns = buildTemplateNamespace({
+      ctx: { selection: "", cwd: "/repo/root" },
+    });
+    expect(substituteText("{{context.cwd}}", ns)).toBe("/repo/root");
+
+    await expect(
+      parseWorkflowText(
+        "cwd-deep",
+        `version: v1alpha1\nsteps:\n  - run: [echo, "{{context.cwd.extra}}"]\n`,
+      ),
+    ).rejects.toThrow(/unknown context path 'cwd\.extra'/);
+
+    await expect(
+      parseWorkflowText(
+        "ctx-bad",
+        `version: v1alpha1\nsteps:\n  - run: [echo, "{{context.nonsense}}"]\n`,
+      ),
+    ).rejects.toThrow(/unknown context path 'nonsense'/);
   });
 
   test("context.error is recovery-only", async () => {

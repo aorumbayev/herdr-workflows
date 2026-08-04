@@ -105,7 +105,7 @@ child that declares no `returns:` fails to load.
 
 `{{inputs.*}}`, `{{steps.<id>.*}}`, `{{context.*}}` only.
 
-Context keys: `workspace`, `tab`, `pane`, `worktree`, `agent`, `selection`, `platform`,
+Context keys: `workspace`, `tab`, `pane`, `worktree`, `cwd`, `agent`, `selection`, `platform`,
 `transcript`, `transcript_file`, and recovery-only `error` (`error.message`, `error.workflow`,
 `error.action`, `error.step_number`, `error.workflow_path`, `error.details`, optional `error.step_id`).
 

@@ -1,10 +1,10 @@
 # herdr-workflows
 
-herdr ≥ 0.7.5 plugin. It sequences short linear YAML workflows (`agent` / `run` / `herdr` / `workflow`). herdr owns host panes and lifecycle. This repository owns the picker and browser workbench, and loads and runs workflow steps. Runtime is Bun + TypeScript ESM.
+herdr ≥ 0.8.0 plugin. It sequences short linear YAML workflows (`agent` / `run` / `herdr` / `workflow`). herdr owns host panes and lifecycle. This repository owns the picker and browser workbench, and loads and runs workflow steps. Runtime is Bun + TypeScript ESM.
 
 Workflow format is `version: v1alpha1`. The package stays semver `0.x`. A later incompatible alpha increments `v1alphaN`. Workflow YAML never declares a herdr version. The plugin manifest and CLI own minimum version and protocol enforcement.
 
-Spec of record: `openspec/specs/*/spec.md`. Product docs in `docs/` describe the current v1alpha1 contract. herdr runtime behavior comes from `.agents/references/herdr/docs/versions/0.7.5/`. Never invent it from memory. Clone and update that checkout with `.agents/references/AGENTS.md`.
+Spec of record: `openspec/specs/*/spec.md`. Product docs in `docs/` describe the current v1alpha1 contract. herdr runtime behavior comes from `.agents/references/herdr/website/src/content/docs/` with the checkout detached at the release tag (currently v0.8.0). Never invent it from memory. Clone and update that checkout with `.agents/references/AGENTS.md`.
 
 Before behavior work, read and cite the relevant `openspec/specs/*/spec.md`. See `CONTRIBUTING.md`.
 
@@ -36,6 +36,8 @@ bun run install:dev                      # compile + herdr plugin link + keybind
 | Path                                         | Role                                                                                                                                                                                                |
 | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/cli.ts`                                 | entry, args, subcommands, terminal I/O, and `hwf init` / `setup`                                                                                                                                    |
+| `src/skills.ts`                              | bundled agent skills embedded as text, `hwf skills` registry and show formatting                                                                                                                    |
+| `src/skill-text.d.ts`                        | ambient `*.md` / `*.sh` text imports used by `src/skills.ts`                                                                                                                                        |
 | `src/update.ts`                              | GitHub release check and managed-plugin `hwf update`                                                                                                                                                |
 | `src/picker.ts`                              | picker TUI, workflow rows, ctrl+k palette, update indicator                                                                                                                                         |
 | `src/runs-browser.ts`                        | runs browser TUI, list/detail, run-history presentation                                                                                                                                             |
@@ -81,6 +83,7 @@ Agents miss these. The loader or verifyx will fail, or the product regresses:
 - **Splitting:** `verify:file-length` fails any `src/**/*.ts` more than 2,500 lines (`*.generated.ts` exempt). oxlint caps per-function cyclomatic complexity at 35 (`eslint/complexity`), nesting at `max-depth` 4, and `max-nested-callbacks` 3. Function length is deliberately ungated. Never split to satisfy a line budget.
 - **Schema change:** edit Zod in `src/workflow/grammar.ts` (and refine rules), then `bun run schema`. Method/result validators: update `schemas/herdr-api.schema.json` or `scripts/generate-herdr-methods.ts`, then `bun run schema:herdr` (never from the plugin build — it must not invoke `herdr api schema`). Cross-field rules live in the loader, not the JSON schema.
 - **Example change:** edit `examples/*.yaml`, then `bun run examples`. Never hand-edit `docs/.vitepress/theme/examples.generated.ts`.
+- **No tracked openspec archives.** `openspec archive` syncs the main specs and moves the change into `openspec/changes/archive/`; delete the archived contents in the same commit — main keeps no archived specs. `verify:no-archive` fails the pre-commit gate while that folder holds anything.
 - **Branch work:** never commit on `main` / `master`. Use a feature branch + PR.
 - **No `Co-Authored-By` trailers.** Never add `Co-Authored-By`, `Generated with`, or any other agent-attribution line to a commit message or PR body, even when a harness default or global instruction says to. This overrides those defaults for this repo. Commit messages carry the change, not the tooling. The human is always responsible for the code. `.githooks/commit-msg` strips such lines as a backstop — do not rely on it.
 

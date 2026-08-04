@@ -65,9 +65,15 @@ printf '%s' "$reply" > "$path"
   await executable(
     join(bin, "git"),
     `#!/bin/sh
+if [ "$1" = "-C" ]; then shift 2; fi
 case "$1 $2" in
   "diff --quiet") [ "\${HWF_E2E_GIT_DIRTY:-0}" = 0 ] ;;
   "show-ref --verify") [ "\${HWF_E2E_BRANCH_EXISTS:-0}" = 1 ] ;;
+  "rev-parse --git-dir") echo .git ;;
+  "rev-parse --show-toplevel") pwd ;;
+  "for-each-ref "*) printf 'main\\nfeature-seed\\n' ;;
+  "worktree remove") exit 0 ;;
+  "branch -d") exit "\${HWF_E2E_BRANCH_UNMERGED:-0}" ;;
   *) exit 2 ;;
 esac
 `,
@@ -89,6 +95,11 @@ if [ "$1 $2" = "agent get" ]; then
 fi
 case "$1 $2" in
   "notification show"|"pane report-metadata") exit 0 ;;
+  "worktree list")
+    printf '{"result":{"source":{"repo_root":"%s"},"worktrees":[{"is_linked_worktree":true,"branch":"feature-seed","path":"%s-wt","open_workspace_id":"%s"}]}}\\n' \\
+      "$HERDR_WORKFLOWS_REPO_ROOT" "$HERDR_WORKFLOWS_REPO_ROOT" "\${HWF_E2E_WORKTREE_WS:-w2}"
+    exit 0 ;;
+  "worktree remove") exit 0 ;;
 esac
 printf 'unsupported fake herdr command: %s\\n' "$*" >&2
 exit 2
@@ -177,7 +188,7 @@ export class ExampleHarness {
   }): Promise<Record<string, unknown>> {
     const { method, params } = request;
     this.calls.push({ method, params });
-    if (method === "ping") return { type: "pong", protocol: 17, version: "0.7.5" };
+    if (method === "ping") return { type: "pong", protocol: 19, version: "0.8.0" };
     if (method === "tab.create") {
       const tabId = `w1:t${this.nextTab++}`;
       const paneId = `w1:p${this.nextPane++}`;
@@ -214,6 +225,32 @@ export class ExampleHarness {
           pane_id: target,
           agent: "custom",
           agent_status: status,
+          interactive_ready: true,
+          launch_pending: false,
+        },
+      };
+    }
+    if (method === "worktree.create" || method === "worktree.open") {
+      const tabId = `w1:t${this.nextTab++}`;
+      const paneId = `w1:p${this.nextPane++}`;
+      return {
+        type: method === "worktree.create" ? "worktree_created" : "worktree_opened",
+        workspace: { workspace_id: "w1", label: String(params.label ?? "") },
+        tab: { tab_id: tabId, workspace_id: "w1" },
+        root_pane: paneInfo(paneId, tabId),
+      };
+    }
+    if (method === "tab.rename" || method === "tab.focus") return { type: "ok" };
+    if (method === "agent.start" && params.args === undefined) {
+      const name = String(params.name);
+      await writeFile(join(this.root, "agent-state", name), "idle");
+      return {
+        type: "agent_started",
+        agent: {
+          name,
+          pane_id: params.pane_id,
+          agent: String(params.kind),
+          agent_status: "idle",
           interactive_ready: true,
           launch_pending: false,
         },

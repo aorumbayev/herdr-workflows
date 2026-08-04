@@ -57,6 +57,8 @@ Plain `k` still types into the filter.
 | `hwf picker`                  | Runs the picker in the current terminal                           |
 | `hwf web [route]`             | Starts the workbench                                              |
 | `hwf update`                  | Installs the latest published release                             |
+| `hwf skills list`             | Lists the bundled agent skills                                    |
+| `hwf skills show <name>`      | Prints one bundled skill with its reference files                 |
 | `hwf help [command]`          | Shows help for one command or all of them                         |
 | `hwf --version`               | Prints the installed plugin version                               |
 

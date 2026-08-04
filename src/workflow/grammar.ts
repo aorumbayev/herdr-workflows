@@ -423,6 +423,7 @@ export function buildTemplateNamespace(opts: {
       tab: opts.ctx.tabId ?? "",
       pane: opts.ctx.paneId ?? "",
       worktree: opts.ctx.worktreePath ?? "",
+      cwd: opts.ctx.cwd,
       agent: opts.agent ?? "",
       selection: sanitizeDisplay(opts.ctx.selection),
       platform: platformName(),

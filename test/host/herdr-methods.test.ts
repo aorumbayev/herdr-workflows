@@ -7,6 +7,7 @@ import {
   METHOD_RESULT_VARIANTS,
   MIN_HERDR_VERSION,
   RESULT_DOT_PATHS,
+  validateHerdrInvocation,
   validateMethodParams,
 } from "../../src/host";
 
@@ -25,6 +26,12 @@ describe("herdr method validators", () => {
 
   test("rejects missing required param", () => {
     expect(validateMethodParams("pane.split", {})).toMatch(/missing required param 'direction'/);
+  });
+
+  test("move_block without its optional anchor passes invocation validation", () => {
+    expect(validateHerdrInvocation("workspace.move_block", { workspace_ids: ["w1"] })).toBe(
+      undefined,
+    );
   });
 
   test("denied method returns its reason", () => {
@@ -101,7 +108,7 @@ describe("herdr method validators", () => {
   });
 
   test("per-method result paths stay method-scoped", () => {
-    expect(HERDR_PROTOCOL).toBe(17);
+    expect(HERDR_PROTOCOL).toBe(19);
     expect(MIN_HERDR_VERSION).toBe(manifest.min_herdr_version);
     const notify = METHOD_RESULT_VARIANTS.get("notification.show");
     expect(notify?.map((v) => v.type)).toEqual(["notification_show"]);

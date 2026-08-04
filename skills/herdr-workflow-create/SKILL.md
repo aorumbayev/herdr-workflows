@@ -158,4 +158,4 @@ version. If a file needs one before its first workbench save, pin the tag:
 13. **No `out:`, `wait:`, `in:`, `use:`, `with:`, `for:`/`as:`, `allow_fail`, `on_error`, dotted method keys, flat `{name}`.**
 14. **Transcript / identity context** unavailable → preflight failure.
 
-Out of scope: parallelism, loops, external engines. OS branching uses `{{context.platform}}` + `when:`. Windows runs through WSL2. Needs herdr ≥ 0.7.5.
+Out of scope: parallelism, loops, external engines. OS branching uses `{{context.platform}}` + `when:`. Windows runs through WSL2. Needs herdr ≥ 0.8.0.

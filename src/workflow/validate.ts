@@ -53,6 +53,7 @@ const CONTEXT_STRING_FIELDS = new Set([
   "tab",
   "pane",
   "worktree",
+  "cwd",
   "agent",
   "selection",
   "platform",

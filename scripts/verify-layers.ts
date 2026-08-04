@@ -103,6 +103,7 @@ function moduleOf(file: string): Module | undefined {
     return "host";
   }
   if (file === "src/context.ts") return "context";
+  if (file === "src/skills.ts") return "cli";
   if (ENTRIES.cli.has(file)) return "cli";
   return undefined;
 }

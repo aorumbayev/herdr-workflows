@@ -102,6 +102,7 @@ const runStepRecordSchema = stepIdentitySchema.and(
       "failed",
       "interrupted",
     ]),
+    truncated: z.literal(true).optional(),
     failure: failureFactSchema.optional(),
     explanation: z.string().optional(),
   }),
@@ -599,7 +600,8 @@ export function presentRunDetail(detail: RunDetail): RunDetailBlock[] {
     Boolean(detail.failure_explanation) && !detail.steps.some((s) => s.explanation);
   for (const step of detail.steps) {
     const depth = Math.max(0, step.workflow_path.length - 1);
-    const outcome = step.outcome ?? (step.active ? "running" : "");
+    const base = step.outcome ?? (step.active ? "running" : "");
+    const outcome = step.truncated === true ? `${base} (truncated read)` : base;
     blocks.push({
       kind: "step",
       depth,
@@ -1081,7 +1083,7 @@ type RunFinalStatus = RunTerminalStatus;
 
 /** Narrow outcome shape the recorder persists — avoids importing the engine context module. */
 type RecorderOutcome =
-  | { ok: true }
+  | { ok: true; truncated?: boolean }
   | {
       ok: false;
       error: string;
@@ -1192,6 +1194,7 @@ function makeRecorder(
         ...stepBase(scope, step, ordinal, total, label, phase),
         finished_at: new Date().toISOString(),
         outcome: kind,
+        ...(outcome?.ok === true && outcome.truncated === true ? { truncated: true } : {}),
         ...(failed
           ? {
               failure: failureFact(step, outcome),

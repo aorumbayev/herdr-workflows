@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ExampleHarness, type RpcCall, type RunResult } from "./examples-harness";
@@ -129,6 +130,77 @@ describe("shipped examples through isolated CLI and fake Herdr", () => {
           ).toBe(true);
         }
       }
+    }
+  });
+
+  test("worktree create runs the full layout with a per-pane agent name", async () => {
+    const calls = successful(
+      await harness.run("worktree", { mode: "create", ref: "main", branch: "feat-x" }),
+    );
+    const created = calls.find((call) => call.method === "worktree.create");
+    expect(created?.params).toMatchObject({
+      cwd: realpathSync(harness.repoRoot),
+      branch: "feat-x",
+      base: "main",
+      label: "feat-x",
+      focus: true,
+    });
+    const rename = calls.find((call) => call.method === "tab.rename");
+    expect(rename?.params.label).toBe("work");
+    const started = calls.find((call) => call.method === "agent.start");
+    expect(started?.params.kind).toBe("claude");
+    expect(started?.params.name).toBe(
+      `claude-${String(started?.params.pane_id)}`.replace(/[^A-Za-z0-9-]/g, "-"),
+    );
+    expect(calls.some((call) => call.method === "tab.focus")).toBe(true);
+    expect(notifications(calls).map((params) => params.title)).toEqual(["Worktree ready"]);
+  });
+
+  test("worktree open targets an existing branch through the same layout", async () => {
+    const calls = successful(
+      await harness.run("worktree", { mode: "open", worktree: "feature-seed" }),
+    );
+    const opened = calls.find((call) => call.method === "worktree.open");
+    expect(opened?.params).toMatchObject({
+      cwd: realpathSync(harness.repoRoot),
+      branch: "feature-seed",
+      label: "feature-seed",
+      focus: true,
+    });
+    expect(calls.some((call) => call.method === "worktree.create")).toBe(false);
+    expect(notifications(calls).map((params) => params.title)).toEqual(["Worktree ready"]);
+  });
+
+  test("worktree delete removes the checkout and reports the branch outcome", async () => {
+    const scenarios: { scope: string; env: Record<string, string>; body: string }[] = [
+      {
+        scope: "worktree-only",
+        env: {},
+        body: "removed the feature-seed worktree; branch kept",
+      },
+      {
+        scope: "worktree-and-branch",
+        env: {},
+        body: "removed the feature-seed worktree and its branch",
+      },
+      {
+        scope: "worktree-and-branch",
+        env: { HWF_E2E_BRANCH_UNMERGED: "1" },
+        body: "removed the feature-seed worktree; branch kept, it is not merged (git branch -D feature-seed)",
+      },
+    ];
+    for (const scenario of scenarios) {
+      const calls = successful(
+        await harness.run(
+          "worktree",
+          { mode: "delete", worktree: "feature-seed", scope: scenario.scope },
+          scenario.env,
+        ),
+      );
+      expect(calls.some((call) => call.method === "worktree.create")).toBe(false);
+      const shown = notifications(calls);
+      expect(shown.map((params) => params.title)).toEqual(["Worktree deleted"]);
+      expect(shown[0]?.body).toBe(scenario.body);
     }
   });
 });

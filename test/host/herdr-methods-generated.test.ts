@@ -12,6 +12,22 @@ describe("herdr methods generated module", () => {
     }
   });
 
+  test("optional position anchor stays optional instead of auto-requiring", () => {
+    expect(
+      focusPolicyForMethod({
+        method: "workspace.move_block",
+        params: {
+          required: ["workspace_ids"],
+          properties: {
+            workspace_ids: { kinds: ["array"], nullable: false },
+            before_workspace_id: { kinds: ["string"], nullable: true },
+          },
+          additionalProperties: false,
+        },
+      }),
+    ).toEqual({ kind: "none" });
+  });
+
   test("regenerated method with unclassified optional selectors fails generation", () => {
     expect(() =>
       focusPolicyForMethod({

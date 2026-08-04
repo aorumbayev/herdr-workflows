@@ -249,6 +249,7 @@ const METHOD_RESULT_TYPE_OVERRIDES: Record<string, string[]> = {
   "tab.get": ["tab_info"],
   "agent.get": ["agent_info"],
   "workspace.create": ["workspace_created"],
+  "workspace.move_block": ["workspace_list"],
   "tab.create": ["tab_created"],
   "worktree.create": ["worktree_created"],
   "worktree.open": ["worktree_opened"],
@@ -389,6 +390,9 @@ const SELECTOR_PARAM = /(?:^target$|_id$)/;
 /** Optional list/filter scopes — omission must not become a focus grab. */
 const FOCUS_FILTER_OPT_OUT = new Set(["pane.list", "tab.list"]);
 
+/** Optional position anchors Herdr resolves deterministically when omitted (append), never from focus. */
+const FOCUS_OPTIONAL_ANCHOR = new Set(["workspace.move_block"]);
+
 /**
  * Multi-selector or non-_id scope pairs that cannot be auto-derived as a single
  * required field. A regenerated method with optional selectors not covered here
@@ -430,6 +434,7 @@ function optionalSelectors(params: MethodParams): string[] {
 
 export function focusPolicyForMethod(method: GeneratedMethod): FocusPolicyEntry {
   if (FOCUS_FILTER_OPT_OUT.has(method.method)) return { kind: "filter" };
+  if (FOCUS_OPTIONAL_ANCHOR.has(method.method)) return { kind: "none" };
   if (FOCUS_SPECIAL.has(method.method)) {
     if (method.method === "pane.swap") return { kind: "swap" };
     if (method.method === "pane.move") return { kind: "move" };

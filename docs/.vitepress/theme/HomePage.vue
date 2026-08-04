@@ -33,7 +33,7 @@ const initCmd = "hwf init";
         </div>
         <p class="note">
           Needs
-          <a href="https://herdr.dev" target="_blank" rel="noopener noreferrer">herdr</a> ≥ 0.7.5
+          <a href="https://herdr.dev" target="_blank" rel="noopener noreferrer">herdr</a> ≥ 0.8.0
         </p>
       </div>
       <!-- object, not img: the chapter buttons inside the SVG only work when its script runs -->
@@ -124,9 +124,9 @@ steps:
       <p class="kicker">from the herd</p>
       <h2>Ready-made workflows</h2>
       <p class="section-lede">
-        <strong>branch-check</strong>, <strong>handoff</strong>, and
-        <strong>prompt-enhance</strong> ship with the plugin. Copy one command, read what it
-        contains, and it's yours.
+        <strong>branch-check</strong>, <strong>handoff</strong>, <strong>prompt-enhance</strong>,
+        and <strong>worktree</strong> ship with the plugin. Copy one command, read what it contains,
+        and it's yours.
       </p>
       <div class="actions">
         <a class="btn btn-primary" :href="withBase('/examples')">Browse examples</a>

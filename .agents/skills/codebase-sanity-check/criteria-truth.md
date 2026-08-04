@@ -61,7 +61,6 @@ examples stay unchanged.
 
 - A requirement enforced by a Zod schema rather than an explicit branch. The schema is the
   enforcing site
-- An archived change under `openspec/changes/archive/`. Archives record history
 
 ## 3. Generated artifacts
 

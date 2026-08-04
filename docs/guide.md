@@ -142,7 +142,7 @@ Templates read from exactly three places:
 
 A template that fills a whole YAML value keeps that value's type, so an object stays an object. A template inside a longer string renders as text. Anything else — a typo in a path, a forward reference, a reference to a background step that produces no result — fails when the file loads, not halfway through your run.
 
-Useful context keys: `pane`, `tab`, `workspace`, `worktree`, `agent`, `selection`, `platform`. See [Reference](/reference#context) for all of them.
+Useful context keys: `pane`, `tab`, `workspace`, `worktree`, `cwd`, `agent`, `selection`, `platform`. See [Reference](/reference#context) for all of them.
 
 ## Ask questions before the run
 
@@ -284,10 +284,16 @@ It has to exit 0, print something, finish inside 30 seconds, and produce at most
 
 ## Build with an agent instead
 
-The `herdr-workflow-create` skill interviews you, writes the YAML, keeps the workbench canvas in sync, and validates the file with this plugin's own loader before saving:
+The `herdr-workflow-create` skill interviews you, writes the YAML, keeps the workbench canvas in sync, and validates the file with this plugin's own loader before saving. It ships inside the CLI — hand its text to your agent:
 
 ```bash
-npx -y skills add aorumbayev/herdr-workflows --skill herdr-workflow-create -y
+hwf skills show herdr-workflow-create
+```
+
+To bring existing workflows up to date with a newer herdr, the sibling skill walks the version gates and repairs the known breakage classes:
+
+```bash
+hwf skills show herdr-workflow-upgrade
 ```
 
 ## Next

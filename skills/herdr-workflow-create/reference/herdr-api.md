@@ -11,7 +11,7 @@ Dotted YAML keys are not actions. Params are never autofilled from UI focus.
 
 ## Allowed methods and the selector each one requires
 
-This is the complete allowlist (58 methods). Anything **not** on this list fails at load —
+This is the complete allowlist (59 methods, herdr 0.8.0 schema, protocol 19). Anything **not** on this list fails at load —
 `plugin.*`, `server.*`, `popup.*`, `events.*`, `session.snapshot`, `integration.*`,
 `pane.graphics.*`, `agent.view.*`, `pane.report_agent*`, `pane.release_agent` and
 `pane.clear_agent_authority` are all denied even though their namespace prefixes look allowed.
@@ -26,7 +26,8 @@ Selector required in `params:`
   `pane.send_input` `pane.send_keys` `pane.send_text` `pane.wait_for_output` `ping` `tab.close`
   `tab.focus` `tab.get` `tab.list` `tab.move` `tab.rename` `workspace.close` `workspace.create`
   `workspace.focus` `workspace.get` `workspace.list` `workspace.move` `workspace.rename`
-  `workspace.report_metadata` `worktree.remove`
+  `workspace.report_metadata` `workspace.move_block` (omitting its optional `before_workspace_id`
+  moves the block to the end) `worktree.remove`
 - **`pane_id`** — `pane.edges` `pane.focus_direction` `pane.layout` `pane.neighbor`
   `pane.process_info` `pane.resize` `pane.zoom`
 - **`target_pane_id`** — `pane.split` (**not** `pane_id`; `pane_id` is not even a valid param there)
@@ -46,7 +47,14 @@ load. Selector values must be non-null and non-empty at runtime. A whole-value t
 A template on an unrelated param does not satisfy the requirement.
 
 Usual selector sources: `{{context.workspace}}`, `{{context.tab}}`, `{{context.pane}}`,
-`{{context.worktree}}`, `{{context.agent}}`.
+`{{context.worktree}}`, `{{context.agent}}`. Worktree actions that take `cwd` accept
+`cwd: "{{context.cwd}}"` — the invocation's project root, always set.
+
+## Agent names
+
+`agent.start` requires `name`, and herdr enforces session-wide uniqueness, so a hardcoded name
+collides the second time a workflow runs. Derive it from the target pane id in a prior `run:` step,
+e.g. `printf %s "kind-$(printf %s "$PANE" | tr -c 'A-Za-z0-9' '-')"`, then pass `name: "{{steps.<id>.stdout}}"`.
 
 ## Confirming param names against the running build
 
@@ -55,7 +63,7 @@ This skill is installed outside the herdr-workflows checkout, so its `src/`, `do
 
 1. The workbench: `GET /api/methods` with the `x-hwf-token` header, on the `hwf web` instance you
    already started. It returns `{methods: [{method, allowed, reason?, params:{required, properties}}]}`
-   for all 89 known methods. Use it as the authority for **param names**. Use the endpoint when the
+   for all 90 known methods. Use it as the authority for **param names**. Use the endpoint when the
    table above omits a method. The table covers every method a workflow normally uses. The selector
    rules above are an extra load-time check and do not appear in the payload.
 2. `scripts/validate.sh` — its error text names the exact missing selector, e.g.
