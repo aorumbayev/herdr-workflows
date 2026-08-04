@@ -284,10 +284,16 @@ It has to exit 0, print something, finish inside 30 seconds, and produce at most
 
 ## Build with an agent instead
 
-The `herdr-workflow-create` skill interviews you, writes the YAML, keeps the workbench canvas in sync, and validates the file with this plugin's own loader before saving:
+The `herdr-workflow-create` skill interviews you, writes the YAML, keeps the workbench canvas in sync, and validates the file with this plugin's own loader before saving. It ships inside the CLI — hand its text to your agent:
 
 ```bash
-npx -y skills add aorumbayev/herdr-workflows --skill herdr-workflow-create -y
+hwf skills show herdr-workflow-create
+```
+
+To bring existing workflows up to date with a newer herdr, the sibling skill walks the version gates and repairs the known breakage classes:
+
+```bash
+hwf skills show herdr-workflow-upgrade
 ```
 
 ## Next

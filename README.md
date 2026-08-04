@@ -92,24 +92,27 @@ Run workflows from the picker or with `hwf run`. Runs need real herdr panes. The
 
 ## Build workflows with your agent
 
-`skills/herdr-workflow-create` teaches an agent to write v1alpha1 workflows, keep the workbench canvas in sync, and validate a file before saving it:
+Two agent skills ship inside the CLI, so there is no separate install step — an agent with `hwf` on `PATH` reads a skill through `hwf skills show`:
+
+- `herdr-workflow-create` — interviews you, writes v1alpha1 YAML, keeps the workbench canvas in sync, and validates through the real loader before saving
+- `herdr-workflow-upgrade` — brings a repo's existing workflows up to date with the latest herdr, behind version gates and a load oracle
 
 ```bash
-npx -y skills add aorumbayev/herdr-workflows --skill herdr-workflow-create -y
+hwf skills list
+hwf skills show herdr-workflow-create
 ```
 
 Or paste this to your agent and let it do the setup:
 
 ```
-Install the herdr-workflows toolkit so you can build workflows for me:
+Set up the herdr-workflows toolkit so you can build workflows for me:
 
 1. If `hwf` is not on PATH: herdr plugin install aorumbayev/herdr-workflows
-2. Install the skill for this agent:
-   npx -y skills add aorumbayev/herdr-workflows --skill herdr-workflow-create -y
-3. Read the installed herdr-workflow-create/SKILL.md so you know the authoring workflow.
-4. In this repo: run `hwf init` if .hwf/config.yaml is missing, then start the workbench in
+2. Read the bundled authoring skill with `hwf skills show herdr-workflow-create` and follow
+   the authoring workflow it describes.
+3. In this repo: run `hwf init` if .hwf/config.yaml is missing, then start the workbench in
    the background with `hwf web --no-open` and give me the URL it prints.
-5. Build a small test workflow — one `run: [git, status, --short]` step — save it, send me
+4. Build a small test workflow — one `run: [git, status, --short]` step — save it, send me
    <url>#w=repo:<name>, and confirm the canvas draws it. Then interview me for the real one.
 ```
 
