@@ -59,7 +59,7 @@ onBeforeUnmount(() => {
       </p>
       <div class="hwf-actions">
         <button type="button" class="hwf-copy" @click="copy(card)">
-          {{ copied === card.name ? "copied ✓" : "copy import command" }}
+          {{ copied === card.name ? "copied" : "copy" }}
         </button>
         <button type="button" class="hwf-peek" @click="show(card.name)">show YAML</button>
       </div>
