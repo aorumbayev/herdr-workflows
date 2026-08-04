@@ -117,6 +117,39 @@ steps:
     if (first.ok) first.recorder.dispose();
   });
 
+  test("failure before any step keeps the explanation in run detail", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - run: [printf, hi]
+`,
+    });
+    const created = await createRunRecorder({
+      workflow: await loadWorkflow("m", root, baseConfig),
+      checkoutRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const { recorder } = created;
+    await recorder.finished("failed", {
+      error: "input 'ref': missing launch payload domain snapshot",
+    });
+    const listed = await listRuns({ checkout_root: await realpath(root) });
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    const { detail, blocks } = await runDetail(listed.runs[0]!.id);
+    expect(detail.kind).toBe("snapshot");
+    if (detail.kind !== "snapshot") return;
+    expect(detail.status).toBe("failed");
+    expect(detail.steps).toEqual([]);
+    expect(detail.failure_explanation).toBe("input 'ref': missing launch payload domain snapshot");
+    expect(blocks).toContainEqual({
+      kind: "error",
+      text: "input 'ref': missing launch payload domain snapshot",
+    });
+    recorder.dispose();
+  });
+
   test("finished is idempotent", async () => {
     const root = await repoWith({
       m: `version: v1alpha1

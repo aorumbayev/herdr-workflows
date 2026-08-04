@@ -119,6 +119,31 @@ describe("InputSession", () => {
     });
   });
 
+  test("supplied launch payload domains survive answering earlier inputs", async () => {
+    const specs: InputSpec[] = [
+      { name: "mode", type: "choice", options: ["create", "delete"] },
+      {
+        name: "ref",
+        type: "choice",
+        dynamicOptions: { run: ["sh", "-c", "echo main"] },
+        when: [{ kind: "eq", path: "inputs.mode", value: "create", negate: false }],
+      },
+    ];
+    const session = createInputSession({
+      specs,
+      file: "x.yaml",
+      config: { profiles: {}, transcripts: {} },
+      repoRoot: await tempRoot(),
+      domains: { ref: ["main"] },
+      resolveDynamic: false,
+    });
+    expect(await session.completeFromProvided({ mode: "create", ref: "main" })).toEqual({
+      ok: true,
+      values: { mode: "create", ref: "main" },
+      domains: { ref: ["main"] },
+    });
+  });
+
   test("cancelPending ignores late dynamic option resolution", async () => {
     const root = await tempRoot();
     const script = join(root, "slow.sh");
