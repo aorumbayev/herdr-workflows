@@ -26,13 +26,13 @@ Selector required in `params:`
   `pane.send_input` `pane.send_keys` `pane.send_text` `pane.wait_for_output` `ping` `tab.close`
   `tab.focus` `tab.get` `tab.list` `tab.move` `tab.rename` `workspace.close` `workspace.create`
   `workspace.focus` `workspace.get` `workspace.list` `workspace.move` `workspace.rename`
-  `workspace.report_metadata` `worktree.remove`
+  `workspace.report_metadata` `workspace.move_block` (omitting its optional `before_workspace_id`
+  moves the block to the end) `worktree.remove`
 - **`pane_id`** — `pane.edges` `pane.focus_direction` `pane.layout` `pane.neighbor`
   `pane.process_info` `pane.resize` `pane.zoom`
 - **`target_pane_id`** — `pane.split` (**not** `pane_id`; `pane_id` is not even a valid param there)
 - **`caller_pane_id`** — `pane.current` (**not** `pane_id`)
 - **`workspace_id`** — `tab.create`
-- **`before_workspace_id`** — `workspace.move_block`
 - **exactly one of `workspace_id` | `cwd`** — `worktree.create` `worktree.list` `worktree.open`
 - **exactly one of `workspace_id` | `tab_id`** — `layout.apply`
 - **exactly one of `tab_id` | `pane_id`** — `layout.set_split_ratio`

@@ -7,6 +7,7 @@ import {
   METHOD_RESULT_VARIANTS,
   MIN_HERDR_VERSION,
   RESULT_DOT_PATHS,
+  validateHerdrInvocation,
   validateMethodParams,
 } from "../../src/host";
 
@@ -25,6 +26,12 @@ describe("herdr method validators", () => {
 
   test("rejects missing required param", () => {
     expect(validateMethodParams("pane.split", {})).toMatch(/missing required param 'direction'/);
+  });
+
+  test("move_block without its optional anchor passes invocation validation", () => {
+    expect(validateHerdrInvocation("workspace.move_block", { workspace_ids: ["w1"] })).toBe(
+      undefined,
+    );
   });
 
   test("denied method returns its reason", () => {
