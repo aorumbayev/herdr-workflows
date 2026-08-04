@@ -161,3 +161,27 @@ steps:
     run: [bun, run, lint, "{{inputs.scope}}"]
     when: '{{inputs.deep}} == "yes"'
 ```
+
+## Capture before jq
+
+A pipeline reports only the last command's exit status, and `jq` exits 0 on empty input, so
+`herdr … | jq` hides a herdr failure behind empty output. Capture the output into a variable
+first, in `run:` steps and in dynamic-choice option commands: a herdr failure then aborts the
+command and its stderr reaches the user.
+
+```yaml
+version: v1alpha1
+inputs:
+  worktree:
+    type: choice
+    description: Which existing worktree
+    options:
+      run:
+        [
+          sh,
+          -c,
+          'set -eu; list=$(herdr worktree list --cwd . --json); printf %s "$list" | jq -r ''.result.worktrees[]? | select(.is_linked_worktree) | .branch''',
+        ]
+steps:
+  - run: [echo, "{{inputs.worktree}}"]
+```
