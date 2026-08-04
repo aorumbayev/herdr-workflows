@@ -166,4 +166,34 @@ describe("run snapshot schema", () => {
       }),
     ).toBe(false);
   });
+
+  test("truncated step fact is accepted only as literal true", () => {
+    const now = new Date().toISOString();
+    const withTruncated = (truncated: unknown) => ({
+      version: 1,
+      id: allocateRunId(),
+      workflow: "demo",
+      source: "repo",
+      checkout_root: "/repo/a",
+      started_at: now,
+      heartbeat_at: now,
+      steps: [
+        {
+          phase: "main",
+          workflow: "demo",
+          workflow_path: ["demo"],
+          ordinal: 1,
+          total: 1,
+          action: "herdr",
+          label: "herdr pane.read",
+          finished_at: now,
+          outcome: "succeeded",
+          truncated,
+        },
+      ],
+    });
+    expect(isSnapshot(withTruncated(true))).toBe(true);
+    expect(isSnapshot(withTruncated(false))).toBe(false);
+    expect(isSnapshot(withTruncated("yes"))).toBe(false);
+  });
 });

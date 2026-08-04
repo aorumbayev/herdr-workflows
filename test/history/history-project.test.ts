@@ -136,6 +136,34 @@ describe("presentRunDetail", () => {
     expect(explained.some((b) => b.kind === "step" && b.explanation === "step boom")).toBe(true);
   });
 
+  test("truncated read marks the step outcome in both renderers", () => {
+    const now = new Date().toISOString();
+    const detail = snapshot({
+      id: "550e8400-e29b-41d4-a716-446655440777",
+      workflow: "reads",
+      steps: [
+        {
+          phase: "main",
+          workflow: "reads",
+          workflow_path: ["reads"],
+          ordinal: 1,
+          total: 1,
+          action: "herdr",
+          label: "herdr pane.read",
+          started_at: now,
+          finished_at: now,
+          outcome: "succeeded",
+          truncated: true,
+        },
+      ],
+    });
+    const blocks = presentRunDetail(detail);
+    const step = blocks.find((b) => b.kind === "step");
+    expect(step?.kind === "step" ? step.outcome : "").toBe("succeeded (truncated read)");
+    expect(formatRunDetailLines(blocks, 120).join("\n")).toContain("truncated read");
+    expect(webTexts(blocks).join("\n")).toContain("truncated read");
+  });
+
   test.each([
     {
       name: "stale",

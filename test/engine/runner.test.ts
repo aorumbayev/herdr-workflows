@@ -1740,6 +1740,95 @@ steps:
     expect(closed).toEqual([]);
   });
 
+  // Pins herdr 0.8.0 (#1899): API close of a workspace's last tab closes the workspace.
+  // Decided knowledge pin only — the engine has no guard for workspace-removing closes.
+  test("close that removes a workspace's last tab keeps the succeeded outcome", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: summarize
+    using: claude
+    pane: { open: tab, close: success }
+`,
+    });
+    const { deps } = mockDeps();
+    const baseCall = deps.herdrCall;
+    const workspaces = new Map<string, Set<string>>([
+      ["w1", new Set(["w1:t1"])],
+      ["w9", new Set(["w9:t1"])],
+    ]);
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: {
+        ...deps,
+        ...fastClock(),
+        herdrCall: async (method, params = {}) => {
+          if (method === "tab.create") {
+            return {
+              type: "tab_created",
+              tab: { tab_id: "w9:t1", workspace_id: "w9" },
+              root_pane: { pane_id: "w9:p1", tab_id: "w9:t1", workspace_id: "w9" },
+            };
+          }
+          return baseCall(method, params);
+        },
+        paneClose: async (paneId) => {
+          expect(paneId).toBe("w9:p1");
+          const tabs = workspaces.get("w9");
+          tabs?.delete("w9:t1");
+          if (tabs?.size === 0) workspaces.delete("w9");
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(workspaces.has("w9")).toBe(false);
+    const snaps = await readSnapshots();
+    expect(snaps[0]?.steps.map((s) => s.outcome)).toEqual(["succeeded"]);
+  });
+
+  test("herdr read reporting truncation records a truncated step outcome", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: peek
+    herdr: pane.read
+    params: { pane_id: "w1:p1", source: recent }
+  - id: again
+    herdr: pane.read
+    params: { pane_id: "w1:p2", source: recent }
+`,
+    });
+    const { deps } = mockDeps();
+    const baseCall = deps.herdrCall;
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: {
+        ...deps,
+        herdrCall: async (method, params = {}) => {
+          if (method === "pane.read") {
+            const paneId = String(params.pane_id);
+            return {
+              type: "pane_read",
+              read: { pane_id: paneId, text: "tail rows", truncated: paneId === "w1:p1" },
+            };
+          }
+          return baseCall(method, params);
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    const steps = (await readSnapshots())[0]?.steps ?? [];
+    expect(steps.find((s) => s.step_id === "peek")?.truncated).toBe(true);
+    expect(steps.find((s) => s.step_id === "again")?.truncated).toBeUndefined();
+  });
+
   test("stalled agent.prompt gets exactly one enter nudge then completes", async () => {
     const root = await repoWith({
       m: `version: v1alpha1
