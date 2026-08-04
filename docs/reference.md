@@ -72,7 +72,7 @@ Other fields: `cwd`, `env`, `pane`, `background`, `timeout`.
 
 Other fields: `params`, `retry`.
 
-Nothing is inferred. Every required or behavior-selecting parameter goes in `params:`, using the method's own field name. A method that would otherwise resolve a target from live UI focus is rejected without it. For herdr 0.7.5 that means, among others: `tab.create` needs `workspace_id`; `pane.split` needs `target_pane_id`; `layout.apply` and `layout.set_split_ratio` need exactly one of their paired selectors; `worktree.list`, `create`, and `open` need exactly one of `workspace_id` or `cwd`. `pane.list` and `tab.list` keep their filters optional.
+Nothing is inferred. Every required or behavior-selecting parameter goes in `params:`, using the method's own field name. A method that would otherwise resolve a target from live UI focus is rejected without it. For herdr 0.8.0 that means, among others: `tab.create` needs `workspace_id`; `pane.split` needs `target_pane_id`; `layout.apply` and `layout.set_split_ratio` need exactly one of their paired selectors; `worktree.list`, `create`, and `open` need exactly one of `workspace_id` or `cwd`. `pane.list` and `tab.list` keep their filters optional.
 
 Method names, parameter types, and result paths are checked against the vendored herdr API schema at load time. A denied method fails at load. Success gives you the method's complete result.
 
@@ -116,6 +116,8 @@ herdr decides the effective split, so an extreme `size` may be approximated rath
 Foreground panes take focus by default. Background panes don't. An agent step that omits the whole block gets a new tab in the invocation workspace.
 
 `close` applies only to agent panes this step created. `success` closes after the turn settles and the response is captured; `always` closes after any outcome. Omit it to keep the pane, which is what you want for diagnosis. `close` is invalid on commands and on background steps.
+
+Since herdr 0.8.0, closing the pane that hosts a workspace's last tab closes that workspace, matching the TUI. The runner does not guard against this: place a pane you want to survive `close` in a workspace that has another tab.
 
 `pane.open` may be a whole-value `{{inputs.name}}` reference when that input is an unconditional, closed, static choice whose every option is `tab`, `beside`, or `below`.
 

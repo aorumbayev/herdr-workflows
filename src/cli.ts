@@ -536,7 +536,7 @@ function presentUpdateResult(result: UpdateResult): void {
   }
 }
 
-/** Kinds `herdr agent start --kind` accepts (herdr 0.7.5 cli-reference). Native start stays authoritative. */
+/** Kinds `herdr agent start --kind` accepts (herdr 0.8.0 cli-reference). Native start stays authoritative. */
 const HERDR_AGENT_KINDS = [
   "pi",
   "claude",
@@ -567,6 +567,8 @@ const KNOWN_KINDS: { name: (typeof HERDR_AGENT_KINDS)[number]; bin: string }[] =
   { name: "codex", bin: "codex" },
   { name: "cursor", bin: "cursor" },
   { name: "opencode", bin: "opencode" },
+  { name: "grok", bin: "grok" },
+  { name: "agy", bin: "agy" },
 ];
 
 async function onPath(bin: string): Promise<boolean> {

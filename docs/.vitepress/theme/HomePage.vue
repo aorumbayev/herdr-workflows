@@ -33,7 +33,7 @@ const initCmd = "hwf init";
         </div>
         <p class="note">
           Needs
-          <a href="https://herdr.dev" target="_blank" rel="noopener noreferrer">herdr</a> ≥ 0.7.5
+          <a href="https://herdr.dev" target="_blank" rel="noopener noreferrer">herdr</a> ≥ 0.8.0
         </p>
       </div>
       <!-- object, not img: the chapter buttons inside the SVG only work when its script runs -->

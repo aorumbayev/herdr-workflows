@@ -540,7 +540,7 @@
         <rect x="56" y="536" width="616" height="52" rx="5" fill="#272d38" stroke="#88c0d0" stroke-opacity=".45"/>
         <text x="80" y="568" class="m"><tspan class="cy">$ </tspan>herdr plugin install aorumbayev/herdr-workflows</text>
       </g>
-      <text style="--d:60.2s" x="700" y="568" class="a v44 p">needs herdr ≥ 0.7.5 · MIT</text>
+      <text style="--d:60.2s" x="700" y="568" class="a v44 p">needs herdr ≥ 0.8.0 · MIT</text>
     </g>
 
     <!-- chapter nav -->

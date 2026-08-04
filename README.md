@@ -49,7 +49,7 @@ That workflow reads your diff, then opens Claude in a split pane and asks it to 
 
 ## Install
 
-You need [herdr](https://herdr.dev) 0.7.5 or later and [Bun](https://bun.sh) 1.3 or later. Linux and macOS. On Windows, install both herdr and this plugin inside WSL2.
+You need [herdr](https://herdr.dev) 0.8.0 or later and [Bun](https://bun.sh) 1.3 or later. Linux and macOS. On Windows, install both herdr and this plugin inside WSL2.
 
 ```bash
 herdr plugin install aorumbayev/herdr-workflows
