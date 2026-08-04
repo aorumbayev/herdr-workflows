@@ -27,8 +27,10 @@ git -C .agents/references/herdr switch --detach vX.Y.Z
   stale ref file or run `git -C .agents/references/herdr remote prune origin`, then fetch again.
 - The checkout may lack a `docs/versions/<new>` snapshot — upstream restructured versioned docs.
   Live docs at the tag are `website/src/content/docs`.
-- Record the previous floor tag too: `min_herdr_version` in `herdr-plugin.toml` names it
-  (`v<min_herdr_version>`). Both tags anchor every diff below.
+- Record the floor tag too: `min_herdr_version` in `herdr-plugin.toml` names it
+  (`v<min_herdr_version>`). Every diff below runs floor tag against release tag — never the
+  adjacent previous release, because every release between the floor and the new tag is also new
+  to this plugin.
 
 ## Phase 1: Classify the changelog
 
@@ -40,10 +42,11 @@ recall, and do not report an entry the file does not contain.
 ## Phase 2: Diff the wire protocol
 
 ```bash
-git -C .agents/references/herdr diff v<old> vX.Y.Z -- src/protocol/wire.rs
+git -C .agents/references/herdr diff v<floor> vX.Y.Z -- src/protocol/wire.rs
 ```
 
-Compare `PROTOCOL_VERSION` between the tags. The plugin pins `HERDR_PROTOCOL` in
+Run the diff — reading a file at whatever commit the checkout sits on is not evidence of what
+changed between the tags. Compare `PROTOCOL_VERSION` between the tags. The plugin pins `HERDR_PROTOCOL` in
 `src/herdr-methods.generated.ts` and `src/host.ts` compares it with strict equality against the
 `ping` response. Any protocol bump therefore means the plugin refuses every socket call
 (`herdr protocol mismatch: connected=…, pinned=…`) while CLI-mediated paths keep working. A bump is
@@ -54,7 +57,7 @@ an automatic break verdict. State it as such.
 Two independent reads, both required:
 
 1. Source diff in the checkout:
-   `git -C .agents/references/herdr diff v<old> vX.Y.Z -- src/api/schema.rs src/api/schema/`
+   `git -C .agents/references/herdr diff v<floor> vX.Y.Z -- src/api/schema.rs src/api/schema/`
 2. After installing the new herdr binary, capture `herdr api schema --json` and structurally diff
    it against `schemas/herdr-api.schema.json`: protocol number, added or removed method consts,
    added enum values (for example new `IntegrationTarget` agent kinds), changed param or result
@@ -117,4 +120,7 @@ Lead with the break verdict, then four sections:
 4. **Housekeeping** — org, license, docs churn. One line each.
 
 Every claim carries its evidence: the tag diff hunk, the schema diff entry, or the sandbox output
-line. A claim with no diff and no run does not go in the report.
+line. Cite files repo-relative with a line number (`src/host.ts:220`, not `host.ts:220`), and cite
+files inside the reference checkout with their full prefix
+(`.agents/references/herdr/CHANGELOG.md:5`), so every citation resolves from the repository root.
+A claim with no diff and no run does not go in the report.
