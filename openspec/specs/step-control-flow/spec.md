@@ -2,7 +2,6 @@
 
 ## Purpose
 Linear step execution with constrained conditions, retries, tolerated failure, and a single entry-workflow `on_failure` action.
-
 ## Requirements
 ### Requirement: Strictly linear workflow execution
 The runner MUST process steps in document order. It MUST NOT support loops, parallel groups, joins, dependencies, or scheduler queues. A background action MUST represent a launched process, not a branch. The runner MUST never join a background action for a result.
@@ -69,7 +68,7 @@ Only the directly invoked entry workflow's failure action MUST run. Failure acti
 
 `context.error` MUST contain required string `message`, required string `workflow`, required string `action` equal to `agent|run|herdr|workflow`, required integer `step_number`, required string-array `workflow_path` from entry to the workflow containing the failed action, optional string `step_id`, and required object `details`. A child failure MUST identify the child's internal failing action and local step number, rather than the parent's workflow action. Command details MUST contain available `stdout`, `stderr`, and `exit_code`. Placed failures MUST also contain available `pane_id`, `tab_id`, and `workspace_id`. Agent details MUST contain available `profile`, native kind or target, and pane identifiers. Herdr details MUST contain `method` and reason. Workflow details MUST contain the child workflow name. Recovery failure MUST be final and MUST NOT recurse. Parse, validation, and preflight failures MUST NOT invoke recovery. The original workflow MUST stay failed after recovery succeeds. Step-scoped recovery MUST NOT exist.
 
-Any unexpected Herdr transport loss after dispatching an in-flight agent, placed run, or Herdr RPC MUST count as uncertain coordination loss, because the protocol does not identify live handoff separately from other disconnects. The runner MUST stop, preserve created panes, skip recovery, and report that the underlying action may still be active. It MUST NOT replay, retry, or infer completion.
+Any unexpected Herdr transport loss after dispatching an in-flight agent, placed run, or Herdr RPC MUST count as uncertain coordination loss, because the protocol does not identify live handoff separately from other disconnects. Transport loss MUST be identified by the socket client's stable error codes, never by matching error message text. The runner MUST stop, preserve created panes, skip recovery, and report that the underlying action may still be active. It MUST NOT replay, retry, or infer completion.
 
 #### Scenario: Notification recovery
 - **WHEN** step two fails and `on_failure` calls `notification.show`
@@ -91,6 +90,14 @@ Any unexpected Herdr transport loss after dispatching an in-flight agent, placed
 - **WHEN** the Herdr transport closes while a workflow operation is in flight
 - **THEN** the run stops with coordination-interrupted status and does not execute `on_failure`
 
+#### Scenario: Coordination loss carries a stable code
+- **WHEN** the socket client surfaces a transport failure during a dispatched action
+- **THEN** the failure carries one of the stable transport-loss error codes (`closed`, `no_socket`, or `unreachable`) and the runner treats it as coordination loss without inspecting message text
+
+#### Scenario: Non-transport HerdrError allows recovery
+- **WHEN** the socket client surfaces a non-transport `HerdrError` (for example code `internal`) during a dispatched action
+- **THEN** the runner treats it as an ordinary failure and executes `on_failure`
+
 ### Requirement: Automatic failure notifications omit command output
 When the runner shows an automatic Herdr notification for a hard step failure or preflight failure, the notification body MUST use a generic message that names the failed step number and directs the operator to the terminal or private run history. The body MUST NOT include command stdout, stderr, or other captured action output. Detailed failure text MUST remain available on the CLI result and in private run history. Author `on_failure` actions that call `notification.show` and agent `blocked` episode notifications are separate and MUST keep their current content rules.
 
@@ -101,3 +108,4 @@ When the runner shows an automatic Herdr notification for a hard step failure or
 #### Scenario: Agent blocked notification unchanged
 - **WHEN** a managed agent enters `blocked` during a turn
 - **THEN** the runner still sends one blocked-episode notification per episode and keeps waiting
+
