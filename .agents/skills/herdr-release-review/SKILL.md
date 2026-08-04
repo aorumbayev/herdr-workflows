@@ -67,7 +67,11 @@ Additive versus breaking is the key verdict per item. An added method or enum va
 opportunity. A removed or reshaped one is a break for whatever in `src/host.ts`, `src/engine.ts`,
 or the workflow grammar names it — grep before claiming impact.
 
-## Phase 4: Upgrade path (only when the protocol bumped)
+## Phase 4: Upgrade path
+
+Run this phase when the protocol bumped. Run steps 1, 2, and 6 alone when the schema gained
+methods or enum values without a protocol bump and the plugin should adopt them — the floor and
+the pin stay put in that case.
 
 1. Copy the captured schema into `schemas/herdr-api.schema.json`.
 2. `bun run schema:herdr`. The generator fails naming any unmapped method
@@ -80,6 +84,12 @@ or the workflow grammar names it — grep before claiming impact.
 4. Update the protocol pin test in `test/host/herdr-methods.test.ts` and the fake-herdr `ping`
    fixture in `test/e2e/examples-harness.ts`.
 5. `bun test ./test` and `CI=1 npm run verify` must pass before the review is done.
+6. Refresh what the regenerated table feeds. `skills/herdr-workflow-create/reference/herdr-api.md`
+   hand-lists the allowed methods with their counts, version pin, and per-method selectors — a
+   regen without this refresh teaches authors a stale API. Take new selectors from
+   `HERDR_FOCUS_POLICY` in the regenerated file. Then sweep prose for the old floor:
+   `grep -rn "<old version>" README.md AGENTS.md CONTRIBUTING.md docs skills openspec` and move
+   every stated floor, docs pin, and "as of herdr X.Y.Z" sentence to the new release.
 
 ## Phase 5: Prove it live
 
