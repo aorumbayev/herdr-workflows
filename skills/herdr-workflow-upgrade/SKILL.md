@@ -55,7 +55,10 @@ required versions and both protocols, in this shape:
 herdr protocol mismatch: connected=20, pinned=19 (installed=0.9.0, required≥0.8.0)
 ```
 
-Refused → check whether a compatible plugin release exists:
+Refused → check whether a compatible plugin release exists. The refusal is a build
+incompatibility between the plugin and the running herdr, never a workflow-authoring problem:
+workflow YAML declares no herdr version or protocol, so old YAML cannot cause it and no YAML
+edit can resolve it.
 
 ```bash
 hwf update
