@@ -249,6 +249,7 @@ const METHOD_RESULT_TYPE_OVERRIDES: Record<string, string[]> = {
   "tab.get": ["tab_info"],
   "agent.get": ["agent_info"],
   "workspace.create": ["workspace_created"],
+  "workspace.move_block": ["workspace_list"],
   "tab.create": ["tab_created"],
   "worktree.create": ["worktree_created"],
   "worktree.open": ["worktree_opened"],

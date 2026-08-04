@@ -101,7 +101,7 @@ describe("herdr method validators", () => {
   });
 
   test("per-method result paths stay method-scoped", () => {
-    expect(HERDR_PROTOCOL).toBe(17);
+    expect(HERDR_PROTOCOL).toBe(19);
     expect(MIN_HERDR_VERSION).toBe(manifest.min_herdr_version);
     const notify = METHOD_RESULT_VARIANTS.get("notification.show");
     expect(notify?.map((v) => v.type)).toEqual(["notification_show"]);
