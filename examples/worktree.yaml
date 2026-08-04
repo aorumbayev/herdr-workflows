@@ -1,0 +1,160 @@
+version: v1alpha1
+title: Worktrees
+description: create, open or delete a git worktree, with an agent in its work pane
+on_failure:
+  herdr: notification.show
+  params:
+    title: Worktrees workflow failed
+    body: "{{context.error.message}}"
+    sound: request
+inputs:
+  mode:
+    type: choice
+    description: what to do with a worktree
+    options:
+      - create
+      - open
+      - delete
+    default: create
+  # reference to check out from: local branches and remote-tracking branches, newest first
+  ref:
+    type: choice
+    description: reference the new branch starts from
+    when: '{{inputs.mode}} == "create"'
+    options:
+      run:
+        [
+          sh,
+          -c,
+          "git for-each-ref --exclude='refs/remotes/*/HEAD' --sort=-committerdate --format='%(refname:short)' refs/heads refs/remotes",
+        ]
+  # new branch to create at that reference; an existing branch name is checked out as-is instead
+  branch:
+    type: text
+    description: worktree branch to create, or an existing branch to check out
+    when: '{{inputs.mode}} == "create"'
+    min_length: 1
+  worktree:
+    type: choice
+    description: which existing worktree
+    when: '{{inputs.mode}} != "create"'
+    options:
+      run:
+        [
+          sh,
+          -c,
+          "herdr worktree list --cwd . --json | jq -r '.result.worktrees[]? | select(.is_linked_worktree) | .branch'",
+        ]
+  scope:
+    type: choice
+    description: delete the checkout only, or its branch as well
+    when: '{{inputs.mode}} == "delete"'
+    options:
+      - worktree-only
+      - worktree-and-branch
+    default: worktree-only
+steps:
+  # cmd /c on Windows, sh -c elsewhere - this text is valid in both
+  - when: '{{context.platform}} == "windows"'
+    run: |
+      echo This workflow needs a POSIX shell with git, jq and herdr on PATH - run herdr from WSL or Git Bash. 1>&2
+      exit 1
+
+  - run: |
+      set -eu
+      missing=
+      for c in git jq herdr; do
+        command -v "$c" >/dev/null 2>&1 || missing="$missing $c"
+      done
+      if [ -n "$missing" ]; then
+        echo "missing required tools:$missing" >&2
+        exit 1
+      fi
+      git rev-parse --git-dir >/dev/null 2>&1 || {
+        echo "not a git repository - run this workflow from a checkout" >&2
+        exit 1
+      }
+
+  # herdr 0.8.0 worktree actions take exactly one of workspace_id or cwd;
+  # workspace_id only resolves for worktree-backed workspaces, so pass the repo root instead
+  - id: repo
+    run: printf %s "$(git rev-parse --show-toplevel)"
+
+  - id: created
+    when: '{{inputs.mode}} == "create"'
+    herdr: worktree.create
+    params:
+      cwd: "{{steps.repo.stdout}}"
+      branch: "{{inputs.branch}}"
+      base: "{{inputs.ref}}"
+      label: "{{inputs.branch}}"
+      focus: true
+
+  - workflow: worktree-layout
+    when: '{{inputs.mode}} == "create"'
+    inputs:
+      tab_id: "{{steps.created.tab.tab_id}}"
+      root_pane_id: "{{steps.created.root_pane.pane_id}}"
+
+  - id: opened
+    when:
+      - '{{inputs.mode}} != "create"'
+      - '{{inputs.mode}} == "open"'
+    herdr: worktree.open
+    params:
+      cwd: "{{steps.repo.stdout}}"
+      branch: "{{inputs.worktree}}"
+      label: "{{inputs.worktree}}"
+      focus: true
+
+  - workflow: worktree-layout
+    when:
+      - '{{inputs.mode}} != "create"'
+      - '{{inputs.mode}} == "open"'
+    inputs:
+      tab_id: "{{steps.opened.tab.tab_id}}"
+      root_pane_id: "{{steps.opened.root_pane.pane_id}}"
+
+  - id: deleted
+    when:
+      - '{{inputs.mode}} != "create"'
+      - '{{inputs.mode}} == "delete"'
+    env:
+      WT: "{{inputs.worktree}}"
+      SCOPE: "{{inputs.scope}}"
+    run: |
+      set -eu
+      list=$(herdr worktree list --cwd . --json)
+      root=$(printf %s "$list" | jq -r '.result.source.repo_root')
+      entry=$(printf %s "$list" | jq -c --arg b "$WT" \
+        'first(.result.worktrees[] | select(.is_linked_worktree and .branch == $b))')
+      if [ -z "$entry" ] || [ "$entry" = null ]; then
+        echo "no worktree checkout for branch $WT" >&2
+        exit 1
+      fi
+      path=$(printf %s "$entry" | jq -r '.path')
+      ws=$(printf %s "$entry" | jq -r '.open_workspace_id // empty')
+
+      if [ -n "$ws" ]; then
+        herdr worktree remove --workspace "$ws"
+      else
+        git -C "$root" worktree remove "$path"
+      fi
+
+      if [ "$SCOPE" = worktree-only ]; then
+        printf %s "removed the $WT worktree; branch kept"
+      elif git -C "$root" branch -d "$WT" >/dev/null 2>&1; then
+        printf %s "removed the $WT worktree and its branch"
+      else
+        printf %s "removed the $WT worktree; branch kept, it is not merged (git branch -D $WT)"
+      fi
+
+  - when:
+      - '{{inputs.mode}} != "create"'
+      - '{{inputs.mode}} == "delete"'
+      - "{{steps.deleted.stdout}}"
+    herdr: notification.show
+    params:
+      title: Worktree deleted
+      body: "{{steps.deleted.stdout}}"
+      sound: done

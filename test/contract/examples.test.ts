@@ -75,7 +75,12 @@ describe("shipped examples", () => {
 
   test("example gallery cards build without legacy keys", async () => {
     const cards = await buildExamples(EXAMPLES_DIR);
-    expect(cards.map((c) => c.name).sort()).toEqual(["branch-check", "handoff", "prompt-enhance"]);
+    expect(cards.map((c) => c.name).sort()).toEqual([
+      "branch-check",
+      "handoff",
+      "prompt-enhance",
+      "worktree",
+    ]);
     for (const card of cards) {
       expect(card.desc.length).toBeGreaterThan(0);
       expect(card.payload.length).toBeGreaterThan(0);
@@ -112,7 +117,6 @@ describe("shipped examples", () => {
     for (const card of cards) {
       expect(home).toContain(card.name);
     }
-    expect(home).not.toMatch(/\bworktree\b/);
     expect(home).not.toMatch(/\breview\b/);
   });
 });

@@ -1,0 +1,47 @@
+version: v1alpha1
+title: Worktree layout
+description: shared by the create and open paths of the worktrees workflow
+hidden: true
+inputs:
+  tab_id: text
+  root_pane_id: text
+steps:
+  - herdr: tab.rename
+    params:
+      tab_id: "{{inputs.tab_id}}"
+      label: work
+
+  # match the agent already in use instead of prompting for it; HERDR_WORKTREE_AGENT overrides
+  - id: agent
+    run: |
+      set -eu
+      kind=$(herdr agent list 2>/dev/null | jq -r 'first(.result.agents[]? | select(.focused) | .agent) // empty' 2>/dev/null || true)
+      printf %s "${HERDR_WORKTREE_AGENT:-${kind:-claude}}"
+
+  # agent names are unique across the session in herdr 0.8.0, so key on the pane
+  - id: agent_name
+    env:
+      KIND: "{{steps.agent.stdout}}"
+      PANE: "{{inputs.root_pane_id}}"
+    run: |
+      set -eu
+      printf %s "$KIND-$(printf %s "$PANE" | tr -c 'A-Za-z0-9' '-')"
+
+  # the fresh pane's shell needs a moment before it counts as an available agent target
+  - herdr: agent.start
+    params:
+      pane_id: "{{inputs.root_pane_id}}"
+      kind: "{{steps.agent.stdout}}"
+      name: "{{steps.agent_name.stdout}}"
+    retry:
+      attempts: 10
+      delay: 1s
+
+  - herdr: tab.focus
+    params:
+      tab_id: "{{inputs.tab_id}}"
+
+  - herdr: notification.show
+    params:
+      title: Worktree ready
+      sound: done

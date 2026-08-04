@@ -1,7 +1,7 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { encodePayload } from "../src/workflow/exchange";
-import { parseRaw } from "../src/workflow/grammar";
+import { parseRaw, referencedWorkflowChildren } from "../src/workflow/grammar";
 
 const EXAMPLES_DIR = join(import.meta.dir, "..", "examples");
 const OUT = join(import.meta.dir, "..", "docs", ".vitepress", "theme", "examples.generated.ts");
@@ -18,15 +18,33 @@ export async function buildExamples(dir = EXAMPLES_DIR): Promise<ExampleCard[]> 
     .filter((f) => f.endsWith(".yaml"))
     .map((f) => f.replace(/\.yaml$/, ""))
     .sort();
+  const sources = new Map(
+    await Promise.all(
+      names.map(async (name) => {
+        const body = await readFile(join(dir, `${name}.yaml`), "utf8");
+        return [name, { body, raw: parseRaw(`${name}.yaml`, body) }] as const;
+      }),
+    ),
+  );
+  const collect = (name: string, seen: Set<string>): void => {
+    if (seen.has(name)) return;
+    seen.add(name);
+    const source = sources.get(name);
+    if (!source) throw new Error(`example '${name}' references missing child workflow`);
+    for (const child of referencedWorkflowChildren(source.raw)) collect(child, seen);
+  };
   const cards: ExampleCard[] = [];
-  for (const name of names) {
-    const body = await readFile(join(dir, `${name}.yaml`), "utf8");
-    const raw = parseRaw(`${name}.yaml`, body);
+  for (const [name, source] of sources) {
+    if (source.raw.hidden === true) continue;
+    const bundle = new Set<string>();
+    collect(name, bundle);
     cards.push({
       name,
-      desc: raw.description ?? "",
-      body,
-      payload: encodePayload([{ name, yaml: body }]),
+      desc: source.raw.description ?? "",
+      body: source.body,
+      payload: encodePayload(
+        [...bundle].map((entry) => ({ name: entry, yaml: sources.get(entry)!.body })),
+      ),
     });
   }
   return cards;
