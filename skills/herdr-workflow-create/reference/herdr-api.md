@@ -50,6 +50,12 @@ Usual selector sources: `{{context.workspace}}`, `{{context.tab}}`, `{{context.p
 `{{context.worktree}}`, `{{context.agent}}`. Worktree actions that take `cwd` accept
 `cwd: "{{context.cwd}}"` — the invocation's project root, always set.
 
+## Agent names
+
+`agent.start` requires `name`, and herdr enforces session-wide uniqueness, so a hardcoded name
+collides the second time a workflow runs. Derive it from the target pane id in a prior `run:` step,
+e.g. `printf %s "kind-$(printf %s "$PANE" | tr -c 'A-Za-z0-9' '-')"`, then pass `name: "{{steps.<id>.stdout}}"`.
+
 ## Confirming param names against the running build
 
 This skill is installed outside the herdr-workflows checkout, so its `src/`, `docs/` and
