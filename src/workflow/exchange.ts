@@ -412,8 +412,11 @@ async function journalIsStale(journalPath: string): Promise<boolean> {
  * Chosen approach: stage the full post-import tree and rename the scope directory once —
  * per-file publish cannot compose into bundle atomicity across process death.
  *
- * A live import (dest intact, staging present, previous absent) is left alone unless `force`
- * or the journal is older than JOURNAL_STALE_MS — peers must not delete each other's staging.
+ * A journaled import is left alone unless `force` or the journal is older than
+ * JOURNAL_STALE_MS. A live peer's swap passes through every intermediate state below
+ * (staging built, dest renamed away, previous pending removal), so repairing any of them
+ * on a fresh journal races the owner and corrupts its swap — only the owner (`force`)
+ * or a stale journal proves the importer is gone.
  */
 export async function recoverInterruptedImport(
   dir: string,
@@ -425,13 +428,13 @@ export async function recoverInterruptedImport(
     await rm(journalPath, { force: true }).catch(() => undefined);
     return;
   }
+  if (!opts.force && !(await journalIsStale(journalPath))) return;
 
   const destExists = await pathExists(journal.dest);
   const stagingExists = await pathExists(journal.staging);
   const previousExists = await pathExists(journal.previous);
 
   if (destExists && stagingExists && !previousExists) {
-    if (!opts.force && !(await journalIsStale(journalPath))) return;
     await rm(journal.staging, { recursive: true, force: true });
     await unlink(journalPath).catch(() => undefined);
     return;
