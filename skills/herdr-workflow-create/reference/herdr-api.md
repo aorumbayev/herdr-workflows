@@ -47,7 +47,8 @@ load. Selector values must be non-null and non-empty at runtime. A whole-value t
 A template on an unrelated param does not satisfy the requirement.
 
 Usual selector sources: `{{context.workspace}}`, `{{context.tab}}`, `{{context.pane}}`,
-`{{context.worktree}}`, `{{context.agent}}`.
+`{{context.worktree}}`, `{{context.agent}}`. Worktree actions that take `cwd` accept
+`cwd: "{{context.cwd}}"` — the invocation's project root, always set.
 
 ## Confirming param names against the running build
 

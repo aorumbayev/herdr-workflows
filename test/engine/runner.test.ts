@@ -1455,6 +1455,7 @@ steps:
 returns:
   note: "{{steps.echo.stdout}}"
   platform: "{{context.platform}}"
+  cwd: "{{context.cwd}}"
 steps:
   - id: echo
     run: [printf, hello]
@@ -1470,7 +1471,7 @@ steps:
     });
     expect(result.ok).toBe(true);
     const snaps = (await readSnapshots()).filter((s) => s.workflow === "m");
-    expect(snaps[0]?.returns).toMatchObject({ note: "hello" });
+    expect(snaps[0]?.returns).toMatchObject({ note: "hello", cwd: root });
     expect(typeof (snaps[0]?.returns as { platform?: string } | undefined)?.platform).toBe(
       "string",
     );

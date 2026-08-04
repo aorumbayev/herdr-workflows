@@ -130,7 +130,11 @@ A placed run MUST require exactly one of background or `ready_when: /regex/`. Re
 - **THEN** the step fails and preserves its pane
 
 ### Requirement: Canonical invocation context
-Context MUST expose stable `workspace`, `tab`, `pane`, `worktree`, `agent`, `selection`, and `platform`, plus plugin-produced `transcript` and `transcript_file`. Platform MUST be `macos` or `linux`. Windows hosts run under WSL2, where the value is `linux`. Selection MUST be empty when absent. Referencing unavailable identity or transcript values MUST fail preflight. Transcript values MUST have a hard size cap. They MUST never enter automatic shell env or private per-run snapshot history, and import/editing surfaces MUST mark them visibly sensitive. Run cleanup MUST remove the transcript file on every path, and MUST start only after recovery completes. Run cleanup MUST remove managed response files only when the run succeeds, so a failed run keeps the agent output a step already wrote. `context.error` MUST exist only during recovery.
+Context MUST expose stable `workspace`, `tab`, `pane`, `worktree`, `cwd`, `agent`, `selection`, and `platform`, plus plugin-produced `transcript` and `transcript_file`. Platform MUST be `macos` or `linux`. Windows hosts run under WSL2, where the value is `linux`. Selection MUST be empty when absent. `cwd` MUST be the invocation's project root and MUST always be non-empty, so referencing it MUST NOT fail preflight. Referencing unavailable identity or transcript values MUST fail preflight. Transcript values MUST have a hard size cap. They MUST never enter automatic shell env or private per-run snapshot history, and import/editing surfaces MUST mark them visibly sensitive. Run cleanup MUST remove the transcript file on every path, and MUST start only after recovery completes. Run cleanup MUST remove managed response files only when the run succeeds, so a failed run keeps the agent output a step already wrote. `context.error` MUST exist only during recovery.
+
+#### Scenario: Worktree action addressed by cwd
+- **WHEN** a step calls `worktree.create` with `cwd: "{{context.cwd}}"`
+- **THEN** the call receives the invocation's project root without a helper `git rev-parse` step
 
 #### Scenario: Explicit transcript handoff
 - **WHEN** reviewed YAML embeds `{{context.transcript}}` in a managed agent prompt

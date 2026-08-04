@@ -144,6 +144,7 @@ The loader rejects duplicate step IDs, unknown paths, forward references, and re
 | Key                                             | Holds                                                                |
 | ----------------------------------------------- | -------------------------------------------------------------------- |
 | `workspace`, `tab`, `pane`, `worktree`, `agent` | Where the workflow started                                           |
+| `cwd`                                           | Project root of the invocation directory. Always set                 |
 | `selection`                                     | Selected text. Empty when there's none                               |
 | `platform`                                      | `macos` or `linux`. Windows is WSL2 only, where the value is `linux` |
 | `transcript`, `transcript_file`                 | Session transcript. Sensitive. Fails preflight if unavailable        |

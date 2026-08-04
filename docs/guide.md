@@ -142,7 +142,7 @@ Templates read from exactly three places:
 
 A template that fills a whole YAML value keeps that value's type, so an object stays an object. A template inside a longer string renders as text. Anything else — a typo in a path, a forward reference, a reference to a background step that produces no result — fails when the file loads, not halfway through your run.
 
-Useful context keys: `pane`, `tab`, `workspace`, `worktree`, `agent`, `selection`, `platform`. See [Reference](/reference#context) for all of them.
+Useful context keys: `pane`, `tab`, `workspace`, `worktree`, `cwd`, `agent`, `selection`, `platform`. See [Reference](/reference#context) for all of them.
 
 ## Ask questions before the run
 
