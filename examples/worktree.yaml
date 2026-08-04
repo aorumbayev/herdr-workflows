@@ -43,7 +43,7 @@ inputs:
         [
           sh,
           -c,
-          "herdr worktree list --cwd . --json | jq -r '.result.worktrees[]? | select(.is_linked_worktree) | .branch'",
+          "set -eu; list=$(herdr worktree list --cwd . --json); printf %s \"$list\" | jq -r '.result.worktrees[]? | select(.is_linked_worktree) | .branch'",
         ]
   scope:
     type: choice
