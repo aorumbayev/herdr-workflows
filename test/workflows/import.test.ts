@@ -1,6 +1,16 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { gzipSync } from "node:zlib";
-import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  stat,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../../src/context";
@@ -402,6 +412,8 @@ steps:
     await rename(dir, previous);
 
     expect(await Bun.file(join(dir, "a.yaml")).exists()).toBe(false);
+    const aged = new Date(Date.now() - 11_000);
+    await utimes(importJournalPath(dir), aged, aged);
     await recoverInterruptedImport(dir);
 
     expect(await readFile(join(dir, "a.yaml"), "utf8")).toBe(exactBody);
@@ -410,6 +422,28 @@ steps:
     expect(await pathExists(previous)).toBe(false);
     expect(await pathExists(staging)).toBe(false);
     expect(await Bun.file(importJournalPath(dir)).exists()).toBe(false);
+    void home;
+  });
+
+  test("recovery leaves a live peer's fresh mid-swap state untouched", async () => {
+    const { root, home } = await scratch();
+    const dir = join(root, ".hwf", "workflows");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "a.yaml"), exactBody);
+
+    const staging = `${dir}.test.staging`;
+    const previous = `${dir}.test.prev`;
+    await mkdir(staging, { recursive: true });
+    await writeFile(join(staging, "a.yaml"), exactBody);
+    await writeFile(importJournalPath(dir), JSON.stringify({ dest: dir, staging, previous }));
+    await rename(dir, previous);
+
+    await recoverInterruptedImport(dir);
+
+    expect(await pathExists(dir)).toBe(false);
+    expect(await pathExists(staging)).toBe(true);
+    expect(await pathExists(previous)).toBe(true);
+    expect(await Bun.file(importJournalPath(dir)).exists()).toBe(true);
     void home;
   });
 
