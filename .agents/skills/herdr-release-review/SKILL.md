@@ -121,13 +121,17 @@ The procedure itself creates windows where things look broken. Warn the user bef
 
 ## Report
 
-Lead with the break verdict, then four sections:
+Lead with the break verdict, then five sections:
 
 1. **Breaking** — each with its fix (usually Phase 4).
 2. **API additions** — as opportunities to simplify or refine the plugin, each naming the plugin
    code it could replace or improve.
 3. **Behavior changes to watch** — no code change now, but a contract this plugin relies on moved.
-4. **Housekeeping** — org, license, docs churn. One line each.
+4. **Workflow-author impact** — changes that break YAML users have already written in consumer
+   repos while the plugin itself stays fine after regen: removed target inference, newly required
+   params, uniqueness constraints, changed defaults. The 0.8.0 review found all three of its
+   real-world breakages in this class. Name the affected step patterns and the rewrite for each.
+5. **Housekeeping** — org, license, docs churn. One line each.
 
 Every claim carries its evidence: the tag diff hunk, the schema diff entry, or the sandbox output
 line. Cite files repo-relative with a line number (`src/host.ts:220`, not `host.ts:220`), and cite
