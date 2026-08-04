@@ -463,7 +463,7 @@ export function createInputSession(opts: CreateInputSessionOpts): InputSession {
       if (err) return { ok: false, error: err };
       for (const later of specs.slice(pending.index + 1)) {
         delete values[later.name];
-        delete domains[later.name];
+        if (!suppliedDomains.has(later.name)) delete domains[later.name];
       }
       values[pending.spec.name] = value;
       cursor = pending.index + 1;

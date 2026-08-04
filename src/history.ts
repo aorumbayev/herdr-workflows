@@ -128,6 +128,7 @@ const runSnapshotSchema = z
     current_step: runCurrentStepSchema.optional(),
     steps: z.array(runStepRecordSchema),
     status: z.enum(["succeeded", "failed", "interrupted"]).optional(),
+    failure_explanation: z.string().optional(),
     returns: z.unknown().optional(),
   })
   .superRefine((row, ctx) => {
@@ -440,7 +441,7 @@ export function toDetail(snapshot: RunSnapshot, opts: { now?: number } = {}): Ru
   const steps = orderDetailSteps(snapshot.steps.map(detailStepFromRecord));
   const current =
     snapshot.current_step !== undefined ? detailStepFromCurrent(snapshot.current_step) : undefined;
-  let failure_explanation: string | undefined;
+  let failure_explanation = snapshot.failure_explanation;
   for (let i = snapshot.steps.length - 1; i >= 0; i--) {
     const step = snapshot.steps[i]!;
     if (step.explanation) {
@@ -995,6 +996,8 @@ export class RunHistorySession {
             ...this.snapshot.steps.slice(0, -1),
             { ...last, explanation: boundFailureExplanation(opts.error) },
           ];
+        } else if (!hasExplanation) {
+          this.snapshot.failure_explanation = boundFailureExplanation(opts.error);
         }
       }
       await this.persistUnlocked();
