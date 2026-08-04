@@ -54,6 +54,7 @@ import {
   type WhenSpec,
 } from "./workflow/grammar";
 import { ReleaseCheckError, updatePlugin, type UpdateDeps, type UpdateResult } from "./update";
+import { findSkill, formatSkill, listSkills } from "./skills";
 
 /**
  * Survive a reader that left. A detached `hwf run` outlives the picker holding the read end of its
@@ -1105,6 +1106,31 @@ function buildProgram(): Command {
     .description("Update to the latest published GitHub Release via Herdr")
     .action(async () => {
       await runUpdate();
+    });
+
+  const skills = program.command("skills").description("Print the bundled agent skills");
+  skills
+    .command("list")
+    .description("List the bundled skills with their descriptions")
+    .action(() => {
+      for (const skill of listSkills()) {
+        process.stdout.write(`${skill.name} — ${skill.description}\n`);
+      }
+    });
+  skills
+    .command("show")
+    .description("Print one skill with its reference files")
+    .argument("<name>", "skill name")
+    .action((name: string) => {
+      const skill = findSkill(name);
+      if (!skill) {
+        die(
+          `unknown skill '${name}' — available: ${listSkills()
+            .map((s) => s.name)
+            .join(", ")}`,
+        );
+      }
+      process.stdout.write(formatSkill(skill));
     });
 
   program
