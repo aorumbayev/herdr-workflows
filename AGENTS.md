@@ -27,7 +27,7 @@ bun run install:dev                      # compile + herdr plugin link + keybind
 - CI (`.github/workflows/verify.yml`): three jobs — `bun test ./test` on Ubuntu and macOS (`fail-fast: false`), `npm run verify` on Linux only, `bun run docs:build` on Linux only. Nothing runs `openspec validate`.
 - Local `npm run verify` auto-fixes lint/format. Under `CI=1` it only checks.
 - After `install:dev`, the live binary is `bin/herdr-workflows`.
-- Remote GitHub install runs the manifest build: Bun preflight, `bun install --production --frozen-lockfile`, `bun build --compile`, then `bin/herdr-workflows setup`. Local link/dev still compiles with `bun run build` / `bun run install:dev`.
+- Remote GitHub install runs the manifest build: Bun preflight, `bun install --production --frozen-lockfile`, `bun build --compile`, then `bin/herdr-workflows setup`. Local link/dev still compiles with `bun run build` / `bun run install:dev`; `build` runs `bun install --frozen-lockfile` first, so a drifted `node_modules` never reaches the compiler.
 
 ## Layout
 

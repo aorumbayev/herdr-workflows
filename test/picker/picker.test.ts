@@ -31,7 +31,15 @@ import {
 import { humanizeWorkflowName, workflowDisplayTitle } from "../../src/workflow/grammar";
 import { fakePickerChrome, type FakePickerChrome } from "../fakes/picker-chrome-fake";
 
-const { acceptWorkflow, attachRunsBrowser, setListMode, tryOpenActionsPalette } = pickerSeams;
+const {
+  acceptWorkflow,
+  attachRunsBrowser,
+  bindPickerEvents,
+  handlePickerKey,
+  setListMode,
+  submitInputText,
+  tryOpenActionsPalette,
+} = pickerSeams;
 
 const entries: WorkflowListEntry[] = [
   {
@@ -703,5 +711,141 @@ describe("picker run handoff", () => {
     await Bun.sleep(0);
     expect(loads).toBe(1);
     expect(state.mode).not.toBe("list");
+  });
+});
+
+const CUSTOM_UNIT: InputSpec = {
+  name: "unit",
+  type: "choice",
+  options: ["new"],
+  allowCustom: true,
+};
+
+const PLACEMENT: InputSpec = { name: "placement", type: "choice", options: ["tab", "below"] };
+
+function inputWorkflowState(
+  inputs: InputSpec[],
+): PickerState & { chrome: FakePickerChrome; entry: WorkflowListEntry } {
+  const state = pickerState() as PickerState & {
+    chrome: FakePickerChrome;
+    entry: WorkflowListEntry;
+  };
+  state.entry = { name: "place", source: "global", file: "/global/place.yaml" };
+  state.loadWorkflow = async (entry) => ({
+    name: entry.name,
+    file: entry.file,
+    version: "v1alpha1",
+    hidden: false,
+    steps: [{ action: { kind: "run", payload: { form: "argv", argv: ["true"] } } }],
+    inputs,
+    repoOwned: false,
+    needsTranscript: false,
+    children: new Map(),
+  });
+  bindPickerEvents(state);
+  return state;
+}
+
+/** Drive the picker to the custom text field of the first (custom-capable) choice input. */
+async function openCustomChoiceField(
+  inputs: InputSpec[],
+  filter: string,
+): Promise<PickerState & { chrome: FakePickerChrome; entry: WorkflowListEntry }> {
+  const state = inputWorkflowState(inputs);
+  acceptWorkflow(state, state.entry);
+  await Bun.sleep(0);
+  state.chrome.typeFilter(filter);
+  state.chrome.setSelectedIndex(state.chrome.options().length - 1);
+  state.chrome.selectCurrent();
+  return state;
+}
+
+describe("picker custom choice input", () => {
+  test("custom row keeps the typed filter text as the starting value", async () => {
+    const state = await openCustomChoiceField([CUSTOM_UNIT, PLACEMENT], "mytest");
+    expect(state.choiceOptions).toEqual([]);
+    expect(state.chrome.promptValue()).toBe("mytest");
+    expect(state.chrome.lastFooter()).toContain("enter submit");
+  });
+
+  test("enter reaches the custom field instead of reselecting the custom row", async () => {
+    const state = await openCustomChoiceField([CUSTOM_UNIT, PLACEMENT], "mytest");
+    let prevented = false;
+    handlePickerKey(state, {
+      name: "return",
+      ctrl: false,
+      meta: false,
+      preventDefault: () => {
+        prevented = true;
+      },
+    } as unknown as Parameters<typeof handlePickerKey>[1]);
+    expect(prevented).toBe(false);
+    expect(state.chrome.options()).toEqual([]);
+  });
+
+  test("submitting a custom value stores it and advances to the next input", async () => {
+    const state = await openCustomChoiceField([CUSTOM_UNIT, PLACEMENT], "mytest");
+    submitInputText(state, "mytest");
+    await Bun.sleep(0);
+    expect(state.inputValues).toEqual({ unit: "mytest" });
+    expect(state.inputIndex).toBe(1);
+    expect(state.choiceOptions).toEqual(["tab", "below"]);
+  });
+
+  test("submitting an empty custom value stores it and advances", async () => {
+    const state = await openCustomChoiceField([CUSTOM_UNIT, PLACEMENT], "");
+    submitInputText(state, "");
+    await Bun.sleep(0);
+    expect(state.inputValues).toEqual({ unit: "" });
+    expect(state.inputIndex).toBe(1);
+  });
+
+  test("a rejected custom value shows the session error and holds the input", async () => {
+    const state = await openCustomChoiceField([{ ...CUSTOM_UNIT, minLength: 4 }, PLACEMENT], "abc");
+    submitInputText(state, "abc");
+    await Bun.sleep(0);
+    expect(state.chrome.lastStatus()).toContain("at least 4 characters");
+    expect(state.inputValues).toEqual({});
+    expect(state.inputIndex).toBe(0);
+  });
+});
+
+describe("picker input failure screen", () => {
+  const UNIT: InputSpec = { name: "unit", type: "choice", options: ["a", "b"] };
+  const NO_PROFILE: InputSpec = { name: "prof", type: "profile" };
+
+  async function failAfterFirstChoice(): Promise<
+    PickerState & { chrome: FakePickerChrome; entry: WorkflowListEntry }
+  > {
+    const state = inputWorkflowState([UNIT, NO_PROFILE]);
+    acceptWorkflow(state, state.entry);
+    await Bun.sleep(0);
+    state.chrome.selectCurrent();
+    await Bun.sleep(0);
+    return state;
+  }
+
+  test("a mid-queue failure takes the screen from the previous choice list", async () => {
+    const state = await failAfterFirstChoice();
+    expect(state.chrome.lastStatus()).toContain("no profiles configured");
+    expect(state.choiceOptions).toEqual([]);
+    expect(state.chrome.options()).toEqual([]);
+    expect(state.chrome.layout()).toBe("hidden");
+  });
+
+  test("enter on the failure screen does not re-fire the stale choice list", async () => {
+    const state = await failAfterFirstChoice();
+    let prevented = false;
+    handlePickerKey(state, {
+      name: "return",
+      ctrl: false,
+      meta: false,
+      preventDefault: () => {
+        prevented = true;
+      },
+    } as unknown as Parameters<typeof handlePickerKey>[1]);
+    expect(prevented).toBe(false);
+    expect(state.chrome.lastStatus()).toContain("no profiles configured");
+    expect(state.inputValues).toEqual({ unit: "a" });
   });
 });

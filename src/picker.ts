@@ -738,8 +738,16 @@ function setInputMode(
   showCustomChoiceText(state, spec, restored ?? spec.default ?? "");
 }
 
+/** The filter text is what the author typed for this input; keep it instead of dropping it. */
+function customChoiceSeed(state: PickerState, spec: InputSpec): string {
+  const stored = state.inputValues[spec.name];
+  if (stored !== undefined) return stored;
+  return state.chrome.filterValue().trim() || spec.default || "";
+}
+
 function showCustomChoiceText(state: PickerState, spec: InputSpec, value: string): void {
   state.choiceOptions = [];
+  state.chrome.setOptions([]);
   state.chrome.hideBrowser();
   focusTextField(state, `${spec.name}...`, value);
 }
@@ -782,6 +790,9 @@ function navigateSelectList(state: PickerState, key: ChromeKeyEvent): boolean {
 function handleInputKey(state: PickerState, key: ChromeKeyEvent): void {
   const spec = state.inputQueue[state.inputIndex];
   if (!spec || (spec.type !== "choice" && spec.type !== "profile")) return;
+  // Empty options mean the custom-value text field replaced the list; leave enter
+  // and arrows to the focused field, which preventDefault would starve.
+  if (state.choiceOptions.length === 0) return;
   navigateSelectList(state, key);
 }
 
@@ -993,6 +1004,12 @@ function stdinLeakHandlers(): {
 
 function showFailure(state: PickerState, entry: WorkflowListEntry, error: unknown): void {
   state.running = false;
+  // A failure between inputs must take the screen from the previous choice list,
+  // or its still-live options re-fire selections into a session with no active input.
+  state.choiceOptions = [];
+  state.chrome.setOptions([]);
+  state.chrome.hideBrowser();
+  state.chrome.hideList();
   const detail = error instanceof Error ? error.message : String(error);
   showStatus(state, `${entry.name}\n${ELLIPSIS}\n\nFailed${CHROME_SEP}${detail}`, { flexGrow: 1 });
   state.chrome.setFooter(FAIL_HINT);
@@ -1006,6 +1023,8 @@ async function advanceInput(state: PickerState, entry: WorkflowListEntry): Promi
     return;
   }
   state.mode = "input";
+  // The previous input's list stops owning keys while the next one resolves.
+  state.choiceOptions = [];
   const cur = await session.current();
   syncInputSession(state);
   if (cur.status === "cancelled") return;
@@ -1038,7 +1057,7 @@ function submitInputChoice(state: PickerState, value: unknown): void {
   if (isCustomChoiceValue(value)) {
     const spec = state.inputQueue[state.inputIndex];
     if (!spec) return;
-    showCustomChoiceText(state, spec, state.inputValues[spec.name] ?? spec.default ?? "");
+    showCustomChoiceText(state, spec, customChoiceSeed(state, spec));
     return;
   }
   if (typeof value !== "string") return;
@@ -1228,7 +1247,10 @@ export async function runPickerSession(opts: PickerSessionOpts): Promise<number>
 export const pickerSeams = {
   setListMode,
   attachRunsBrowser,
+  bindPickerEvents,
+  handlePickerKey,
   launchWorkbenchRoute,
+  submitInputText,
   tryOpenActionsPalette,
   acceptWorkflow,
 };

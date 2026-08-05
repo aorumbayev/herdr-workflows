@@ -11,6 +11,9 @@ export type FakePickerChrome = PickerChrome & {
   lastDetail(): string;
   lastHint(): string | undefined;
   lastBrowserOpts(): BrowserShowOpts | undefined;
+  promptValue(): string;
+  /** Set the filter text the way a keystroke does — value plus the input event. */
+  typeFilter(text: string): void;
   layout(): "browser" | "detail" | "hidden" | "list-only";
   destroyed: boolean;
   listHeight: number;
@@ -33,6 +36,7 @@ export function fakePickerChrome(overrides: Partial<PickerChrome> = {}): FakePic
   let listHeight = 99;
   let destroyed = false;
   const listSelect: Array<(option: ChromeOption) => void> = [];
+  const filterInput: Array<(value: string) => void> = [];
 
   const chrome: FakePickerChrome = {
     showBrowser(opts = {}) {
@@ -130,6 +134,7 @@ export function fakePickerChrome(overrides: Partial<PickerChrome> = {}): FakePic
     whenDestroyed() {},
     on(event, cb) {
       if (event === "list-select") listSelect.push(cb as (option: ChromeOption) => void);
+      if (event === "filter-input") filterInput.push(cb as (value: string) => void);
     },
     lastStatus() {
       return status;
@@ -149,6 +154,13 @@ export function fakePickerChrome(overrides: Partial<PickerChrome> = {}): FakePic
     lastBrowserOpts() {
       return lastBrowser;
     },
+    promptValue() {
+      return promptValue;
+    },
+    typeFilter(text) {
+      filter = text;
+      for (const cb of filterInput) cb(text);
+    },
     layout() {
       return layout;
     },
@@ -162,7 +174,6 @@ export function fakePickerChrome(overrides: Partial<PickerChrome> = {}): FakePic
   };
 
   void filterPlaceholder;
-  void promptValue;
 
   return chrome;
 }
