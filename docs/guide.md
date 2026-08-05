@@ -166,7 +166,7 @@ The picker asks for these in order, before step 1. Only the workflow you started
 
 - **`type: text`** takes any text. **`type: choice`** offers a list. **`type: profile`** offers your profile names.
 - **Options can be a command.** `{run: [...]}` runs from your repo root and turns each output line into an option.
-- **`allow_custom: true`** turns the options into suggestions and accepts anything else typed.
+- **`allow_custom: true`** turns the options into suggestions and accepts anything else typed. Select the `custom...` row to get a text field, which starts from the text you typed to filter.
 - **`min_length`** rejects a value that's too short. Use `min_length: 1` to refuse an empty answer.
 - **`when:`** hides an input based on an earlier answer. The example never asks for a branch in `status` mode, and doesn't run the branch-listing command either.
 
