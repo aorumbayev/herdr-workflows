@@ -955,6 +955,10 @@ async function awaitManagedTurn(
       mode === "new-agent" && SETTLED.has(status) && !hasText && (status === "done" || sawActive);
     if (emptySettled) {
       settledEmptyPolls += 1;
+      // A paste stall can slip past submit-time pickup checks when detection flickers off idle.
+      if (settledEmptyPolls === 1) {
+        await deps.herdrCall("agent.send_keys", { target, keys: ["enter"] }).catch(() => undefined);
+      }
       if (settledEmptyPolls > SETTLED_EMPTY_GRACE_POLLS) {
         return { settled: false, error: await missingManagedError(path) };
       }

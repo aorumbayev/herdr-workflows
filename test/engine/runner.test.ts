@@ -570,6 +570,63 @@ steps:
     expect(err.error).not.toMatch(/within \d+s/);
   });
 
+  test("settled-empty grace sends one Enter nudge and accepts a late response", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: summarize
+    using: claude
+    pane: { open: beside }
+`,
+    });
+    const { deps, calls, agents } = mockDeps({ writeManagedResponse: false });
+    const baseCall = deps.herdrCall;
+    let responsePath = "";
+    let polls = 0;
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: {
+        ...deps,
+        ...fastClock(),
+        herdrCall: async (method, params = {}) => {
+          const out = await baseCall(method, params);
+          if (method === "agent.prompt") {
+            responsePath = /absolute path ([^\s,]+)/.exec(String(params.text ?? ""))?.[1] ?? "";
+            const target = String(params.target);
+            const info = agents.get(target);
+            if (info) {
+              info.status = "working";
+              agents.set(target, info);
+            }
+            polls = 0;
+          }
+          if (method === "agent.send_keys" && responsePath) {
+            await Bun.write(responsePath, "nudged answer\n");
+          }
+          return out;
+        },
+        agentStatus: async (target) => {
+          const info = agents.get(target);
+          if (!info) return "idle";
+          polls += 1;
+          if (polls > 3) {
+            info.status = "done";
+            agents.set(target, info);
+          }
+          return info.status;
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    const nudges = calls.filter((c) => c.method === "agent.send_keys");
+    expect(nudges).toHaveLength(1);
+    expect(nudges[0]?.params.keys).toEqual(["enter"]);
+  });
+
   test("target mode keeps waiting for managed response until timeout", async () => {
     const root = await repoWith({
       m: `version: v1alpha1
