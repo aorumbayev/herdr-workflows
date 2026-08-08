@@ -63,7 +63,7 @@ describe("shipped examples through isolated CLI and fake Herdr", () => {
     }
   });
 
-  test("prompt-enhance uses the configured custom agent and native clipboard branch", async () => {
+  test("prompt-enhance uses the configured custom agent and this platform's clipboard", async () => {
     const calls = successful(
       await harness.run(
         "prompt-enhance",
@@ -72,7 +72,8 @@ describe("shipped examples through isolated CLI and fake Herdr", () => {
       ),
     );
 
-    expect(await readFile(harness.clipboard, "utf8")).toBe("wl-copy:refined prompt");
+    const expected = process.platform === "darwin" ? "pbcopy" : "wl-copy";
+    expect(await readFile(harness.clipboard, "utf8")).toBe(`${expected}:refined prompt`);
     expect(calls.find((call) => call.method === "agent.start")?.params).toMatchObject({
       kind: "custom",
     });
@@ -80,18 +81,22 @@ describe("shipped examples through isolated CLI and fake Herdr", () => {
     expect(calls.some((call) => call.method === "pane.close")).toBe(true);
   });
 
-  test("prompt-enhance falls back to xclip when no Wayland display is set", async () => {
-    const calls = successful(
-      await harness.run(
-        "prompt-enhance",
-        { target: "deterministic", text: "fix it" },
-        { WAYLAND_DISPLAY: "" },
-      ),
-    );
+  // macOS never reaches this branch: the workflow guards it on context.platform.
+  test.skipIf(process.platform === "darwin")(
+    "prompt-enhance falls back to xclip when no Wayland display is set",
+    async () => {
+      const calls = successful(
+        await harness.run(
+          "prompt-enhance",
+          { target: "deterministic", text: "fix it" },
+          { WAYLAND_DISPLAY: "" },
+        ),
+      );
 
-    expect(await readFile(harness.clipboard, "utf8")).toBe("xclip:refined prompt");
-    expect(titles(calls)).toEqual(["enhancing prompt", "prompt ready"]);
-  });
+      expect(await readFile(harness.clipboard, "utf8")).toBe("xclip:refined prompt");
+      expect(titles(calls)).toEqual(["enhancing prompt", "prompt ready"]);
+    },
+  );
 
   test("handoff preserves the target and cleans up at the selected granularity", async () => {
     for (const placement of ["tab", "beside", "below"]) {
