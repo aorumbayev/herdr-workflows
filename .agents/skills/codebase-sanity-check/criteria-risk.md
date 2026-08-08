@@ -30,8 +30,8 @@ list-form `run:` passes argv elements. That promise is the rail.
 ### How to measure
 
 - `rg -n 'spawn|exec\(|execSync|execFile|Bun\.\$' src` and classify every hit as argv or shell text.
-  Do not add `shell` to that pattern. It matches `src/engine.ts` shell helpers and their importers
-  many times and tells you nothing. `shellArgv` in that file is the real place to read
+  Do not add `shell` to that pattern. It matches `src/engine/command.ts` shell helpers and their
+  importers many times and tells you nothing. `shellArgv` in that file is the real place to read
 - For each shell-text hit, trace the argument back to its source. Cite the line where user data
   enters
 - Confirm the load-time rejection exists and is reached:

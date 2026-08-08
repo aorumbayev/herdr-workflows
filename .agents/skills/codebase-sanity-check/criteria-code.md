@@ -146,7 +146,7 @@ durable fact the code cannot express and which pages a human for approval.
 ### What to check
 
 - One abstraction loads and validates workflows, one runs them, one per step type. Verify
-  `src/workflow/` and `src/engine.ts` still hold that shape
+  `src/workflow/` and `src/engine/` still hold that shape
 - A concept that lives in two folders
 - A folder holding one file with no sibling planned
 - `AGENTS.md` Layout rows that name a path that no longer exists, or paths under `src/` with no row

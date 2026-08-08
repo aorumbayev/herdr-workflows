@@ -47,7 +47,7 @@ const ENTRIES: Record<Module, ReadonlySet<string>> = {
     "src/workflow/exchange.ts",
     "src/workflow/results.ts",
   ]),
-  engine: new Set(["src/engine.ts"]),
+  engine: new Set(["src/engine/index.ts"]),
   history: new Set(["src/history.ts"]),
   update: new Set(["src/update.ts"]),
   host: new Set(["src/host.ts", "src/herdr-methods.generated.ts"]),
@@ -78,8 +78,8 @@ const SIDEWAYS = new Set([
 const ALLOW: ReadonlySet<string> = new Set([
   "src/history.ts -> src/workflow/grammar.ts",
   "src/history.ts -> src/workflow/results.ts",
-  "src/context.ts -> src/engine.ts",
-  "src/workflow/inputs.ts -> src/engine.ts",
+  "src/context.ts -> src/engine/index.ts",
+  "src/workflow/inputs.ts -> src/engine/index.ts",
 ]);
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -102,7 +102,7 @@ function moduleOf(file: string): Module | undefined {
   if (file === "src/chrome.ts") return "chrome";
   if (file === "src/workbench.ts" || file.startsWith("src/web/")) return "workbench";
   if (file.startsWith("src/workflow/")) return "workflows";
-  if (file === "src/engine.ts") return "engine";
+  if (file.startsWith("src/engine/")) return "engine";
   if (file === "src/history.ts") return "history";
   if (file === "src/update.ts") return "update";
   if (file === "src/host.ts" || file === "src/herdr-methods.generated.ts") {
