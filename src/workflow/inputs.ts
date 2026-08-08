@@ -6,8 +6,8 @@ import {
   shellUsesInput,
   workflowChildNames,
 } from "./validate";
+import { CaptureLimitError } from "../caps";
 import {
-  CaptureLimitError,
   workflowSchemaUrl,
   globalConfigPath,
   noProfilesConfiguredMessage,

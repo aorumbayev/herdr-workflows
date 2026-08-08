@@ -1,4 +1,4 @@
-import { CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../context";
+import { CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../caps";
 import { validateHerdrInvocation } from "../host";
 import { renderScalar, substituteParams, substituteText } from "../workflow/grammar";
 import type { PaneOpen, ShellName, StepAction, TemplateNamespace } from "../workflow/grammar";
@@ -27,7 +27,7 @@ export async function herdrStep(frame: StepFrame): Promise<StepOutcome> {
   }
 }
 
-type RunAction = Extract<StepAction, { kind: "run" }>;
+type CommandAction = Extract<StepAction, { kind: "run" }>;
 
 type CaptureBudget = {
   source: string;
@@ -254,7 +254,7 @@ export function mergeStepEnv(
   return { ...inherited, ...hwf, ...stepEnv };
 }
 
-function commandArgv(action: RunAction, ns: TemplateNamespace): string[] {
+function commandArgv(action: CommandAction, ns: TemplateNamespace): string[] {
   const payload = action.payload;
   if (payload.form === "argv") return payload.argv.map((el) => substituteText(el, ns));
   return shellArgv(payload.command, payload.shell);
@@ -285,9 +285,9 @@ function commandFailure(outcome: CommandOutcome): Extract<StepOutcome, { ok: fal
   };
 }
 
-async function localRun(
+async function localCommand(
   frame: StepFrame,
-  action: RunAction,
+  action: CommandAction,
   cwd: string,
   env: NodeJS.ProcessEnv,
 ): Promise<StepOutcome> {
@@ -324,9 +324,9 @@ async function localRun(
 
 const READY_LINES = 80;
 
-async function placedRun(
+async function placedCommand(
   frame: StepFrame,
-  action: RunAction,
+  action: CommandAction,
   cwd: string,
   paneEnv: Record<string, string>,
 ): Promise<StepOutcome> {
@@ -342,7 +342,7 @@ async function placedRun(
   }
   const placed = await placeCommandPane({
     open,
-    target: sub(pane.target),
+    anchor: sub(pane.anchor),
     workspace: sub(pane.workspace),
     size: pane.size,
     focus: pane.focus ?? action.background !== true,
@@ -384,10 +384,10 @@ export async function shellStep(
     action.cwd !== undefined ? substituteText(action.cwd, frame.values) : frame.opts.ctx.cwd;
   if (action.pane || action.background === true || action.readyWhen !== undefined) {
     try {
-      return await placedRun(frame, action, cwd, { ...hwf, ...stepEnv.env });
+      return await placedCommand(frame, action, cwd, { ...hwf, ...stepEnv.env });
     } catch (error) {
       return dispatchFailure("run", error);
     }
   }
-  return localRun(frame, action, cwd, mergeStepEnv(frame.env, hwf, stepEnv.env));
+  return localCommand(frame, action, cwd, mergeStepEnv(frame.env, hwf, stepEnv.env));
 }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { InputSpec, LoadedWorkflow, WorkflowListEntry } from "../../src/workflow/grammar";
-import { pickerSeams, runPickerSession, type PickerState } from "../../src/picker";
+import { pickerSeams, runPickerScreen, type PickerState } from "../../src/picker";
 import { createInputSession } from "../../src/workflow/inputs";
 import {
   beginConfirmedDelete,
@@ -524,12 +524,12 @@ describe("actions palette letters", () => {
 
   test("beginConfirmedDelete claims the target once so a second y cannot race", () => {
     const entry = entries[1]!;
-    const state = { deleteTarget: entry as WorkflowListEntry | undefined, deleteInFlight: false };
+    const state = { pendingDelete: entry as WorkflowListEntry | undefined, deleteInFlight: false };
     expect(beginConfirmedDelete(state)).toBe(entry);
-    expect(state.deleteTarget).toBeUndefined();
+    expect(state.pendingDelete).toBeUndefined();
     expect(state.deleteInFlight).toBe(true);
     expect(beginConfirmedDelete(state)).toBeUndefined();
-    expect(beginConfirmedDelete({ deleteTarget: entry, deleteInFlight: true })).toBeUndefined();
+    expect(beginConfirmedDelete({ pendingDelete: entry, deleteInFlight: true })).toBeUndefined();
   });
 });
 
@@ -615,10 +615,10 @@ function pickerState(): PickerState & { chrome: FakePickerChrome } {
 }
 
 describe("picker session checkout", () => {
-  test("runPickerSession invokes injected chdir with repoRoot before mount", async () => {
+  test("runPickerScreen invokes injected chdir with repoRoot before mount", async () => {
     const seen: string[] = [];
     await expect(
-      runPickerSession({
+      runPickerScreen({
         entries: [],
         repoRoot: "/managed/checkout",
         config: { profiles: {}, transcripts: {} },

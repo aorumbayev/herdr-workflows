@@ -2,14 +2,14 @@ import { closeSync, mkdirSync, openSync, statSync, watch, type FSWatcher } from 
 import { join, dirname } from "node:path";
 import { mkdir, writeFile, rm } from "node:fs/promises";
 import { z } from "zod";
+import { assertHwfEnvValues } from "../caps";
 import {
-  assertHwfEnvValues,
   pluginStateDir,
   ensureLocalConfigGitignored,
-  transcriptText,
   type InvocationContext,
   type WorkflowsConfig,
 } from "../context";
+import { transcriptText } from "../transcript";
 import {
   buildTemplateNamespace,
   completeWorkflowInputs,
@@ -226,7 +226,7 @@ function isRuntimeScriptEntry(entry: string | undefined): boolean {
 /** Source files a workbench serves, so a dev edit to one of them makes the running server stale. */
 const SERVED_SOURCE_RE = /\.(ts|html)$/;
 
-export type CodeWatchTarget = { path: string; recursive: boolean };
+export type CodeWatchPath = { path: string; recursive: boolean };
 
 /**
  * Identity of the build this process runs, recorded on an owned workbench's endpoint so an
@@ -254,7 +254,7 @@ export function buildIdentity(
  * an upgrade renames the whole managed checkout, and a filesystem watch cannot see a rename of an
  * ancestor on Linux, where watches are bound to inodes rather than paths.
  */
-function codeWatchTarget(entry: string | undefined = Bun.main): CodeWatchTarget | undefined {
+function codeWatchPath(entry: string | undefined = Bun.main): CodeWatchPath | undefined {
   if (entry !== undefined && isRuntimeScriptEntry(entry)) {
     return { path: dirname(entry), recursive: true };
   }
@@ -264,17 +264,17 @@ function codeWatchTarget(entry: string | undefined = Bun.main): CodeWatchTarget 
 /**
  * A workbench must not outlive the code it was built from: a stale server keeps answering
  * authenticated probes, so picker actions adopt it and serve the previous build. Returns a
- * disposer; an unwatchable target is not fatal, since termination signals still stop the process.
+ * disposer; an unwatchable path is not fatal, since termination signals still stop the process.
  */
 export function retireOnCodeChange(
   onRetire: () => void,
-  target: CodeWatchTarget | undefined = codeWatchTarget(),
+  path: CodeWatchPath | undefined = codeWatchPath(),
 ): () => void {
-  if (!target) return () => undefined;
+  if (!path) return () => undefined;
   let watcher: FSWatcher;
   try {
-    watcher = watch(target.path, { recursive: target.recursive }, (_event, file) => {
-      if (target.recursive && !SERVED_SOURCE_RE.test(String(file ?? ""))) return;
+    watcher = watch(path.path, { recursive: path.recursive }, (_event, file) => {
+      if (path.recursive && !SERVED_SOURCE_RE.test(String(file ?? ""))) return;
       onRetire();
     });
   } catch {

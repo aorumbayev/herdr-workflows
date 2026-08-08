@@ -135,15 +135,15 @@ export function pickerEscapeExitCode(mode: string, running: boolean): number {
   return 0;
 }
 
-/** Claim the confirmed delete target; a second call while in flight returns undefined. */
+/** Claim the pending delete; a second call while in flight returns undefined. */
 export function beginConfirmedDelete(state: {
-  deleteTarget?: WorkflowListEntry;
+  pendingDelete?: WorkflowListEntry;
   deleteInFlight?: boolean;
 }): WorkflowListEntry | undefined {
   if (state.deleteInFlight) return undefined;
-  const entry = state.deleteTarget;
+  const entry = state.pendingDelete;
   if (!entry) return undefined;
-  state.deleteTarget = undefined;
+  state.pendingDelete = undefined;
   state.deleteInFlight = true;
   return entry;
 }
@@ -446,7 +446,7 @@ export type PickerState = {
   mode: "list" | "input" | "run" | "palette" | "delete-confirm";
   entries: WorkflowListEntry[];
   pending?: WorkflowListEntry;
-  deleteTarget?: WorkflowListEntry;
+  pendingDelete?: WorkflowListEntry;
   /** True while a confirmed delete is in flight — further y/n/esc are ignored. */
   deleteInFlight?: boolean;
   inputQueue: InputSpec[];
@@ -619,7 +619,7 @@ function setListMode(state: PickerState): void {
   state.runs.leave();
   state.mode = "list";
   state.pending = undefined;
-  state.deleteTarget = undefined;
+  state.pendingDelete = undefined;
   state.deleteInFlight = false;
   state.workflow = undefined;
   state.inputQueue = [];
@@ -827,7 +827,7 @@ function launchWorkbenchRoute(state: PickerState, route: string): void {
 function openActionsPalette(state: PickerState): void {
   saveWorkflowListChrome(state);
   state.mode = "palette";
-  state.deleteTarget = undefined;
+  state.pendingDelete = undefined;
   state.deleteInFlight = false;
   state.chrome.hideBrowser();
   state.chrome.hideList();
@@ -837,7 +837,7 @@ function openActionsPalette(state: PickerState): void {
 
 function openDeleteConfirm(state: PickerState, entry: WorkflowListEntry): void {
   state.mode = "delete-confirm";
-  state.deleteTarget = entry;
+  state.pendingDelete = entry;
   state.deleteInFlight = false;
   state.chrome.hideBrowser();
   state.chrome.hideList();
@@ -1166,7 +1166,7 @@ function bindPickerEvents(state: PickerState): void {
   });
 }
 
-export type PickerSessionOpts = {
+export type PickerScreenOpts = {
   entries: WorkflowListEntry[];
   repoRoot: string;
   config: WorkflowsConfig;
@@ -1177,7 +1177,7 @@ export type PickerSessionOpts = {
   chdir?: (path: string) => void;
 };
 
-export async function runPickerSession(opts: PickerSessionOpts): Promise<number> {
+export async function runPickerScreen(opts: PickerScreenOpts): Promise<number> {
   (opts.chdir ?? ((p) => process.chdir(p)))(opts.repoRoot);
 
   const leak = stdinLeakHandlers();

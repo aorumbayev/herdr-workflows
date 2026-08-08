@@ -6,7 +6,7 @@ Ubiquitous language is only worth anything when one word means one thing. This c
 
 The two hardest cases are the ones where both senses appear in the same file:
 
-- `grammar.ts` declares `PaneSpec.target` at line 88 and `AgentAction.target` at line 64. One is a placement anchor, the other is an agent selector. They are twenty-four lines apart.
+- `grammar.ts` declares `PaneSpec.target` at line 64 and `AgentAction.target` at line 88. One is a placement anchor, the other is an agent selector. They are twenty-four lines apart.
 - `engine.ts` uses `runId` (workflow execution) and `RunAction` (a shell command) in the same functions.
 
 The credential extraction in `refactor-language-and-cohesion` is the precedent for the cohesion half: a standalone cluster with its own error type, moved verbatim to a new platform module, with the reviewer confirming the result was byte-identical. `caps` and `transcript` have the same shape. `caps` owns `CaptureLimitError` and depends on nothing. `transcript` depends on the config layers for its extractor table and on the dynamic `engine` import for the extractor command.
@@ -17,7 +17,7 @@ Goals: one word, one meaning, for `session`, `target`, and `run` in the code. Tw
 
 Non-goals:
 
-- **No YAML key renames.** `target:` inside a `pane:` block stays `target:`, and `run:` stays `run:`. Both are shipped grammar. The ambiguity is real for authors, and the answer for authors is documentation, not a breaking rename in a behavior-neutral change.
+- **No YAML key renames.** `target:` inside a `pane:` block stays `target:`, and `run:` stays `run:`. Both are shipped grammar. The ambiguity is real for authors, and the answer for authors is documentation, not a breaking rename in a behavior-neutral change. This rules out nothing on the code side: the private types behind those keys are renamed, and the mapping from key to field is one line in `parsePane`. See D7.
 - **No herdr vocabulary renames.** `agent_session`, `agent_status`, `pane_id`, and `target` as a herdr selector keep herdr's words at the boundary.
 - **No `context` rename.** `{{context.*}}` is grammar, and `InvocationContext` is a correct name for a value object. The `context` collision was already narrowed when `StepCtx` became `StepFrame`, and what remains is the module's low cohesion, which task 4 addresses directly.
 - **No new lint rule.** A regex cannot tell which sense of `target` it is reading. The gate for this change is `tsc` plus the test suite.
@@ -46,11 +46,23 @@ For each noun, one sense keeps the word and the others move. `session` stays wit
 
 ### D6: One task per noun, each independently green
 
-Four tasks, each ending in the full suite. Any task can be dropped without unwinding the others, so a reviewer who rejects one rename does not reject the change.
+Five tasks, each ending in the full suite. Any task can be dropped without unwinding the others, so a reviewer who rejects one rename does not reject the change.
+
+### D7: Rename the private type behind a YAML key, keep the key
+
+`PaneSpec` is hand-written, not a `z.infer`, and `parsePane` already maps the schema onto it field by field. So `PaneSpec.target` becomes `anchor` and the mapping line becomes `anchor: raw.target`. The YAML key, the Zod schema, `docs/workflow.schema.json`, the `pane.target` message strings, and the `pane.target` error keys all stay as they are, because each of them names what the author wrote rather than what the loader produced. The same reasoning applies to grammar's private `RunAction`, which becomes `CommandAction`: it is not exported, `kind: "run"` is a separate declaration, and the YAML key is a third.
+
+The three remaining action types (`AgentAction`, `HerdrAction`, `WorkflowAction`) still mirror their YAML keys, so a reader who learns the mirror keeps it. `CommandAction` is the one deliberate break, and it is the one whose key collides with the workflow-execution sense of `run`.
+
+### D8: `TranscriptExtractor` stays with `transcriptSchema`
+
+`transcriptSchema` is the Zod validator that defines the extractor shape, and `WorkflowsConfig` declares the field. Both live in `context.ts`, so `context.ts` is the definition of record. Moving only the TypeScript type into `transcript.ts` split one concept across two files and needed a `context -> transcript` edge to reconnect it.
+
+`AgentProfile` settles it. It is structurally identical, plays the identical role beside `profileSchema`, has more external consumers, and nobody proposed moving it. So the extractor type stays in `context.ts`, `transcript.ts` imports it, and the platform-layer edge is `transcript -> context` alone. `transcript -> caps` and `transcript -> host` are real dependencies and stay.
 
 ## Risks / Trade-offs
 
-- **Rename churn across four files.** Broad but shallow. `tsc` through `verify:check-types` names every miss exactly, and no rename crosses a serialization boundary, so no history snapshot or config file can drift.
+- **Rename churn across nine files.** Broad but shallow. `tsc` through `verify:check-types` names every miss exactly, and no rename crosses a serialization boundary, so no history snapshot or config file can drift.
 - **`transcript.ts` inherits the dynamic `engine` import.** The allowlist edge moves rather than multiplying, and `verify:layers` fails loudly if the entry is wrong.
 - **Reviewer disagreement on a chosen word.** Contained by D6: each noun is one revertable task.
 - **The user-facing `target:` ambiguity survives.** Accepted and out of scope. Worth a follow-up docs note that `target:` inside `pane:` is an anchor and `target:` on an agent step is an existing agent.

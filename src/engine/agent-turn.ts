@@ -5,6 +5,8 @@ import {
   AGENT_PROMPT_BYTE_LIMIT,
   CAPTURE_BYTE_LIMIT,
   CaptureLimitError,
+} from "../caps";
+import {
   configPathsHint,
   globalConfigPath,
   repoConfigPath,
@@ -438,7 +440,7 @@ async function placeNewAgentPane(
     text === undefined ? undefined : substituteText(text, frame.values);
   const placed = await placeEmptyPane({
     open: resolvePaneOpen(pane.open, frame.values),
-    target: sub(pane.target),
+    anchor: sub(pane.anchor),
     workspace: sub(pane.workspace),
     size: pane.size,
     focus: pane.focus ?? action.background !== true,

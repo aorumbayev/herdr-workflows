@@ -46,7 +46,7 @@ list-form `run:` passes argv elements. That promise is the rail.
 
 ## 2. Caps and failing loud
 
-`src/context.ts` holds the caps. Crossing one must fail, naming the source and the limit. Truncation
+`src/caps.ts` holds the caps. Crossing one must fail, naming the source and the limit. Truncation
 is a data-integrity defect, not a graceful degradation.
 
 ### What to check
@@ -59,7 +59,7 @@ is a data-integrity defect, not a graceful degradation.
 ### How to measure
 
 - `rg -n "slice\(0,|substring\(0,|substr\(|\.slice\(-" src` and check each against a cap constant
-- `rg -n "<each exported cap name from src/context.ts>" src` and confirm every capture, transcript,
+- `rg -n "<each exported cap name from src/caps.ts>" src` and confirm every capture, transcript,
   managed response, and environment path checks its cap
 - Quote the failure message from a test that crosses a cap
 
@@ -77,9 +77,9 @@ is a data-integrity defect, not a graceful degradation.
 
 - `rg -in "token|secret|password|api[_-]?key|authorization|bearer" src` returns roughly eighty-six
   hits. Classify each as read, store, or emit. Only emits are findings. Credential ACL helpers in
-  `src/context.ts` own private credential checks (including the workbench token path), so judge
+  `src/credentials.ts` own private credential checks (including the workbench token path), so judge
   their file mode and callers, never their existence
-- Read `src/history.ts` and the transcript path in `src/context.ts` and name exactly what they write
+- Read `src/history.ts` and `src/transcript.ts` and name exactly what they write
 - For any credential file, require restrictive creation mode and a refusal to follow symlinks:
   `rg -n "0o600|O_NOFOLLOW|chmod|mode:" src`. A credential file created with default mode is a
   finding
@@ -151,7 +151,7 @@ The most expensive copout, because it converts a caught defect into an uncaught 
 - A relaxed `verify:*` threshold, a new `verify.config.json` ignore, or a lowered `--max-warnings`
 - A test skipped, deleted, or renamed out of the run
 - An assertion made weaker, such as an exact comparison replaced by a presence check
-- A cap raised in `src/context.ts` with no requirement behind it
+- A cap raised in `src/caps.ts` with no requirement behind it
 
 ### How to measure
 
@@ -161,7 +161,7 @@ Every check below reads added lines only.
 - `git diff origin/<base>...HEAD -- verify.config.json package.json .oxlintrc.json knip.json`
 - `git diff origin/<base>...HEAD -- test | rg "^\+.*(\.skip|\.todo|toBeTruthy|toBeDefined)"`
 - `git diff origin/<base>...HEAD -- test | rg "^-.*(it\(|test\()"` for removed cases
-- `git diff origin/<base>...HEAD -- src/context.ts`
+- `git diff origin/<base>...HEAD -- src/caps.ts`
 
 Any hit is Critical unless the diff or the change document states the reason. Quote the reason and
 judge it.

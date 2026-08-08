@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertFocusPolicy, HerdrError } from "../../src/host";
-import { CAPTURE_BYTE_LIMIT } from "../../src/context";
+import { CAPTURE_BYTE_LIMIT } from "../../src/caps";
 import {
   CoordinationError,
   generateAgentName,

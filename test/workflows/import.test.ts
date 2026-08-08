@@ -13,7 +13,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../../src/context";
+import { CAPTURE_BYTE_LIMIT, CaptureLimitError } from "../../src/caps";
 import {
   checkPayload,
   decodePayload,

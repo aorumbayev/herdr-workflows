@@ -4,7 +4,7 @@ import { chmod, mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pluginStateDir } from "../../src/context";
-import { allocateRunId, RunHistorySession } from "../../src/history";
+import { allocateRunId, RunHistoryWriter } from "../../src/history";
 import { workflowSchemaUrl } from "../../src/context";
 import { parseWebRoute, runWorkbenchRoute } from "../../src/workbench";
 import {
@@ -1276,13 +1276,13 @@ describe("run history web API", () => {
 
   test("list and detail use no-store and exclude private output", async () => {
     const root = await repo();
-    const session = new RunHistorySession();
-    await session.claim({
+    const writer = new RunHistoryWriter();
+    await writer.claim({
       workflow: "demo",
       source: "repo",
       checkout_root: root,
     });
-    await session.recordStep({
+    await writer.recordStep({
       phase: "main",
       workflow: "demo",
       workflow_path: ["demo"],
@@ -1295,8 +1295,8 @@ describe("run history web API", () => {
       failure: { action: "run", exit_code: 2 },
       explanation: "secret-stdout-body",
     });
-    await session.finalize("failed");
-    session.dispose();
+    await writer.finalize("failed");
+    writer.dispose();
 
     const server = await startWebServer({ repoRoot: root });
     try {
@@ -1334,15 +1334,15 @@ describe("run history web API", () => {
     const root = await repo();
     const foreign = await mkdtemp(join(tmpdir(), "hwf-foreign-"));
     dirs.push(foreign);
-    const session = new RunHistorySession();
-    await session.claim({
+    const writer = new RunHistoryWriter();
+    await writer.claim({
       workflow: "other",
       source: "global",
       checkout_root: foreign,
     });
-    await session.finalize("succeeded");
-    const id = session.id!;
-    session.dispose();
+    await writer.finalize("succeeded");
+    const id = writer.id!;
+    writer.dispose();
 
     const server = await startWebServer({ repoRoot: root });
     try {
@@ -1427,15 +1427,15 @@ describe("run history web API", () => {
     const gone = join(tmpdir(), `hwf-gone-${Date.now()}`);
     await mkdir(gone, { recursive: true });
     const canonicalGone = await realpath(gone);
-    const session = new RunHistorySession();
-    await session.claim({
+    const writer = new RunHistoryWriter();
+    await writer.claim({
       workflow: "demo",
       source: "repo",
       checkout_root: gone,
     });
-    await session.finalize("succeeded");
-    const id = session.id!;
-    session.dispose();
+    await writer.finalize("succeeded");
+    const id = writer.id!;
+    writer.dispose();
     await rm(gone, { recursive: true, force: true });
 
     const server = await startWebServer({ repoRoot: root });

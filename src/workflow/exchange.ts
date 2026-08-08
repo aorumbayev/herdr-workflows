@@ -14,7 +14,7 @@ import { gunzipSync } from "node:zlib";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { CAPTURE_BYTE_LIMIT, CaptureLimitError, assertUnderCaptureCap } from "../context";
+import { CAPTURE_BYTE_LIMIT, CaptureLimitError, assertUnderCaptureCap } from "../caps";
 import {
   WORKFLOW_NAME_RULE,
   resolveWorkflowFile,

@@ -6,7 +6,7 @@ describe("placeCommandPane", () => {
     const calls: { method: string; params: Record<string, unknown> }[] = [];
     const placed = await placeCommandPane({
       open: "beside",
-      target: "w1:pM",
+      anchor: "w1:pM",
       focus: false,
       argv: ["sh", "-c", "echo LISTENING; sleep 20"],
       deps: {

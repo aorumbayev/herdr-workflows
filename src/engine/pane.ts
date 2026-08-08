@@ -15,7 +15,7 @@ type PlaceAnchors = { paneId?: string; tabId?: string; workspaceId?: string };
 
 export type PlaceOpts = {
   open: PaneOpen;
-  target?: string;
+  anchor?: string;
   workspace?: string;
   size?: number;
   focus: boolean;
@@ -38,10 +38,10 @@ function requireWorkspace(o: PlaceOpts): string {
   return workspace;
 }
 
-function requireTargetPane(o: PlaceOpts): string {
-  const target = o.target ?? o.invocation.paneId;
-  if (!target) failPlacement(`pane.open: ${o.open} needs pane.target or an invocation pane`);
-  return target;
+function requireAnchorPane(o: PlaceOpts): string {
+  const anchor = o.anchor ?? o.invocation.paneId;
+  if (!anchor) failPlacement(`pane.open: ${o.open} needs pane.target or an invocation pane`);
+  return anchor;
 }
 
 function splitDirection(open: PaneOpen): "right" | "down" {
@@ -79,7 +79,7 @@ export async function placeEmptyPane(o: PlaceOpts): Promise<PlacedPane> {
   }
   const result = await o.deps.herdrCall("pane.split", {
     direction: splitDirection(o.open),
-    target_pane_id: requireTargetPane(o),
+    target_pane_id: requireAnchorPane(o),
     ratio: o.size !== undefined ? sizeToFirstRatio(o.size) : null,
     cwd: o.cwd ?? null,
     env: o.env ?? {},
