@@ -24,6 +24,10 @@ function notifications(calls: RpcCall[]): Record<string, unknown>[] {
   return calls.filter((call) => call.method === "notification.show").map((call) => call.params);
 }
 
+function titles(calls: RpcCall[]): unknown[] {
+  return notifications(calls).map((params) => params.title);
+}
+
 describe("shipped examples through isolated CLI and fake Herdr", () => {
   test("branch-check covers clean, changed, existing, and available outcomes", async () => {
     const scenarios: {
@@ -169,6 +173,75 @@ describe("shipped examples through isolated CLI and fake Herdr", () => {
     });
     expect(calls.some((call) => call.method === "worktree.create")).toBe(false);
     expect(notifications(calls).map((params) => params.title)).toEqual(["Worktree ready"]);
+  });
+
+  test("review-gate notifies on APPROVE and fails the run on REJECT", async () => {
+    const approved = successful(
+      await harness.run(
+        "review-gate",
+        { reviewer: "deterministic" },
+        { HWF_E2E_GIT_DIRTY: "1", HWF_E2E_REVIEW_VERDICT: "APPROVE" },
+      ),
+    );
+    expect(titles(approved)).toEqual(["review approved"]);
+    expect(approved.some((call) => call.method === "pane.close")).toBe(true);
+
+    const rejected = await harness.run(
+      "review-gate",
+      { reviewer: "deterministic" },
+      { HWF_E2E_GIT_DIRTY: "1", HWF_E2E_REVIEW_VERDICT: "REJECT" },
+    );
+    expect(rejected.exitCode).not.toBe(0);
+    expect(rejected.stderr).toContain("one finding, reported above");
+    expect(titles(rejected.calls)).toEqual([]);
+  });
+
+  test("review-gate skips the reviewer when the diff is empty", async () => {
+    const calls = successful(
+      await harness.run("review-gate", { reviewer: "deterministic" }, { HWF_E2E_GIT_DIRTY: "0" }),
+    );
+    expect(titles(calls)).toEqual(["nothing to review"]);
+    expect(calls.some((call) => call.method === "agent.start")).toBe(false);
+  });
+
+  test("adversarial-revise runs the revision step only on the REVISE verdict", async () => {
+    const scenarios = [
+      { verdict: "APPROVE", starts: 2, title: "proposal approved" },
+      { verdict: "REVISE", starts: 3, title: "proposal revised" },
+    ];
+    for (const scenario of scenarios) {
+      const calls = successful(
+        await harness.run(
+          "adversarial-revise",
+          { task: "ship a thing", author: "deterministic", critic: "deterministic" },
+          { HWF_E2E_CRITIQUE_VERDICT: scenario.verdict },
+        ),
+      );
+      expect(calls.filter((call) => call.method === "agent.start")).toHaveLength(scenario.starts);
+      expect(titles(calls)).toEqual([scenario.title]);
+    }
+  });
+
+  test("remote-branch-log resolves the branch choice from the chosen remote", async () => {
+    for (const remote of ["origin", "upstream"]) {
+      const calls = successful(
+        await harness.run("remote-branch-log", { remote, branch: `${remote}/release` }),
+      );
+      expect(notifications(calls)).toEqual([
+        {
+          title: `recent commits on ${remote}/release`,
+          body: `abc1234 seed commit on ${remote}/release\n`,
+          sound: "done",
+        },
+      ]);
+    }
+
+    const crossed = await harness.run("remote-branch-log", {
+      remote: "origin",
+      branch: "upstream/release",
+    });
+    expect(crossed.exitCode).not.toBe(0);
+    expect(crossed.stderr).toContain("must be one of: origin/main, origin/release");
   });
 
   test("worktree delete removes the checkout and reports the branch outcome", async () => {
