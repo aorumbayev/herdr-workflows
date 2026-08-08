@@ -1,6 +1,6 @@
 <script setup>
 import { onBeforeUnmount, ref, watch } from "vue";
-import examples from "./examples.generated";
+import { data as examples } from "./examples.data";
 
 const open = ref("");
 const copied = ref("");

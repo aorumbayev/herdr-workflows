@@ -3,7 +3,6 @@
   "ignorePatterns": [
     ".agents/references/**",
     ".cursor/**",
-    "docs/.vitepress/theme/examples.generated.ts",
     "examples/**",
     "openspec/**",
     "schemas/**",

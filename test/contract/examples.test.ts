@@ -2,19 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildExamples, renderModule } from "../../scripts/generate-examples";
+import { buildExamples } from "../../scripts/build-examples";
 import { loadWorkflow } from "../../src/workflow/inputs";
 import type { WorkflowsConfig } from "../../src/context";
-
-const committedGallery = join(
-  import.meta.dir,
-  "..",
-  "..",
-  "docs",
-  ".vitepress",
-  "theme",
-  "examples.generated.ts",
-);
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -94,15 +84,6 @@ describe("shipped examples", () => {
       expect(card.body).not.toMatch(/^\s*on_error:/m);
       expect(card.body).not.toContain("{session}");
       expect(card.body).not.toMatch(/^\s*use:/m);
-    }
-  });
-
-  test("docs/.vitepress/theme/examples.generated.ts matches buildExamples()", async () => {
-    const expected = renderModule(await buildExamples(EXAMPLES_DIR));
-    if ((await Bun.file(committedGallery).text()) !== expected) {
-      throw new Error(
-        "docs/.vitepress/theme/examples.generated.ts is stale — run `bun run examples`",
-      );
     }
   });
 

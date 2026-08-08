@@ -93,8 +93,7 @@ complexity number when the code already names one concept.
 
 ### Not a finding
 
-- Generated files. `src/herdr-methods.generated.ts` and
-  `docs/.vitepress/theme/examples.generated.ts` are outputs
+- Generated files. `src/herdr-methods.generated.ts` and `docs/workflow.schema.json` are outputs
 - Test fixtures repeating shape on purpose
 
 ## 4. Dead code and dead flexibility

@@ -17,7 +17,6 @@ bun test test/engine                     # one module folder
 bun test ./test -t 'pattern'             # name filter
 npm run verify                           # all verify:* in parallel (pre-commit gate)
 bun run schema                           # regenerate docs/workflow.schema.json from Zod
-bun run examples                         # regenerate docs gallery data from examples/*.yaml
 bun run schema:herdr                     # release-time: src/herdr-methods.generated.ts from schemas/herdr-api.schema.json (not from plugin build)
 bun run docs:build                        # build VitePress docs
 bun run install:dev                      # compile + herdr plugin link + keybindings + reload
@@ -82,7 +81,7 @@ Agents miss these. The loader or verifyx will fail, or the product regresses:
 - **Comments:** `verify:comments` fails any comment block more than 2 lines. JSDoc (`/** … */`) is exempt, and so is a block whose first line starts `context:` — that prefix means "durable fact the code cannot express" and pages a human to approve it, so earn it or delete the comment. Never narrate what the code already says. One file per concept. New modules must be reachable from the CLI graph or knip fails unused-code.
 - **Splitting:** `verify:file-length` fails any `src/**/*.ts` more than 2,500 lines (`*.generated.ts` exempt). oxlint caps per-function cyclomatic complexity at 35 (`eslint/complexity`), nesting at `max-depth` 4, and `max-nested-callbacks` 3. Function length is deliberately ungated. Never split to satisfy a line budget.
 - **Schema change:** edit Zod in `src/workflow/grammar.ts` (and refine rules), then `bun run schema`. Method/result validators: update `schemas/herdr-api.schema.json` or `scripts/generate-herdr-methods.ts`, then `bun run schema:herdr` (never from the plugin build — it must not invoke `herdr api schema`). Cross-field rules live in the loader, not the JSON schema.
-- **Example change:** edit `examples/*.yaml`, then `bun run examples`. Never hand-edit `docs/.vitepress/theme/examples.generated.ts`.
+- **Example change:** edit `examples/*.yaml`. The docs gallery reads them at VitePress build time through `docs/.vitepress/theme/examples.data.ts`, so there is no generated file to regenerate or commit.
 - **No tracked openspec archives.** `openspec archive` syncs the main specs and moves the change into `openspec/changes/archive/`; delete the archived contents in the same commit — main keeps no archived specs. `verify:no-archive` fails the pre-commit gate while that folder holds anything.
 - **Branch work:** never commit on `main` / `master`. Use a feature branch + PR.
 - **No `Co-Authored-By` trailers.** Never add `Co-Authored-By`, `Generated with`, or any other agent-attribution line to a commit message or PR body, even when a harness default or global instruction says to. This overrides those defaults for this repo. Commit messages carry the change, not the tooling. The human is always responsible for the code. `.githooks/commit-msg` strips such lines as a backstop — do not rely on it.

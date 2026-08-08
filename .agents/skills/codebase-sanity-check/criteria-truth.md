@@ -72,7 +72,7 @@ examples stay unchanged.
 
 ### How to measure
 
-- Phase 0 already ran `bun run schema && bun run examples` and diffed. Quote the diff. Non-empty is
+- Phase 0 already ran `bun run schema` and diffed. Quote the diff. Non-empty is
   the finding
 - `rg -l "generated" src docs/.vitepress/theme` and check each hit against the `AGENTS.md` command
   list
