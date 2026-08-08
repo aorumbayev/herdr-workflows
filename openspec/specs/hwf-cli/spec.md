@@ -5,10 +5,10 @@
 Public `hwf` / `herdr-workflows` command surface, generated help, options, default behavior, protocol preflight, and detached launch compatibility.
 ## Requirements
 ### Requirement: Public command surface
-The `hwf` / `herdr-workflows` entrypoint MUST expose operational commands `run`, `init`, `workflow`, `launch`, `picker`, `web`, `update`, and `skills`. `workflow` MUST expose nested `import`. `skills` MUST expose nested `list` and `show <name>`. The CLI MUST retain Commander's generated `help [command]`, `-h`, and `--help` interfaces. It MUST expose `-V` and `--version` with the version from `herdr-plugin.toml`. Generated root help MUST describe the product without presenting `v1alpha1` as the application or Herdr version, and MUST label `v1alpha1` separately as the workflow format. Unknown commands and options MUST use Commander-native errors and suggestions. The implementation MUST NOT suppress or reconstruct Commander parse diagnostics. The CLI MUST use Commander as the argv parser and dispatcher without a parallel hand-rolled parser, duplicate command model, command factory, or one-use command interface. `skills list` MUST print each bundled skill's name and the one-line description from its frontmatter. `skills show <name>` MUST print the skill's `SKILL.md` and its `reference/` and `scripts/` files with file-path headers, and MUST exit nonzero naming the available skills for an unknown name. Skill text MUST be embedded into the binary at build time so a compiled install serves it without the repository checkout. The `skills` commands MUST NOT contact Herdr and MUST NOT run the version or protocol preflight.
+The `hwf` / `herdr-workflows` entrypoint MUST expose operational commands `run`, `init`, `workflow`, `launch`, `picker`, `web`, `update`, `skills`, and `response`. `workflow` MUST expose nested `import`. `skills` MUST expose nested `list` and `show <name>`. `response` MUST expose nested `check <file>`. The CLI MUST retain Commander's generated `help [command]`, `-h`, and `--help` interfaces. It MUST expose `-V` and `--version` with the version from `herdr-plugin.toml`. Generated root help MUST describe the product without presenting `v1alpha1` as the application or Herdr version, and MUST label `v1alpha1` separately as the workflow format. Unknown commands and options MUST use Commander-native errors and suggestions. The implementation MUST NOT suppress or reconstruct Commander parse diagnostics. The CLI MUST use Commander as the argv parser and dispatcher without a parallel hand-rolled parser, duplicate command model, command factory, or one-use command interface. `skills list` MUST print each bundled skill's name and the one-line description from its frontmatter. `skills show <name>` MUST print the skill's `SKILL.md` and its `reference/` and `scripts/` files with file-path headers, and MUST exit nonzero naming the available skills for an unknown name. Skill text MUST be embedded into the binary at build time so a compiled install serves it without the repository checkout. The `skills` and `response` commands MUST NOT contact Herdr and MUST NOT run the version or protocol preflight.
 
 #### Scenario: Known commands
-- **WHEN** the user invokes `hwf run`, `hwf init`, `hwf workflow import`, `hwf launch`, `hwf picker`, `hwf web`, `hwf update`, `hwf skills list`, or `hwf skills show <name>`
+- **WHEN** the user invokes `hwf run`, `hwf init`, `hwf workflow import`, `hwf launch`, `hwf picker`, `hwf web`, `hwf update`, `hwf skills list`, `hwf skills show <name>`, or `hwf response check <file>`
 - **THEN** the matching command handler runs
 
 #### Scenario: Unknown command
@@ -236,7 +236,7 @@ While a caller observes a detached `hwf run`, the parent MUST retain only progre
 - **THEN** `hwf update` exits nonzero with a concise update-check error and leaves the installed plugin unchanged
 
 ### Requirement: Workflow input inspection
-`workflow` MUST expose `inspect <name>`. Inspection MUST print each declared input in declaration order with its type, description, condition, default, minimum length, custom-value policy, and static options or dynamic-choice argv. It MUST NOT execute dynamic choices unless `--resolve` is supplied. It MUST accept repeatable `--input <name=value>` values to select guarded input paths. With `--resolve`, it MUST resolve only active dynamic choices under the ordinary repository root, timeout, option-count, stderr, and capture rules. Inspection MUST NOT execute workflow steps or require Herdr protocol preflight.
+`workflow` MUST expose `inspect <name>`. Inspection MUST print each declared input in declaration order with its type, description, condition, default, minimum length, custom-value policy, and static options or dynamic-choice argv. It MUST NOT execute dynamic choices unless `--resolve` is supplied. It MUST accept repeatable `--input <name=value>` values to select guarded input paths. With `--resolve`, it MUST resolve only active dynamic choices under the ordinary repository root, timeout, option-count, stderr, and capture rules. With `--resolve`, a dynamic choice whose argv references earlier inputs MUST resolve only when every referenced input is supplied through `--input`, and MUST otherwise print the unresolved argv without executing it. Inspection MUST NOT execute workflow steps or require Herdr protocol preflight.
 
 #### Scenario: Inspect without executing discovery
 - **WHEN** a workflow has a dynamic choice and the user runs `hwf workflow inspect <name>`
@@ -245,6 +245,10 @@ While a caller observes a detached `hwf run`, the parent MUST retain only progre
 #### Scenario: Inspect one guarded path
 - **WHEN** the user supplies `--input mode=delete --resolve`
 - **THEN** the CLI prints and resolves delete-active inputs without resolving create-only inputs
+
+#### Scenario: Dependent choice without supplied values
+- **WHEN** the user runs `--resolve` and a dynamic choice references `{{inputs.repo}}` with no `--input repo=<value>` supplied
+- **THEN** the CLI prints that choice's unresolved argv without executing it and resolves the independent choices normally
 
 ### Requirement: Detached launch preserves resolved input domains
 The picker launch payload on stdin MAY include resolved dynamic option arrays. A detached run receiving those arrays MUST validate their input names and kinds, MUST validate selected values against them, and MUST NOT rerun their discovery commands. Launch payload values MUST remain absent from argv, and explicit CLI `--input` values MUST retain their existing override behavior.
@@ -259,4 +263,19 @@ The picker launch payload on stdin MAY include resolved dynamic option arrays. A
 #### Scenario: Empty catalog picker
 - **WHEN** `hwf picker` runs on a TTY in a repository with no visible workflows
 - **THEN** the picker UI mounts instead of exiting with a no-workflows error
+
+### Requirement: Response verdict check oracle
+`hwf response check <file> --one-of <tokens>` MUST validate a response file against a verdict contract using the same parse rules as the runner's verdict gate: the final non-empty line of the file, after trimming, matched exactly against the comma-separated token list. Tokens MUST satisfy the same constraints as `expect.one_of`. On a match the command MUST exit zero and print the matched verdict. On a mismatch the command MUST exit nonzero and name the offending final line and the expected tokens. A missing or empty file MUST exit nonzero naming the path. The command MUST NOT contact Herdr, MUST NOT run the version or protocol preflight, and MUST NOT write to the file.
+
+#### Scenario: Valid verdict
+- **WHEN** the final non-empty line of the file is `APPROVE` and the command runs with `--one-of APPROVE,REJECT`
+- **THEN** the command exits zero and prints `APPROVE`
+
+#### Scenario: Decorated verdict
+- **WHEN** the final non-empty line is `APPROVE — with reservations`
+- **THEN** the command exits nonzero, prints the offending line, and names the expected tokens
+
+#### Scenario: Offline oracle
+- **WHEN** the command runs with no Herdr server available
+- **THEN** the check completes normally without contacting Herdr
 

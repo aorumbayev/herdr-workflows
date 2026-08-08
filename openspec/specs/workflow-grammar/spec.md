@@ -15,7 +15,7 @@ A workflow MUST declare string `version: v1alpha1` and a non-empty `steps:` list
 - **THEN** loading fails with the supported format and rewrite-or-upgrade guidance
 
 ### Requirement: Four explicit actions and strict modifiers
-Every step MUST carry exactly one action from `agent`, `run`, `herdr`, and `workflow`. Every step MUST accept optional `id`, `when`, and `continue_on_error`. Agent actions MUST also accept mutually exclusive `using` and `target`, plus `cwd`, `env`, `pane`, `background`, and `timeout`. Run actions MUST also accept `shell`, `cwd`, `env`, `pane`, `background`, `ready_when`, `timeout`, `retry`, and `success_codes`. Herdr actions MUST also accept `params` and `retry`. Workflow actions MUST also accept `inputs`. Any other key MUST be a load error. Dotted keys MUST never be inferred as actions. Keys such as `out`, `wait`, `in`, `ratio`, `allow_fail`, `for`, and `as` MUST fail as unknown keys.
+Every step MUST carry exactly one action from `agent`, `run`, `herdr`, and `workflow`. Every step MUST accept optional `id`, `when`, and `continue_on_error`. Agent actions MUST also accept mutually exclusive `using` and `target`, plus `cwd`, `env`, `pane`, `background`, `timeout`, and `expect`. Run actions MUST also accept `shell`, `cwd`, `env`, `pane`, `background`, `ready_when`, `timeout`, `retry`, and `success_codes`. Herdr actions MUST also accept `params` and `retry`. Workflow actions MUST also accept `inputs`. Any other key MUST be a load error. Dotted keys MUST never be inferred as actions. Keys such as `out`, `wait`, `in`, `ratio`, `allow_fail`, `for`, and `as` MUST fail as unknown keys.
 
 #### Scenario: Multiple actions
 - **WHEN** a step contains both `run` and `agent`
@@ -44,7 +44,7 @@ A whole-value template in structured YAML MUST preserve the source type. Embedde
 - **THEN** the object remains structured rather than becoming JSON text
 
 ### Requirement: Natural step results
-A blocking managed agent turn MUST produce `{response, agent, pane_id}`, where `response` and `pane_id` are strings and `agent` is native Herdr AgentInfo. A local command MUST produce string `stdout`, string `stderr`, integer `exit_code`, and boolean `failed`. A placed command that satisfies readiness MUST produce the complete native wait result, plus created pane/tab/workspace identifiers. A Herdr action MUST produce its complete native success result. A child workflow MUST produce its declared returns. Background and skipped steps MUST produce no result. V1alpha1 MUST NOT support `out` or positional `previous`.
+A blocking managed agent turn MUST produce `{response, agent, pane_id}`, where `response` and `pane_id` are strings and `agent` is native Herdr AgentInfo. A blocking managed agent turn that declares `expect` MUST also produce string `verdict`. A local command MUST produce string `stdout`, string `stderr`, integer `exit_code`, and boolean `failed`. A placed command that satisfies readiness MUST produce the complete native wait result, plus created pane/tab/workspace identifiers. A Herdr action MUST produce its complete native success result. A child workflow MUST produce its declared returns. Background and skipped steps MUST produce no result. V1alpha1 MUST NOT support `out` or positional `previous`.
 
 #### Scenario: Managed agent response
 - **WHEN** a blocking agent settles and writes non-empty managed output
@@ -78,11 +78,23 @@ A blocking managed agent turn MUST produce `{response, agent, pane_id}`, where `
 ### Requirement: Named adaptive inputs
 Input names MUST match `[a-z][a-z0-9_]{0,31}`. Values MUST be `text`, `profile`, a non-empty static choice list, or a strict map containing only `type`, `description`, `default`, `when`, `allow_custom`, `min_length`, and, conditionally, `options`. Map type MUST be `text`, `choice`, or `profile`. Choice MUST require static options or `{run: <argv>}`. Text and profile MUST reject options. Dynamic choice failure or empty output MUST fail collection. Choice and profile defaults MUST exist in the available values. Only the entry workflow MUST prompt, in declaration order, and unused inputs MUST fail load.
 
-Dynamic choice argv MUST reject templates, MUST run from repository root with the invoking environment, and MUST receive no partially collected input exports. Nonzero exit MUST fail the step with capped stderr. Stdout MUST split on LF/CRLF, trim surrounding whitespace, discard empty lines, and deduplicate while preserving first-seen order. More than 1,000 choices, or crossing the shared capture cap, MUST fail input collection. Dynamic choice commands MUST time out after 10 seconds and get terminated as a process group.
+Dynamic choice argv elements MAY contain templates rooted at `inputs` that reference earlier declared inputs. Templates rooted at `steps` or `context` inside dynamic argv MUST be load errors. A self reference or forward reference MUST be a load error. Referencing a conditional input MUST be a load error unless the consuming input's `when:` carries every clause that guards the referenced input. The runner MUST substitute referenced values into argv elements before execution. Dynamic choice argv MUST run from repository root with the invoking environment and MUST receive no partially collected input exports. Nonzero exit MUST fail the step with capped stderr. Stdout MUST split on LF/CRLF, trim surrounding whitespace, discard empty lines, and deduplicate while preserving first-seen order. More than 1,000 choices, or crossing the shared capture cap, MUST fail input collection. Dynamic choice commands MUST time out after 10 seconds and get terminated as a process group.
 
 #### Scenario: Profile picker
 - **WHEN** an input has type profile
 - **THEN** the picker lists merged native-kind profile names in deterministic order
+
+#### Scenario: Cascading dynamic choice
+- **WHEN** input `repo` is a dynamic choice and input `branch` declares `{run: [git, -C, "{{inputs.repo}}", branch, --format, "%(refname:short)"]}`
+- **THEN** the `branch` options resolve after `repo` is answered, with the answered value substituted into the argv element
+
+#### Scenario: Forward reference in dynamic argv
+- **WHEN** an earlier input's dynamic argv references a later input
+- **THEN** loading fails naming the forward reference
+
+#### Scenario: Unguarded reference to a conditional input
+- **WHEN** input `branch` references `{{inputs.remote}}` in its dynamic argv, `remote` is guarded by `mode == "push"`, and `branch` declares no matching guard
+- **THEN** loading fails naming the missing guard clause
 
 ### Requirement: Managed native agent action
 `agent:` MUST contain non-empty prompt text. `using:` MUST resolve a merged profile. When both `using` and `target` are absent, the runner MUST use the merged `default_profile`. New-agent mode MUST create a requested or default Herdr pane, call native `agent.start` with profile kind/args, and submit through `agent.prompt`. `target:` MUST resolve an existing agent name or pane ID. It MUST reject `pane`, `cwd`, and `env`, and MUST submit through `agent.prompt` without launching a new agent. Blocking turns MUST append the managed response-file instruction and wait for `idle` or `done`. `blocked` MUST send one notification per blocked episode and keep waiting. `unknown` MUST never count as successful settlement. Omitted timeout MUST default to 30 minutes and apply to the prompted turn. Native agent interactive readiness MUST use a separate 30-second startup deadline.
@@ -186,7 +198,7 @@ A mapped choice input MAY declare `allow_custom: true`, in which case its option
 - **THEN** collection fails before workflow step 1 and names the input and minimum length
 
 ### Requirement: Entry dynamic choices resolve once
-Workflow loading and listing MUST validate dynamic-choice declarations without executing them. Entry input collection MUST execute only active dynamic choices, at most once per invocation. A detached picker run MUST reuse the option domains collected by its parent and MUST NOT execute those commands again. The detached runner MUST reject snapshots for undeclared, inactive, static, text, or profile inputs. Direct CLI and child invocation MUST each resolve their own active dynamic options once. Dynamic-choice argv MUST remain template-free and receive no partially collected input exports.
+Workflow loading and listing MUST validate dynamic-choice declarations without executing them. Entry input collection MUST execute only active dynamic choices, at most once per invocation, except that a choice whose resolved domain is discarded because an earlier answer changed MUST resolve again from the new answer. A detached picker run MUST reuse the option domains collected by its parent and MUST NOT execute those commands again. The detached runner MUST reject snapshots for undeclared, inactive, static, text, or profile inputs. Direct CLI and child invocation MUST each resolve their own active dynamic options once. Dynamic-choice argv MUST accept `inputs`-rooted templates only and MUST receive no partially collected input exports.
 
 #### Scenario: Picker launches dynamic choice workflow
 - **WHEN** the picker resolves one active dynamic choice and starts its detached run
@@ -195,6 +207,10 @@ Workflow loading and listing MUST validate dynamic-choice declarations without e
 #### Scenario: Inactive dynamic choice
 - **WHEN** a dynamic choice input has a false input condition
 - **THEN** its command does not execute
+
+#### Scenario: Dependent domain after an earlier answer changes
+- **WHEN** a user navigates back and gives input `repo` a different value
+- **THEN** the domain of the dependent choice is discarded and its command runs again with the new value
 
 ### Requirement: Statically selected pane placement
 `pane.open` MAY be a whole-value template that references one unconditional, closed, static choice input. Every option of that input MUST be `tab`, `beside`, or `below`. Literal placement MUST retain its current behavior. Embedded templates and references to text, profile, custom, dynamic, conditional, step-result, or context values MUST be load errors at `pane.open`.
@@ -217,4 +233,31 @@ A blocking local `run` MAY declare `success_codes` as a non-empty list of unique
 #### Scenario: Unexpected probe failure
 - **WHEN** the same probe exits two
 - **THEN** the workflow stops normally with the command's failure reason
+
+### Requirement: Verdict-gated agent turns
+An agent action MAY declare `expect` with `one_of`: a non-empty list of distinct tokens matching `[A-Z][A-Z0-9_]{0,31}`, and optional `require`: a non-empty subset of `one_of`. `expect` MUST be a load error on a background agent action. The runner MUST instruct the agent to end its managed response with exactly one `one_of` token on the final non-empty line, and to verify the response file with the `hwf response check` command until it exits zero before finishing the turn. The runner MUST parse `verdict` as the final non-empty line of the managed response after trimming, matched exactly against `one_of`. A response whose final non-empty line matches no `one_of` token MUST fail the step and name the expected tokens. When `require` is present and the parsed verdict is not in `require`, the step MUST fail and name the verdict and the required tokens. `verdict` MUST contain only the matched token; `response` MUST keep the complete text. Referencing `steps.<id>.verdict` when the producer declares no `expect` MUST be a load error. Existing condition, tolerated-failure, and recovery semantics MUST apply to verdict failures unchanged.
+
+#### Scenario: Verdict drives a condition
+- **WHEN** a reviewer step declares `expect: {one_of: [APPROVE, REJECT]}` and replies with prose ending in `REJECT`
+- **THEN** the step succeeds, `{{steps.review.verdict}}` renders `REJECT`, and a later step gated on `== "REJECT"` runs
+
+#### Scenario: Required verdict missing
+- **WHEN** a step declares `require: [APPROVE]` and the agent's final non-empty line is `REJECT`
+- **THEN** the step fails, the failure names `REJECT` and the required tokens, and normal failure handling applies
+
+#### Scenario: Unparseable verdict
+- **WHEN** the agent's final non-empty line matches no `one_of` token
+- **THEN** the step fails and the error names the expected tokens
+
+#### Scenario: Verdict reference without expect
+- **WHEN** a template references `{{steps.review.verdict}}` and the `review` step declares no `expect`
+- **THEN** loading fails and names the missing `expect` declaration
+
+#### Scenario: Background agent with expect
+- **WHEN** an agent action declares both `background: true` and `expect`
+- **THEN** loading fails because a background turn produces no result
+
+#### Scenario: Self-check instruction names the oracle
+- **WHEN** a blocking agent step declares `expect: {one_of: [APPROVE, REJECT]}`
+- **THEN** the submitted prompt names the tokens, the final-line rule, and the exact `hwf response check` command for the managed response path
 
