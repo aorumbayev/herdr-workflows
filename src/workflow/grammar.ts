@@ -278,6 +278,21 @@ export function textTemplates(text: string): TemplatePath[] {
   return out;
 }
 
+export const DYNAMIC_ARGV_ROOT_RULE =
+  "dynamic choice argv templates may only reference earlier inputs";
+
+/** Input names a dynamic choice argv references, in first-seen order. */
+export function dynamicChoiceInputRefs(dynamic: DynamicChoice): string[] {
+  const out: string[] = [];
+  for (const element of dynamic.run) {
+    for (const path of textTemplates(element)) {
+      const name = path.root === "inputs" ? path.segments[0] : undefined;
+      if (name && path.segments.length === 1 && !out.includes(name)) out.push(name);
+    }
+  }
+  return out;
+}
+
 function malformedTemplateSnippet(text: string): string | undefined {
   let from = 0;
   while (from < text.length) {
@@ -647,18 +662,30 @@ const dynamicChoiceSchema = z
       .array(z.string().min(1))
       .min(1)
       .describe(
-        "argv run from the repo root to discover the options, one per line. Must be template-free and independent of earlier answers; treat it as read-only. Capped at 10s, 1,000 options, and 8 MiB.",
+        "argv run from the repo root to discover the options, one per line. Elements may template `{{inputs.<earlier>}}` to cascade from an earlier answer; `steps` and `context` roots are load errors. Treat it as read-only. Capped at 10s, 1,000 options, and 8 MiB.",
       ),
   })
   .strict()
   .superRefine((dc, ctx) => {
     for (let i = 0; i < dc.run.length; i++) {
-      if (dc.run[i]!.includes("{{")) {
+      const element = dc.run[i]!;
+      const bad = malformedTemplateSnippet(element);
+      if (bad !== undefined) {
         ctx.addIssue({
           code: "custom",
-          message: "dynamic choice argv rejects templates",
+          message: `invalid template '${bad}' — expected {{inputs.<earlier input>}}`,
           path: ["run", i],
         });
+        continue;
+      }
+      for (const path of textTemplates(element)) {
+        if (path.root !== "inputs" || path.segments.length !== 1) {
+          ctx.addIssue({
+            code: "custom",
+            message: DYNAMIC_ARGV_ROOT_RULE,
+            path: ["run", i],
+          });
+        }
       }
     }
   });

@@ -193,7 +193,21 @@ Names match `[a-z][a-z0-9_]{0,31}`. A declared input nothing references is a loa
 
 **Guards.** An inactive input doesn't prompt, doesn't resolve, doesn't apply its default, doesn't enter the input namespace, and doesn't export an `HWF_` value. Supplying a value for one fails collection — scripted `hwf run` callers must leave the flag off entirely, including `--input branch=`. Referencing a guarded input is a load error unless the reading site carries every clause that guards it.
 
-**Dynamic options.** `{run: argv}` runs from the repo root with the invoking environment and no partial input exports, and its argv can't contain templates or depend on earlier answers. Output splits on newlines, trims, drops empty lines, and deduplicates while keeping first-seen order. Nonzero exit, empty output, more than 1,000 options, or crossing the capture cap fails collection. Loading and listing validate the declaration without running it. Entry collection runs each active one once. A picker launch carries the resolved options to the detached run so they aren't looked up twice. Treat these commands as read-only.
+**Dynamic options.** `{run: argv}` runs from the repo root with the invoking environment and no partial input exports. Output splits on newlines, trims, drops empty lines, and deduplicates while keeping first-seen order. Nonzero exit, empty output, more than 1,000 options, or crossing the capture cap fails collection. Loading and listing validate the declaration without running it. Entry collection runs each active one once. A picker launch carries the resolved options to the detached run so they aren't looked up twice. Treat these commands as read-only.
+
+**Cascading choices.** A dynamic argv element may hold `{{inputs.<name>}}` templates that name earlier declared inputs, so one choice can list the values of another. The answer lands as one argv element, never re-parsed by a shell. Substitution happens right before the command runs, so the options reflect the answer given a moment earlier. `steps.*` and `context.*` roots inside dynamic argv are load errors, and so are a self reference and a forward reference. Referencing a guarded input requires the consuming input's own `when:` to carry every clause that guards it. Changing an earlier answer discards the later answers and the options resolved from them, so the next prompt lists a fresh domain.
+
+```yaml
+inputs:
+  repo:
+    type: choice
+    description: Repository to inspect
+    options: { run: [ls, repos] }
+  branch:
+    type: choice
+    description: Branch in that repository
+    options: { run: [git, -C, "repos/{{inputs.repo}}", branch, --format=%(refname:short)] }
+```
 
 **Prompts.** The picker states the input name, your `description`, the position in the sequence, and how to answer: how many options a resolved closed domain has, whether a custom value is accepted, and a text input's default and `min_length`. Answers so far stay listed below the prompt.
 
@@ -202,7 +216,7 @@ hwf workflow inspect <name>
 hwf workflow inspect <name> --input mode=delete --resolve
 ```
 
-Without `--resolve`, dynamic argv is printed, not run. With it, only active dynamic options resolve, under the usual limits.
+Without `--resolve`, dynamic argv is printed, not run. With it, only active dynamic options resolve, under the usual limits. A choice whose argv references earlier inputs resolves only when every referenced input arrives through `--input`. Otherwise its unresolved argv is printed and the independent choices still resolve.
 
 ## Control flow
 

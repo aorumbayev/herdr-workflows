@@ -81,7 +81,7 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "description": "argv run from the repo root to discover the options, one per line. Must be template-free and independent of earlier answers; treat it as read-only. Capped at 10s, 1,000 options, and 8 MiB."
+                        "description": "argv run from the repo root to discover the options, one per line. Elements may template `{{inputs.<earlier>}}` to cascade from an earlier answer; `steps` and `context` roots are load errors. Treat it as read-only. Capped at 10s, 1,000 options, and 8 MiB."
                       }
                     },
                     "required": ["run"],

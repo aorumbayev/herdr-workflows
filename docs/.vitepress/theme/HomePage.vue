@@ -125,7 +125,8 @@ steps:
       <h2>Ready-made workflows</h2>
       <p class="section-lede">
         <strong>adversarial-revise</strong>, <strong>branch-check</strong>,
-        <strong>handoff</strong>, <strong>prompt-enhance</strong>, <strong>review-gate</strong>, and
+        <strong>handoff</strong>, <strong>prompt-enhance</strong>,
+        <strong>remote-branch-log</strong>, <strong>review-gate</strong>, and
         <strong>worktree</strong> ship with the plugin. Copy one command, read what it contains, and
         it's yours.
       </p>

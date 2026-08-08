@@ -2,6 +2,7 @@ import { isMethodResultDotPath, RESULT_DOT_PATHS } from "../host";
 import {
   bail,
   clausesContain,
+  DYNAMIC_ARGV_ROOT_RULE,
   evaluateWhen,
   IDENT_RE,
   isWholeValueTemplate,
@@ -729,7 +730,38 @@ function assertInputGuards(file: string, inputs: InputSpec[]): void {
         `input '${prior.name}'`,
       );
     }
+    assertDynamicArgvRefs(file, input, earlier, inputs);
     earlier.set(input.name, input);
+  }
+}
+
+function assertDynamicArgvRefs(
+  file: string,
+  input: InputSpec,
+  earlier: Map<string, InputSpec>,
+  inputs: InputSpec[],
+): void {
+  const argv = input.dynamicOptions?.run;
+  if (!argv) return;
+  for (let i = 0; i < argv.length; i++) {
+    const key = `inputs.${input.name}.options.run[${i}]`;
+    for (const path of textTemplates(argv[i]!)) {
+      if (path.root !== "inputs" || path.segments.length !== 1) {
+        bail(file, undefined, key, DYNAMIC_ARGV_ROOT_RULE);
+      }
+      const target = path.segments[0]!;
+      if (target === input.name) {
+        bail(file, undefined, key, `self reference to input '${target}'`);
+      }
+      const prior = earlier.get(target);
+      if (!prior) {
+        if (!inputs.some((row) => row.name === target)) {
+          bail(file, undefined, key, `unknown input '${target}'`);
+        }
+        bail(file, undefined, key, `forward reference to input '${target}'`);
+      }
+      assertAvailability(file, undefined, key, input.when ?? [], prior.when, `input '${target}'`);
+    }
   }
 }
 

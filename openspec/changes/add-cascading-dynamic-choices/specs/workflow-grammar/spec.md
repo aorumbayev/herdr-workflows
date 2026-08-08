@@ -22,3 +22,18 @@ Dynamic choice argv elements MAY contain templates rooted at `inputs` that refer
 #### Scenario: Unguarded reference to a conditional input
 - **WHEN** input `branch` references `{{inputs.remote}}` in its dynamic argv, `remote` is guarded by `mode == "push"`, and `branch` declares no matching guard
 - **THEN** loading fails naming the missing guard clause
+
+### Requirement: Entry dynamic choices resolve once
+Workflow loading and listing MUST validate dynamic-choice declarations without executing them. Entry input collection MUST execute only active dynamic choices, at most once per invocation, except that a choice whose resolved domain is discarded because an earlier answer changed MUST resolve again from the new answer. A detached picker run MUST reuse the option domains collected by its parent and MUST NOT execute those commands again. The detached runner MUST reject snapshots for undeclared, inactive, static, text, or profile inputs. Direct CLI and child invocation MUST each resolve their own active dynamic options once. Dynamic-choice argv MUST accept `inputs`-rooted templates only and MUST receive no partially collected input exports.
+
+#### Scenario: Picker launches dynamic choice workflow
+- **WHEN** the picker resolves one active dynamic choice and starts its detached run
+- **THEN** the discovery command executes exactly once and the child validates against the same option snapshot
+
+#### Scenario: Inactive dynamic choice
+- **WHEN** a dynamic choice input has a false input condition
+- **THEN** its command does not execute
+
+#### Scenario: Dependent domain after an earlier answer changes
+- **WHEN** a user navigates back and gives input `repo` a different value
+- **THEN** the domain of the dependent choice is discarded and its command runs again with the new value

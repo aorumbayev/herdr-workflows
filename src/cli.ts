@@ -48,6 +48,7 @@ import {
   type WorkflowsConfig,
 } from "./context";
 import {
+  dynamicChoiceInputRefs,
   WORKFLOW_FORMAT,
   WorkflowLoadError,
   type InputSpec,
@@ -839,12 +840,15 @@ async function cmdWorkflowInspect(
         values[spec.name] = spec.default;
       }
       if (spec.dynamicOptions) {
+        const refs = dynamicChoiceInputRefs(spec.dynamicOptions);
+        if (refs.some((ref) => !Object.hasOwn(provided, ref))) continue;
         try {
           domains[spec.name] = await resolveDynamicChoices(
             workflow.file,
             spec.name,
             spec.dynamicOptions,
             repoRoot,
+            { values },
           );
         } catch (error) {
           die(error instanceof Error ? error.message : String(error));

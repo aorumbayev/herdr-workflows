@@ -611,3 +611,307 @@ steps:
     expect(await Bun.file(marker).exists()).toBe(false);
   });
 });
+
+describe("cascading dynamic choices", () => {
+  const cascade = (branchArgv: string, extra = "") =>
+    `version: v1alpha1
+inputs:
+  repo: [alpha, beta]
+  branch:
+    type: choice
+    options:
+      run: ${branchArgv}
+${extra}steps:
+  - run: [echo, "{{inputs.repo}}", "{{inputs.branch}}"]
+`;
+
+  test("argv may reference an earlier input", async () => {
+    const wf = await parseWorkflowText("c", cascade(`[echo, "{{inputs.repo}}-main"]`));
+    expect(wf.inputs[1]?.dynamicOptions?.run).toEqual(["echo", "{{inputs.repo}}-main"]);
+  });
+
+  test("a referenced input counts as used", async () => {
+    const wf = await parseWorkflowText(
+      "c",
+      `version: v1alpha1
+inputs:
+  repo: [alpha, beta]
+  branch:
+    type: choice
+    options:
+      run: [echo, "{{inputs.repo}}"]
+steps:
+  - run: [echo, "{{inputs.branch}}"]
+`,
+    );
+    expect(wf.inputs.map((i) => i.name)).toEqual(["repo", "branch"]);
+  });
+
+  test("steps and context roots are load errors", async () => {
+    for (const argv of [`[echo, "{{steps.one.output}}"]`, `[echo, "{{context.cwd}}"]`]) {
+      await expect(parseWorkflowText("c", cascade(argv))).rejects.toThrow(
+        /may only reference earlier inputs/,
+      );
+    }
+  });
+
+  test("malformed argv template is a load error", async () => {
+    await expect(parseWorkflowText("c", cascade(`[echo, "{{ nope }}"]`))).rejects.toThrow(
+      /invalid template/,
+    );
+  });
+
+  test("self reference is a load error", async () => {
+    await expect(parseWorkflowText("c", cascade(`[echo, "{{inputs.branch}}"]`))).rejects.toThrow(
+      /self reference to input 'branch'/,
+    );
+  });
+
+  test("forward reference is a load error", async () => {
+    await expect(
+      parseWorkflowText(
+        "c",
+        `version: v1alpha1
+inputs:
+  branch:
+    type: choice
+    options:
+      run: [echo, "{{inputs.repo}}"]
+  repo: [alpha, beta]
+steps:
+  - run: [echo, "{{inputs.branch}}", "{{inputs.repo}}"]
+`,
+      ),
+    ).rejects.toThrow(/forward reference to input 'repo'/);
+  });
+
+  test("unknown reference is a load error", async () => {
+    await expect(parseWorkflowText("c", cascade(`[echo, "{{inputs.nope}}"]`))).rejects.toThrow(
+      /unknown input 'nope'/,
+    );
+  });
+
+  test("referencing a conditional input requires the same guard", async () => {
+    const guarded = `version: v1alpha1
+inputs:
+  mode: [push, local]
+  remote:
+    type: text
+    when: '{{inputs.mode}} == "push"'
+  branch:
+    type: choice
+    options:
+      run: [echo, "{{inputs.remote}}"]
+GUARD
+steps:
+  - run: [echo, "{{inputs.mode}}"]
+  - run: [echo, "{{inputs.branch}}"]
+    when: '{{inputs.mode}} == "push"'
+`;
+    await expect(parseWorkflowText("c", guarded.replace("GUARD\n", ""))).rejects.toThrow(
+      /input 'remote' is not proven available/,
+    );
+    const ok = await parseWorkflowText(
+      "c",
+      guarded.replace("GUARD", `    when: '{{inputs.mode}} == "push"'`),
+    );
+    expect(ok.inputs).toHaveLength(3);
+  });
+
+  test("session substitutes the earlier answer before discovery", async () => {
+    const root = await tempRepo();
+    const specs: InputSpec[] = [
+      { name: "repo", type: "choice", options: ["alpha", "beta"] },
+      {
+        name: "branch",
+        type: "choice",
+        dynamicOptions: {
+          run: ["sh", "-c", 'printf "%s-main\\n%s-dev\\n" "$1" "$1"', "sh", "{{inputs.repo}}"],
+        },
+      },
+    ];
+    const session = createInputSession({
+      specs,
+      file: "x.yaml",
+      config: { profiles: {}, transcripts: {} },
+      repoRoot: root,
+      resolveDynamic: true,
+    });
+    expect((await session.current()).status).toBe("prompt");
+    expect(session.answer("beta")).toEqual({ ok: true });
+    const dependent = await session.current();
+    expect(dependent.status).toBe("prompt");
+    if (dependent.status === "prompt") {
+      expect(dependent.prompt.options).toEqual(["beta-main", "beta-dev"]);
+    }
+    expect(session.answer("beta-dev")).toEqual({ ok: true });
+    expect(session.result()).toEqual({
+      ok: true,
+      values: { repo: "beta", branch: "beta-dev" },
+      domains: { branch: ["beta-main", "beta-dev"] },
+    });
+  });
+
+  test("back-navigation discards the dependent domain and re-resolves", async () => {
+    const root = await tempRepo();
+    const specs: InputSpec[] = [
+      { name: "repo", type: "choice", options: ["alpha", "beta"] },
+      {
+        name: "branch",
+        type: "choice",
+        dynamicOptions: { run: ["sh", "-c", 'printf "%s-main\\n" "$1"', "sh", "{{inputs.repo}}"] },
+      },
+    ];
+    const session = createInputSession({
+      specs,
+      file: "x.yaml",
+      config: { profiles: {}, transcripts: {} },
+      repoRoot: root,
+      resolveDynamic: true,
+    });
+    expect((await session.current()).status).toBe("prompt");
+    session.answer("alpha");
+    expect((await session.current()).status).toBe("prompt");
+    session.answer("alpha-main");
+    expect(session.domains).toEqual({ branch: ["alpha-main"] });
+
+    expect(session.back()).toBe(true);
+    expect(session.back()).toBe(true);
+    expect(session.domains).toEqual({});
+    expect((await session.current()).status).toBe("prompt");
+    expect(session.answer("beta")).toEqual({ ok: true });
+    const again = await session.current();
+    expect(again.status).toBe("prompt");
+    if (again.status === "prompt") expect(again.prompt.options).toEqual(["beta-main"]);
+  });
+
+  test("launch payload carries a dependent domain without re-running discovery", async () => {
+    const root = await tempRepo();
+    const marker = join(root, "dependent-ran");
+    const specs: InputSpec[] = [
+      { name: "repo", type: "choice", options: ["alpha", "beta"] },
+      {
+        name: "branch",
+        type: "choice",
+        dynamicOptions: { run: ["sh", "-c", `touch ${marker}; echo {{inputs.repo}}-main`] },
+      },
+    ];
+    const collected = await collectInputValues({
+      specs,
+      provided: { repo: "beta", branch: "beta-main" },
+      domains: { branch: ["beta-main"] },
+      config: { profiles: {}, transcripts: {} },
+      repoRoot: root,
+      file: "x.yaml",
+      resolveDynamic: false,
+    });
+    expect(collected).toEqual({
+      ok: true,
+      values: { repo: "beta", branch: "beta-main" },
+      domains: { branch: ["beta-main"] },
+    });
+    expect(await Bun.file(marker).exists()).toBe(false);
+  });
+
+  test("a hostile earlier answer lands as one unexpanded argv element", async () => {
+    const root = await tempRepo();
+    const marker = join(root, "expanded");
+    const hostile = `a b "c" $(touch ${marker}) \`touch ${marker}\` {{inputs.repo}} $HOME`;
+    const specs: InputSpec[] = [
+      { name: "repo", type: "choice", options: ["alpha"], allowCustom: true },
+      {
+        name: "branch",
+        type: "choice",
+        dynamicOptions: { run: ["sh", "-c", 'printf "%s\\n" "$1"', "sh", "{{inputs.repo}}"] },
+      },
+    ];
+    const session = createInputSession({
+      specs,
+      file: "x.yaml",
+      config: { profiles: {}, transcripts: {} },
+      repoRoot: root,
+    });
+    expect((await session.current()).status).toBe("prompt");
+    expect(session.answer(hostile)).toEqual({ ok: true });
+    const dependent = await session.current();
+    expect(dependent.status).toBe("prompt");
+    if (dependent.status === "prompt") expect(dependent.prompt.options).toEqual([hostile]);
+    expect(await Bun.file(marker).exists()).toBe(false);
+  });
+
+  test("back-navigation re-resolves a three-input chain", async () => {
+    const root = await tempRepo();
+    const specs: InputSpec[] = [
+      { name: "a", type: "choice", options: ["one", "two"] },
+      {
+        name: "b",
+        type: "choice",
+        dynamicOptions: { run: ["sh", "-c", 'printf "%s-b\\n" "$1"', "sh", "{{inputs.a}}"] },
+      },
+      {
+        name: "c",
+        type: "choice",
+        dynamicOptions: { run: ["sh", "-c", 'printf "%s-c\\n" "$1"', "sh", "{{inputs.b}}"] },
+      },
+    ];
+    const session = createInputSession({
+      specs,
+      file: "x.yaml",
+      config: { profiles: {}, transcripts: {} },
+      repoRoot: root,
+    });
+    await session.current();
+    session.answer("one");
+    await session.current();
+    session.answer("one-b");
+    await session.current();
+    session.answer("one-b-c");
+    expect(session.domains).toEqual({ b: ["one-b"], c: ["one-b-c"] });
+
+    expect(session.back()).toBe(true);
+    expect(session.back()).toBe(true);
+    expect(session.back()).toBe(true);
+    expect(session.domains).toEqual({});
+    await session.current();
+    session.answer("two");
+    const b = await session.current();
+    if (b.status === "prompt") expect(b.prompt.options).toEqual(["two-b"]);
+    session.answer("two-b");
+    const c = await session.current();
+    expect(c.status).toBe("prompt");
+    if (c.status === "prompt") expect(c.prompt.options).toEqual(["two-b-c"]);
+  });
+
+  test("an inactive guarded consumer never runs its dependent discovery", async () => {
+    const root = await tempRepo();
+    const marker = join(root, "guarded-ran");
+    const workflow = await parseWorkflowText(
+      "c",
+      `version: v1alpha1
+inputs:
+  mode: [push, local]
+  remote:
+    type: text
+    when: '{{inputs.mode}} == "push"'
+  branch:
+    type: choice
+    when: '{{inputs.mode}} == "push"'
+    options:
+      run: [sh, -c, 'touch ${marker}; printf "%s-x\\n" "$1"', sh, "{{inputs.remote}}"]
+steps:
+  - run: [echo, "{{inputs.mode}}"]
+  - run: [echo, "{{inputs.branch}}"]
+    when: '{{inputs.mode}} == "push"'
+`,
+    );
+    const collected = await collectInputValues({
+      specs: workflow.inputs,
+      provided: { mode: "local" },
+      config: { profiles: {}, transcripts: {} },
+      repoRoot: root,
+      file: "x.yaml",
+    });
+    expect(collected).toEqual({ ok: true, values: { mode: "local" }, domains: {} });
+    expect(await Bun.file(marker).exists()).toBe(false);
+  });
+});

@@ -269,12 +269,14 @@ describe("inputs and profile choices", () => {
     expect(parseDynamicChoiceStdout(" main\r\n\nmain\ndev \n")).toEqual(["main", "dev"]);
   });
 
-  test("dynamic choice rejects templates and honors limits", async () => {
+  test("dynamic choice substitutes referenced inputs and honors limits", async () => {
     const root = await mkdtemp(join(tmpdir(), "herdr-workflows-dyn-"));
     dirs.push(root);
-    await expect(
-      resolveDynamicChoices("f.yaml", "branch", { run: ["echo", "{{inputs.x}}"] }, root),
-    ).rejects.toThrow(/rejects templates/);
+    expect(
+      await resolveDynamicChoices("f.yaml", "branch", { run: ["echo", "{{inputs.x}}-b"] }, root, {
+        values: { x: "a" },
+      }),
+    ).toEqual(["a-b"]);
 
     await expect(
       resolveDynamicChoices("f.yaml", "branch", { run: ["false"] }, root),

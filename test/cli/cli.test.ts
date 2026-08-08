@@ -373,6 +373,51 @@ describe("cli run", () => {
     expect(inspected.stdout).toContain("branch:");
   });
 
+  test("workflow inspect --resolve honors the dependent-choice precondition", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-cascade-"));
+    dirs.push(root);
+    await writeWorkflow(
+      root,
+      "cascade",
+      [
+        "version: v1alpha1",
+        "inputs:",
+        "  repo: [alpha, beta]",
+        "  branch:",
+        "    type: choice",
+        "    options:",
+        '      run: [sh, -c, \'touch dependent-ran; echo "$1-main"\', sh, "{{inputs.repo}}"]',
+        "  tag:",
+        "    type: choice",
+        "    options:",
+        "      run: [echo, v1]",
+        "steps:",
+        '  - run: [echo, "{{inputs.branch}}", "{{inputs.tag}}"]',
+        "",
+      ].join("\n"),
+    );
+
+    const unresolved = await runCli(["workflow", "inspect", "cascade", "--resolve"], root, {
+      HERDR_WORKFLOWS_REPO_ROOT: root,
+    });
+    expect(unresolved.code).toBe(0);
+    expect(unresolved.stdout).toContain('options.run: ["sh", "-c"');
+    expect(unresolved.stdout).toContain('"{{inputs.repo}}"');
+    expect(unresolved.stdout).not.toContain('options: ["alpha-main"]');
+    expect(unresolved.stdout).toContain('options: ["v1"]');
+    expect(await Bun.file(join(root, "dependent-ran")).exists()).toBe(false);
+
+    const resolved = await runCli(
+      ["workflow", "inspect", "cascade", "--resolve", "--input", "repo=beta"],
+      root,
+      { HERDR_WORKFLOWS_REPO_ROOT: root },
+    );
+    expect(resolved.code).toBe(0);
+    expect(resolved.stdout).toContain('options: ["beta-main"]');
+    expect(resolved.stdout).toContain('options: ["v1"]');
+    expect(await Bun.file(join(root, "dependent-ran")).exists()).toBe(true);
+  });
+
   test("run rejects herdr protocol before missing-input failure", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-cli-repo-"));
     dirs.push(root);

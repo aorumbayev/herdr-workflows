@@ -80,6 +80,7 @@ describe("shipped examples", () => {
       "branch-check",
       "handoff",
       "prompt-enhance",
+      "remote-branch-log",
       "review-gate",
       "worktree",
     ]);

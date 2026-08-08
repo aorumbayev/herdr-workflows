@@ -40,9 +40,27 @@ Mapped-input keys — these seven and no others: `type`, `description`, `default
 every non-shorthand input**.
 
 Types: `text`, `choice` (static list or `{run: argv}`), `profile`. Only the entry workflow prompts.
-A closed choice's `default:` must be one of its `options:`. Dynamic-choice argv is template-free,
-runs from the project root, receives no partially collected `HWF_*` inputs, and should only do
-read-only discovery.
+A closed choice's `default:` must be one of its `options:`. Dynamic-choice argv runs from the
+project root, receives no partially collected `HWF_*` inputs, and should only do read-only
+discovery.
+
+Dynamic-choice argv elements may carry `{{inputs.<name>}}` templates that name **earlier** declared
+inputs, substituted right before the command runs. `steps.*` and `context.*` roots fail to load, and
+so do a self reference and a forward reference. Referencing a guarded input requires the consuming
+input's `when:` to repeat every clause guarding it. Changing an earlier answer discards the later
+answers and the options resolved from them.
+
+```yaml
+inputs:
+  repo:
+    type: choice
+    description: Repository to inspect
+    options: { run: [ls, repos] }
+  branch:
+    type: choice
+    description: Branch in that repository
+    options: { run: [git, -C, "repos/{{inputs.repo}}", branch, --format=%(refname:short)] }
+```
 
 ## Actions
 
