@@ -65,21 +65,32 @@ describe("shipped examples through isolated CLI and fake Herdr", () => {
 
   test("prompt-enhance uses the configured custom agent and native clipboard branch", async () => {
     const calls = successful(
-      await harness.run("prompt-enhance", {
-        target: "deterministic",
-        text: "fix it",
-      }),
+      await harness.run(
+        "prompt-enhance",
+        { target: "deterministic", text: "fix it" },
+        { WAYLAND_DISPLAY: "wayland-e2e" },
+      ),
     );
 
-    expect(await readFile(harness.clipboard, "utf8")).toBe("refined prompt");
+    expect(await readFile(harness.clipboard, "utf8")).toBe("wl-copy:refined prompt");
     expect(calls.find((call) => call.method === "agent.start")?.params).toMatchObject({
       kind: "custom",
     });
-    expect(notifications(calls).map((params) => params.title)).toEqual([
-      "enhancing prompt",
-      "prompt ready",
-    ]);
+    expect(titles(calls)).toEqual(["enhancing prompt", "prompt ready"]);
     expect(calls.some((call) => call.method === "pane.close")).toBe(true);
+  });
+
+  test("prompt-enhance falls back to xclip when no Wayland display is set", async () => {
+    const calls = successful(
+      await harness.run(
+        "prompt-enhance",
+        { target: "deterministic", text: "fix it" },
+        { WAYLAND_DISPLAY: "" },
+      ),
+    );
+
+    expect(await readFile(harness.clipboard, "utf8")).toBe("xclip:refined prompt");
+    expect(titles(calls)).toEqual(["enhancing prompt", "prompt ready"]);
   });
 
   test("handoff preserves the target and cleans up at the selected granularity", async () => {
@@ -242,6 +253,21 @@ describe("shipped examples through isolated CLI and fake Herdr", () => {
     });
     expect(crossed.exitCode).not.toBe(0);
     expect(crossed.stderr).toContain("must be one of: origin/main, origin/release");
+  });
+
+  test("worktree open skips agent.start when the reopened pane already has one", async () => {
+    const calls = successful(
+      await harness.run(
+        "worktree",
+        { mode: "open", worktree: "feature-seed" },
+        { HWF_E2E_AGENT_ON_OPEN: "1" },
+      ),
+    );
+
+    expect(calls.some((call) => call.method === "worktree.open")).toBe(true);
+    expect(calls.filter((call) => call.method === "agent.start")).toHaveLength(0);
+    expect(calls.some((call) => call.method === "tab.focus")).toBe(true);
+    expect(titles(calls)).toEqual(["Worktree ready"]);
   });
 
   test("worktree delete removes the checkout and reports the branch outcome", async () => {

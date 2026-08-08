@@ -27,8 +27,20 @@ steps:
       set -eu
       printf %s "$KIND-$(printf %s "$PANE" | tr -c 'A-Za-z0-9' '-')"
 
+  # reopening a worktree that is already open returns its existing pane, whose
+  # agent already holds this name - starting a second one there is an error
+  - id: running
+    env:
+      PANE: "{{inputs.root_pane_id}}"
+    run: |
+      set -eu
+      herdr agent list 2>/dev/null \
+        | jq -r --arg p "$PANE" 'first(.result.agents[]? | select(.pane_id == $p) | .name) // empty' \
+        2>/dev/null || true
+
   # the fresh pane's shell needs a moment before it counts as an available agent target
   - herdr: agent.start
+    when: '{{steps.running.stdout}} == ""'
     params:
       pane_id: "{{inputs.root_pane_id}}"
       kind: "{{steps.agent.stdout}}"

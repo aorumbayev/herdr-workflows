@@ -101,10 +101,12 @@ esac
 `,
   );
   const clipboardCommand = `#!/bin/sh
-tee "$HWF_E2E_CLIPBOARD" >/dev/null
+printf '%s:' "$(basename "$0")" > "$HWF_E2E_CLIPBOARD"
+cat >> "$HWF_E2E_CLIPBOARD"
 `;
-  await executable(join(bin, "pbcopy"), clipboardCommand);
-  await executable(join(bin, "xclip"), clipboardCommand);
+  for (const name of ["pbcopy", "wl-copy", "xclip", "xsel"]) {
+    await executable(join(bin, name), clipboardCommand);
+  }
   await executable(
     join(bin, "herdr"),
     `#!/bin/sh
@@ -117,6 +119,16 @@ if [ "$1 $2" = "agent get" ]; then
 fi
 case "$1 $2" in
   "notification show"|"pane report-metadata") exit 0 ;;
+  "agent list")
+    pane=
+    [ "\${HWF_E2E_AGENT_ON_OPEN:-0}" = 1 ] && pane=$(cat "$HWF_E2E_AGENT_STATE/opened-pane" 2>/dev/null || true)
+    if [ -n "$pane" ]; then
+      printf '{"result":{"agents":[{"name":"claude-%s","pane_id":"%s","agent":"claude","focused":true}]}}\\n' \\
+        "$pane" "$pane"
+    else
+      printf '{"result":{"agents":[]}}\\n'
+    fi
+    exit 0 ;;
   "worktree list")
     printf '{"result":{"source":{"repo_root":"%s"},"worktrees":[{"is_linked_worktree":true,"branch":"feature-seed","path":"%s-wt","open_workspace_id":"%s"}]}}\\n' \\
       "$HERDR_WORKFLOWS_REPO_ROOT" "$HERDR_WORKFLOWS_REPO_ROOT" "\${HWF_E2E_WORKTREE_WS:-w2}"
@@ -256,6 +268,9 @@ export class ExampleHarness {
     if (method === "worktree.create" || method === "worktree.open") {
       const tabId = `w1:t${this.nextTab++}`;
       const paneId = `w1:p${this.nextPane++}`;
+      if (method === "worktree.open") {
+        await writeFile(join(this.root, "agent-state", "opened-pane"), paneId);
+      }
       return {
         type: method === "worktree.create" ? "worktree_created" : "worktree_opened",
         workspace: { workspace_id: "w1", label: String(params.label ?? "") },
