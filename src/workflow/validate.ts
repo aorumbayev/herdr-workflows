@@ -23,6 +23,7 @@ import {
   AGENT_INFO_FIELD,
   AGENT_STRING_FIELDS,
   AGENT_VERDICT_FIELD,
+  COMMAND_FIELD_TYPES,
   COMMAND_FIELDS,
   READINESS_ID_FIELDS,
   SENSITIVE_CONTEXT_KEYS,
@@ -373,10 +374,8 @@ function sourceTypeOf(
   const fields = path.segments.slice(1);
   if (fields.length === 0) return "object";
   if (producer.kind === "command") {
-    const field = fields[0]!;
-    if (field === "exit_code") return fields.length === 1 ? "number" : "unknown";
-    if (field === "failed") return fields.length === 1 ? "boolean" : "unknown";
-    if (field === "stdout" || field === "stderr") return fields.length === 1 ? "string" : "unknown";
+    const type = COMMAND_FIELD_TYPES.get(fields[0]!);
+    if (type && fields.length === 1) return type;
     return "unknown";
   }
   if (producer.kind === "agent") {

@@ -2,12 +2,12 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { chmod, mkdir, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { pluginStateDir } from "./context";
 import {
   assertCredentialStoreSafe,
   assertPrivateCredentialFile,
   CredentialStoreError,
-  pluginStateDir,
-} from "./context";
+} from "./credentials";
 import type { LoadedWorkflow, WorkflowStep } from "./workflow/grammar";
 import { COMMAND_EXIT_CODE_FIELD } from "./workflow/results";
 
@@ -54,7 +54,7 @@ const isoTimestamp = z.string().refine((s) => Number.isFinite(Date.parse(s)));
 
 const failureFactSchema = z.object({
   action: z.enum(["agent", "run", "herdr", "workflow"]),
-  exit_code: z.number().optional(),
+  [COMMAND_EXIT_CODE_FIELD]: z.number().optional(),
   method: z.string().optional(),
   coordination: z.string().optional(),
   step_id: z.string().optional(),

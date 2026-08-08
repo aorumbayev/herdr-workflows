@@ -65,6 +65,20 @@ export const AGENT_VERDICT_FIELD = "verdict" satisfies keyof AgentResult;
 
 export const COMMAND_EXIT_CODE_FIELD = "exit_code" satisfies keyof CommandResult;
 
+export type ScalarFieldType = "string" | "number" | "boolean";
+
+/** Scalar type of each command-result field, single-sourced beside the field-name sets. */
+const COMMAND_FIELD_TYPE_MAP = {
+  stdout: "string",
+  stderr: "string",
+  [COMMAND_EXIT_CODE_FIELD]: "number",
+  failed: "boolean",
+} satisfies Record<keyof CommandResult, ScalarFieldType>;
+
+export const COMMAND_FIELD_TYPES: ReadonlyMap<string, ScalarFieldType> = new Map(
+  Object.entries(COMMAND_FIELD_TYPE_MAP),
+);
+
 export const COMMAND_FIELDS: ReadonlySet<string> = new Set(Object.keys(COMMAND_KEYS));
 
 export const AGENT_STRING_FIELDS: ReadonlySet<string> = new Set(
