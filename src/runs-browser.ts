@@ -1,6 +1,7 @@
 import { basename } from "node:path";
 import {
   formatElapsed,
+  formatProgressLine,
   listRuns,
   statusLabel,
   allocateRunId,
@@ -8,6 +9,7 @@ import {
   normalizeRunUuid,
   optimisticRunningDetail,
   parseHistoryAck,
+  parseProgressLine,
   presentDetail,
   runDetail,
   type RunDetail,
@@ -697,7 +699,11 @@ async function startRun(
       },
       onProgressLine: (line) => {
         if (launchCancelled(session, launch, runId)) return;
-        session.progressLines.push(truncate(line, session.deps.getContentWidth()));
+        const progress = parseProgressLine(line);
+        if (!progress) return;
+        session.progressLines.push(
+          truncate(formatProgressLine(progress), session.deps.getContentWidth()),
+        );
         withProgress(session, runId, entry, checkoutRoot, history.state);
         renderDetail(session);
       },

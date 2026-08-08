@@ -9,6 +9,7 @@ import {
   pluginStateDir,
 } from "./context";
 import type { LoadedWorkflow, WorkflowStep } from "./workflow/grammar";
+import { COMMAND_EXIT_CODE_FIELD } from "./workflow/results";
 
 /** Versioned private run snapshot and allowlisted projections. */
 
@@ -267,6 +268,45 @@ export function parseHistoryAck(line: string): HistoryAck | undefined {
     return { state: "rejected", id: second.toLowerCase(), error: rest };
   }
   return { state: "rejected", error: second ?? rest ?? "launch rejected" };
+}
+
+/** Step progress on the observed stdout channel. `start` is the only pre-outcome state. */
+export type ProgressOutcome = "start" | "ok" | "skip" | "fail" | "launch";
+
+export type ProgressLine = {
+  index: number;
+  total: number;
+  label: string;
+  outcome: ProgressOutcome;
+};
+
+const PROGRESS_RE = /^\[(\d+)\/(\d+)\] (.+)$/;
+const PROGRESS_SUFFIX: readonly ProgressOutcome[] = ["skip", "fail", "launch"];
+
+/** Encode a progress line — the visible `[i/n] label` format the runs browser shows verbatim. */
+export function formatProgressLine(progress: ProgressLine): string {
+  const head = `[${progress.index}/${progress.total}] ${progress.label}`;
+  if (progress.outcome === "start") return `${head}…`;
+  return progress.outcome === "ok" ? head : `${head} ${progress.outcome}`;
+}
+
+/** Decode a progress line from the detached-run stdout channel. */
+export function parseProgressLine(line: string): ProgressLine | undefined {
+  const m = PROGRESS_RE.exec(line.trim());
+  if (!m) return undefined;
+  const index = Number(m[1]);
+  const total = Number(m[2]);
+  const rest = m[3]!;
+  if (rest.endsWith("…")) {
+    return { index, total, label: rest.slice(0, -1), outcome: "start" };
+  }
+  for (const outcome of PROGRESS_SUFFIX) {
+    const suffix = ` ${outcome}`;
+    if (rest.endsWith(suffix)) {
+      return { index, total, label: rest.slice(0, -suffix.length), outcome };
+    }
+  }
+  return { index, total, label: rest, outcome: "ok" };
 }
 
 export function normalizeRunUuid(raw: string): string | undefined {
@@ -1131,10 +1171,10 @@ function failureFact(
   step: WorkflowStep,
   outcome: Extract<RecorderOutcome, { ok: false }>,
 ): RunFailureFact {
-  const details = outcome.details ?? {};
+  const exitCode = (outcome.details ?? {})[COMMAND_EXIT_CODE_FIELD];
   return {
     action: step.action.kind as RunActionKind,
-    ...(typeof details.exit_code === "number" ? { exit_code: details.exit_code } : {}),
+    ...(typeof exitCode === "number" ? { exit_code: exitCode } : {}),
     ...(step.action.kind === "herdr" ? { method: step.action.method } : {}),
     ...(outcome.coordinationLost === true ? { coordination: "lost" } : {}),
     ...(step.id ? { step_id: step.id } : {}),

@@ -27,7 +27,13 @@ import {
   loadWorkflow,
   workflowTemplateRefs,
 } from "./workflow/inputs";
-import { createRunRecorder, type RunRecorder, type RunStepOutcomeKind } from "./history";
+import {
+  createRunRecorder,
+  parseProgressLine,
+  type ProgressOutcome,
+  type RunRecorder,
+  type RunStepOutcomeKind,
+} from "./history";
 import {
   HerdrError,
   isTransportLoss,
@@ -55,6 +61,16 @@ import type {
   ReturnsSpec,
   RecoveryAction,
 } from "./workflow/grammar";
+import {
+  parseVerdict,
+  verdictMismatchMessage,
+  verdictNotRequiredMessage,
+  type AgentResult,
+  type CommandResult,
+  type ExpectSpec,
+  type ReadinessIds,
+  type StepFailureDetails,
+} from "./workflow/results";
 
 type StepFailure = {
   message: string;
@@ -107,7 +123,7 @@ type StepRunOpts = {
   children: Map<string, LoadedWorkflow>;
   managedResponseFiles: string[];
   recorder: RunRecorder;
-  onProgress?: (step: number, total: number, label: string, outcome?: string) => void;
+  onProgress?: (step: number, total: number, label: string, outcome?: ProgressOutcome) => void;
   onStderr?: (text: string) => void;
   runSteps: RunSteps;
 };
@@ -211,8 +227,12 @@ function managedPromptSpillPath(runId: string, stepIndex: number, responseDir: s
   return join(responseDir, `${runId}-step-${stepIndex}-prompt.txt`);
 }
 
-function appendResponseInstruction(prompt: string, path: string): string {
-  return `${prompt}\n\nRequired: use your file-write tool to write your full answer as plain UTF-8 text to the absolute path ${path}, overwriting whatever is there. Do not finish until that file exists with your answer. Write nothing else to that path and do not create other files for it. Printing the answer in chat is not enough.`;
+function appendResponseInstruction(prompt: string, path: string, expect?: ExpectSpec): string {
+  const base = `${prompt}\n\nRequired: use your file-write tool to write your full answer as plain UTF-8 text to the absolute path ${path}, overwriting whatever is there. Do not finish until that file exists with your answer. Write nothing else to that path and do not create other files for it. Printing the answer in chat is not enough.`;
+  if (!expect) return base;
+  const tokens = expect.oneOf.join(", ");
+  const check = `hwf response check ${quotePosixArg(path)} --one-of ${expect.oneOf.join(",")}`;
+  return `${base}\n\nRequired verdict: the final non-empty line of that file must be exactly one of these tokens and nothing else: ${tokens}. Put your reasoning above it. Before you finish the turn, run \`${check}\` and correct the file until that command exits 0.`;
 }
 
 function spilledPromptInstruction(spillPath: string): string {
@@ -252,7 +272,7 @@ async function herdrStep(c: StepCtx): Promise<StepOutcome> {
   }
 }
 
-export type PlacedPane = { pane_id: string; tab_id: string; workspace_id: string };
+export type PlacedPane = ReadinessIds;
 
 type PlaceAnchors = { paneId?: string; tabId?: string; workspaceId?: string };
 
@@ -649,24 +669,26 @@ function commandArgv(action: RunAction, ns: TemplateNamespace): string[] {
 
 function bindCommandResult(c: StepCtx, outcome: CommandOutcome): void {
   if (!c.step.id) return;
-  c.values.steps[c.step.id] = {
+  const result: CommandResult = {
     stdout: outcome.stdout,
     stderr: outcome.stderr,
     exit_code: outcome.exitCode,
     failed: outcome.failed,
   };
+  c.values.steps[c.step.id] = result;
 }
 
 function commandFailure(outcome: CommandOutcome): Extract<StepOutcome, { ok: false }> {
   const detail = outcome.stderr.trim() || outcome.stdout.trim().slice(-500);
+  const details: StepFailureDetails = {
+    stdout: outcome.stdout,
+    stderr: outcome.stderr,
+    exit_code: outcome.exitCode,
+  };
   return {
     ok: false,
     error: detail || `exit ${outcome.exitCode}`,
-    details: {
-      stdout: outcome.stdout,
-      stderr: outcome.stderr,
-      exit_code: outcome.exitCode,
-    },
+    details,
   };
 }
 
@@ -985,6 +1007,31 @@ function agentDetails(parts: {
   };
 }
 
+/** Settle-time gate: authoritative even when the agent skipped the `hwf response check` self-check. */
+function applyVerdict(
+  response: string,
+  expect: ExpectSpec,
+  details: Record<string, unknown>,
+): { ok: true; verdict: string } | Extract<StepOutcome, { ok: false }> {
+  const parsed = parseVerdict(response, expect.oneOf);
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: `agent: ${verdictMismatchMessage(parsed.line, expect.oneOf)}`,
+      details,
+    };
+  }
+  if (expect.require && !expect.require.includes(parsed.verdict)) {
+    const failure: StepFailureDetails = { verdict: parsed.verdict };
+    return {
+      ok: false,
+      error: `agent: ${verdictNotRequiredMessage(parsed.verdict, expect.require)}`,
+      details: { ...details, ...failure },
+    };
+  }
+  return { ok: true, verdict: parsed.verdict };
+}
+
 async function managedResult(
   c: StepCtx,
   target: string,
@@ -992,26 +1039,33 @@ async function managedResult(
   timeoutMs: number,
   mode: ManagedWaitMode,
   details: Record<string, unknown>,
+  expect?: ExpectSpec,
 ): Promise<StepOutcome> {
   const wait = await awaitManagedTurn(c, target, path, timeoutMs, mode);
   if (!wait.settled) {
     return { ok: false, error: wait.error, details };
   }
+  let response: string;
+  let agent: Record<string, unknown>;
   try {
-    const response = await readManagedResponse(path);
-    const agent = await c.opts.deps.agentInfo(target);
-    const pane =
-      typeof details.pane_id === "string"
-        ? details.pane_id
-        : typeof agent.pane_id === "string"
-          ? agent.pane_id
-          : "";
-    return { ok: true, result: { response, agent, pane_id: pane } };
+    response = await readManagedResponse(path);
+    agent = await c.opts.deps.agentInfo(target);
   } catch (error) {
     const message =
       error instanceof HerdrError ? error.message : `managed response: ${String(error)}`;
     return { ok: false, error: message, details };
   }
+  const pane =
+    typeof details.pane_id === "string"
+      ? details.pane_id
+      : typeof agent.pane_id === "string"
+        ? agent.pane_id
+        : "";
+  const result: AgentResult = { response, agent, pane_id: pane };
+  if (!expect) return { ok: true, result };
+  const gate = applyVerdict(response, expect, details);
+  if (!gate.ok) return gate;
+  return { ok: true, result: { ...result, verdict: gate.verdict } };
 }
 
 /** Evidence the agent accepted input (not still sitting on a pristine idle welcome). */
@@ -1136,7 +1190,7 @@ async function newAgentTurn(c: StepCtx, action: AgentAction): Promise<StepOutcom
       return { ok: true, launched: true };
     }
     const path = await preparedResponsePath(c);
-    await submitPrompt(c, placement.name, appendResponseInstruction(prompt, path));
+    await submitPrompt(c, placement.name, appendResponseInstruction(prompt, path, action.expect));
     const outcome = await managedResult(
       c,
       placement.name,
@@ -1144,6 +1198,7 @@ async function newAgentTurn(c: StepCtx, action: AgentAction): Promise<StepOutcom
       action.timeoutMs ?? TURN_TIMEOUT_MS,
       "new-agent",
       baseDetails(),
+      action.expect,
     );
     if (outcome.ok && close === "success") await closePane(c, placement.placed);
     return outcome;
@@ -1178,7 +1233,7 @@ async function targetTurn(
       return { ok: true, launched: true };
     }
     const path = await preparedResponsePath(c);
-    await submitPrompt(c, target, appendResponseInstruction(prompt, path));
+    await submitPrompt(c, target, appendResponseInstruction(prompt, path, action.expect));
     return await managedResult(
       c,
       target,
@@ -1186,6 +1241,7 @@ async function targetTurn(
       action.timeoutMs ?? TURN_TIMEOUT_MS,
       "target",
       details,
+      action.expect,
     );
   } catch (error) {
     const failure = dispatchFailure(`agent (target ${target})`, error);
@@ -1540,7 +1596,7 @@ export function launchDetachedRun(req: LaunchRunRequest): DetachedRunHandle {
         if (!detached) req.onHistoryAck?.(trimmed);
         return;
       }
-      if (/^\[\d+\/\d+\]/.test(trimmed)) {
+      if (parseProgressLine(trimmed)) {
         lastProgress = trimmed;
         if (!detached) req.onProgressLine(trimmed);
         return;
@@ -1689,6 +1745,12 @@ function stepLabel(step: WorkflowStep): string {
   return `workflow: ${a.name}`;
 }
 
+/** The one step-outcome to recorded-history-kind translation. */
+export function recordedOutcomeKind(outcome: StepOutcome): RunStepOutcomeKind {
+  if (!outcome.ok) return outcome.coordinationLost === true ? "interrupted" : "failed";
+  return outcome.launched === true ? "launched" : "succeeded";
+}
+
 function bindResult(step: WorkflowStep, values: TemplateNamespace, outcome: StepOutcome): void {
   if (!step.id || !outcome.ok || outcome.result === undefined) return;
   values.steps[step.id] = outcome.result;
@@ -1814,8 +1876,7 @@ async function runSteps(
     bindResult(step, values, outcome);
     const progress = outcome.launched === true ? "launch" : "ok";
     opts.onProgress?.(n, total, label, progress);
-    const kind: RunStepOutcomeKind = outcome.launched === true ? "launched" : "succeeded";
-    await opts.recorder.stepFinished(step, n, total, label, kind, outcome);
+    await opts.recorder.stepFinished(step, n, total, label, recordedOutcomeKind(outcome), outcome);
   }
   if (tolerated.length) return { ok: false, error: tolerated.join("; "), failures: tolerated };
   return { ok: true };
@@ -1851,13 +1912,7 @@ async function runRecovery(
     1,
     1,
     label,
-    outcome.ok
-      ? outcome.launched === true
-        ? "launched"
-        : "succeeded"
-      : outcome.coordinationLost
-        ? "interrupted"
-        : "failed",
+    recordedOutcomeKind(outcome),
     outcome,
     "recovery",
   );
@@ -2029,7 +2084,7 @@ export type RunOptions = {
   recorder?: RunRecorder;
   workflow?: LoadedWorkflow;
   deps?: Partial<RunnerDeps>;
-  onProgress?: (step: number, total: number, label: string, outcome?: string) => void;
+  onProgress?: (step: number, total: number, label: string, outcome?: ProgressOutcome) => void;
   onStderr?: (text: string) => void;
 };
 

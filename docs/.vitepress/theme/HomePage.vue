@@ -124,9 +124,10 @@ steps:
       <p class="kicker">from the herd</p>
       <h2>Ready-made workflows</h2>
       <p class="section-lede">
-        <strong>branch-check</strong>, <strong>handoff</strong>, <strong>prompt-enhance</strong>,
-        and <strong>worktree</strong> ship with the plugin. Copy one command, read what it contains,
-        and it's yours.
+        <strong>adversarial-revise</strong>, <strong>branch-check</strong>,
+        <strong>handoff</strong>, <strong>prompt-enhance</strong>, <strong>review-gate</strong>, and
+        <strong>worktree</strong> ship with the plugin. Copy one command, read what it contains, and
+        it's yours.
       </p>
       <div class="actions">
         <a class="btn btn-primary" :href="withBase('/examples')">Browse examples</a>

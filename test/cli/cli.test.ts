@@ -620,3 +620,70 @@ describe("cli web", () => {
     expect(result.stderr).toContain("--port expects an integer between 1 and 65535");
   });
 });
+
+describe("cli response check", () => {
+  async function withResponse(text: string): Promise<{ root: string; file: string }> {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-verdict-"));
+    dirs.push(root);
+    const file = join(root, "response.txt");
+    await writeFile(file, text);
+    return { root, file };
+  }
+
+  test("a matching final line exits zero and prints the verdict", async () => {
+    const { root, file } = await withResponse("Reasoning about the diff.\n\nAPPROVE\n");
+    const result = await runCli(["response", "check", file, "--one-of", "APPROVE,REJECT"], root);
+    expect(result.code).toBe(0);
+    expect(result.stdout.trim()).toBe("APPROVE");
+    expect(result.stderr).toBe("");
+  });
+
+  test("a decorated verdict exits nonzero naming the line and the tokens", async () => {
+    const { root, file } = await withResponse("APPROVE — with reservations\n");
+    const result = await runCli(["response", "check", file, "--one-of", "APPROVE,REJECT"], root);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("APPROVE — with reservations");
+    expect(result.stderr).toContain("APPROVE, REJECT");
+    expect(result.stdout).toBe("");
+  });
+
+  test("a missing or empty file exits nonzero naming the path", async () => {
+    const { root, file } = await withResponse("   \n\n");
+    const empty = await runCli(["response", "check", file, "--one-of", "APPROVE"], root);
+    expect(empty.code).toBe(1);
+    expect(empty.stderr).toContain(file);
+
+    const gone = join(root, "nope.txt");
+    const missing = await runCli(["response", "check", gone, "--one-of", "APPROVE"], root);
+    expect(missing.code).toBe(1);
+    expect(missing.stderr).toContain(gone);
+  });
+
+  test("bad token lists are rejected with the expect.one_of rules", async () => {
+    const { root, file } = await withResponse("APPROVE\n");
+    const lower = await runCli(["response", "check", file, "--one-of", "approve"], root);
+    expect(lower.code).toBe(1);
+    expect(lower.stderr).toContain("[A-Z][A-Z0-9_]{0,31}");
+
+    const dup = await runCli(["response", "check", file, "--one-of", "APPROVE,APPROVE"], root);
+    expect(dup.code).toBe(1);
+    expect(dup.stderr).toContain("duplicate verdict token 'APPROVE'");
+
+    const blank = await runCli(["response", "check", file, "--one-of", " , "], root);
+    expect(blank.code).toBe(1);
+    expect(blank.stderr).toContain("at least one verdict token");
+
+    const noFlag = await runCli(["response", "check", file], root);
+    expect(noFlag.code).not.toBe(0);
+    expect(noFlag.stderr).toContain("--one-of");
+  });
+
+  test("the check runs offline with no herdr socket", async () => {
+    const { root, file } = await withResponse("APPROVE\n");
+    const result = await runCli(["response", "check", file, "--one-of", "APPROVE"], root, {
+      HERDR_SOCKET_PATH: join(root, "missing.sock"),
+    });
+    expect(result.code).toBe(0);
+    expect(result.stdout.trim()).toBe("APPROVE");
+  });
+});

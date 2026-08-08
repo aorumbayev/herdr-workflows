@@ -43,6 +43,7 @@ const ENTRIES: Record<Module, ReadonlySet<string>> = {
     "src/workflow/validate.ts",
     "src/workflow/inputs.ts",
     "src/workflow/exchange.ts",
+    "src/workflow/results.ts",
   ]),
   engine: new Set(["src/engine.ts"]),
   history: new Set(["src/history.ts"]),
@@ -67,11 +68,13 @@ const SIDEWAYS = new Set([
 /**
  * context: Residual edges the layer rule tolerates after Phase 3 consolidation.
  * - history → workflow/grammar: shared step/workflow types for run snapshots.
+ * - history → workflow/results: step-result field names the failure fact quotes.
  * - context → engine (dynamic): breaks the context↔engine cycle for transcript reads.
  * - workflows/inputs → engine (dynamic): dynamic-choice capture via spawnCapture.
  */
 const ALLOW: ReadonlySet<string> = new Set([
   "src/history.ts -> src/workflow/grammar.ts",
+  "src/history.ts -> src/workflow/results.ts",
   "src/context.ts -> src/engine.ts",
   "src/workflow/inputs.ts -> src/engine.ts",
 ]);

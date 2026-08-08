@@ -52,13 +52,22 @@ type MockAgent = {
   launch_pending: boolean;
 };
 
-function mockDeps(overrides: Partial<RunnerDeps> & { writeManagedResponse?: boolean } = {}): {
+function mockDeps(
+  overrides: Partial<RunnerDeps> & {
+    writeManagedResponse?: boolean;
+    managedResponse?: string;
+  } = {},
+): {
   deps: RunnerDeps;
   notes: string[];
   calls: { method: string; params: Record<string, unknown> }[];
   agents: Map<string, MockAgent>;
 } {
-  const { writeManagedResponse = true, ...depOverrides } = overrides;
+  const {
+    writeManagedResponse = true,
+    managedResponse = "managed answer\n",
+    ...depOverrides
+  } = overrides;
   const notes: string[] = [];
   const calls: { method: string; params: Record<string, unknown> }[] = [];
   const agents = new Map<string, MockAgent>();
@@ -145,7 +154,7 @@ function mockDeps(overrides: Partial<RunnerDeps> & { writeManagedResponse?: bool
         }
         if (writeManagedResponse && responsePath) {
           await mkdir(join(responsePath, ".."), { recursive: true });
-          await writeFile(responsePath, "managed answer\n");
+          await writeFile(responsePath, managedResponse);
         }
         info.status = "done";
         agents.set(target, info);
@@ -2234,5 +2243,231 @@ steps:
     });
     const err = failed(result);
     expect(err.error).toMatch(/command output|byte limit/);
+  });
+});
+
+describe("agent verdicts", () => {
+  const ctxOf = (root: string) => ({
+    selection: "",
+    cwd: root,
+    workspaceId: "w1",
+    tabId: "w1:t1",
+    paneId: "w1:p1",
+  });
+
+  test("prompt names the tokens, the final-line rule, and the response check command", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: review this
+    using: claude
+    expect: { one_of: [APPROVE, REJECT] }
+`,
+    });
+    const { deps, calls } = mockDeps({ managedResponse: "looks fine\nAPPROVE\n" });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: ctxOf(root),
+      deps: { ...deps, ...fastClock() },
+    });
+    expect(result.ok).toBe(true);
+    const prompt = String(calls.find((c) => c.method === "agent.prompt")?.params.text ?? "");
+    expect(prompt).toContain("APPROVE, REJECT");
+    expect(prompt).toContain("final non-empty line");
+    expect(prompt).toMatch(/hwf response check \S+ --one-of APPROVE,REJECT/);
+  });
+
+  test("the self-check command stays one shell word when the response path has a space", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: review this
+    using: claude
+    expect: { one_of: [APPROVE] }
+`,
+    });
+    const responseDir = join(root, "scratch dir");
+    const { deps, calls } = mockDeps({ managedResponse: "APPROVE\n" });
+    await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: ctxOf(root),
+      deps: { ...deps, ...fastClock(), responseDir },
+    });
+    const prompt = String(calls.find((c) => c.method === "agent.prompt")?.params.text ?? "");
+    const command = /run `(hwf response check .+?)` and correct/.exec(prompt)?.[1];
+    expect(command).toBeDefined();
+    // A shell must see check/--one-of/token plus exactly one path word.
+    const split = Bun.spawnSync(["sh", "-c", `printf '%s\\n' ${command!.slice("hwf ".length)}`]);
+    const argv = split.stdout.toString().trimEnd().split("\n");
+    expect(argv).toHaveLength(5);
+    expect(argv[0]).toBe("response");
+    expect(argv[1]).toBe("check");
+    expect(argv[2]).toStartWith(`${responseDir}/`);
+    expect(argv[3]).toBe("--one-of");
+    expect(argv[4]).toBe("APPROVE");
+  });
+
+  test("verdict binds as a scalar and drives a later condition", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: review this
+    using: claude
+    expect: { one_of: [APPROVE, REJECT] }
+  - id: rejected
+    run: [echo, rejected]
+    when: '{{steps.review.verdict}} == "REJECT"'
+  - id: approved
+    run: [echo, approved]
+    when: '{{steps.review.verdict}} == "APPROVE"'
+`,
+    });
+    const { deps } = mockDeps({
+      managedResponse: "Long reasoning about the diff.\n\nREJECT\n",
+    });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: ctxOf(root),
+      deps: { ...deps, ...fastClock() },
+    });
+    expect(result.ok).toBe(true);
+    const [snapshot] = await readSnapshots();
+    const outcomes = (snapshot?.steps ?? []).map((s) => `${s.step_id}:${s.outcome}`);
+    expect(outcomes).toContain("rejected:succeeded");
+    expect(outcomes).toContain("approved:skipped");
+  });
+
+  test("an unparseable verdict fails the step and names the tokens", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: review this
+    using: claude
+    expect: { one_of: [APPROVE, REJECT] }
+`,
+    });
+    const { deps } = mockDeps({ managedResponse: "APPROVE — with reservations\n" });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: ctxOf(root),
+      deps: { ...deps, ...fastClock() },
+    });
+    const err = failed(result);
+    expect(err.error).toMatch(/not a verdict token/);
+    expect(err.error).toContain("APPROVE — with reservations");
+    expect(err.error).toContain("APPROVE, REJECT");
+  });
+
+  test("a verdict outside require fails and names the verdict and required tokens", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: review this
+    using: claude
+    expect: { one_of: [APPROVE, REJECT], require: [APPROVE] }
+`,
+    });
+    const { deps } = mockDeps({ managedResponse: "no good\nREJECT\n" });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: ctxOf(root),
+      deps: { ...deps, ...fastClock() },
+    });
+    const err = failed(result);
+    expect(err.error).toMatch(/verdict REJECT is not accepted/);
+    expect(err.error).toContain("requires one of: APPROVE");
+    const [snapshot] = await readSnapshots();
+    const step = (snapshot?.steps ?? []).find((s) => s.step_id === "review");
+    expect(step?.outcome).toBe("failed");
+    expect(step?.failure).toMatchObject({ action: "agent", step_id: "review" });
+  });
+
+  test("continue_on_error tolerates a verdict failure and on_failure sees it", async () => {
+    const tolerated = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: review this
+    using: claude
+    continue_on_error: true
+    expect: { one_of: [APPROVE], require: [APPROVE] }
+  - run: [echo, kept-going]
+`,
+    });
+    const { deps } = mockDeps({ managedResponse: "nope\n" });
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: tolerated,
+      config: baseConfig,
+      ctx: ctxOf(tolerated),
+      deps: { ...deps, ...fastClock() },
+    });
+    const err = failed(result);
+    expect(err.aborted).toBeUndefined();
+    expect(err.failures?.join(" ")).toMatch(/not a verdict token/);
+
+    const recovered = await repoWith({
+      m: `version: v1alpha1
+on_failure:
+  herdr: notification.show
+  params:
+    title: gate failed
+    body: "{{context.error.message}}"
+steps:
+  - id: review
+    agent: review this
+    using: claude
+    expect: { one_of: [APPROVE, REJECT], require: [APPROVE] }
+`,
+    });
+    const recovery = mockDeps({ managedResponse: "REJECT\n" });
+    const second = await runWorkflow({
+      name: "m",
+      repoRoot: recovered,
+      config: baseConfig,
+      ctx: ctxOf(recovered),
+      deps: { ...recovery.deps, ...fastClock() },
+    });
+    expect(second.ok).toBe(false);
+    const note = recovery.calls.find((c) => c.method === "notification.show");
+    expect(String(note?.params.body ?? "")).toMatch(/verdict REJECT is not accepted/);
+  });
+
+  test("a turn without expect keeps the plain result shape", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: review this
+    using: claude
+  - run: [echo, "{{steps.review.response}}"]
+`,
+    });
+    const { deps, calls } = mockDeps();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: ctxOf(root),
+      deps: { ...deps, ...fastClock() },
+    });
+    expect(result.ok).toBe(true);
+    const prompt = String(calls.find((c) => c.method === "agent.prompt")?.params.text ?? "");
+    expect(prompt).not.toContain("Required verdict");
   });
 });

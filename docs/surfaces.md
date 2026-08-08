@@ -59,6 +59,7 @@ Plain `k` still types into the filter.
 | `hwf update`                  | Installs the latest published release                             |
 | `hwf skills list`             | Lists the bundled agent skills                                    |
 | `hwf skills show <name>`      | Prints one bundled skill with its reference files                 |
+| `hwf response check <file>`   | Checks a response file's verdict. `--one-of TOKEN,TOKEN`          |
 | `hwf help [command]`          | Shows help for one command or all of them                         |
 | `hwf --version`               | Prints the installed plugin version                               |
 
@@ -67,6 +68,16 @@ Bare `hwf` in a terminal is the same as `hwf web`. Without a terminal it prints 
 `hwf` and `herdr-workflows` are the same command under two names.
 
 `hwf web` accepts `w=<repo|global>:<name>`, `share=<repo|global>:<name>`, `run=<uuid>`, `import`, and `new`. It also accepts `--port` and `--no-open`.
+
+### `hwf response check`
+
+```bash
+hwf response check /path/to/response.txt --one-of APPROVE,REJECT
+```
+
+The offline verdict oracle behind [`expect:`](/reference#expect). It reads the final non-empty line of the file, trims it, and matches it against the comma-separated tokens, which follow the same rules as `expect.one_of`. A match exits 0 and prints the token. A mismatch exits nonzero and names both the offending line and the expected tokens. A missing or empty file exits nonzero and names the path. The command never writes to the file.
+
+`skills` and `response` are the two commands that never contact herdr and never run the version or protocol preflight, so an agent inside a turn can call `response check` and get an answer immediately. That is what the runner's appended instruction asks it to do: rerun the check against its own response file until it exits 0.
 
 ## The workbench
 

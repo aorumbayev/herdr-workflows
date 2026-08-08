@@ -53,6 +53,8 @@ import {
   type InputSpec,
   type WhenSpec,
 } from "./workflow/grammar";
+import { formatProgressLine } from "./history";
+import { parseVerdict, parseVerdictTokens, verdictMismatchMessage } from "./workflow/results";
 import { ReleaseCheckError, updatePlugin, type UpdateDeps, type UpdateResult } from "./update";
 import { findSkill, formatSkill, listSkills } from "./skills";
 
@@ -921,12 +923,7 @@ async function cmdRun(
         process.stdout.write(`${line}\n`);
       },
       onProgress: (i, n, label, outcome = "ok") => {
-        if (outcome === "start") {
-          process.stdout.write(`[${i}/${n}] ${label}…\n`);
-          return;
-        }
-        const suffix = outcome === "ok" ? "" : ` ${outcome}`;
-        process.stdout.write(`[${i}/${n}] ${label}${suffix}\n`);
+        process.stdout.write(`${formatProgressLine({ index: i, total: n, label, outcome })}\n`);
       },
       onStderr: (t) => process.stderr.write(t.endsWith("\n") ? t : `${t}\n`),
     });
@@ -935,6 +932,18 @@ async function cmdRun(
     if (error instanceof WorkflowLoadError) die(error.message);
     throw error;
   }
+}
+
+async function cmdResponseCheck(path: string, oneOfRaw: string): Promise<void> {
+  const tokens = parseVerdictTokens(oneOfRaw);
+  if (!tokens.ok) die(tokens.error);
+  const file = Bun.file(path);
+  if (!(await file.exists())) die(`response file not found: ${path}`);
+  const text = await file.text();
+  if (!text.trim()) die(`response file is empty: ${path}`);
+  const parsed = parseVerdict(text, tokens.tokens);
+  if (!parsed.ok) die(verdictMismatchMessage(parsed.line, tokens.tokens));
+  process.stdout.write(`${parsed.verdict}\n`);
 }
 
 function registerOwnedWorkbenchShutdown(shutdown: () => void): void {
@@ -1131,6 +1140,18 @@ function buildProgram(): Command {
         );
       }
       process.stdout.write(formatSkill(skill));
+    });
+
+  const response = program
+    .command("response")
+    .description("Inspect an agent response file offline");
+  response
+    .command("check")
+    .description("Check the final verdict line of a response file against expected tokens")
+    .argument("<file>", "path to the managed response file")
+    .requiredOption("--one-of <tokens>", "comma-separated verdict tokens")
+    .action(async (file: string, opts: { oneOf: string }) => {
+      await cmdResponseCheck(file, opts.oneOf);
     });
 
   program

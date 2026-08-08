@@ -18,6 +18,14 @@ import {
   type WhenSpec,
   type WorkflowStep,
 } from "./grammar";
+import {
+  AGENT_INFO_FIELD,
+  AGENT_STRING_FIELDS,
+  AGENT_VERDICT_FIELD,
+  COMMAND_FIELDS,
+  READINESS_ID_FIELDS,
+  SENSITIVE_CONTEXT_KEYS,
+} from "./results";
 
 type ProducerKind = "agent" | "command" | "readiness" | "herdr" | "child" | "none";
 
@@ -29,6 +37,7 @@ type StepProducer = {
   childReturns?: ReturnsSpec;
   noneReason?: string;
   when?: WhenSpec[];
+  hasVerdict?: boolean;
 };
 
 type SourceType = "string" | "number" | "boolean" | "object" | "unknown";
@@ -44,9 +53,6 @@ type TemplateOpts = {
   proven?: WhenSpec[];
 };
 
-const COMMAND_FIELDS = new Set(["stdout", "stderr", "exit_code", "failed"]);
-const AGENT_STRING_FIELDS = new Set(["response", "pane_id"]);
-const READINESS_ID_FIELDS = new Set(["pane_id", "tab_id", "workspace_id"]);
 const READINESS_HERDR_METHOD = "pane.wait_for_output";
 const CONTEXT_STRING_FIELDS = new Set([
   "workspace",
@@ -61,7 +67,6 @@ const CONTEXT_STRING_FIELDS = new Set([
   "transcript_file",
 ]);
 const CONTEXT_ERROR_STRING = new Set(["message", "workflow", "action", "step_id"]);
-const SENSITIVE_RETURNS = new Set(["transcript", "transcript_file"]);
 
 function isLocalCommand(step: WorkflowStep): boolean {
   return step.action.kind === "run" && !step.action.pane && !step.action.background;
@@ -96,7 +101,9 @@ function classifyProducer(
     };
   }
 
-  if (step.action.kind === "agent") return { ...base, kind: "agent" };
+  if (step.action.kind === "agent") {
+    return { ...base, kind: "agent", ...(step.action.expect ? { hasVerdict: true } : {}) };
+  }
   if (step.action.kind === "herdr") {
     return { ...base, kind: "herdr", herdrMethod: step.action.method };
   }
@@ -192,7 +199,21 @@ function assertAgentField(
     }
     return;
   }
-  if (head === "agent") {
+  if (head === AGENT_VERDICT_FIELD) {
+    if (!producer.hasVerdict) {
+      bail(
+        file,
+        stepIndex,
+        key,
+        `step '${producer.id}' declares no expect:, so it produces no ${AGENT_VERDICT_FIELD}`,
+      );
+    }
+    if (fieldSegments.length !== 1) {
+      unknownField(file, stepIndex, key, "managed agent", producer, fieldSegments);
+    }
+    return;
+  }
+  if (head === AGENT_INFO_FIELD) {
     if (fieldSegments.length === 1) return;
     if (!globalResultFieldAllowed(fieldSegments.join("."))) {
       unknownField(file, stepIndex, key, "managed agent", producer, fieldSegments);
@@ -359,7 +380,10 @@ function sourceTypeOf(
   }
   if (producer.kind === "agent") {
     if (AGENT_STRING_FIELDS.has(fields[0]!) && fields.length === 1) return "string";
-    if (fields[0] === "agent") return fields.length === 1 ? "object" : "unknown";
+    if (fields[0] === AGENT_VERDICT_FIELD && producer.hasVerdict && fields.length === 1) {
+      return "string";
+    }
+    if (fields[0] === AGENT_INFO_FIELD) return fields.length === 1 ? "object" : "unknown";
     return "unknown";
   }
   return "unknown";
@@ -453,7 +477,7 @@ function assertTemplatePath(
     if (
       opts.rejectSensitiveContext &&
       path.segments[0] !== undefined &&
-      SENSITIVE_RETURNS.has(path.segments[0])
+      SENSITIVE_CONTEXT_KEYS.has(path.segments[0])
     ) {
       bail(file, stepIndex, key, `returns: cannot reference context.${path.segments[0]}`);
     }

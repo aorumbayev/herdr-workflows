@@ -76,9 +76,11 @@ describe("shipped examples", () => {
   test("example gallery cards build without legacy keys", async () => {
     const cards = await buildExamples(EXAMPLES_DIR);
     expect(cards.map((c) => c.name).sort()).toEqual([
+      "adversarial-revise",
       "branch-check",
       "handoff",
       "prompt-enhance",
+      "review-gate",
       "worktree",
     ]);
     for (const card of cards) {
@@ -114,9 +116,7 @@ describe("shipped examples", () => {
       join(import.meta.dir, "..", "..", "docs", ".vitepress", "theme", "HomePage.vue"),
     ).text();
     const cards = await buildExamples(EXAMPLES_DIR);
-    for (const card of cards) {
-      expect(home).toContain(card.name);
-    }
-    expect(home).not.toMatch(/\breview\b/);
+    const listed = [...home.matchAll(/<strong>([a-z0-9-]+)<\/strong>/g)].map((m) => m[1]);
+    expect(listed.sort()).toEqual(cards.map((c) => c.name).sort());
   });
 });

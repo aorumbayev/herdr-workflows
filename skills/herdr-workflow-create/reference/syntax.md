@@ -73,7 +73,24 @@ or `target: "{{context.agent}}"` for an existing **idle/done** agent — it reje
 `env:` and `using:`, because that agent already has a pane. A busy target fails before the prompt
 is sent.
 
-Blocking result: `{response, agent, pane_id}`.
+Blocking result: `{response, agent, pane_id}`, plus `verdict` when the step declares `expect:`.
+
+```yaml
+- id: review
+  agent: Review this. Findings first, verdict on the final line.
+  using: claude
+  expect:
+    one_of: [APPROVE, REJECT] # distinct tokens matching [A-Z][A-Z0-9_]{0,31}
+    require: [APPROVE] # optional non-empty subset that lets the step succeed
+```
+
+`verdict` is the final non-empty line of the response, trimmed and matched exactly, so reasoning
+above it is fine. The runner appends the token list, the final-line rule, and an
+`hwf response check <file> --one-of TOKEN,TOKEN` command to the prompt — the same parse the runner
+applies at settle time, which the agent reruns against its own response file until it exits 0. An
+unmatched final line or a verdict outside `require` is an ordinary step failure that names the
+tokens. `expect:` fails to load with `background: true` or on any other action, and
+`{{steps.<id>.verdict}}` fails to load when the producer declares no `expect:`.
 
 ### `herdr:`
 
