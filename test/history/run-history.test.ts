@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { allocateRunId, RunHistorySession, runDetail } from "../../src/history";
+import { allocateRunId, RunHistoryWriter, runDetail } from "../../src/history";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -70,16 +70,16 @@ describe("picker run history formatting", () => {
     await mkdir(root, { recursive: true });
     const ids: string[] = [];
     for (let i = 0; i < 8; i++) {
-      const session = new RunHistorySession();
-      await session.claim({
+      const writer = new RunHistoryWriter();
+      await writer.claim({
         workflow: `wf-${i}`,
         source: "repo",
         checkout_root: root,
         started_at: new Date(Date.now() - i * 1000).toISOString(),
       });
-      ids.push(session.id!);
-      await session.finalize("succeeded");
-      session.dispose();
+      ids.push(writer.id!);
+      await writer.finalize("succeeded");
+      writer.dispose();
     }
     const keep = ids[7]!;
     const { runs, chrome } = createTestRuns(root);
@@ -105,7 +105,7 @@ describe("picker run history formatting", () => {
   test("overlapping detail opens keep the latest status content", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-pick-gen-"));
     dirs.push(root);
-    const first = new RunHistorySession();
+    const first = new RunHistoryWriter();
     await first.claim({
       workflow: "one",
       source: "repo",
@@ -115,7 +115,7 @@ describe("picker run history formatting", () => {
     await first.finalize("succeeded");
     const firstId = first.id!;
     first.dispose();
-    const second = new RunHistorySession();
+    const second = new RunHistoryWriter();
     await second.claim({
       workflow: "two",
       source: "repo",
@@ -174,7 +174,7 @@ describe("picker run history formatting", () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-pick-root-"));
     dirs.push(root);
     await mkdir(root, { recursive: true });
-    const first = new RunHistorySession();
+    const first = new RunHistoryWriter();
     await first.claim({
       workflow: "one",
       source: "repo",
@@ -184,7 +184,7 @@ describe("picker run history formatting", () => {
     await first.finalize("succeeded");
     const keep = first.id!;
     first.dispose();
-    const second = new RunHistorySession();
+    const second = new RunHistoryWriter();
     await second.claim({
       workflow: "two",
       source: "repo",
@@ -203,13 +203,13 @@ describe("picker run history formatting", () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-pick-root-"));
     dirs.push(root);
     await mkdir(root, { recursive: true });
-    const local = new RunHistorySession();
+    const local = new RunHistoryWriter();
     await local.claim({ workflow: "here", source: "repo", checkout_root: root });
     await local.finalize("succeeded");
     local.dispose();
     const foreignRoot = await mkdtemp(join(tmpdir(), "hwf-foreign-"));
     dirs.push(foreignRoot);
-    const foreignOk = new RunHistorySession();
+    const foreignOk = new RunHistoryWriter();
     await foreignOk.claim({
       workflow: "there",
       source: "repo",
@@ -231,7 +231,7 @@ describe("picker run history formatting", () => {
     await mkdir(root, { recursive: true });
     const foreignRoot = await mkdtemp(join(tmpdir(), "hwf-foreign-only-"));
     dirs.push(foreignRoot);
-    const foreignOk = new RunHistorySession();
+    const foreignOk = new RunHistoryWriter();
     await foreignOk.claim({
       workflow: "there",
       source: "repo",
@@ -261,11 +261,11 @@ describe("picker run history formatting", () => {
   test("return to runs preserves list selection from the open detail", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-pick-active-"));
     dirs.push(root);
-    const session = new RunHistorySession();
-    await session.claim({ workflow: "keep", source: "repo", checkout_root: root });
-    await session.finalize("succeeded");
-    const keep = session.id!;
-    session.dispose();
+    const writer = new RunHistoryWriter();
+    await writer.claim({ workflow: "keep", source: "repo", checkout_root: root });
+    await writer.finalize("succeeded");
+    const keep = writer.id!;
+    writer.dispose();
     const { runs, chrome } = createTestRuns(root);
     await runs.enter();
     await runs.openDetail(keep);

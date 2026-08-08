@@ -564,8 +564,8 @@ function assertCwdEnvPane(
 ): void {
   if (action.cwd !== undefined) assertTemplates(file, stepIndex, key("cwd"), action.cwd, opts);
   if (action.env !== undefined) assertValueTemplates(file, stepIndex, key("env"), action.env, opts);
-  if (action.pane?.target !== undefined) {
-    assertTemplates(file, stepIndex, key("pane.target"), action.pane.target, opts);
+  if (action.pane?.anchor !== undefined) {
+    assertTemplates(file, stepIndex, key("pane.target"), action.pane.anchor, opts);
   }
   if (action.pane?.workspace !== undefined) {
     assertTemplates(file, stepIndex, key("pane.workspace"), action.pane.workspace, opts);
@@ -582,7 +582,7 @@ function assertPaneOpenTemplate(
   stepIndex: number | undefined,
   key: string,
   open: string,
-  pane: { target?: string; workspace?: string; size?: number },
+  pane: { anchor?: string; workspace?: string; size?: number },
   opts: TemplateOpts,
 ): void {
   const path = parseTemplatePath(open.slice(2, -2).trim())!;
@@ -618,7 +618,7 @@ function assertPaneOpenTemplate(
     }
   }
   const domain = new Set(input.options);
-  if (domain.has("tab") && (pane.target !== undefined || pane.size !== undefined)) {
+  if (domain.has("tab") && (pane.anchor !== undefined || pane.size !== undefined)) {
     bail(file, stepIndex, key, "pane.target/size are invalid when pane.open can resolve to tab");
   }
   if ((domain.has("beside") || domain.has("below")) && pane.workspace !== undefined) {
@@ -712,14 +712,14 @@ function assertInputGuards(file: string, inputs: InputSpec[]): void {
       if (path.root !== "inputs" || path.segments.length !== 1) {
         bail(file, undefined, key, "input when: may only reference earlier inputs");
       }
-      const target = path.segments[0]!;
-      if (!earlier.has(target)) {
-        if (target === input.name || !inputs.some((row) => row.name === target)) {
-          bail(file, undefined, key, `unknown input '${target}'`);
+      const referencedInput = path.segments[0]!;
+      if (!earlier.has(referencedInput)) {
+        if (referencedInput === input.name || !inputs.some((row) => row.name === referencedInput)) {
+          bail(file, undefined, key, `unknown input '${referencedInput}'`);
         }
-        bail(file, undefined, key, `forward reference to input '${target}'`);
+        bail(file, undefined, key, `forward reference to input '${referencedInput}'`);
       }
-      const prior = earlier.get(target)!;
+      const prior = earlier.get(referencedInput)!;
       assertAvailability(
         file,
         undefined,
@@ -748,18 +748,25 @@ function assertDynamicArgvRefs(
       if (path.root !== "inputs" || path.segments.length !== 1) {
         bail(file, undefined, key, DYNAMIC_ARGV_ROOT_RULE);
       }
-      const target = path.segments[0]!;
-      if (target === input.name) {
-        bail(file, undefined, key, `self reference to input '${target}'`);
+      const referencedInput = path.segments[0]!;
+      if (referencedInput === input.name) {
+        bail(file, undefined, key, `self reference to input '${referencedInput}'`);
       }
-      const prior = earlier.get(target);
+      const prior = earlier.get(referencedInput);
       if (!prior) {
-        if (!inputs.some((row) => row.name === target)) {
-          bail(file, undefined, key, `unknown input '${target}'`);
+        if (!inputs.some((row) => row.name === referencedInput)) {
+          bail(file, undefined, key, `unknown input '${referencedInput}'`);
         }
-        bail(file, undefined, key, `forward reference to input '${target}'`);
+        bail(file, undefined, key, `forward reference to input '${referencedInput}'`);
       }
-      assertAvailability(file, undefined, key, input.when ?? [], prior.when, `input '${target}'`);
+      assertAvailability(
+        file,
+        undefined,
+        key,
+        input.when ?? [],
+        prior.when,
+        `input '${referencedInput}'`,
+      );
     }
   }
 }

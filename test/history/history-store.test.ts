@@ -19,7 +19,7 @@ import {
   runDetail,
   listRuns,
   readSnapshot,
-  RunHistorySession,
+  RunHistoryWriter,
   runsDir,
   snapshotPath,
 } from "../../src/history";
@@ -59,8 +59,8 @@ describe("run history store", () => {
 
   test("exclusive claims reject reused identity", async () => {
     const id = allocateRunId();
-    const a = new RunHistorySession();
-    const b = new RunHistorySession();
+    const a = new RunHistoryWriter();
+    const b = new RunHistoryWriter();
     expect(await a.claim(baseMeta(id))).toMatchObject({ ok: true, state: "claimed", id });
     expect(await b.claim(baseMeta(id))).toMatchObject({ ok: false, state: "rejected", id });
     a.dispose();
@@ -68,8 +68,8 @@ describe("run history store", () => {
   });
 
   test("concurrent runs own different snapshots", async () => {
-    const a = new RunHistorySession();
-    const b = new RunHistorySession();
+    const a = new RunHistoryWriter();
+    const b = new RunHistoryWriter();
     expect((await a.claim(baseMeta())).state).toBe("claimed");
     expect((await b.claim(baseMeta())).state).toBe("claimed");
     expect(a.id).not.toBe(b.id);
@@ -78,10 +78,10 @@ describe("run history store", () => {
   });
 
   test("later write recovers complete state after missed intermediate", async () => {
-    const session = new RunHistorySession();
-    expect((await session.claim(baseMeta())).state).toBe("claimed");
-    const id = session.id!;
-    await session.setCurrentStep({
+    const writer = new RunHistoryWriter();
+    expect((await writer.claim(baseMeta())).state).toBe("claimed");
+    const id = writer.id!;
+    await writer.setCurrentStep({
       phase: "main",
       workflow: "demo",
       workflow_path: ["demo"],
@@ -93,7 +93,7 @@ describe("run history store", () => {
     });
     // Simulate a missed write by corrupting the on-disk file, then succeeding.
     await writeFile(snapshotPath(id), "{", { mode: 0o600 });
-    await session.recordStep({
+    await writer.recordStep({
       phase: "main",
       workflow: "demo",
       workflow_path: ["demo"],
@@ -107,30 +107,30 @@ describe("run history store", () => {
     const snap = await readSnapshot(id);
     expect(snap?.steps).toHaveLength(1);
     expect(snap?.current_step).toBeUndefined();
-    session.dispose();
+    writer.dispose();
   });
 
   test("empty permissive state root is tightened and claimable", async () => {
     if (platform() === "win32") return;
-    const session = new RunHistorySession();
+    const writer = new RunHistoryWriter();
     await mkdir(stateDir, { recursive: true });
     await chmod(stateDir, 0o755);
-    const result = await session.claim(baseMeta());
+    const result = await writer.claim(baseMeta());
     expect(result).toMatchObject({ ok: true, state: "claimed" });
     expect((await stat(stateDir)).mode & 0o777).toBe(0o700);
-    session.dispose();
+    writer.dispose();
   });
 
   test("non-empty permissive state root makes history unavailable", async () => {
     if (platform() === "win32") return;
-    const session = new RunHistorySession();
+    const writer = new RunHistoryWriter();
     await mkdir(stateDir, { recursive: true });
     await writeFile(join(stateDir, "marker"), "x");
     await chmod(stateDir, 0o755);
-    const result = await session.claim(baseMeta());
+    const result = await writer.claim(baseMeta());
     expect(result).toMatchObject({ ok: true, state: "unavailable" });
     expect((await stat(stateDir)).mode & 0o777).toBe(0o755);
-    session.dispose();
+    writer.dispose();
   });
 
   test("history ACL validation refuses foreign grants without stripping", async () => {
@@ -149,12 +149,12 @@ describe("run history store", () => {
   });
 
   test("queued persists drain before finalize wins", async () => {
-    const session = new RunHistorySession();
-    expect((await session.claim(baseMeta())).state).toBe("claimed");
-    const id = session.id!;
+    const writer = new RunHistoryWriter();
+    expect((await writer.claim(baseMeta())).state).toBe("claimed");
+    const id = writer.id!;
     const started = new Date().toISOString();
     await Promise.all([
-      session.setCurrentStep({
+      writer.setCurrentStep({
         phase: "main",
         workflow: "demo",
         workflow_path: ["demo"],
@@ -164,8 +164,8 @@ describe("run history store", () => {
         label: "one",
         started_at: started,
       }),
-      session.touch(),
-      session.recordStep({
+      writer.touch(),
+      writer.recordStep({
         phase: "main",
         workflow: "demo",
         workflow_path: ["demo"],
@@ -177,12 +177,12 @@ describe("run history store", () => {
         outcome: "succeeded",
       }),
     ]);
-    await session.finalize("succeeded");
+    await writer.finalize("succeeded");
     const snap = await readSnapshot(id);
     expect(snap?.status).toBe("succeeded");
     expect(snap?.steps).toHaveLength(1);
     expect(snap?.current_step).toBeUndefined();
-    session.dispose();
+    writer.dispose();
   });
 
   test("filters apply before forty-result limit", async () => {
@@ -227,7 +227,7 @@ describe("run history store", () => {
 
   test("retention preserves non-terminal and oversized newest terminal", async () => {
     await mkdir(runsDir(), { recursive: true, mode: 0o700 });
-    const active = new RunHistorySession();
+    const active = new RunHistoryWriter();
     expect((await active.claim(baseMeta())).state).toBe("claimed");
 
     const pad = "x".repeat(200_000);
@@ -248,10 +248,10 @@ describe("run history store", () => {
         steps: [],
       });
     }
-    const session = new RunHistorySession();
-    await session.claim({ ...baseMeta(), workflow: "trigger" });
-    await session.finalize("succeeded");
-    session.dispose();
+    const writer = new RunHistoryWriter();
+    await writer.claim({ ...baseMeta(), workflow: "trigger" });
+    await writer.finalize("succeeded");
+    writer.dispose();
 
     const activeSnap = await readSnapshot(active.id!);
     expect(activeSnap?.status).toBeUndefined();
@@ -320,11 +320,11 @@ describe("run history store", () => {
   test("unsafe snapshot file ACL is unavailable not missing", async () => {
     if (platform() === "win32") return;
     const root = await mkdtemp(join(tmpdir(), "hwf-acl-root-"));
-    const session = new RunHistorySession();
-    expect((await session.claim({ ...baseMeta(), checkout_root: root })).state).toBe("claimed");
-    const id = session.id!;
-    await session.finalize("succeeded");
-    session.dispose();
+    const writer = new RunHistoryWriter();
+    expect((await writer.claim({ ...baseMeta(), checkout_root: root })).state).toBe("claimed");
+    const id = writer.id!;
+    await writer.finalize("succeeded");
+    writer.dispose();
     await chmod(snapshotPath(id), 0o644);
     const { detail } = await runDetail(id);
     expect(detail.kind).toBe("unavailable");
@@ -334,39 +334,39 @@ describe("run history store", () => {
   });
 
   test("failed atomic replacement removes temporary snapshot", async () => {
-    const session = new RunHistorySession();
-    expect((await session.claim(baseMeta())).state).toBe("claimed");
-    const id = session.id!;
+    const writer = new RunHistoryWriter();
+    expect((await writer.claim(baseMeta())).state).toBe("claimed");
+    const id = writer.id!;
     const path = snapshotPath(id);
     await rm(path);
     await mkdir(path, { mode: 0o700 });
-    await session.touch();
+    await writer.touch();
     const leftovers = (await readdir(runsDir())).filter(
       (name) => name.startsWith(`.${id}.`) && name.endsWith(".tmp"),
     );
     expect(leftovers).toEqual([]);
-    session.dispose();
+    writer.dispose();
     await rm(path, { recursive: true, force: true });
   });
 
   test("unresolvable claim checkout is unavailable", async () => {
-    const session = new RunHistorySession();
-    const result = await session.claim({
+    const writer = new RunHistoryWriter();
+    const result = await writer.claim({
       ...baseMeta(),
       checkout_root: join(tmpdir(), `missing-${Date.now()}`),
     });
     expect(result).toMatchObject({ ok: true, state: "unavailable" });
-    session.dispose();
+    writer.dispose();
   });
 
   test("deleted checkout remains listable under soft canonical filter", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-soft-root-"));
     const canonical = await realpath(root);
-    const session = new RunHistorySession();
-    expect((await session.claim({ ...baseMeta(), checkout_root: root })).state).toBe("claimed");
-    const id = session.id!;
-    await session.finalize("succeeded");
-    session.dispose();
+    const writer = new RunHistoryWriter();
+    expect((await writer.claim({ ...baseMeta(), checkout_root: root })).state).toBe("claimed");
+    const id = writer.id!;
+    await writer.finalize("succeeded");
+    writer.dispose();
     const snap = await readSnapshot(id);
     expect(snap?.checkout_root).toBe(canonical);
     await rm(root, { recursive: true, force: true });
@@ -377,9 +377,9 @@ describe("run history store", () => {
   });
 
   test("search matches completed safe step labels", async () => {
-    const session = new RunHistorySession();
-    await session.claim(baseMeta());
-    await session.recordStep({
+    const writer = new RunHistoryWriter();
+    await writer.claim(baseMeta());
+    await writer.recordStep({
       phase: "main",
       workflow: "demo",
       workflow_path: ["demo"],
@@ -390,7 +390,7 @@ describe("run history store", () => {
       finished_at: new Date().toISOString(),
       outcome: "succeeded",
     });
-    await session.finalize("succeeded");
+    await writer.finalize("succeeded");
     const listed = await listRuns({
       text: "unique-shell-label",
       checkout_root: checkoutRoot,
@@ -398,15 +398,15 @@ describe("run history store", () => {
     expect(listed.ok).toBe(true);
     if (!listed.ok) return;
     expect(listed.runs).toHaveLength(1);
-    expect(toListItem((await readSnapshot(session.id!))!).step_labels).toContain(
+    expect(toListItem((await readSnapshot(writer.id!))!).step_labels).toContain(
       "unique-shell-label",
     );
-    session.dispose();
+    writer.dispose();
   });
 
   test("retention byte budget counts only terminal snapshots", async () => {
     await mkdir(runsDir(), { recursive: true, mode: 0o700 });
-    const active = new RunHistorySession();
+    const active = new RunHistoryWriter();
     expect((await active.claim(baseMeta())).state).toBe("claimed");
     const huge = "y".repeat(400_000);
     await writeFile(
@@ -454,7 +454,7 @@ describe("run history store", () => {
       status: "succeeded",
       steps: [],
     });
-    const trigger = new RunHistorySession();
+    const trigger = new RunHistoryWriter();
     await trigger.claim({ ...baseMeta(), workflow: "trigger" });
     await trigger.finalize("succeeded");
     trigger.dispose();
@@ -485,9 +485,9 @@ describe("run history store", () => {
   });
 
   test("failure explanation is detail-only and not searchable", async () => {
-    const session = new RunHistorySession();
-    await session.claim(baseMeta());
-    await session.recordStep({
+    const writer = new RunHistoryWriter();
+    await writer.claim(baseMeta());
+    await writer.recordStep({
       phase: "main",
       workflow: "demo",
       workflow_path: ["demo"],
@@ -500,7 +500,7 @@ describe("run history store", () => {
       failure: { action: "run", exit_code: 3 },
       explanation: "secret-token-xyz",
     });
-    await session.finalize("failed");
+    await writer.finalize("failed");
     const listed = await listRuns({ text: "secret-token-xyz", checkout_root: null });
     expect(listed.ok).toBe(true);
     if (!listed.ok) return;
@@ -509,12 +509,12 @@ describe("run history store", () => {
     expect(byExit.ok).toBe(true);
     if (!byExit.ok) return;
     expect(byExit.runs).toHaveLength(1);
-    const { detail } = await runDetail(session.id!);
+    const { detail } = await runDetail(writer.id!);
     expect(detail.kind).toBe("snapshot");
     if (detail.kind !== "snapshot") return;
     expect(detail.failure_explanation).toBe("secret-token-xyz");
     expect(JSON.stringify(byExit.runs[0])).not.toContain("secret-token-xyz");
-    session.dispose();
+    writer.dispose();
   });
 });
 

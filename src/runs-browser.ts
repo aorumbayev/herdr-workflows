@@ -271,7 +271,7 @@ export type RunsBrowserDeps = {
 
 type BrowserView = "list" | "detail";
 
-type RunsBrowserSession = {
+type RunsBrowserScreen = {
   deps: RunsBrowserDeps;
   view: BrowserView | null;
   scope: RunsScope;
@@ -306,23 +306,23 @@ export type RunsBrowser = {
 };
 
 function applyListOptions(
-  session: RunsBrowserSession,
+  screen: RunsBrowserScreen,
   options: Parameters<PickerChrome["setOptions"]>[0],
 ): void {
-  session.deps.chrome.setOptions(options);
+  screen.deps.chrome.setOptions(options);
 }
 
-function stopDetailPoll(session: RunsBrowserSession): void {
-  if (session.detailPoll !== undefined) {
-    clearInterval(session.detailPoll);
-    session.detailPoll = undefined;
+function stopDetailPoll(screen: RunsBrowserScreen): void {
+  if (screen.detailPoll !== undefined) {
+    clearInterval(screen.detailPoll);
+    screen.detailPoll = undefined;
   }
 }
 
-function detachRun(session: RunsBrowserSession): void {
-  session.runHandle?.detach();
-  session.runHandle = undefined;
-  session.running = false;
+function detachRun(screen: RunsBrowserScreen): void {
+  screen.runHandle?.detach();
+  screen.runHandle = undefined;
+  screen.running = false;
 }
 
 /** Terminal snapshots do not poll; only live/stale snapshot detail refreshes. */
@@ -330,115 +330,111 @@ export function isDetailPollableStatus(status: string): boolean {
   return status === "running" || status === "stale";
 }
 
-function detailIsPollable(session: RunsBrowserSession): boolean {
-  if (session.view !== "detail") return false;
-  if (!session.activeRunId || !normalizeRunUuid(session.activeRunId)) return false;
-  if (!session.detailView || session.detailView.kind !== "detail") return false;
-  if (session.detailView.detail.kind !== "snapshot") return false;
-  return isDetailPollableStatus(session.detailView.detail.status);
+function detailIsPollable(screen: RunsBrowserScreen): boolean {
+  if (screen.view !== "detail") return false;
+  if (!screen.activeRunId || !normalizeRunUuid(screen.activeRunId)) return false;
+  if (!screen.detailView || screen.detailView.kind !== "detail") return false;
+  if (screen.detailView.detail.kind !== "snapshot") return false;
+  return isDetailPollableStatus(screen.detailView.detail.status);
 }
 
 function beginDetailPollRequest(
-  session: RunsBrowserSession,
+  screen: RunsBrowserScreen,
 ): { id: string; gen: number } | undefined {
-  if (!detailIsPollable(session)) return undefined;
-  const id = session.activeRunId!;
-  return { id, gen: session.detailToken.begin() };
+  if (!detailIsPollable(screen)) return undefined;
+  const id = screen.activeRunId!;
+  return { id, gen: screen.detailToken.begin() };
 }
 
-function detailPollResponseCurrent(session: RunsBrowserSession, id: string, gen: number): boolean {
-  return (
-    session.view === "detail" && session.activeRunId === id && session.detailToken.current(gen)
-  );
+function detailPollResponseCurrent(screen: RunsBrowserScreen, id: string, gen: number): boolean {
+  return screen.view === "detail" && screen.activeRunId === id && screen.detailToken.current(gen);
 }
 
-function selectedRunSummary(session: RunsBrowserSession): string {
-  const selected = session.browserState?.items[session.deps.chrome.selectedIndex()];
+function selectedRunSummary(screen: RunsBrowserScreen): string {
+  const selected = screen.browserState?.items[screen.deps.chrome.selectedIndex()];
   if (!selected) return "";
   return formatRunSummary(selected);
 }
 
-function paintRunsSelection(session: RunsBrowserSession, total: number): void {
-  session.deps.chrome.setDetail(
-    formatDetailLines(selectedRunSummary(session), session.deps.getContentWidth()),
+function paintRunsSelection(screen: RunsBrowserScreen, total: number): void {
+  screen.deps.chrome.setDetail(
+    formatDetailLines(selectedRunSummary(screen), screen.deps.getContentWidth()),
   );
-  session.deps.chrome.setFooter(
-    runsFooter(session.scope, session.deps.chrome.selectedIndex(), total),
-  );
+  screen.deps.chrome.setFooter(runsFooter(screen.scope, screen.deps.chrome.selectedIndex(), total));
 }
 
-function preserveSelectionId(session: RunsBrowserSession): string | undefined {
+function preserveSelectionId(screen: RunsBrowserScreen): string | undefined {
   return (
-    session.browserState?.selectedId ??
-    session.browserState?.items[session.deps.chrome.selectedIndex()]?.id ??
-    session.activeRunId
+    screen.browserState?.selectedId ??
+    screen.browserState?.items[screen.deps.chrome.selectedIndex()]?.id ??
+    screen.activeRunId
   );
 }
 
-function renderDetail(session: RunsBrowserSession): void {
-  if (!session.detailView) return;
-  const lines = detailLines(session.detailView, session.deps.getContentWidth());
-  const { visible, scroll } = scrollDetailLines(lines, session.detailScroll, 10);
-  session.detailScroll = scroll;
-  session.deps.chrome.showDetailLayout();
-  session.deps.chrome.status(visible.join("\n"), { flexGrow: 1 });
-  session.deps.chrome.setFooter(
+function renderDetail(screen: RunsBrowserScreen): void {
+  if (!screen.detailView) return;
+  const lines = detailLines(screen.detailView, screen.deps.getContentWidth());
+  const { visible, scroll } = scrollDetailLines(lines, screen.detailScroll, 10);
+  screen.detailScroll = scroll;
+  screen.deps.chrome.showDetailLayout();
+  screen.deps.chrome.status(visible.join("\n"), { flexGrow: 1 });
+  screen.deps.chrome.setFooter(
     runDetailFooter({
-      allowWorkbench: viewAllowsWorkbench(session.detailView),
+      allowWorkbench: viewAllowsWorkbench(screen.detailView),
     }),
   );
 }
 
-async function refreshOpenDetail(session: RunsBrowserSession): Promise<void> {
-  const req = beginDetailPollRequest(session);
+async function refreshOpenDetail(screen: RunsBrowserScreen): Promise<void> {
+  const req = beginDetailPollRequest(screen);
   if (!req) {
-    stopDetailPoll(session);
+    stopDetailPoll(screen);
     return;
   }
   const view = await runDetail(req.id);
-  if (!detailPollResponseCurrent(session, req.id, req.gen)) return;
-  session.detailView = { kind: "detail", ...view };
-  renderDetail(session);
-  if (!detailIsPollable(session)) stopDetailPoll(session);
+  if (!detailPollResponseCurrent(screen, req.id, req.gen)) return;
+  screen.detailView = { kind: "detail", ...view };
+  renderDetail(screen);
+  if (!detailIsPollable(screen)) stopDetailPoll(screen);
 }
 
-function startDetailPoll(session: RunsBrowserSession): void {
-  stopDetailPoll(session);
-  if (!detailIsPollable(session)) return;
+function startDetailPoll(screen: RunsBrowserScreen): void {
+  stopDetailPoll(screen);
+  if (!detailIsPollable(screen)) return;
   const timer = setInterval(() => {
-    void refreshOpenDetail(session);
+    void refreshOpenDetail(screen);
   }, 3000);
   timer.unref?.();
-  session.detailPoll = timer;
+  screen.detailPoll = timer;
 }
 
-async function refresh(session: RunsBrowserSession): Promise<void> {
-  if (session.view !== "list") return;
-  const gen = session.refreshToken.begin();
-  const currentScope = session.scope;
-  const filter = session.deps.chrome.filterValue();
-  const view = session.view;
-  const preserveId = preserveSelectionId(session);
-  const browser = await loadRunsBrowser(session.deps.repoRoot, currentScope, filter, preserveId);
+async function refresh(screen: RunsBrowserScreen): Promise<void> {
+  if (screen.view !== "list") return;
+  const gen = screen.refreshToken.begin();
+  const currentScope = screen.scope;
+  const filter = screen.deps.chrome.filterValue();
+  const view = screen.view;
+  const preserveId = preserveSelectionId(screen);
+  const browser = await loadRunsBrowser(screen.deps.repoRoot, currentScope, filter, preserveId);
   if (
-    !session.refreshToken.current(gen) ||
-    session.view !== view ||
-    session.scope !== currentScope ||
-    session.deps.chrome.filterValue() !== filter
+    !screen.refreshToken.current(gen) ||
+    screen.view !== view ||
+    screen.scope !== currentScope ||
+    screen.deps.chrome.filterValue() !== filter
   ) {
     return;
   }
-  session.browserState = browser;
-  session.deps.chrome.showBrowser({
+  screen.browserState = browser;
+  screen.deps.chrome.showBrowser({
     filterPlaceholder: "filter runs...",
     filterValue: filter,
     showFilter: true,
     listHeight: RUNS_LIST_VIEWPORT,
   });
-  session.deps.chrome.showList("");
+  screen.deps.chrome.showList("");
   if (browser.unavailable || browser.items.length === 0) {
-    applyListOptions(session, []);
-    session.deps.chrome.setDetail(
+    applyListOptions(screen, []);
+    screen.deps.chrome.setDetail(
       formatDetailLines(
         formatRunListEmpty({
           scope: browser.scope,
@@ -446,169 +442,165 @@ async function refresh(session: RunsBrowserSession): Promise<void> {
           filterActive: browser.filter.trim().length > 0,
           unavailable: browser.unavailable,
         }),
-        session.deps.getContentWidth(),
+        screen.deps.getContentWidth(),
       ),
     );
-    session.deps.chrome.setFooter(runsFooter(session.scope, 0, 0));
+    screen.deps.chrome.setFooter(runsFooter(screen.scope, 0, 0));
     return;
   }
-  const options = formatRunsOptions(browser.items, session.deps.getContentWidth(), session.scope);
-  applyListOptions(session, options);
+  const options = formatRunsOptions(browser.items, screen.deps.getContentWidth(), screen.scope);
+  applyListOptions(screen, options);
   const idx = runsSelectedIndex(browser.items, browser.selectedId);
-  session.deps.chrome.setSelectedIndex(idx);
-  session.browserState.selectedId = browser.items[idx]?.id;
-  paintRunsSelection(session, options.length);
+  screen.deps.chrome.setSelectedIndex(idx);
+  screen.browserState.selectedId = browser.items[idx]?.id;
+  paintRunsSelection(screen, options.length);
 }
 
-async function enter(session: RunsBrowserSession): Promise<void> {
-  stopDetailPoll(session);
-  const preserveFromDetail = session.activeRunId;
-  session.running = false;
-  session.progressLines = [];
-  session.view = "list";
-  session.detailView = undefined;
-  if (preserveFromDetail && session.browserState) {
-    session.browserState.selectedId = preserveFromDetail;
+async function enter(screen: RunsBrowserScreen): Promise<void> {
+  stopDetailPoll(screen);
+  const preserveFromDetail = screen.activeRunId;
+  screen.running = false;
+  screen.progressLines = [];
+  screen.view = "list";
+  screen.detailView = undefined;
+  if (preserveFromDetail && screen.browserState) {
+    screen.browserState.selectedId = preserveFromDetail;
   }
-  session.activeRunId = undefined;
-  session.deps.chrome.clearStatus();
-  session.deps.chrome.showBrowser({
+  screen.activeRunId = undefined;
+  screen.deps.chrome.clearStatus();
+  screen.deps.chrome.showBrowser({
     filterPlaceholder: "filter runs...",
-    filterValue: session.savedFilter,
+    filterValue: screen.savedFilter,
     showFilter: true,
   });
-  session.deps.chrome.showList("");
-  await refresh(session);
-  session.deps.chrome.focusFilter();
+  screen.deps.chrome.showList("");
+  await refresh(screen);
+  screen.deps.chrome.focusFilter();
 }
 
-function leave(session: RunsBrowserSession): void {
-  stopDetailPoll(session);
-  session.view = null;
-  session.detailView = undefined;
-  session.activeRunId = undefined;
+function leave(screen: RunsBrowserScreen): void {
+  stopDetailPoll(screen);
+  screen.view = null;
+  screen.detailView = undefined;
+  screen.activeRunId = undefined;
 }
 
-async function openDetail(session: RunsBrowserSession, id: string): Promise<void> {
-  session.view = "detail";
-  session.activeRunId = id;
-  session.detailScroll = 0;
-  const gen = session.detailToken.begin();
+async function openDetail(screen: RunsBrowserScreen, id: string): Promise<void> {
+  screen.view = "detail";
+  screen.activeRunId = id;
+  screen.detailScroll = 0;
+  const gen = screen.detailToken.begin();
   const view = await runDetail(id);
-  if (
-    session.view !== "detail" ||
-    session.activeRunId !== id ||
-    !session.detailToken.current(gen)
-  ) {
+  if (screen.view !== "detail" || screen.activeRunId !== id || !screen.detailToken.current(gen)) {
     return;
   }
-  session.detailView = { kind: "detail", ...view };
-  renderDetail(session);
-  startDetailPoll(session);
+  screen.detailView = { kind: "detail", ...view };
+  renderDetail(screen);
+  startDetailPoll(screen);
 }
 
-function openSelected(session: RunsBrowserSession): void {
-  const selected = session.browserState?.items[session.deps.chrome.selectedIndex()];
-  if (selected) void openDetail(session, selected.id);
+function openSelected(screen: RunsBrowserScreen): void {
+  const selected = screen.browserState?.items[screen.deps.chrome.selectedIndex()];
+  if (selected) void openDetail(screen, selected.id);
 }
 
-function toggleScope(session: RunsBrowserSession): void {
-  if (session.view !== "list") return;
-  session.scope = session.scope === "current" ? "all" : "current";
-  void refresh(session);
+function toggleScope(screen: RunsBrowserScreen): void {
+  if (screen.view !== "list") return;
+  screen.scope = screen.scope === "current" ? "all" : "current";
+  void refresh(screen);
 }
 
-function onSelectionChanged(session: RunsBrowserSession): void {
-  if (session.view !== "list" || !session.browserState) return;
-  const selected = session.browserState.items[session.deps.chrome.selectedIndex()];
-  if (selected) session.browserState.selectedId = selected.id;
-  session.activeRunId = undefined;
-  paintRunsSelection(session, session.deps.chrome.options().length);
+function onSelectionChanged(screen: RunsBrowserScreen): void {
+  if (screen.view !== "list" || !screen.browserState) return;
+  const selected = screen.browserState.items[screen.deps.chrome.selectedIndex()];
+  if (selected) screen.browserState.selectedId = selected.id;
+  screen.activeRunId = undefined;
+  paintRunsSelection(screen, screen.deps.chrome.options().length);
 }
 
-function onFilterInput(session: RunsBrowserSession): void {
-  session.savedFilter = session.deps.chrome.filterValue();
-  void refresh(session);
+function onFilterInput(screen: RunsBrowserScreen): void {
+  screen.savedFilter = screen.deps.chrome.filterValue();
+  void refresh(screen);
 }
 
-function onResize(session: RunsBrowserSession): void {
-  if (session.view === "list") void refresh(session);
-  else if (session.view === "detail") renderDetail(session);
+function onResize(screen: RunsBrowserScreen): void {
+  if (screen.view === "list") void refresh(screen);
+  else if (screen.view === "detail") renderDetail(screen);
 }
 
-function handleDetailKey(session: RunsBrowserSession, key: ChromeKeyEvent): boolean {
+function handleDetailKey(screen: RunsBrowserScreen, key: ChromeKeyEvent): boolean {
   if (key.name === "escape") {
     key.preventDefault();
-    detachRun(session);
-    stopDetailPoll(session);
-    void enter(session);
+    detachRun(screen);
+    stopDetailPoll(screen);
+    void enter(screen);
     return true;
   }
   if (key.name === "up") {
     key.preventDefault();
-    session.detailScroll = Math.max(0, session.detailScroll - 1);
-    renderDetail(session);
+    screen.detailScroll = Math.max(0, screen.detailScroll - 1);
+    renderDetail(screen);
     return true;
   }
   if (key.name === "down") {
     key.preventDefault();
-    session.detailScroll += 1;
-    renderDetail(session);
+    screen.detailScroll += 1;
+    renderDetail(screen);
     return true;
   }
   if (key.name === "w" && !key.ctrl && !key.meta) {
     key.preventDefault();
-    const id = session.activeRunId;
+    const id = screen.activeRunId;
     if (!id || !normalizeRunUuid(id)) return true;
-    if (!session.detailView || !viewAllowsWorkbench(session.detailView)) return true;
-    stopDetailPoll(session);
-    session.deps.launchWorkbenchRoute(runWorkbenchRoute(id));
-    session.deps.chrome.setFooter(runDetailFooter());
+    if (!screen.detailView || !viewAllowsWorkbench(screen.detailView)) return true;
+    stopDetailPoll(screen);
+    screen.deps.launchWorkbenchRoute(runWorkbenchRoute(id));
+    screen.deps.chrome.setFooter(runDetailFooter());
     return true;
   }
   return true;
 }
 
-function handleKey(session: RunsBrowserSession, key: ChromeKeyEvent): boolean {
-  if (session.view === "detail") return handleDetailKey(session, key);
-  if (session.view !== "list") return false;
+function handleKey(screen: RunsBrowserScreen, key: ChromeKeyEvent): boolean {
+  if (screen.view === "detail") return handleDetailKey(screen, key);
+  if (screen.view !== "list") return false;
   if (key.ctrl && (key.name === "g" || key.sequence === "\x07")) {
     key.preventDefault();
-    toggleScope(session);
+    toggleScope(screen);
     return true;
   }
   if (key.name === "up") {
     key.preventDefault();
-    session.deps.chrome.moveUp();
+    screen.deps.chrome.moveUp();
     return true;
   }
   if (key.name === "down") {
     key.preventDefault();
-    session.deps.chrome.moveDown();
+    screen.deps.chrome.moveDown();
     return true;
   }
   if (key.name === "return" || key.name === "linefeed") {
     key.preventDefault();
-    openSelected(session);
+    openSelected(screen);
     return true;
   }
   return false;
 }
 
 function setStartingDetail(
-  session: RunsBrowserSession,
+  screen: RunsBrowserScreen,
   entry: WorkflowListEntry,
   runId: string,
 ): void {
-  stopDetailPoll(session);
-  session.view = "detail";
-  session.running = true;
-  session.activeRunId = runId;
-  session.detailScroll = 0;
-  session.progressLines = [];
-  session.detailToken.begin();
-  session.detailView = { kind: "starting", id: runId, workflow: entry.name };
-  renderDetail(session);
+  stopDetailPoll(screen);
+  screen.view = "detail";
+  screen.running = true;
+  screen.activeRunId = runId;
+  screen.detailScroll = 0;
+  screen.progressLines = [];
+  screen.detailToken.begin();
+  screen.detailView = { kind: "starting", id: runId, workflow: entry.name };
+  renderDetail(screen);
 }
 
 function runningDetailView(
@@ -632,29 +624,29 @@ function runningDetailView(
 }
 
 function launchCancelled(
-  session: RunsBrowserSession,
+  screen: RunsBrowserScreen,
   launch: StartRunLaunch,
   runId: string,
 ): boolean {
-  return Boolean(launch.getExit()) || session.view !== "detail" || session.activeRunId !== runId;
+  return Boolean(launch.getExit()) || screen.view !== "detail" || screen.activeRunId !== runId;
 }
 
 function withProgress(
-  session: RunsBrowserSession,
+  screen: RunsBrowserScreen,
   runId: string,
   entry: WorkflowListEntry,
   checkoutRoot: string,
   historyState: "pending" | "claimed" | "unavailable",
 ): void {
-  if (session.detailView?.kind === "detail" || session.detailView?.kind === "history-unavailable") {
-    session.detailView = { ...session.detailView, progress: session.progressLines };
-  } else if (session.detailView?.kind === "starting" && historyState === "claimed") {
-    session.detailView = runningDetailView(runId, entry, checkoutRoot, session.progressLines);
+  if (screen.detailView?.kind === "detail" || screen.detailView?.kind === "history-unavailable") {
+    screen.detailView = { ...screen.detailView, progress: screen.progressLines };
+  } else if (screen.detailView?.kind === "starting" && historyState === "claimed") {
+    screen.detailView = runningDetailView(runId, entry, checkoutRoot, screen.progressLines);
   }
 }
 
 async function startRun(
-  session: RunsBrowserSession,
+  screen: RunsBrowserScreen,
   entry: WorkflowListEntry,
   launch: StartRunLaunch,
 ): Promise<void> {
@@ -662,108 +654,108 @@ async function startRun(
     Object.entries(launch.inputValues).map(([key, value]) => [key, sanitizeDisplay(value)]),
   );
   const runId = allocateRunId();
-  const checkoutRoot = await canonicalRepoRoot(session.deps.repoRoot);
-  setStartingDetail(session, entry, runId);
+  const checkoutRoot = await canonicalRepoRoot(screen.deps.repoRoot);
+  setStartingDetail(screen, entry, runId);
   try {
     const launchFn = launch.launchRun ?? launchDetachedRun;
     const history = { state: "pending" as "pending" | "claimed" | "unavailable" };
     const handle = launchFn({
       name: entry.name,
-      repoRoot: session.deps.repoRoot,
+      repoRoot: screen.deps.repoRoot,
       ctx: launch.ctx,
       inputs,
       domains: launch.inputDomains,
       runId,
       onHistoryAck: (line) => {
-        if (launchCancelled(session, launch, runId)) return;
+        if (launchCancelled(screen, launch, runId)) return;
         const ack = parseHistoryAck(line);
         if (!ack) return;
         if (ack.state === "claimed" && ack.id === runId) {
           history.state = "claimed";
-          session.detailView = runningDetailView(runId, entry, checkoutRoot, session.progressLines);
-          renderDetail(session);
-          startDetailPoll(session);
+          screen.detailView = runningDetailView(runId, entry, checkoutRoot, screen.progressLines);
+          renderDetail(screen);
+          startDetailPoll(screen);
           return;
         }
         if (ack.state === "unavailable") {
           history.state = "unavailable";
-          stopDetailPoll(session);
-          session.detailView = {
+          stopDetailPoll(screen);
+          screen.detailView = {
             kind: "history-unavailable",
             id: runId,
             workflow: entry.name,
-            progress: session.progressLines,
+            progress: screen.progressLines,
           };
-          renderDetail(session);
+          renderDetail(screen);
         }
       },
       onProgressLine: (line) => {
-        if (launchCancelled(session, launch, runId)) return;
+        if (launchCancelled(screen, launch, runId)) return;
         const progress = parseProgressLine(line);
         if (!progress) return;
-        session.progressLines.push(
-          truncate(formatProgressLine(progress), session.deps.getContentWidth()),
+        screen.progressLines.push(
+          truncate(formatProgressLine(progress), screen.deps.getContentWidth()),
         );
-        withProgress(session, runId, entry, checkoutRoot, history.state);
-        renderDetail(session);
+        withProgress(screen, runId, entry, checkoutRoot, history.state);
+        renderDetail(screen);
       },
     });
-    session.runHandle = handle;
+    screen.runHandle = handle;
     const result = await handle.result;
-    if (launchCancelled(session, launch, runId)) return;
-    session.runHandle = undefined;
-    session.running = false;
-    stopDetailPoll(session);
+    if (launchCancelled(screen, launch, runId)) return;
+    screen.runHandle = undefined;
+    screen.running = false;
+    stopDetailPoll(screen);
     if (history.state === "pending" && !result.ok) {
-      session.detailView = {
+      screen.detailView = {
         kind: "local-failure",
         id: runId,
         workflow: entry.name,
         message: result.detail || "launch failed",
       };
-      renderDetail(session);
+      renderDetail(screen);
       return;
     }
     if (history.state === "unavailable") {
-      session.detailView = {
+      screen.detailView = {
         kind: "history-unavailable",
         id: runId,
         workflow: entry.name,
-        progress: session.progressLines,
+        progress: screen.progressLines,
         finished: result.ok ? "succeeded" : "failed",
         ...(result.ok ? {} : { message: result.detail }),
       };
-      renderDetail(session);
+      renderDetail(screen);
       return;
     }
-    const gen = session.detailToken.begin();
+    const gen = screen.detailToken.begin();
     const view = await runDetail(runId);
     if (
-      session.view !== "detail" ||
-      session.activeRunId !== runId ||
-      !session.detailToken.current(gen)
+      screen.view !== "detail" ||
+      screen.activeRunId !== runId ||
+      !screen.detailToken.current(gen)
     ) {
       return;
     }
-    session.detailView = { kind: "detail", ...view };
-    renderDetail(session);
-    startDetailPoll(session);
+    screen.detailView = { kind: "detail", ...view };
+    renderDetail(screen);
+    startDetailPoll(screen);
   } catch (error) {
-    session.runHandle = undefined;
-    session.running = false;
-    stopDetailPoll(session);
-    session.detailView = {
+    screen.runHandle = undefined;
+    screen.running = false;
+    stopDetailPoll(screen);
+    screen.detailView = {
       kind: "local-failure",
       id: runId,
       workflow: entry.name,
       message: error instanceof Error ? error.message : String(error),
     };
-    renderDetail(session);
+    renderDetail(screen);
   }
 }
 
 export function createRunsBrowser(deps: RunsBrowserDeps): RunsBrowser {
-  const session: RunsBrowserSession = {
+  const screen: RunsBrowserScreen = {
     deps,
     view: null,
     scope: "current",
@@ -775,25 +767,25 @@ export function createRunsBrowser(deps: RunsBrowserDeps): RunsBrowser {
     progressLines: [],
   };
   return {
-    enter: () => enter(session),
-    leave: () => leave(session),
-    handleKey: (key) => handleKey(session, key),
+    enter: () => enter(screen),
+    leave: () => leave(screen),
+    handleKey: (key) => handleKey(screen, key),
     dispose: () => {
-      detachRun(session);
-      stopDetailPoll(session);
-      session.view = null;
+      detachRun(screen);
+      stopDetailPoll(screen);
+      screen.view = null;
     },
-    refresh: () => refresh(session),
-    onSelectionChanged: () => onSelectionChanged(session),
-    onFilterInput: () => onFilterInput(session),
-    onResize: () => onResize(session),
-    startRun: (entry, launch) => startRun(session, entry, launch),
-    openDetail: (id) => openDetail(session, id),
-    openSelected: () => openSelected(session),
-    isActive: () => session.view !== null,
-    isDetail: () => session.view === "detail",
+    refresh: () => refresh(screen),
+    onSelectionChanged: () => onSelectionChanged(screen),
+    onFilterInput: () => onFilterInput(screen),
+    onResize: () => onResize(screen),
+    startRun: (entry, launch) => startRun(screen, entry, launch),
+    openDetail: (id) => openDetail(screen, id),
+    openSelected: () => openSelected(screen),
+    isActive: () => screen.view !== null,
+    isDetail: () => screen.view === "detail",
     get running() {
-      return session.running;
+      return screen.running;
     },
   };
 }

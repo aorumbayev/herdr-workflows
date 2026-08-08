@@ -32,6 +32,7 @@ import {
 import { evaluateWhen, resolveDynamicChoices } from "./workflow/inputs";
 import { IMPORT_DISCLAIMER, parseImportScope, runImport } from "./workflow/exchange";
 import { listWorkflows, loadWorkflow } from "./workflow/inputs";
+import { CaptureLimitError } from "./caps";
 import {
   PRODUCT_VERSION,
   ensureLocalConfigGitignored,
@@ -42,7 +43,6 @@ import {
   loadContext,
   resolveRepoRoot,
   EXAMPLES_URL,
-  CaptureLimitError,
   openInBrowser,
   type AgentProfile,
   type WorkflowsConfig,
@@ -257,12 +257,12 @@ function installPosixName(
   if (entryExists(dest)) {
     const stat = lstatSync(dest);
     if (stat.isSymbolicLink()) {
-      const target = resolve(dirname(dest), readlinkSync(dest));
+      const linkDest = resolve(dirname(dest), readlinkSync(dest));
       const owned =
         entry?.kind === "symlink" &&
         typeof entry.source === "string" &&
-        target === resolve(entry.source);
-      if (kind === "symlink" && target === resolve(source) && owned) {
+        linkDest === resolve(entry.source);
+      if (kind === "symlink" && linkDest === resolve(source) && owned) {
         messages.push(`${name} already linked at ${dest}`);
         return dest;
       }
@@ -1023,7 +1023,7 @@ async function runPickerPopup(
   const picker = await pickerImport;
   const { releaseCheck, app, entries } = await loading;
 
-  const code = await picker.runPickerSession({
+  const code = await picker.runPickerScreen({
     entries,
     repoRoot: app.repoRoot,
     config: app.config,

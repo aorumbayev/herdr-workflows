@@ -2,13 +2,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CAPTURE_BYTE_LIMIT } from "../../src/context";
+import { CAPTURE_BYTE_LIMIT } from "../../src/caps";
 import {
-  extractSessionTranscript,
+  extractAgentTranscript,
   readClaudeTranscript,
   slug,
   transcriptText,
-} from "../../src/context";
+} from "../../src/transcript";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -43,7 +43,7 @@ describe("transcript extractors", () => {
       }),
       JSON.stringify({ type: "system", message: { content: "ignore" } }),
     ].join("\n");
-    expect(extractSessionTranscript(jsonl)).toBe("user:\nhello\n\nassistant:\nworld");
+    expect(extractAgentTranscript(jsonl)).toBe("user:\nhello\n\nassistant:\nworld");
   });
 
   test("readClaudeTranscript loads fixture; missing file names path", async () => {

@@ -64,7 +64,7 @@ Two independent reads, both required:
    shapes.
 
 Additive versus breaking is the key verdict per item. An added method or enum value is an
-opportunity. A removed or reshaped one is a break for whatever in `src/host.ts`, `src/engine.ts`,
+opportunity. A removed or reshaped one is a break for whatever in `src/host.ts`, `src/engine/`,
 or the workflow grammar names it — grep before claiming impact.
 
 ## Phase 4: Upgrade path

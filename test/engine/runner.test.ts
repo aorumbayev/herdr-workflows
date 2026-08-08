@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { WorkflowsConfig } from "../../src/context";
 import { HerdrError, TRANSPORT_LOSS_CODES } from "../../src/host";
-import { AGENT_PROMPT_BYTE_LIMIT, CAPTURE_BYTE_LIMIT, HWF_ENV_BYTE_LIMIT } from "../../src/context";
+import { AGENT_PROMPT_BYTE_LIMIT, CAPTURE_BYTE_LIMIT, HWF_ENV_BYTE_LIMIT } from "../../src/caps";
 import { listRuns, loadAllSnapshots, runDetail, type RunSnapshot } from "../../src/history";
 import type { RunnerDeps } from "../../src/engine";
 import { runWorkflow } from "../../src/engine";

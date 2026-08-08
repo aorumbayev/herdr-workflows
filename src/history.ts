@@ -776,18 +776,18 @@ async function writeSnapshotAtomic(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<void> {
   const dir = await ensureRunsDir(env);
-  const target = snapshotPath(snapshot.id, env);
+  const path = snapshotPath(snapshot.id, env);
   const tmp = join(dir, `.${snapshot.id}.${randomBytes(6).toString("hex")}.tmp`);
   const body = `${JSON.stringify(snapshot)}\n`;
   try {
     await writeFile(tmp, body, { mode: 0o600 });
     await assertPrivateCredentialFile(tmp, historyAclOpts);
-    await rename(tmp, target);
+    await rename(tmp, path);
   } catch (error) {
     await rm(tmp, { force: true }).catch(() => undefined);
     throw error;
   }
-  await assertPrivateCredentialFile(target, historyAclOpts);
+  await assertPrivateCredentialFile(path, historyAclOpts);
 }
 
 async function listSnapshotFiles(env: NodeJS.ProcessEnv = process.env): Promise<string[]> {
@@ -864,7 +864,7 @@ type ClaimMeta = {
   started_at?: string;
 };
 
-export class RunHistorySession {
+export class RunHistoryWriter {
   private snapshot: RunSnapshot | undefined;
   private heartbeat: ReturnType<typeof setInterval> | undefined;
   private env: NodeJS.ProcessEnv;
@@ -1211,7 +1211,7 @@ function emitAck(onAck: ((line: string) => void) | undefined, line: string): voi
 }
 
 function makeRecorder(
-  session: RunHistorySession | undefined,
+  writer: RunHistoryWriter | undefined,
   runId: string,
   scope: RecorderScope,
   state: SharedState,
@@ -1219,21 +1219,21 @@ function makeRecorder(
   return {
     runId,
     child(next) {
-      return makeRecorder(session, runId, next, state);
+      return makeRecorder(writer, runId, next, state);
     },
     async stepStarted(step, ordinal, total, label, phase = "main") {
-      if (!session) return;
-      await session.setCurrentStep({
+      if (!writer) return;
+      await writer.setCurrentStep({
         ...stepBase(scope, step, ordinal, total, label, phase),
         started_at: new Date().toISOString(),
       });
     },
     async stepFinished(step, ordinal, total, label, kind, outcome, phase = "main") {
-      if (!session) return;
+      if (!writer) return;
       const failed = outcome !== undefined && !outcome.ok;
       // Nested child steps already carry the explanation; wrapper records facts only.
       const explainFailure = failed && step.action.kind !== "workflow";
-      await session.recordStep({
+      await writer.recordStep({
         ...stepBase(scope, step, ordinal, total, label, phase),
         finished_at: new Date().toISOString(),
         outcome: kind,
@@ -1249,11 +1249,11 @@ function makeRecorder(
     async finished(status, extras) {
       if (state.finalized) return;
       state.finalized = true;
-      if (!session) return;
-      await session.finalize(status, extras ?? {}).catch(() => undefined);
+      if (!writer) return;
+      await writer.finalize(status, extras ?? {}).catch(() => undefined);
     },
     dispose() {
-      session?.dispose();
+      writer?.dispose();
     },
   };
 }
@@ -1264,8 +1264,8 @@ export async function createRunRecorder(opts: {
   checkoutRoot: string;
   onAck?: (line: string) => void;
 }): Promise<{ ok: false; error: string } | { ok: true; recorder: RunRecorder }> {
-  const session = new RunHistorySession();
-  const claim = await session.claim({
+  const writer = new RunHistoryWriter();
+  const claim = await writer.claim({
     ...(opts.runId !== undefined ? { id: opts.runId } : {}),
     workflow: opts.workflow.name,
     ...(opts.workflow.title !== undefined ? { title: opts.workflow.title } : {}),
@@ -1285,17 +1285,17 @@ export async function createRunRecorder(opts: {
         ...(claim.id !== undefined ? { id: claim.id } : {}),
       }),
     );
-    session.dispose();
+    writer.dispose();
     return { ok: false, error: claim.error };
   }
   if (claim.state === "unavailable") {
     emitAck(opts.onAck, formatHistoryAck({ state: "unavailable", id: claim.id }));
-    session.dispose();
+    writer.dispose();
     return { ok: true, recorder: makeRecorder(undefined, claim.id, scope, { finalized: false }) };
   }
   emitAck(opts.onAck, formatHistoryAck({ state: "claimed", id: claim.id }));
   return {
     ok: true,
-    recorder: makeRecorder(session, claim.id, scope, { finalized: false }),
+    recorder: makeRecorder(writer, claim.id, scope, { finalized: false }),
   };
 }

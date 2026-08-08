@@ -16,6 +16,8 @@ type Module =
   | "update"
   | "host"
   | "context"
+  | "caps"
+  | "transcript"
   | "credentials";
 
 const LAYER: Record<Module, number> = {
@@ -30,6 +32,8 @@ const LAYER: Record<Module, number> = {
   update: 1,
   host: 2,
   context: 2,
+  caps: 2,
+  transcript: 2,
   credentials: 2,
 };
 
@@ -47,11 +51,13 @@ const ENTRIES: Record<Module, ReadonlySet<string>> = {
     "src/workflow/exchange.ts",
     "src/workflow/results.ts",
   ]),
-  engine: new Set(["src/engine.ts"]),
+  engine: new Set(["src/engine/index.ts"]),
   history: new Set(["src/history.ts"]),
   update: new Set(["src/update.ts"]),
   host: new Set(["src/host.ts", "src/herdr-methods.generated.ts"]),
   context: new Set(["src/context.ts"]),
+  caps: new Set(["src/caps.ts"]),
+  transcript: new Set(["src/transcript.ts"]),
   credentials: new Set(["src/credentials.ts"]),
 };
 
@@ -66,20 +72,23 @@ const SIDEWAYS = new Set([
   "runs-browser->workbench",
   "context->host",
   "host->context",
+  "transcript->context",
+  "transcript->caps",
+  "transcript->host",
 ]);
 
 /**
  * context: Residual edges the layer rule tolerates after Phase 3 consolidation.
  * - history → workflow/grammar: shared step/workflow types for run snapshots.
  * - history → workflow/results: step-result field names the failure fact quotes.
- * - context → engine (dynamic): breaks the context↔engine cycle for transcript reads.
+ * - transcript → engine (dynamic): breaks the transcript↔engine cycle for transcript reads.
  * - workflows/inputs → engine (dynamic): dynamic-choice capture via spawnCapture.
  */
 const ALLOW: ReadonlySet<string> = new Set([
   "src/history.ts -> src/workflow/grammar.ts",
   "src/history.ts -> src/workflow/results.ts",
-  "src/context.ts -> src/engine.ts",
-  "src/workflow/inputs.ts -> src/engine.ts",
+  "src/transcript.ts -> src/engine/index.ts",
+  "src/workflow/inputs.ts -> src/engine/index.ts",
 ]);
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -102,13 +111,15 @@ function moduleOf(file: string): Module | undefined {
   if (file === "src/chrome.ts") return "chrome";
   if (file === "src/workbench.ts" || file.startsWith("src/web/")) return "workbench";
   if (file.startsWith("src/workflow/")) return "workflows";
-  if (file === "src/engine.ts") return "engine";
+  if (file.startsWith("src/engine/")) return "engine";
   if (file === "src/history.ts") return "history";
   if (file === "src/update.ts") return "update";
   if (file === "src/host.ts" || file === "src/herdr-methods.generated.ts") {
     return "host";
   }
   if (file === "src/context.ts") return "context";
+  if (file === "src/caps.ts") return "caps";
+  if (file === "src/transcript.ts") return "transcript";
   if (file === "src/credentials.ts") return "credentials";
   if (file === "src/skills.ts") return "cli";
   if (ENTRIES.cli.has(file)) return "cli";

@@ -53,6 +53,18 @@ case "$prompt" in
     mkdir -p .hwf/tmp
     printf '%s' "$reply" > .hwf/tmp/handoff.md
     ;;
+  *"Review this diff"*)
+    reply="one finding, reported above
+
+\${HWF_E2E_REVIEW_VERDICT:-APPROVE}"
+    ;;
+  *"Critique the proposal"*)
+    reply="the plan skips verification
+
+\${HWF_E2E_CRITIQUE_VERDICT:-APPROVE}"
+    ;;
+  *"Write a short, concrete proposal"*) reply="deterministic proposal" ;;
+  *"Revise your proposal"*) reply="deterministic revision" ;;
   *) reply="managed reply" ;;
 esac
 printf '%s' "$reply" > "$path"
@@ -66,12 +78,22 @@ printf '%s' "$reply" > "$path"
     join(bin, "git"),
     `#!/bin/sh
 if [ "$1" = "-C" ]; then shift 2; fi
+for last in "$@"; do :; done
 case "$1 $2" in
   "diff --quiet") [ "\${HWF_E2E_GIT_DIRTY:-0}" = 0 ] ;;
+  "diff HEAD")
+    [ "\${HWF_E2E_GIT_DIRTY:-0}" = 1 ] && printf '%s\\n' 'diff --git a/x b/x' '+changed'
+    exit 0 ;;
   "show-ref --verify") [ "\${HWF_E2E_BRANCH_EXISTS:-0}" = 1 ] ;;
   "rev-parse --git-dir") echo .git ;;
   "rev-parse --show-toplevel") pwd ;;
-  "for-each-ref "*) printf 'main\\nfeature-seed\\n' ;;
+  "remote "*) printf 'origin\\nupstream\\n' ;;
+  "for-each-ref "*)
+    case "$last" in
+      refs/remotes/*) printf '%s/main\\n%s/release\\n' "\${last#refs/remotes/}" "\${last#refs/remotes/}" ;;
+      *) printf 'main\\nfeature-seed\\n' ;;
+    esac ;;
+  "log --oneline") printf 'abc1234 seed commit on %s\\n' "$last" ;;
   "worktree remove") exit 0 ;;
   "branch -d") exit "\${HWF_E2E_BRANCH_UNMERGED:-0}" ;;
   *) exit 2 ;;
@@ -79,10 +101,12 @@ esac
 `,
   );
   const clipboardCommand = `#!/bin/sh
-tee "$HWF_E2E_CLIPBOARD" >/dev/null
+printf '%s:' "$(basename "$0")" > "$HWF_E2E_CLIPBOARD"
+cat >> "$HWF_E2E_CLIPBOARD"
 `;
-  await executable(join(bin, "pbcopy"), clipboardCommand);
-  await executable(join(bin, "xclip"), clipboardCommand);
+  for (const name of ["pbcopy", "wl-copy", "xclip", "xsel"]) {
+    await executable(join(bin, name), clipboardCommand);
+  }
   await executable(
     join(bin, "herdr"),
     `#!/bin/sh
@@ -95,6 +119,16 @@ if [ "$1 $2" = "agent get" ]; then
 fi
 case "$1 $2" in
   "notification show"|"pane report-metadata") exit 0 ;;
+  "agent list")
+    pane=
+    [ "\${HWF_E2E_AGENT_ON_OPEN:-0}" = 1 ] && pane=$(cat "$HWF_E2E_AGENT_STATE/opened-pane" 2>/dev/null || true)
+    if [ -n "$pane" ]; then
+      printf '{"result":{"agents":[{"name":"claude-%s","pane_id":"%s","agent":"claude","focused":true}]}}\\n' \\
+        "$pane" "$pane"
+    else
+      printf '{"result":{"agents":[]}}\\n'
+    fi
+    exit 0 ;;
   "worktree list")
     printf '{"result":{"source":{"repo_root":"%s"},"worktrees":[{"is_linked_worktree":true,"branch":"feature-seed","path":"%s-wt","open_workspace_id":"%s"}]}}\\n' \\
       "$HERDR_WORKFLOWS_REPO_ROOT" "$HERDR_WORKFLOWS_REPO_ROOT" "\${HWF_E2E_WORKTREE_WS:-w2}"
@@ -139,6 +173,7 @@ export class ExampleHarness {
   private nextPane = 2;
   private nextTab = 2;
   private agents = new Map<string, string[]>();
+  private runEnv: Record<string, string> = {};
 
   private constructor(root: string, bin: string, agent: string, clipboard: string, server: Server) {
     this.root = root;
@@ -233,6 +268,9 @@ export class ExampleHarness {
     if (method === "worktree.create" || method === "worktree.open") {
       const tabId = `w1:t${this.nextTab++}`;
       const paneId = `w1:p${this.nextPane++}`;
+      if (method === "worktree.open") {
+        await writeFile(join(this.root, "agent-state", "opened-pane"), paneId);
+      }
       return {
         type: method === "worktree.create" ? "worktree_created" : "worktree_opened",
         workspace: { workspace_id: "w1", label: String(params.label ?? "") },
@@ -288,6 +326,7 @@ export class ExampleHarness {
         cwd: this.repoRoot,
         stdout: "ignore",
         stderr: "pipe",
+        env: { ...process.env, ...this.runEnv },
       });
       const [stderr, exitCode] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
       if (exitCode !== 0) throw new Error(stderr || `fake agent exited ${exitCode}`);
@@ -310,6 +349,7 @@ export class ExampleHarness {
     env: Record<string, string> = {},
   ): Promise<RunResult> {
     const callOffset = this.calls.length;
+    this.runEnv = env;
     const args = [process.execPath, SOURCE_CLI, "run", name];
     for (const [key, value] of Object.entries(inputs)) args.push("--input", `${key}=${value}`);
     const proc = Bun.spawn(args, {

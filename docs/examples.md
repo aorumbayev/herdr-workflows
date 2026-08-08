@@ -1,6 +1,6 @@
 # Examples
 
-Three workflows you can have running in under a minute. Each card copies a `hwf workflow import "<bundle>"` command.
+Workflows you can have running in under a minute. Each card copies a `hwf workflow import "<bundle>"` command.
 
 Paste it into a terminal, or into the **Import** view of `hwf web`. You'll see the full YAML and any warnings before anything is written, then you pick one destination: this repo or global. See [Run and manage · Import](/surfaces#import-a-workflow).
 
@@ -11,13 +11,17 @@ The files themselves live in [`examples/`](https://github.com/aorumbayev/herdr-w
 ## What to copy from them
 
 - **`branch-check`** is the one to read first. It shows guarded inputs, a custom-value choice, ordered `when:` conditions, and `success_codes` for a command that reports its answer through the exit code.
+- **`remote-branch-log`** shows a cascading choice: the second input's options come from a command that reads the first input's answer.
 - **`handoff`** shows passing your session transcript to an agent.
-- **`prompt-enhance`** shows reading a result back out of an agent and using it.
-- **`worktree`** shows dynamic choice options from commands, raw `herdr:` worktree and tab calls, a hidden child workflow shared by two paths, `retry:` on a herdr action, and per-pane unique agent names.
+- **`prompt-enhance`** shows reading a result back out of an agent and using it, and picking a clipboard command from the ones the host has.
+- **`review-gate`** shows `expect:` on an agent step. The agent ends with one token from `one_of:`, and `{{steps.review.verdict}}` branches the steps after it.
+- **`adversarial-revise`** shows two profiles in one run. An author drafts, a critic returns a verdict, and one revision step runs only when the verdict asks for it.
+- **`worktree`** shows dynamic choice options from commands, raw `herdr:` worktree and tab calls, a hidden child workflow shared by two paths, `retry:` on a herdr action, per-pane unique agent names, and a `when:` guard that skips a step whose work is already done.
 
 ## Tips
 
 - Reach for `run: [cmd, arg]` over the string form. Each item stays one argument, and templates work.
 - Read results with `{{steps.id.stdout}}` or `{{steps.id.response}}`. Nothing to declare.
+- Add `expect: {one_of: [...]}` to an agent step to get `{{steps.id.verdict}}` as well.
 - A background step needs a `pane:` of its own, or a `target:` pointing at an agent that already has one.
 - Keep `on_failure:` on the workflow you start. A child's own recovery doesn't run.

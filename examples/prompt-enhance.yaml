@@ -48,7 +48,20 @@ steps:
       TEXT: "{{steps.refined.response}}"
     when: '{{context.platform}} == "macos"'
 
-  - run: [sh, -c, 'printf %s "$TEXT" | xclip -selection clipboard']
+  # wl-copy and xclip fork to hold the selection, so their output goes to
+  # /dev/null - otherwise the captured pipe never reaches EOF and the step hangs
+  - run: |
+      set -eu
+      if [ -n "${WAYLAND_DISPLAY:-}" ] && command -v wl-copy >/dev/null 2>&1; then
+        printf %s "$TEXT" | wl-copy >/dev/null 2>&1
+      elif command -v xclip >/dev/null 2>&1; then
+        printf %s "$TEXT" | xclip -selection clipboard >/dev/null 2>&1
+      elif command -v xsel >/dev/null 2>&1; then
+        printf %s "$TEXT" | xsel --clipboard --input >/dev/null 2>&1
+      else
+        echo "no clipboard tool on PATH - install wl-clipboard, xclip or xsel" >&2
+        exit 1
+      fi
     env:
       TEXT: "{{steps.refined.response}}"
     when: '{{context.platform}} != "macos"'

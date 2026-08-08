@@ -204,7 +204,7 @@ steps:
       kind: "run",
       readyWhen: "listening",
       timeoutMs: 30_000,
-      pane: { open: "beside", size: 40, target: "{{context.pane}}" },
+      pane: { open: "beside", size: 40, anchor: "{{context.pane}}" },
     });
   });
 

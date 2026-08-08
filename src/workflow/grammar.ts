@@ -61,7 +61,7 @@ type PaneClose = "success" | "always";
 
 type PaneSpec = {
   open: PaneOpen | string;
-  target?: string;
+  anchor?: string;
   workspace?: string;
   size?: number;
   focus?: boolean;
@@ -94,7 +94,7 @@ type AgentAction = {
   expect?: ExpectSpec;
 };
 
-type RunAction = {
+type CommandAction = {
   kind: "run";
   payload: RunPayload;
   cwd?: string;
@@ -120,7 +120,7 @@ type WorkflowAction = {
   inputs?: Record<string, string>;
 };
 
-export type StepAction = AgentAction | RunAction | HerdrAction | WorkflowAction;
+export type StepAction = AgentAction | CommandAction | HerdrAction | WorkflowAction;
 
 export type WorkflowStep = {
   id?: string;
@@ -131,7 +131,7 @@ export type WorkflowStep = {
 
 export type RecoveryAction =
   | Omit<AgentAction, "background">
-  | Omit<RunAction, "background" | "retry">
+  | Omit<CommandAction, "background" | "retry">
   | Omit<HerdrAction, "retry">
   | WorkflowAction;
 
@@ -1480,7 +1480,7 @@ function parseRetry(value: { attempts: number; delay?: string }): RetrySpec {
 function parsePane(pane: z.infer<typeof paneSchema>): PaneSpec {
   return {
     open: pane.open,
-    ...(pane.target !== undefined ? { target: pane.target } : {}),
+    ...(pane.target !== undefined ? { anchor: pane.target } : {}),
     ...(pane.workspace !== undefined ? { workspace: pane.workspace } : {}),
     ...(pane.size !== undefined ? { size: pane.size } : {}),
     ...(pane.focus !== undefined ? { focus: pane.focus } : {}),
