@@ -9,6 +9,15 @@ import {
   type InvocationContext,
 } from "../context";
 import { validateHerdrInvocation } from "../host";
+import {
+  AGENT_RESULT_SHAPE,
+  AGENT_VERDICT_FIELD,
+  COMMAND_RESULT_SHAPE,
+  SENSITIVE_CONTEXT_KEYS,
+  VERDICT_TOKEN_PATTERN,
+  VERDICT_TOKEN_RE,
+  type ExpectSpec,
+} from "./results";
 
 export class WorkflowLoadError extends Error {
   constructor(message: string) {
@@ -82,6 +91,7 @@ type AgentAction = {
   pane?: PaneSpec;
   background?: boolean;
   timeoutMs?: number;
+  expect?: ExpectSpec;
 };
 
 type RunAction = {
@@ -268,6 +278,21 @@ export function textTemplates(text: string): TemplatePath[] {
   return out;
 }
 
+export const DYNAMIC_ARGV_ROOT_RULE =
+  "dynamic choice argv templates may only reference earlier inputs";
+
+/** Input names a dynamic choice argv references, in first-seen order. */
+export function dynamicChoiceInputRefs(dynamic: DynamicChoice): string[] {
+  const out: string[] = [];
+  for (const element of dynamic.run) {
+    for (const path of textTemplates(element)) {
+      const name = path.root === "inputs" ? path.segments[0] : undefined;
+      if (name && path.segments.length === 1 && !out.includes(name)) out.push(name);
+    }
+  }
+  return out;
+}
+
 function malformedTemplateSnippet(text: string): string | undefined {
   let from = 0;
   while (from < text.length) {
@@ -382,8 +407,6 @@ function stepTemplates(step: WorkflowStep): TemplatePath[] {
   }
   return out;
 }
-
-const SENSITIVE_CONTEXT_KEYS = new Set(["transcript", "transcript_file"]);
 
 function isSensitiveContextPath(path: TemplatePath): boolean {
   return path.root === "context" && SENSITIVE_CONTEXT_KEYS.has(path.segments[0] ?? "");
@@ -589,6 +612,48 @@ const retrySchema = z
   })
   .strict();
 
+const verdictTokenSchema = z
+  .string()
+  .regex(VERDICT_TOKEN_RE, `verdict token must match ${VERDICT_TOKEN_PATTERN}`);
+
+const expectSchema = z
+  .object({
+    one_of: z
+      .array(verdictTokenSchema)
+      .min(1)
+      .describe(
+        "Distinct verdict tokens the agent must end its managed response with, on the final non-empty line.",
+      ),
+    require: z
+      .array(verdictTokenSchema)
+      .min(1)
+      .describe("Subset of `one_of` that lets the step succeed. Omit it to accept every token.")
+      .optional(),
+  })
+  .strict()
+  .superRefine((expect, ctx) => {
+    const seen = new Set<string>();
+    expect.one_of.forEach((token, i) => {
+      if (seen.has(token)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `expect.one_of: duplicate verdict token '${token}'`,
+          path: ["one_of", i],
+        });
+      }
+      seen.add(token);
+    });
+    expect.require?.forEach((token, i) => {
+      if (!seen.has(token)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `expect.require: '${token}' is not in one_of`,
+          path: ["require", i],
+        });
+      }
+    });
+  });
+
 const envSchema = z.record(z.string(), z.string());
 
 const dynamicChoiceSchema = z
@@ -597,18 +662,30 @@ const dynamicChoiceSchema = z
       .array(z.string().min(1))
       .min(1)
       .describe(
-        "argv run from the repo root to discover the options, one per line. Must be template-free and independent of earlier answers; treat it as read-only. Capped at 10s, 1,000 options, and 8 MiB.",
+        "argv run from the repo root to discover the options, one per line. Elements may template `{{inputs.<earlier>}}` to cascade from an earlier answer; `steps` and `context` roots are load errors. Treat it as read-only. Capped at 10s, 1,000 options, and 8 MiB.",
       ),
   })
   .strict()
   .superRefine((dc, ctx) => {
     for (let i = 0; i < dc.run.length; i++) {
-      if (dc.run[i]!.includes("{{")) {
+      const element = dc.run[i]!;
+      const bad = malformedTemplateSnippet(element);
+      if (bad !== undefined) {
         ctx.addIssue({
           code: "custom",
-          message: "dynamic choice argv rejects templates",
+          message: `invalid template '${bad}' — expected {{inputs.<earlier input>}}`,
           path: ["run", i],
         });
+        continue;
+      }
+      for (const path of textTemplates(element)) {
+        if (path.root !== "inputs" || path.segments.length !== 1) {
+          ctx.addIssue({
+            code: "custom",
+            message: DYNAMIC_ARGV_ROOT_RULE,
+            path: ["run", i],
+          });
+        }
       }
     }
   });
@@ -739,6 +816,7 @@ function refineAgentStep(step: Record<string, unknown>, ctx: RefineCtx): void {
       "pane",
       "background",
       "timeout",
+      "expect",
     ],
     ctx,
   );
@@ -759,6 +837,13 @@ function refineAgentStep(step: Record<string, unknown>, ctx: RefineCtx): void {
       code: "custom",
       message: "background: rejects timeout",
       path: ["timeout"],
+    });
+  }
+  if (step.background === true && step.expect !== undefined) {
+    ctx.addIssue({
+      code: "custom",
+      message: "background: rejects expect — a background turn produces no result",
+      path: ["expect"],
     });
   }
   if (step.background === true && step.pane && typeof step.pane === "object") {
@@ -1007,7 +1092,7 @@ const sharedActionFields = {
   agent: z
     .string()
     .describe(
-      "Action: prompt text for an agent. Pair with `using:` to start a new agent or `target:` to address a running one. The result is `{response, agent, pane_id}`; the default turn timeout is 30 minutes.",
+      `Action: prompt text for an agent. Pair with \`using:\` to start a new agent or \`target:\` to address a running one. The result is \`${AGENT_RESULT_SHAPE}\`; the default turn timeout is 30 minutes.`,
     )
     .optional(),
   using: z
@@ -1027,7 +1112,7 @@ const sharedActionFields = {
   run: z
     .union([z.string().min(1), z.array(z.string()).min(1)])
     .describe(
-      "Action: a command. A list is argv with no shell; a string runs through `shell:`. Inputs are exported as `HWF_<name>`. A blocking local run results in `{stdout, stderr, exit_code, failed}`; a placed run results in its readiness payload, and a background run has no result to reference.",
+      `Action: a command. A list is argv with no shell; a string runs through \`shell:\`. Inputs are exported as \`HWF_<name>\`. A blocking local run results in \`${COMMAND_RESULT_SHAPE}\`; a placed run results in its readiness payload, and a background run has no result to reference.`,
     )
     .optional(),
   shell: z
@@ -1081,6 +1166,11 @@ const sharedActionFields = {
   timeout: durationSchema
     .describe(
       "Time limit for an `agent:` or `run:` step; `herdr:` and `workflow:` reject it. Omitting it leaves a local `run:` uncapped, but an agent turn still falls back to 30 minutes, and a placed `run:` with `ready_when:` requires it.",
+    )
+    .optional(),
+  expect: expectSchema
+    .describe(
+      `Verdict contract for a blocking \`agent:\` turn. The runner tells the agent to end the managed response with one \`one_of\` token and to verify it with \`hwf response check\`, then binds the matched token as \`${AGENT_VERDICT_FIELD}\`. A missing, unlisted, or non-\`require\` verdict fails the step. Rejected on \`background:\` and on the other three actions.`,
     )
     .optional(),
   success_codes: z
@@ -1141,7 +1231,12 @@ function refineRecoveryStep(step: Record<string, unknown>, ctx: RefineCtx): void
   }
   const action = actions[0]!;
   if (action === "agent") {
-    refineStepUnknownKeys(step, "agent", ["using", "target", "cwd", "env", "pane", "timeout"], ctx);
+    refineStepUnknownKeys(
+      step,
+      "agent",
+      ["using", "target", "cwd", "env", "pane", "timeout", "expect"],
+      ctx,
+    );
     refineAgentCore(step, ctx);
   } else if (action === "run") {
     refineStepUnknownKeys(
@@ -1423,6 +1518,13 @@ function parseReturns(file: string, value: string | Record<string, string>): Ret
   return { kind: "map", fields: value };
 }
 
+function parseExpect(value: z.infer<typeof expectSchema>): ExpectSpec {
+  return {
+    oneOf: [...value.one_of],
+    ...(value.require !== undefined ? { require: [...value.require] } : {}),
+  };
+}
+
 function optionalCwdEnvPane(step: {
   cwd?: string;
   env?: Record<string, string>;
@@ -1484,6 +1586,7 @@ function toAction(
       ...optionalCwdEnvPane(step),
       ...(step.background === true ? { background: true } : {}),
       ...(step.timeout !== undefined ? { timeoutMs: parseDurationMs(step.timeout) } : {}),
+      ...(step.expect !== undefined ? { expect: parseExpect(step.expect) } : {}),
     };
   }
   if (step.run !== undefined) {

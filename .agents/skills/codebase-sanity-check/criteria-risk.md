@@ -226,9 +226,8 @@ judge it.
 
 - For each new export in the diff, grep for a call site outside its own file
 - `git diff origin/<base>...HEAD --name-only` and check the pairings the repository requires:
-  a `src/workflow/grammar.ts` schema change with no `docs/workflow.schema.json` change, an
-  `examples/*.yaml` change with no `examples.generated.ts` change, or a behavior change with no
-  change under `openspec/`
+  a `src/workflow/grammar.ts` schema change with no `docs/workflow.schema.json` change, or a
+  behavior change with no change under `openspec/`
 - `git diff origin/<base>...HEAD | rg "^\+.*catch\s*\([^)]*\)\s*\{\s*\}"`
 
 ### Not a finding

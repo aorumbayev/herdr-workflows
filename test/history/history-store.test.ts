@@ -26,7 +26,7 @@ import {
 import { RUN_HISTORY_RETENTION_BYTES } from "../../src/history";
 import type { RunnerDeps } from "../../src/engine";
 import { runWorkflow } from "../../src/engine";
-import { assertCredentialStoreSafe } from "../../src/context";
+import { assertCredentialStoreSafe } from "../../src/credentials";
 import { writeTestSnapshot } from "../fakes/helpers/history-snapshot";
 
 describe("run history store", () => {

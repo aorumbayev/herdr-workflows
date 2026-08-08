@@ -34,7 +34,6 @@
   "scripts": {
     "test": "bun test ./test",
     "schema": "bun scripts/generate-schema.ts",
-    "examples": "bun scripts/generate-examples.ts",
     "schema:herdr": "bun scripts/generate-herdr-methods.ts",
     "build": "bun install --frozen-lockfile && bun build --compile --outfile=bin/herdr-workflows src/cli.ts",
     "docs:dev": "vitepress dev docs",

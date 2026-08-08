@@ -373,6 +373,51 @@ describe("cli run", () => {
     expect(inspected.stdout).toContain("branch:");
   });
 
+  test("workflow inspect --resolve honors the dependent-choice precondition", async () => {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-cascade-"));
+    dirs.push(root);
+    await writeWorkflow(
+      root,
+      "cascade",
+      [
+        "version: v1alpha1",
+        "inputs:",
+        "  repo: [alpha, beta]",
+        "  branch:",
+        "    type: choice",
+        "    options:",
+        '      run: [sh, -c, \'touch dependent-ran; echo "$1-main"\', sh, "{{inputs.repo}}"]',
+        "  tag:",
+        "    type: choice",
+        "    options:",
+        "      run: [echo, v1]",
+        "steps:",
+        '  - run: [echo, "{{inputs.branch}}", "{{inputs.tag}}"]',
+        "",
+      ].join("\n"),
+    );
+
+    const unresolved = await runCli(["workflow", "inspect", "cascade", "--resolve"], root, {
+      HERDR_WORKFLOWS_REPO_ROOT: root,
+    });
+    expect(unresolved.code).toBe(0);
+    expect(unresolved.stdout).toContain('options.run: ["sh", "-c"');
+    expect(unresolved.stdout).toContain('"{{inputs.repo}}"');
+    expect(unresolved.stdout).not.toContain('options: ["alpha-main"]');
+    expect(unresolved.stdout).toContain('options: ["v1"]');
+    expect(await Bun.file(join(root, "dependent-ran")).exists()).toBe(false);
+
+    const resolved = await runCli(
+      ["workflow", "inspect", "cascade", "--resolve", "--input", "repo=beta"],
+      root,
+      { HERDR_WORKFLOWS_REPO_ROOT: root },
+    );
+    expect(resolved.code).toBe(0);
+    expect(resolved.stdout).toContain('options: ["beta-main"]');
+    expect(resolved.stdout).toContain('options: ["v1"]');
+    expect(await Bun.file(join(root, "dependent-ran")).exists()).toBe(true);
+  });
+
   test("run rejects herdr protocol before missing-input failure", async () => {
     const root = await mkdtemp(join(tmpdir(), "hwf-cli-repo-"));
     dirs.push(root);
@@ -618,5 +663,72 @@ describe("cli web", () => {
     });
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("--port expects an integer between 1 and 65535");
+  });
+});
+
+describe("cli response check", () => {
+  async function withResponse(text: string): Promise<{ root: string; file: string }> {
+    const root = await mkdtemp(join(tmpdir(), "hwf-cli-verdict-"));
+    dirs.push(root);
+    const file = join(root, "response.txt");
+    await writeFile(file, text);
+    return { root, file };
+  }
+
+  test("a matching final line exits zero and prints the verdict", async () => {
+    const { root, file } = await withResponse("Reasoning about the diff.\n\nAPPROVE\n");
+    const result = await runCli(["response", "check", file, "--one-of", "APPROVE,REJECT"], root);
+    expect(result.code).toBe(0);
+    expect(result.stdout.trim()).toBe("APPROVE");
+    expect(result.stderr).toBe("");
+  });
+
+  test("a decorated verdict exits nonzero naming the line and the tokens", async () => {
+    const { root, file } = await withResponse("APPROVE — with reservations\n");
+    const result = await runCli(["response", "check", file, "--one-of", "APPROVE,REJECT"], root);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("APPROVE — with reservations");
+    expect(result.stderr).toContain("APPROVE, REJECT");
+    expect(result.stdout).toBe("");
+  });
+
+  test("a missing or empty file exits nonzero naming the path", async () => {
+    const { root, file } = await withResponse("   \n\n");
+    const empty = await runCli(["response", "check", file, "--one-of", "APPROVE"], root);
+    expect(empty.code).toBe(1);
+    expect(empty.stderr).toContain(file);
+
+    const gone = join(root, "nope.txt");
+    const missing = await runCli(["response", "check", gone, "--one-of", "APPROVE"], root);
+    expect(missing.code).toBe(1);
+    expect(missing.stderr).toContain(gone);
+  });
+
+  test("bad token lists are rejected with the expect.one_of rules", async () => {
+    const { root, file } = await withResponse("APPROVE\n");
+    const lower = await runCli(["response", "check", file, "--one-of", "approve"], root);
+    expect(lower.code).toBe(1);
+    expect(lower.stderr).toContain("[A-Z][A-Z0-9_]{0,31}");
+
+    const dup = await runCli(["response", "check", file, "--one-of", "APPROVE,APPROVE"], root);
+    expect(dup.code).toBe(1);
+    expect(dup.stderr).toContain("duplicate verdict token 'APPROVE'");
+
+    const blank = await runCli(["response", "check", file, "--one-of", " , "], root);
+    expect(blank.code).toBe(1);
+    expect(blank.stderr).toContain("at least one verdict token");
+
+    const noFlag = await runCli(["response", "check", file], root);
+    expect(noFlag.code).not.toBe(0);
+    expect(noFlag.stderr).toContain("--one-of");
+  });
+
+  test("the check runs offline with no herdr socket", async () => {
+    const { root, file } = await withResponse("APPROVE\n");
+    const result = await runCli(["response", "check", file, "--one-of", "APPROVE"], root, {
+      HERDR_SOCKET_PATH: join(root, "missing.sock"),
+    });
+    expect(result.code).toBe(0);
+    expect(result.stdout.trim()).toBe("APPROVE");
   });
 });

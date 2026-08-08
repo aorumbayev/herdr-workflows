@@ -25,7 +25,9 @@ import {
   WorkflowLoadError,
   evaluateWhen,
   bail,
+  dynamicChoiceInputRefs,
   parseWhenClause,
+  substituteText,
   workflowNeedsTranscript,
   workflowTemplateRefs,
   analyzeResolvedSensitivity,
@@ -225,17 +227,15 @@ export async function resolveDynamicChoices(
   name: string,
   dynamic: DynamicChoice,
   repoRoot: string,
-  env: NodeJS.ProcessEnv = process.env,
+  opts: { values?: Record<string, string>; env?: NodeJS.ProcessEnv } = {},
 ): Promise<string[]> {
-  for (const el of dynamic.run) {
-    if (el.includes("{{")) {
-      bail(file, undefined, `inputs.${name}.options.run`, "dynamic choice argv rejects templates");
-    }
-  }
+  const env = opts.env ?? process.env;
+  const ns: TemplateNamespace = { inputs: { ...opts.values }, steps: {}, context: {} };
+  const argv = dynamic.run.map((el) => substituteText(el, ns));
   const { spawnCapture } = await import("../engine");
   let result: Awaited<ReturnType<typeof spawnCapture>>;
   try {
-    result = await spawnCapture(dynamic.run, {
+    result = await spawnCapture(argv, {
       cwd: repoRoot,
       env,
       timeoutMs: DYNAMIC_CHOICE_TIMEOUT_MS,
@@ -323,6 +323,7 @@ async function resolveActiveOptions(
   spec: InputSpec,
   opts: CreateInputSessionOpts,
   domains: Record<string, string[]>,
+  values: Record<string, string>,
 ): Promise<{ ok: true; options?: string[]; cache?: boolean } | { ok: false; error: string }> {
   if (spec.type === "profile") {
     const profiles = profileNames(opts.config);
@@ -355,6 +356,7 @@ async function resolveActiveOptions(
       spec.name,
       spec.dynamicOptions,
       opts.repoRoot,
+      { values },
     );
     return { ok: true, options, cache: true };
   } catch (error) {
@@ -476,7 +478,7 @@ export function createInputSession(opts: CreateInputSessionOpts): InputSession {
       if (!next) return { status: "done" };
       cursor = next.index;
       if (Object.hasOwn(domains, next.spec.name)) usedDomains.add(next.spec.name);
-      const resolved = await resolveActiveOptions(next.spec, opts, domains);
+      const resolved = await resolveActiveOptions(next.spec, opts, domains, values);
       if (!resolveToken.current(token)) return { status: "cancelled" };
       if (!resolved.ok) return { status: "error", error: resolved.error };
       if (resolved.options !== undefined && resolved.options.length === 0) {
@@ -619,6 +621,9 @@ function inputIsUsed(
     for (const clause of input.when ?? []) {
       const parts = clause.path.split(".");
       if (parts[0] === "inputs" && parts[1] === name) return true;
+    }
+    if (input.dynamicOptions && dynamicChoiceInputRefs(input.dynamicOptions).includes(name)) {
+      return true;
     }
   }
   for (const step of steps) {

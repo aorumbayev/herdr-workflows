@@ -2,20 +2,35 @@
 
 ## Review gate
 
+`expect:` makes the verdict a token, so the gate compares one word instead of the whole response.
+A consumer of a guarded step repeats that step's `when:` clauses first.
+
 ```yaml
 version: v1alpha1
 title: Review
 steps:
   - id: diff
     run: [git, diff, HEAD]
-  - agent: |
-      Review this diff. Blocking issues only.
+  - id: review
+    agent: |
+      Review this diff. Blocking issues only. Findings first, verdict on the final line.
 
       {{steps.diff.stdout}}
     using: claude
     when: "{{steps.diff.stdout}}"
     pane: { open: beside }
+    expect:
+      one_of: [APPROVE, REJECT]
+  - run: [sh, -c, 'printf "%s\n" "$FINDINGS" >&2; exit 1']
+    env:
+      FINDINGS: "{{steps.review.response}}"
+    when:
+      - "{{steps.diff.stdout}}"
+      - '{{steps.review.verdict}} == "REJECT"'
 ```
+
+Use `require: [APPROVE]` instead of the gated `run:` when any other token should fail the step
+outright.
 
 ## Worktree
 

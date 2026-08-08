@@ -15,7 +15,8 @@ type Module =
   | "history"
   | "update"
   | "host"
-  | "context";
+  | "context"
+  | "credentials";
 
 const LAYER: Record<Module, number> = {
   cli: -1,
@@ -29,6 +30,7 @@ const LAYER: Record<Module, number> = {
   update: 1,
   host: 2,
   context: 2,
+  credentials: 2,
 };
 
 /** Outsiders may import only these files from each module. */
@@ -43,12 +45,14 @@ const ENTRIES: Record<Module, ReadonlySet<string>> = {
     "src/workflow/validate.ts",
     "src/workflow/inputs.ts",
     "src/workflow/exchange.ts",
+    "src/workflow/results.ts",
   ]),
   engine: new Set(["src/engine.ts"]),
   history: new Set(["src/history.ts"]),
   update: new Set(["src/update.ts"]),
   host: new Set(["src/host.ts", "src/herdr-methods.generated.ts"]),
   context: new Set(["src/context.ts"]),
+  credentials: new Set(["src/credentials.ts"]),
 };
 
 /** Same-layer module edges that are part of the architecture (not residuals). */
@@ -67,11 +71,13 @@ const SIDEWAYS = new Set([
 /**
  * context: Residual edges the layer rule tolerates after Phase 3 consolidation.
  * - history → workflow/grammar: shared step/workflow types for run snapshots.
+ * - history → workflow/results: step-result field names the failure fact quotes.
  * - context → engine (dynamic): breaks the context↔engine cycle for transcript reads.
  * - workflows/inputs → engine (dynamic): dynamic-choice capture via spawnCapture.
  */
 const ALLOW: ReadonlySet<string> = new Set([
   "src/history.ts -> src/workflow/grammar.ts",
+  "src/history.ts -> src/workflow/results.ts",
   "src/context.ts -> src/engine.ts",
   "src/workflow/inputs.ts -> src/engine.ts",
 ]);
@@ -103,6 +109,7 @@ function moduleOf(file: string): Module | undefined {
     return "host";
   }
   if (file === "src/context.ts") return "context";
+  if (file === "src/credentials.ts") return "credentials";
   if (file === "src/skills.ts") return "cli";
   if (ENTRIES.cli.has(file)) return "cli";
   return undefined;

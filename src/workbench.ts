@@ -13,9 +13,6 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import {
-  assertCredentialStoreSafe,
-  assertPrivateCredentialFile,
-  assertPrivateCredentialFileSync,
   globalConfigPath,
   loadConfig,
   parseConfigText,
@@ -23,6 +20,11 @@ import {
   repoConfigPath,
   workflowSchemaUrl,
 } from "./context";
+import {
+  assertCredentialStoreSafe,
+  assertPrivateCredentialFile,
+  assertPrivateCredentialFileSync,
+} from "./credentials";
 import { HERDR_METHOD_BY_NAME } from "./herdr-methods.generated";
 import {
   RUN_UUID_PATTERN,

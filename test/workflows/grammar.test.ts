@@ -1134,3 +1134,103 @@ steps:
     expect(workflow.repoOwned).toBe(false);
   });
 });
+
+describe("verdict contract", () => {
+  test("expect parses one_of and require", async () => {
+    const workflow = await parseWorkflowText(
+      "gate",
+      `version: v1alpha1
+steps:
+  - id: review
+    agent: review this
+    expect:
+      one_of: [APPROVE, REJECT, NEEDS_WORK]
+      require: [APPROVE, NEEDS_WORK]
+`,
+    );
+    const action = workflow.steps[0]!.action;
+    expect(action.kind).toBe("agent");
+    if (action.kind !== "agent") throw new Error("expected agent action");
+    expect(action.expect).toEqual({
+      oneOf: ["APPROVE", "REJECT", "NEEDS_WORK"],
+      require: ["APPROVE", "NEEDS_WORK"],
+    });
+  });
+
+  test("token shape, duplicates, and require subset are load errors", async () => {
+    await expect(
+      parseWorkflowText(
+        "lower",
+        `version: v1alpha1\nsteps:\n  - agent: hi\n    expect: { one_of: [approve] }\n`,
+      ),
+    ).rejects.toThrow(/A-Z/);
+
+    await expect(
+      parseWorkflowText(
+        "dup",
+        `version: v1alpha1\nsteps:\n  - agent: hi\n    expect: { one_of: [APPROVE, APPROVE] }\n`,
+      ),
+    ).rejects.toThrow(/duplicate verdict token 'APPROVE'/);
+
+    await expect(
+      parseWorkflowText(
+        "subset",
+        `version: v1alpha1\nsteps:\n  - agent: hi\n    expect: { one_of: [APPROVE], require: [REJECT] }\n`,
+      ),
+    ).rejects.toThrow(/'REJECT' is not in one_of/);
+
+    await expect(
+      parseWorkflowText(
+        "empty",
+        `version: v1alpha1\nsteps:\n  - agent: hi\n    expect: { one_of: [] }\n`,
+      ),
+    ).rejects.toThrow(/expected array to have >=1 items/);
+  });
+
+  test("expect is rejected on background turns and on other actions", async () => {
+    await expect(
+      parseWorkflowText(
+        "bg",
+        `version: v1alpha1\nsteps:\n  - agent: hi\n    background: true\n    pane: { open: tab }\n    expect: { one_of: [DONE] }\n`,
+      ),
+    ).rejects.toThrow(/background: rejects expect/);
+
+    await expect(
+      parseWorkflowText(
+        "cmd",
+        `version: v1alpha1\nsteps:\n  - run: [echo, hi]\n    expect: { one_of: [DONE] }\n`,
+      ),
+    ).rejects.toThrow(/Unrecognized key: "expect"/);
+  });
+
+  test("verdict resolves only when the producer declares expect", async () => {
+    await expect(
+      parseWorkflowText(
+        "noexpect",
+        `version: v1alpha1\nsteps:\n  - id: review\n    agent: hi\n  - run: [echo, "{{steps.review.verdict}}"]\n`,
+      ),
+    ).rejects.toThrow(/step 'review' declares no expect:, so it produces no verdict/);
+
+    const workflow = await parseWorkflowText(
+      "withexpect",
+      `version: v1alpha1
+steps:
+  - id: review
+    agent: hi
+    expect: { one_of: [APPROVE, REJECT] }
+  - run: [echo, blocked]
+    when: '{{steps.review.verdict}} == "REJECT"'
+`,
+    );
+    expect(workflow.steps).toHaveLength(2);
+  });
+
+  test("verdict is a scalar with no sub-fields", async () => {
+    await expect(
+      parseWorkflowText(
+        "deep",
+        `version: v1alpha1\nsteps:\n  - id: review\n    agent: hi\n    expect: { one_of: [APPROVE] }\n  - run: [echo, "{{steps.review.verdict.text}}"]\n`,
+      ),
+    ).rejects.toThrow(/unknown managed agent result field/);
+  });
+});

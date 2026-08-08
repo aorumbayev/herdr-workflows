@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { allocateRunId, isSnapshot } from "../../src/history";
+import {
+  allocateRunId,
+  formatProgressLine,
+  isSnapshot,
+  parseProgressLine,
+  type ProgressLine,
+} from "../../src/history";
 
 describe("run snapshot schema", () => {
   test("malformed nested step fields are rejected by guard", () => {
@@ -195,5 +201,39 @@ describe("run snapshot schema", () => {
     expect(isSnapshot(withTruncated(true))).toBe(true);
     expect(isSnapshot(withTruncated(false))).toBe(false);
     expect(isSnapshot(withTruncated("yes"))).toBe(false);
+  });
+});
+
+describe("progress line codec", () => {
+  const cases: ProgressLine[] = [
+    { index: 1, total: 3, label: "build", outcome: "start" },
+    { index: 2, total: 3, label: "build", outcome: "ok" },
+    { index: 3, total: 3, label: "run: git diff HEAD", outcome: "skip" },
+    { index: 3, total: 12, label: "review", outcome: "fail" },
+    { index: 10, total: 10, label: "notification.show", outcome: "launch" },
+  ];
+
+  test("every outcome round-trips through the visible format", () => {
+    for (const progress of cases) {
+      expect(parseProgressLine(formatProgressLine(progress))).toEqual(progress);
+    }
+  });
+
+  test("the visible format is unchanged", () => {
+    expect(formatProgressLine({ index: 1, total: 2, label: "probe", outcome: "start" })).toBe(
+      "[1/2] probe…",
+    );
+    expect(formatProgressLine({ index: 1, total: 2, label: "probe", outcome: "ok" })).toBe(
+      "[1/2] probe",
+    );
+    expect(formatProgressLine({ index: 2, total: 2, label: "probe", outcome: "fail" })).toBe(
+      "[2/2] probe fail",
+    );
+  });
+
+  test("non-progress lines decode to undefined", () => {
+    expect(parseProgressLine("@hwf-history:claimed abc")).toBeUndefined();
+    expect(parseProgressLine("plain diagnostic")).toBeUndefined();
+    expect(parseProgressLine("[1/2]")).toBeUndefined();
   });
 });

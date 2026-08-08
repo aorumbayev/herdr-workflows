@@ -2,19 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildExamples, renderModule } from "../../scripts/generate-examples";
+import { buildExamples } from "../../scripts/build-examples";
 import { loadWorkflow } from "../../src/workflow/inputs";
 import type { WorkflowsConfig } from "../../src/context";
-
-const committedGallery = join(
-  import.meta.dir,
-  "..",
-  "..",
-  "docs",
-  ".vitepress",
-  "theme",
-  "examples.generated.ts",
-);
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -76,9 +66,12 @@ describe("shipped examples", () => {
   test("example gallery cards build without legacy keys", async () => {
     const cards = await buildExamples(EXAMPLES_DIR);
     expect(cards.map((c) => c.name).sort()).toEqual([
+      "adversarial-revise",
       "branch-check",
       "handoff",
       "prompt-enhance",
+      "remote-branch-log",
+      "review-gate",
       "worktree",
     ]);
     for (const card of cards) {
@@ -94,15 +87,6 @@ describe("shipped examples", () => {
     }
   });
 
-  test("docs/.vitepress/theme/examples.generated.ts matches buildExamples()", async () => {
-    const expected = renderModule(await buildExamples(EXAMPLES_DIR));
-    if ((await Bun.file(committedGallery).text()) !== expected) {
-      throw new Error(
-        "docs/.vitepress/theme/examples.generated.ts is stale — run `bun run examples`",
-      );
-    }
-  });
-
   test("docs/examples.md mounts ExampleCards and does not embed YAML", async () => {
     const page = await Bun.file(join(import.meta.dir, "..", "..", "docs", "examples.md")).text();
     expect(page).toContain("<ExampleCards");
@@ -114,9 +98,7 @@ describe("shipped examples", () => {
       join(import.meta.dir, "..", "..", "docs", ".vitepress", "theme", "HomePage.vue"),
     ).text();
     const cards = await buildExamples(EXAMPLES_DIR);
-    for (const card of cards) {
-      expect(home).toContain(card.name);
-    }
-    expect(home).not.toMatch(/\breview\b/);
+    const listed = [...home.matchAll(/<strong>([a-z0-9-]+)<\/strong>/g)].map((m) => m[1]);
+    expect(listed.sort()).toEqual(cards.map((c) => c.name).sort());
   });
 });

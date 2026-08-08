@@ -1,0 +1,23 @@
+version: v1alpha1
+title: Remote branch log
+description: Pick a git remote, then one of that remote's branches, and report its recent commits
+inputs:
+  remote:
+    type: choice
+    description: Git remote to browse
+    options:
+      run: [git, remote]
+  branch:
+    type: choice
+    description: Branch on that remote
+    options:
+      run: [git, for-each-ref, --format=%(refname:short), "refs/remotes/{{inputs.remote}}"]
+steps:
+  - id: log
+    run: [git, log, --oneline, --max-count=20, "{{inputs.branch}}"]
+
+  - herdr: notification.show
+    params:
+      title: "recent commits on {{inputs.branch}}"
+      body: "{{steps.log.stdout}}"
+      sound: done

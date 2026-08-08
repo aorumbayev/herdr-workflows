@@ -52,15 +52,34 @@ The value is the prompt. `using:` starts a new agent from a profile. `target:` p
 | `using:`  | Create a pane, call `agent.start`, then `agent.prompt`        |
 | `target:` | Require idle or done, then prompt. No `pane`, `cwd`, or `env` |
 
-Result: `{response, agent, pane_id}`. `agent` is herdr's native `AgentInfo`.
+Result: `{response, agent, pane_id}`. `agent` is herdr's native `AgentInfo`. With `expect:`, the result also carries `verdict`.
 
-Other fields: `cwd`, `env`, `pane`, `background`, `timeout`.
+Other fields: `cwd`, `env`, `pane`, `background`, `timeout`, `expect`.
 
 - The turn waits 30 minutes unless `timeout` says otherwise. Agent startup has a separate 30-second deadline.
 - A `blocked` agent sends one notification per episode and the step keeps waiting. `unknown` never counts as finished.
 - Completion is matched by a response file unique to that step, so another turn finishing first can't be mistaken for yours.
 - `target:` accepts an agent name or a pane ID. `{{context.agent}}` holds the invoking agent's name, or its pane ID when herdr reports no name. Agents your workflow starts have no name.
 - A workflow targeting `{{context.agent}}` has to start while that agent is idle or done. `prefix+k` from a settled pane works. Asking the agent to run it can't work.
+
+#### `expect:`
+
+```yaml
+- id: review
+  agent: Review this diff, findings first, verdict last.
+  using: claude
+  expect:
+    one_of: [APPROVE, REJECT]
+    require: [APPROVE] # optional
+```
+
+`expect` turns the answer into one addressable token, so a later `when:` compares `{{steps.review.verdict}}` instead of the whole response.
+
+- `one_of` is a non-empty list of distinct tokens matching `[A-Z][A-Z0-9_]{0,31}`. `require` is an optional non-empty subset that lets the step succeed. Omitting `require` accepts every token and leaves the branching to `when:`.
+- The runner appends the token list, the final-line rule, and an `hwf response check` command to the prompt. The agent reruns that command against its own response file until it exits 0.
+- `verdict` is the final non-empty line of the response, trimmed and matched exactly. Reasoning above it is fine. `response` still holds the complete text.
+- A final line that matches no token fails the step and names the expected tokens. A verdict outside `require` fails and names both the verdict and the required tokens. Both are ordinary failures: `continue_on_error` tolerates them and `on_failure` sees them.
+- `expect` is a load error with `background: true`, and on the other three actions. Referencing `{{steps.<id>.verdict}}` when the producing step declares no `expect` is a load error.
 
 ### `herdr:`
 
@@ -174,7 +193,21 @@ Names match `[a-z][a-z0-9_]{0,31}`. A declared input nothing references is a loa
 
 **Guards.** An inactive input doesn't prompt, doesn't resolve, doesn't apply its default, doesn't enter the input namespace, and doesn't export an `HWF_` value. Supplying a value for one fails collection — scripted `hwf run` callers must leave the flag off entirely, including `--input branch=`. Referencing a guarded input is a load error unless the reading site carries every clause that guards it.
 
-**Dynamic options.** `{run: argv}` runs from the repo root with the invoking environment and no partial input exports, and its argv can't contain templates or depend on earlier answers. Output splits on newlines, trims, drops empty lines, and deduplicates while keeping first-seen order. Nonzero exit, empty output, more than 1,000 options, or crossing the capture cap fails collection. Loading and listing validate the declaration without running it. Entry collection runs each active one once. A picker launch carries the resolved options to the detached run so they aren't looked up twice. Treat these commands as read-only.
+**Dynamic options.** `{run: argv}` runs from the repo root with the invoking environment and no partial input exports. Output splits on newlines, trims, drops empty lines, and deduplicates while keeping first-seen order. Nonzero exit, empty output, more than 1,000 options, or crossing the capture cap fails collection. Loading and listing validate the declaration without running it. Entry collection runs each active one once. A picker launch carries the resolved options to the detached run so they aren't looked up twice. Treat these commands as read-only.
+
+**Cascading choices.** A dynamic argv element may hold `{{inputs.<name>}}` templates that name earlier declared inputs, so one choice can list the values of another. The answer lands as one argv element, never re-parsed by a shell. Substitution happens right before the command runs, so the options reflect the answer given a moment earlier. `steps.*` and `context.*` roots inside dynamic argv are load errors, and so are a self reference and a forward reference. Referencing a guarded input requires the consuming input's own `when:` to carry every clause that guards it. Changing an earlier answer discards the later answers and the options resolved from them, so the next prompt lists a fresh domain.
+
+```yaml
+inputs:
+  repo:
+    type: choice
+    description: Repository to inspect
+    options: { run: [ls, repos] }
+  branch:
+    type: choice
+    description: Branch in that repository
+    options: { run: [git, -C, "repos/{{inputs.repo}}", branch, --format=%(refname:short)] }
+```
 
 **Prompts.** The picker states the input name, your `description`, the position in the sequence, and how to answer: how many options a resolved closed domain has, whether a custom value is accepted, and a text input's default and `min_length`. Answers so far stay listed below the prompt.
 
@@ -183,7 +216,7 @@ hwf workflow inspect <name>
 hwf workflow inspect <name> --input mode=delete --resolve
 ```
 
-Without `--resolve`, dynamic argv is printed, not run. With it, only active dynamic options resolve, under the usual limits.
+Without `--resolve`, dynamic argv is printed, not run. With it, only active dynamic options resolve, under the usual limits. A choice whose argv references earlier inputs resolves only when every referenced input arrives through `--input`. Otherwise its unresolved argv is printed and the independent choices still resolve.
 
 ## Control flow
 

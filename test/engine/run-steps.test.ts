@@ -9,6 +9,7 @@ import {
   generateAgentName,
   isCoordinationError,
   readManagedResponse,
+  recordedOutcomeKind,
   sizeToFirstRatio,
 } from "../../src/engine";
 
@@ -217,5 +218,26 @@ describe("agent naming and split size", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("recorded outcome kind", () => {
+  test("every step outcome shape maps to one recorded kind", () => {
+    expect(recordedOutcomeKind({ ok: true })).toBe("succeeded");
+    expect(recordedOutcomeKind({ ok: true, result: { stdout: "hi" } })).toBe("succeeded");
+    expect(recordedOutcomeKind({ ok: true, truncated: true })).toBe("succeeded");
+    expect(recordedOutcomeKind({ ok: true, launched: false })).toBe("succeeded");
+    expect(recordedOutcomeKind({ ok: true, launched: true })).toBe("launched");
+    expect(recordedOutcomeKind({ ok: false, error: "boom" })).toBe("failed");
+    expect(recordedOutcomeKind({ ok: false, error: "boom", hardFailure: true })).toBe("failed");
+    expect(recordedOutcomeKind({ ok: false, error: "boom", details: { exit_code: 2 } })).toBe(
+      "failed",
+    );
+    expect(recordedOutcomeKind({ ok: false, error: "boom", coordinationLost: false })).toBe(
+      "failed",
+    );
+    expect(recordedOutcomeKind({ ok: false, error: "boom", coordinationLost: true })).toBe(
+      "interrupted",
+    );
   });
 });

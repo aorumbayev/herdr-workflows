@@ -81,7 +81,7 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "description": "argv run from the repo root to discover the options, one per line. Must be template-free and independent of earlier answers; treat it as read-only. Capped at 10s, 1,000 options, and 8 MiB."
+                        "description": "argv run from the repo root to discover the options, one per line. Elements may template `{{inputs.<earlier>}}` to cascade from an earlier answer; `steps` and `context` roots are load errors. Treat it as read-only. Capped at 10s, 1,000 options, and 8 MiB."
                       }
                     },
                     "required": ["run"],
@@ -281,6 +281,32 @@
           "pattern": "^([1-9]\\d*)(ms|s|m|h)$",
           "description": "Time limit for an `agent:` or `run:` step; `herdr:` and `workflow:` reject it. Omitting it leaves a local `run:` uncapped, but an agent turn still falls back to 30 minutes, and a placed `run:` with `ready_when:` requires it."
         },
+        "expect": {
+          "type": "object",
+          "properties": {
+            "one_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9_]{0,31}$"
+              },
+              "description": "Distinct verdict tokens the agent must end its managed response with, on the final non-empty line."
+            },
+            "require": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9_]{0,31}$"
+              },
+              "description": "Subset of `one_of` that lets the step succeed. Omit it to accept every token."
+            }
+          },
+          "required": ["one_of"],
+          "additionalProperties": false,
+          "description": "Verdict contract for a blocking `agent:` turn. The runner tells the agent to end the managed response with one `one_of` token and to verify it with `hwf response check`, then binds the matched token as `verdict`. A missing, unlisted, or non-`require` verdict fails the step. Rejected on `background:` and on the other three actions."
+        },
         "success_codes": {
           "minItems": 1,
           "type": "array",
@@ -472,6 +498,32 @@
             "type": "string",
             "pattern": "^([1-9]\\d*)(ms|s|m|h)$",
             "description": "Time limit for an `agent:` or `run:` step; `herdr:` and `workflow:` reject it. Omitting it leaves a local `run:` uncapped, but an agent turn still falls back to 30 minutes, and a placed `run:` with `ready_when:` requires it."
+          },
+          "expect": {
+            "type": "object",
+            "properties": {
+              "one_of": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Z][A-Z0-9_]{0,31}$"
+                },
+                "description": "Distinct verdict tokens the agent must end its managed response with, on the final non-empty line."
+              },
+              "require": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Z][A-Z0-9_]{0,31}$"
+                },
+                "description": "Subset of `one_of` that lets the step succeed. Omit it to accept every token."
+              }
+            },
+            "required": ["one_of"],
+            "additionalProperties": false,
+            "description": "Verdict contract for a blocking `agent:` turn. The runner tells the agent to end the managed response with one `one_of` token and to verify it with `hwf response check`, then binds the matched token as `verdict`. A missing, unlisted, or non-`require` verdict fails the step. Rejected on `background:` and on the other three actions."
           },
           "success_codes": {
             "minItems": 1,

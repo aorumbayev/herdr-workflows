@@ -27,7 +27,13 @@ import {
   loadWorkflow,
   workflowTemplateRefs,
 } from "./workflow/inputs";
-import { createRunRecorder, type RunRecorder, type RunStepOutcomeKind } from "./history";
+import {
+  createRunRecorder,
+  parseProgressLine,
+  type ProgressOutcome,
+  type RunRecorder,
+  type RunStepOutcomeKind,
+} from "./history";
 import {
   HerdrError,
   isTransportLoss,
@@ -55,6 +61,16 @@ import type {
   ReturnsSpec,
   RecoveryAction,
 } from "./workflow/grammar";
+import {
+  parseVerdict,
+  verdictMismatchMessage,
+  verdictNotRequiredMessage,
+  type AgentResult,
+  type CommandResult,
+  type ExpectSpec,
+  type ReadinessIds,
+  type StepFailureDetails,
+} from "./workflow/results";
 
 type StepFailure = {
   message: string;
@@ -107,12 +123,12 @@ type StepRunOpts = {
   children: Map<string, LoadedWorkflow>;
   managedResponseFiles: string[];
   recorder: RunRecorder;
-  onProgress?: (step: number, total: number, label: string, outcome?: string) => void;
+  onProgress?: (step: number, total: number, label: string, outcome?: ProgressOutcome) => void;
   onStderr?: (text: string) => void;
   runSteps: RunSteps;
 };
 
-type StepCtx = {
+type StepFrame = {
   step: WorkflowStep;
   stepIndex: number;
   values: TemplateNamespace;
@@ -211,8 +227,12 @@ function managedPromptSpillPath(runId: string, stepIndex: number, responseDir: s
   return join(responseDir, `${runId}-step-${stepIndex}-prompt.txt`);
 }
 
-function appendResponseInstruction(prompt: string, path: string): string {
-  return `${prompt}\n\nRequired: use your file-write tool to write your full answer as plain UTF-8 text to the absolute path ${path}, overwriting whatever is there. Do not finish until that file exists with your answer. Write nothing else to that path and do not create other files for it. Printing the answer in chat is not enough.`;
+function appendResponseInstruction(prompt: string, path: string, expect?: ExpectSpec): string {
+  const base = `${prompt}\n\nRequired: use your file-write tool to write your full answer as plain UTF-8 text to the absolute path ${path}, overwriting whatever is there. Do not finish until that file exists with your answer. Write nothing else to that path and do not create other files for it. Printing the answer in chat is not enough.`;
+  if (!expect) return base;
+  const tokens = expect.oneOf.join(", ");
+  const check = `hwf response check ${quotePosixArg(path)} --one-of ${expect.oneOf.join(",")}`;
+  return `${base}\n\nRequired verdict: the final non-empty line of that file must be exactly one of these tokens and nothing else: ${tokens}. Put your reasoning above it. Before you finish the turn, run \`${check}\` and correct the file until that command exits 0.`;
 }
 
 function spilledPromptInstruction(spillPath: string): string {
@@ -237,14 +257,14 @@ export async function readManagedResponse(path: string): Promise<string> {
   return text;
 }
 
-async function herdrStep(c: StepCtx): Promise<StepOutcome> {
-  const action = c.step.action;
+async function herdrStep(frame: StepFrame): Promise<StepOutcome> {
+  const action = frame.step.action;
   if (action.kind !== "herdr") return { ok: false, error: "internal: not a herdr step" };
-  const params = substituteParams(action.params, c.values) ?? {};
+  const params = substituteParams(action.params, frame.values) ?? {};
   const invalid = validateHerdrInvocation(action.method, params);
   if (invalid) return { ok: false, error: invalid, details: { method: action.method } };
   try {
-    const result = await c.opts.deps.herdrCall(action.method, params);
+    const result = await frame.opts.deps.herdrCall(action.method, params);
     return { ok: true, result, ...(readTruncated(result) ? { truncated: true } : {}) };
   } catch (error) {
     const failure = dispatchFailure(`herdr ${action.method}`, error);
@@ -252,7 +272,7 @@ async function herdrStep(c: StepCtx): Promise<StepOutcome> {
   }
 }
 
-export type PlacedPane = { pane_id: string; tab_id: string; workspace_id: string };
+export type PlacedPane = ReadinessIds;
 
 type PlaceAnchors = { paneId?: string; tabId?: string; workspaceId?: string };
 
@@ -647,31 +667,33 @@ function commandArgv(action: RunAction, ns: TemplateNamespace): string[] {
   return shellArgv(payload.command, payload.shell);
 }
 
-function bindCommandResult(c: StepCtx, outcome: CommandOutcome): void {
-  if (!c.step.id) return;
-  c.values.steps[c.step.id] = {
+function bindCommandResult(frame: StepFrame, outcome: CommandOutcome): void {
+  if (!frame.step.id) return;
+  const result: CommandResult = {
     stdout: outcome.stdout,
     stderr: outcome.stderr,
     exit_code: outcome.exitCode,
     failed: outcome.failed,
   };
+  frame.values.steps[frame.step.id] = result;
 }
 
 function commandFailure(outcome: CommandOutcome): Extract<StepOutcome, { ok: false }> {
   const detail = outcome.stderr.trim() || outcome.stdout.trim().slice(-500);
+  const details: StepFailureDetails = {
+    stdout: outcome.stdout,
+    stderr: outcome.stderr,
+    exit_code: outcome.exitCode,
+  };
   return {
     ok: false,
     error: detail || `exit ${outcome.exitCode}`,
-    details: {
-      stdout: outcome.stdout,
-      stderr: outcome.stderr,
-      exit_code: outcome.exitCode,
-    },
+    details,
   };
 }
 
 async function localRun(
-  c: StepCtx,
+  frame: StepFrame,
   action: RunAction,
   cwd: string,
   env: NodeJS.ProcessEnv,
@@ -682,7 +704,7 @@ async function localRun(
   try {
     outcome =
       payload.form === "argv"
-        ? await runArgvStep(commandArgv(action, c.values), {
+        ? await runArgvStep(commandArgv(action, frame.values), {
             cwd,
             env,
             timeoutMs: action.timeoutMs,
@@ -701,26 +723,27 @@ async function localRun(
     }
     return { ok: false, error: `run: ${errorText(error)}`, hardFailure: true };
   }
-  if (outcome.stderr) c.opts.onStderr?.(outcome.stderr);
+  if (outcome.stderr) frame.opts.onStderr?.(outcome.stderr);
   if (outcome.timedOut) return { ...commandFailure(outcome), hardFailure: true };
-  bindCommandResult(c, outcome);
+  bindCommandResult(frame, outcome);
   return outcome.failed ? commandFailure(outcome) : { ok: true };
 }
 
 const READY_LINES = 80;
 
 async function placedRun(
-  c: StepCtx,
+  frame: StepFrame,
   action: RunAction,
   cwd: string,
   paneEnv: Record<string, string>,
 ): Promise<StepOutcome> {
   const pane = action.pane;
   if (!pane) return { ok: false, error: "run: background and ready_when require pane:" };
-  const sub = (text?: string) => (text === undefined ? undefined : substituteText(text, c.values));
+  const sub = (text?: string) =>
+    text === undefined ? undefined : substituteText(text, frame.values);
   let open: PaneOpen;
   try {
-    open = resolvePaneOpen(pane.open, c.values);
+    open = resolvePaneOpen(pane.open, frame.values);
   } catch (error) {
     return { ok: false, error: errorText(error) };
   }
@@ -732,16 +755,16 @@ async function placedRun(
     focus: pane.focus ?? action.background !== true,
     cwd,
     env: paneEnv,
-    label: c.step.id ?? "hwf-run",
-    argv: commandArgv(action, c.values),
-    deps: c.opts.deps,
-    invocation: c.opts.ctx,
+    label: frame.step.id ?? "hwf-run",
+    argv: commandArgv(action, frame.values),
+    deps: frame.opts.deps,
+    invocation: frame.opts.ctx,
   });
   if (action.background === true) return { ok: true, launched: true };
   if (action.readyWhen === undefined || action.timeoutMs === undefined) {
     return { ok: false, error: "run: placed foreground run requires ready_when and timeout" };
   }
-  const waited = await c.opts.deps.herdrCall("pane.wait_for_output", {
+  const waited = await frame.opts.deps.herdrCall("pane.wait_for_output", {
     pane_id: placed.pane_id,
     source: "recent",
     lines: READY_LINES,
@@ -756,21 +779,22 @@ async function placedRun(
   };
 }
 
-async function shellStep(c: StepCtx & { env: NodeJS.ProcessEnv }): Promise<StepOutcome> {
-  const action = c.step.action;
+async function shellStep(frame: StepFrame & { env: NodeJS.ProcessEnv }): Promise<StepOutcome> {
+  const action = frame.step.action;
   if (action.kind !== "run") return { ok: false, error: "internal: not a run step" };
-  const stepEnv = stepEnvValues(action.env, c.values);
+  const stepEnv = stepEnvValues(action.env, frame.values);
   if (!stepEnv.ok) return { ok: false, error: stepEnv.error };
-  const hwf = buildHwfEnv(c.values.inputs);
-  const cwd = action.cwd !== undefined ? substituteText(action.cwd, c.values) : c.opts.ctx.cwd;
+  const hwf = buildHwfEnv(frame.values.inputs);
+  const cwd =
+    action.cwd !== undefined ? substituteText(action.cwd, frame.values) : frame.opts.ctx.cwd;
   if (action.pane || action.background === true || action.readyWhen !== undefined) {
     try {
-      return await placedRun(c, action, cwd, { ...hwf, ...stepEnv.env });
+      return await placedRun(frame, action, cwd, { ...hwf, ...stepEnv.env });
     } catch (error) {
       return dispatchFailure("run", error);
     }
   }
-  return localRun(c, action, cwd, mergeStepEnv(c.env, hwf, stepEnv.env));
+  return localRun(frame, action, cwd, mergeStepEnv(frame.env, hwf, stepEnv.env));
 }
 
 type AgentAction = Extract<StepAction, { kind: "agent" }>;
@@ -869,31 +893,31 @@ type ProfileChoice =
 /** Target mode keeps waiting for the exact managed file; new-agent fails after a short settled grace. */
 type ManagedWaitMode = "new-agent" | "target";
 
-async function chooseProfile(c: StepCtx, action: AgentAction): Promise<ProfileChoice> {
+async function chooseProfile(frame: StepFrame, action: AgentAction): Promise<ProfileChoice> {
   const name =
     action.using !== undefined
-      ? substituteText(action.using, c.values)
-      : c.opts.config.default_profile;
+      ? substituteText(action.using, frame.values)
+      : frame.opts.config.default_profile;
   if (!name) {
-    const hint = configPathsHint(await globalConfigPath(), repoConfigPath(c.opts.repoRoot));
+    const hint = configPathsHint(await globalConfigPath(), repoConfigPath(frame.opts.repoRoot));
     return {
       ok: false,
       error: `agent: no using: profile and no default_profile is configured (${hint}); run \`hwf init\` or \`hwf init --global\``,
     };
   }
-  const profile = resolveProfile(c.opts.config, name);
+  const profile = resolveProfile(frame.opts.config, name);
   if (!profile) return { ok: false, error: `agent: unknown profile '${name}'` };
   return { ok: true, name, profile };
 }
 
-function responseDirOf(c: StepCtx): string {
-  return c.opts.deps.responseDir ?? runScratchDir(c.opts.repoRoot);
+function responseDirOf(frame: StepFrame): string {
+  return frame.opts.deps.responseDir ?? runScratchDir(frame.opts.repoRoot);
 }
 
-async function preparedResponsePath(c: StepCtx): Promise<string> {
-  const path = managedResponsePath(c.opts.runId, c.stepIndex, responseDirOf(c));
+async function preparedResponsePath(frame: StepFrame): Promise<string> {
+  const path = managedResponsePath(frame.opts.runId, frame.stepIndex, responseDirOf(frame));
   await mkdir(dirname(path), { recursive: true });
-  c.opts.managedResponseFiles.push(path);
+  frame.opts.managedResponseFiles.push(path);
   return path;
 }
 
@@ -911,13 +935,13 @@ async function missingManagedError(path: string): Promise<string> {
 type TurnWait = { settled: true } | { settled: false; error: string };
 
 async function awaitManagedTurn(
-  c: StepCtx,
+  frame: StepFrame,
   target: string,
   path: string,
   timeoutMs: number,
   mode: ManagedWaitMode,
 ): Promise<TurnWait> {
-  const deps = c.opts.deps;
+  const deps = frame.opts.deps;
   const deadline = deps.now() + timeoutMs;
   let notifiedBlocked = false;
   let sawActive = false;
@@ -933,6 +957,10 @@ async function awaitManagedTurn(
       mode === "new-agent" && SETTLED.has(status) && !hasText && (status === "done" || sawActive);
     if (emptySettled) {
       settledEmptyPolls += 1;
+      // A paste stall can slip past submit-time pickup checks when detection flickers off idle.
+      if (settledEmptyPolls === 1) {
+        await deps.herdrCall("agent.send_keys", { target, keys: ["enter"] }).catch(() => undefined);
+      }
       if (settledEmptyPolls > SETTLED_EMPTY_GRACE_POLLS) {
         return { settled: false, error: await missingManagedError(path) };
       }
@@ -945,8 +973,8 @@ async function awaitManagedTurn(
       notifiedBlocked = true;
       await deps
         .notificationShow(
-          `herdr-workflows: ${c.opts.name} agent blocked`,
-          `${target} is waiting for input at step ${c.stepIndex}`,
+          `herdr-workflows: ${frame.opts.name} agent blocked`,
+          `${target} is waiting for input at step ${frame.stepIndex}`,
         )
         .catch(() => undefined);
     }
@@ -985,33 +1013,65 @@ function agentDetails(parts: {
   };
 }
 
+/** Settle-time gate: authoritative even when the agent skipped the `hwf response check` self-check. */
+function applyVerdict(
+  response: string,
+  expect: ExpectSpec,
+  details: Record<string, unknown>,
+): { ok: true; verdict: string } | Extract<StepOutcome, { ok: false }> {
+  const parsed = parseVerdict(response, expect.oneOf);
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: `agent: ${verdictMismatchMessage(parsed.line, expect.oneOf)}`,
+      details,
+    };
+  }
+  if (expect.require && !expect.require.includes(parsed.verdict)) {
+    const failure: StepFailureDetails = { verdict: parsed.verdict };
+    return {
+      ok: false,
+      error: `agent: ${verdictNotRequiredMessage(parsed.verdict, expect.require)}`,
+      details: { ...details, ...failure },
+    };
+  }
+  return { ok: true, verdict: parsed.verdict };
+}
+
 async function managedResult(
-  c: StepCtx,
+  frame: StepFrame,
   target: string,
   path: string,
   timeoutMs: number,
   mode: ManagedWaitMode,
   details: Record<string, unknown>,
+  expect?: ExpectSpec,
 ): Promise<StepOutcome> {
-  const wait = await awaitManagedTurn(c, target, path, timeoutMs, mode);
+  const wait = await awaitManagedTurn(frame, target, path, timeoutMs, mode);
   if (!wait.settled) {
     return { ok: false, error: wait.error, details };
   }
+  let response: string;
+  let agent: Record<string, unknown>;
   try {
-    const response = await readManagedResponse(path);
-    const agent = await c.opts.deps.agentInfo(target);
-    const pane =
-      typeof details.pane_id === "string"
-        ? details.pane_id
-        : typeof agent.pane_id === "string"
-          ? agent.pane_id
-          : "";
-    return { ok: true, result: { response, agent, pane_id: pane } };
+    response = await readManagedResponse(path);
+    agent = await frame.opts.deps.agentInfo(target);
   } catch (error) {
     const message =
       error instanceof HerdrError ? error.message : `managed response: ${String(error)}`;
     return { ok: false, error: message, details };
   }
+  const pane =
+    typeof details.pane_id === "string"
+      ? details.pane_id
+      : typeof agent.pane_id === "string"
+        ? agent.pane_id
+        : "";
+  const result: AgentResult = { response, agent, pane_id: pane };
+  if (!expect) return { ok: true, result };
+  const gate = applyVerdict(response, expect, details);
+  if (!gate.ok) return gate;
+  return { ok: true, result: { ...result, verdict: gate.verdict } };
 }
 
 /** Evidence the agent accepted input (not still sitting on a pristine idle welcome). */
@@ -1036,14 +1096,14 @@ async function waitForPromptPickup(
 }
 
 /** Spill oversized bodies so agent.prompt does not silently drop them. */
-async function maybeSpillAgentPrompt(c: StepCtx, text: string): Promise<string> {
+async function maybeSpillAgentPrompt(frame: StepFrame, text: string): Promise<string> {
   const bytes = Buffer.byteLength(text, "utf8");
   if (bytes <= AGENT_PROMPT_BYTE_LIMIT) return text;
   assertUnderCaptureCap("agent prompt", text);
-  const spill = managedPromptSpillPath(c.opts.runId, c.stepIndex, responseDirOf(c));
+  const spill = managedPromptSpillPath(frame.opts.runId, frame.stepIndex, responseDirOf(frame));
   await mkdir(dirname(spill), { recursive: true, mode: 0o700 });
   await writeFile(spill, text, { mode: 0o600 });
-  c.opts.managedResponseFiles.push(spill);
+  frame.opts.managedResponseFiles.push(spill);
   return spilledPromptInstruction(spill);
 }
 
@@ -1051,9 +1111,9 @@ async function maybeSpillAgentPrompt(c: StepCtx, text: string): Promise<string> 
  * Submit until the agent leaves idle, re-sending the full prompt when a cold agent drops it.
  * Enter nudge only handles the separate bracketed-paste case (text present, not submitted).
  */
-async function submitPrompt(c: StepCtx, target: string, text: string): Promise<void> {
-  const deps = c.opts.deps;
-  const body = await maybeSpillAgentPrompt(c, text);
+async function submitPrompt(frame: StepFrame, target: string, text: string): Promise<void> {
+  const deps = frame.opts.deps;
+  const body = await maybeSpillAgentPrompt(frame, text);
   for (let attempt = 1; attempt <= SUBMIT_MAX_ATTEMPTS; attempt++) {
     // A slow-but-successful earlier submit may land during backoff — never double-prompt.
     if (attempt > 1 && promptPickedUp(await deps.agentStatus(target), "idle")) return;
@@ -1071,32 +1131,33 @@ async function submitPrompt(c: StepCtx, target: string, text: string): Promise<v
   );
 }
 
-async function closePane(c: StepCtx, placed: PlacedPane): Promise<void> {
-  await c.opts.deps.paneClose(placed.pane_id).catch(() => undefined);
+async function closePane(frame: StepFrame, placed: PlacedPane): Promise<void> {
+  await frame.opts.deps.paneClose(placed.pane_id).catch(() => undefined);
 }
 
 async function placeNewAgentPane(
-  c: StepCtx,
+  frame: StepFrame,
   action: AgentAction,
 ): Promise<{ name: string; placed: PlacedPane }> {
   const pane = action.pane ?? { open: "tab" as const };
-  const sub = (text?: string) => (text === undefined ? undefined : substituteText(text, c.values));
+  const sub = (text?: string) =>
+    text === undefined ? undefined : substituteText(text, frame.values);
   const placed = await placeEmptyPane({
-    open: resolvePaneOpen(pane.open, c.values),
+    open: resolvePaneOpen(pane.open, frame.values),
     target: sub(pane.target),
     workspace: sub(pane.workspace),
     size: pane.size,
     focus: pane.focus ?? action.background !== true,
-    cwd: action.cwd !== undefined ? substituteText(action.cwd, c.values) : c.opts.ctx.cwd,
+    cwd: action.cwd !== undefined ? substituteText(action.cwd, frame.values) : frame.opts.ctx.cwd,
     env: Object.fromEntries(
-      Object.entries(action.env ?? {}).map(([k, v]) => [k, substituteText(v, c.values)]),
+      Object.entries(action.env ?? {}).map(([k, v]) => [k, substituteText(v, frame.values)]),
     ),
-    label: c.step.id ?? "hwf-agent",
-    deps: c.opts.deps,
-    invocation: c.opts.ctx,
+    label: frame.step.id ?? "hwf-agent",
+    deps: frame.opts.deps,
+    invocation: frame.opts.ctx,
   });
   return {
-    name: generateAgentName(c.step.id, c.stepIndex, c.opts.runId),
+    name: generateAgentName(frame.step.id, frame.stepIndex, frame.opts.runId),
     placed,
   };
 }
@@ -1116,8 +1177,8 @@ async function bootNewAgent(
   await awaitAgentInteractiveReady(deps, name);
 }
 
-async function newAgentTurn(c: StepCtx, action: AgentAction): Promise<StepOutcome> {
-  const chosen = await chooseProfile(c, action);
+async function newAgentTurn(frame: StepFrame, action: AgentAction): Promise<StepOutcome> {
+  const chosen = await chooseProfile(frame, action);
   if (!chosen.ok) return { ok: false, error: chosen.error };
   let placement: { name: string; placed: PlacedPane } | undefined;
   const close = action.pane?.close;
@@ -1128,43 +1189,48 @@ async function newAgentTurn(c: StepCtx, action: AgentAction): Promise<StepOutcom
       ...(placement ? { target: placement.name, pane: placement.placed } : {}),
     });
   try {
-    placement = await placeNewAgentPane(c, action);
-    await bootNewAgent(c.opts.deps, placement.name, chosen.profile, placement.placed);
-    const prompt = substituteText(action.prompt, c.values);
+    placement = await placeNewAgentPane(frame, action);
+    await bootNewAgent(frame.opts.deps, placement.name, chosen.profile, placement.placed);
+    const prompt = substituteText(action.prompt, frame.values);
     if (action.background === true) {
-      await submitPrompt(c, placement.name, prompt);
+      await submitPrompt(frame, placement.name, prompt);
       return { ok: true, launched: true };
     }
-    const path = await preparedResponsePath(c);
-    await submitPrompt(c, placement.name, appendResponseInstruction(prompt, path));
+    const path = await preparedResponsePath(frame);
+    await submitPrompt(
+      frame,
+      placement.name,
+      appendResponseInstruction(prompt, path, action.expect),
+    );
     const outcome = await managedResult(
-      c,
+      frame,
       placement.name,
       path,
       action.timeoutMs ?? TURN_TIMEOUT_MS,
       "new-agent",
       baseDetails(),
+      action.expect,
     );
-    if (outcome.ok && close === "success") await closePane(c, placement.placed);
+    if (outcome.ok && close === "success") await closePane(frame, placement.placed);
     return outcome;
   } catch (error) {
     const failure = dispatchFailure(`agent (profile ${chosen.name})`, error);
     return failure.ok ? failure : { ...failure, details: baseDetails() };
   } finally {
-    if (close === "always" && placement) await closePane(c, placement.placed);
+    if (close === "always" && placement) await closePane(frame, placement.placed);
   }
 }
 
 async function targetTurn(
-  c: StepCtx,
+  frame: StepFrame,
   action: AgentAction,
   rawTarget: string,
 ): Promise<StepOutcome> {
-  const target = substituteText(rawTarget, c.values);
+  const target = substituteText(rawTarget, frame.values);
   if (!target) return { ok: false, error: "agent: target resolved to an empty value" };
   const details = agentDetails({ target });
   try {
-    const status = await c.opts.deps.agentStatus(target);
+    const status = await frame.opts.deps.agentStatus(target);
     if (!SETTLED.has(status)) {
       return {
         ok: false,
@@ -1172,20 +1238,21 @@ async function targetTurn(
         details: agentDetails({ target, status }),
       };
     }
-    const prompt = substituteText(action.prompt, c.values);
+    const prompt = substituteText(action.prompt, frame.values);
     if (action.background === true) {
-      await submitPrompt(c, target, prompt);
+      await submitPrompt(frame, target, prompt);
       return { ok: true, launched: true };
     }
-    const path = await preparedResponsePath(c);
-    await submitPrompt(c, target, appendResponseInstruction(prompt, path));
+    const path = await preparedResponsePath(frame);
+    await submitPrompt(frame, target, appendResponseInstruction(prompt, path, action.expect));
     return await managedResult(
-      c,
+      frame,
       target,
       path,
       action.timeoutMs ?? TURN_TIMEOUT_MS,
       "target",
       details,
+      action.expect,
     );
   } catch (error) {
     const failure = dispatchFailure(`agent (target ${target})`, error);
@@ -1193,11 +1260,11 @@ async function targetTurn(
   }
 }
 
-async function agentStep(c: StepCtx): Promise<StepOutcome> {
-  const action = c.step.action;
+async function agentStep(frame: StepFrame): Promise<StepOutcome> {
+  const action = frame.step.action;
   if (action.kind !== "agent") return { ok: false, error: "internal: not an agent step" };
-  if (action.target !== undefined) return targetTurn(c, action, action.target);
-  return newAgentTurn(c, action);
+  if (action.target !== undefined) return targetTurn(frame, action, action.target);
+  return newAgentTurn(frame, action);
 }
 
 type WorkflowActionSpec = Extract<StepAction, { kind: "workflow" }>;
@@ -1211,14 +1278,14 @@ function evaluateReturns(returns: ReturnsSpec, ns: TemplateNamespace): unknown {
   );
 }
 
-async function workflowStep(c: StepCtx): Promise<StepOutcome> {
-  const action = c.step.action;
+async function workflowStep(frame: StepFrame): Promise<StepOutcome> {
+  const action = frame.step.action;
   if (action.kind !== "workflow") return { ok: false, error: "internal: not a workflow step" };
-  return runChild(c, action);
+  return runChild(frame, action);
 }
 
-async function runChild(c: StepCtx, action: WorkflowActionSpec): Promise<StepOutcome> {
-  const child = c.opts.children.get(action.name);
+async function runChild(frame: StepFrame, action: WorkflowActionSpec): Promise<StepOutcome> {
+  const child = frame.opts.children.get(action.name);
   if (!child) {
     return {
       ok: false,
@@ -1226,18 +1293,18 @@ async function runChild(c: StepCtx, action: WorkflowActionSpec): Promise<StepOut
       details: { workflow: action.name },
     };
   }
-  const repoRoot = c.opts.repoRoot;
+  const repoRoot = frame.opts.repoRoot;
   const passed = Object.fromEntries(
     Object.entries(action.inputs ?? {}).map(([name, template]) => [
       name,
-      substituteText(template, c.values),
+      substituteText(template, frame.values),
     ]),
   );
   let inputs: ResolvedInputs;
   try {
     const collected = await completeWorkflowInputs(child, {
       provided: passed,
-      config: c.opts.config,
+      config: frame.opts.config,
       repoRoot,
       resolveDynamic: true,
     });
@@ -1258,20 +1325,20 @@ async function runChild(c: StepCtx, action: WorkflowActionSpec): Promise<StepOut
   const childValues: TemplateNamespace = {
     inputs: inputs.values,
     steps: {},
-    context: c.values.context,
+    context: frame.values.context,
   };
-  const childPath = [...c.opts.workflowPath, child.name];
-  const result = await c.opts.runSteps(
+  const childPath = [...frame.opts.workflowPath, child.name];
+  const result = await frame.opts.runSteps(
     child.steps,
     {
-      ...c.opts,
+      ...frame.opts,
       name: child.name,
       workflowPath: childPath,
       children: child.children,
-      recorder: c.opts.recorder.child({
+      recorder: frame.opts.recorder.child({
         name: child.name,
         workflowPath: childPath,
-        parentOrdinal: c.stepIndex,
+        parentOrdinal: frame.stepIndex,
       }),
     },
     childValues,
@@ -1540,7 +1607,7 @@ export function launchDetachedRun(req: LaunchRunRequest): DetachedRunHandle {
         if (!detached) req.onHistoryAck?.(trimmed);
         return;
       }
-      if (/^\[\d+\/\d+\]/.test(trimmed)) {
+      if (parseProgressLine(trimmed)) {
         lastProgress = trimmed;
         if (!detached) req.onProgressLine(trimmed);
         return;
@@ -1631,10 +1698,10 @@ function openWebLaunchStderr(stateDir: string): number | "ignore" {
   }
 }
 
-type StepRunner = (c: StepCtx) => Promise<StepOutcome>;
+type StepRunner = (frame: StepFrame) => Promise<StepOutcome>;
 
 const RUNNERS: Record<WorkflowStep["action"]["kind"], StepRunner> = {
-  run: (c) => shellStep({ ...c, env: process.env }),
+  run: (frame) => shellStep({ ...frame, env: process.env }),
   agent: agentStep,
   herdr: herdrStep,
   workflow: workflowStep,
@@ -1687,6 +1754,31 @@ function stepLabel(step: WorkflowStep): string {
   if (a.kind === "agent") return "agent";
   if (a.kind === "herdr") return a.method;
   return `workflow: ${a.name}`;
+}
+
+/**
+ * context: three distinct outcome vocabularies exist by layer and stay separate on purpose —
+ * `StepOutcome` is the runtime union the runner branches on, `RunStepOutcomeKind` is the recorded
+ * history label, and `ProgressOutcome` is the terse stdout progress suffix. This is the only bridge
+ * between them: every conversion derives the recorded kind first, then maps that kind to progress,
+ * so no second inline map can drift the three apart.
+ */
+export function recordedOutcomeKind(outcome: StepOutcome): RunStepOutcomeKind {
+  if (!outcome.ok) return outcome.coordinationLost === true ? "interrupted" : "failed";
+  return outcome.launched === true ? "launched" : "succeeded";
+}
+
+const PROGRESS_BY_OUTCOME_KIND: Record<RunStepOutcomeKind, ProgressOutcome> = {
+  succeeded: "ok",
+  skipped: "skip",
+  launched: "launch",
+  failed_continued: "fail",
+  failed: "fail",
+  interrupted: "fail",
+};
+
+function progressOutcomeOf(kind: RunStepOutcomeKind): ProgressOutcome {
+  return PROGRESS_BY_OUTCOME_KIND[kind];
 }
 
 function bindResult(step: WorkflowStep, values: TemplateNamespace, outcome: StepOutcome): void {
@@ -1799,8 +1891,9 @@ async function runSteps(
     opts.onProgress?.(n, total, label, "start");
     await opts.recorder.stepStarted(step, n, total, label);
     const outcome = await executeWithRetry(step, n, values, opts);
+    const kind = recordedOutcomeKind(outcome);
     if (!outcome.ok) {
-      opts.onProgress?.(n, total, label, "fail");
+      opts.onProgress?.(n, total, label, progressOutcomeOf(kind));
       if (outcome.coordinationLost) {
         return hardStepFailure(opts, step, n, total, label, outcome, tolerated, true);
       }
@@ -1812,9 +1905,7 @@ async function runSteps(
       return hardStepFailure(opts, step, n, total, label, outcome, tolerated, false);
     }
     bindResult(step, values, outcome);
-    const progress = outcome.launched === true ? "launch" : "ok";
-    opts.onProgress?.(n, total, label, progress);
-    const kind: RunStepOutcomeKind = outcome.launched === true ? "launched" : "succeeded";
+    opts.onProgress?.(n, total, label, progressOutcomeOf(kind));
     await opts.recorder.stepFinished(step, n, total, label, kind, outcome);
   }
   if (tolerated.length) return { ok: false, error: tolerated.join("; "), failures: tolerated };
@@ -1851,13 +1942,7 @@ async function runRecovery(
     1,
     1,
     label,
-    outcome.ok
-      ? outcome.launched === true
-        ? "launched"
-        : "succeeded"
-      : outcome.coordinationLost
-        ? "interrupted"
-        : "failed",
+    recordedOutcomeKind(outcome),
     outcome,
     "recovery",
   );
@@ -2029,7 +2114,7 @@ export type RunOptions = {
   recorder?: RunRecorder;
   workflow?: LoadedWorkflow;
   deps?: Partial<RunnerDeps>;
-  onProgress?: (step: number, total: number, label: string, outcome?: string) => void;
+  onProgress?: (step: number, total: number, label: string, outcome?: ProgressOutcome) => void;
   onStderr?: (text: string) => void;
 };
 

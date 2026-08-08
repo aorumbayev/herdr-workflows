@@ -71,10 +71,10 @@ openspec validate --all --strict
 Then check that generated artifacts still regenerate to identical bytes:
 
 ```bash
-git status --porcelain -- docs/workflow.schema.json docs/.vitepress/theme/examples.generated.ts
-bun run schema && bun run examples
-git diff --stat -- docs/workflow.schema.json docs/.vitepress/theme/examples.generated.ts
-git checkout -- docs/workflow.schema.json docs/.vitepress/theme/examples.generated.ts
+git status --porcelain -- docs/workflow.schema.json
+bun run schema
+git diff --stat -- docs/workflow.schema.json
+git checkout -- docs/workflow.schema.json
 ```
 
 Skip this check and report "Not measured" when that scoped `git status` — the one limited to those two
