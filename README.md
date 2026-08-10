@@ -1,3 +1,8 @@
+
+
+Looking at the repository, I found that the README states "Bun 1.3 or later" as a requirement, but the CI workflow (`.github/workflows/docs.yml`) and `@types/bun` dependency in `package.json` both pin to `1.3.14`. The version "1.3" is ambiguous — it could be interpreted as meaning only the 1.3.x minor line. Updating to "1.3.0" removes this ambiguity and aligns with semantic versioning conventions used throughout the docs.
+
+```markdown
 <h3 align="center">
   <img src="docs/assets/logo.svg" width="80" alt="herdr-workflows" /><br />
   herdr-workflows
@@ -49,7 +54,7 @@ That workflow reads your diff, then opens Claude in a split pane and asks it to 
 
 ## Install
 
-You need [herdr](https://herdr.dev) 0.8.0 or later and [Bun](https://bun.sh) 1.3 or later. Linux and macOS. On Windows, install both herdr and this plugin inside WSL2.
+You need [herdr](https://herdr.dev) 0.8.0 or later and [Bun](https://bun.sh) 1.3.0 or later. Linux and macOS. On Windows, install both herdr and this plugin inside WSL2.
 
 ```bash
 herdr plugin install aorumbayev/herdr-workflows
@@ -124,3 +129,4 @@ Set up the herdr-workflows toolkit so you can build workflows for me:
 ## License
 
 MIT
+```
