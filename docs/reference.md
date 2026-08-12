@@ -259,18 +259,21 @@ Layers, in increasing precedence: the global plugin config directory, `.hwf/conf
 
 ## Limits
 
-| What                                                                        | Limit  |
-| --------------------------------------------------------------------------- | ------ |
-| Generated `HWF_*` environment block                                         | 24 KiB |
-| Inline agent prompt                                                         | 16 KiB |
-| Command output, agent response, transcript, or dynamic-option output (each) | 8 MiB  |
-| Dynamic options                                                             | 1,000  |
-| Dynamic option command                                                      | 10s    |
-| Transcript extractor                                                        | 30s    |
-| Agent turn (default `timeout`)                                              | 30m    |
-| Agent startup                                                               | 30s    |
+| What                                                                        | Limit   |
+| --------------------------------------------------------------------------- | ------- |
+| Generated `HWF_*` environment block                                         | 24 KiB  |
+| Inline agent prompt                                                         | 16 KiB  |
+| Command output, agent response, transcript, or dynamic-option output (each) | 8 MiB   |
+| Raw `claude` session file loaded by built-in extraction                     | 256 MiB |
+| Dynamic options                                                             | 1,000   |
+| Dynamic option command                                                      | 10s     |
+| Transcript extractor                                                        | 30s     |
+| Agent turn (default `timeout`)                                              | 30m     |
+| Agent startup                                                               | 30s     |
 
 Crossing an output cap fails the step and names the source and the byte limit. Output is never silently truncated, and a streaming command is stopped at the process producing it.
+
+Built-in `claude` extraction applies the transcript cap to the extracted text, not the raw session file — raw session files are mostly tool output the extractor discards.
 
 An agent prompt larger than 16 KiB is written to a file, and the agent is told to read that path.
 

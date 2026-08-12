@@ -1,4 +1,10 @@
 export const CAPTURE_BYTE_LIMIT = 8 * 1024 * 1024;
+/**
+ * Raw claude session .jsonl is dominated by tool output the built-in extractor
+ * discards, so the transcript cap applies to the extracted text. This only
+ * bounds how large a raw session file the extractor will load.
+ */
+export const TRANSCRIPT_FILE_BYTE_LIMIT = 32 * CAPTURE_BYTE_LIMIT;
 export const HWF_ENV_BYTE_LIMIT = 24 * 1024;
 /**
  * herdr agent.prompt silently drops ~21KB+ bodies; stay under this with a margin.

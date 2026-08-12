@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { CAPTURE_BYTE_LIMIT, CaptureLimitError, assertUnderCaptureCap } from "./caps";
+import { CaptureLimitError, TRANSCRIPT_FILE_BYTE_LIMIT, assertUnderCaptureCap } from "./caps";
 import type { TranscriptExtractor } from "./context";
 import type { AgentSessionInfo } from "./host";
 
@@ -55,7 +55,9 @@ export async function readClaudeTranscript(
   }
   try {
     const size = file.size;
-    if (size > CAPTURE_BYTE_LIMIT) throw new CaptureLimitError("transcript", size);
+    if (size > TRANSCRIPT_FILE_BYTE_LIMIT) {
+      throw new CaptureLimitError("transcript file", size, TRANSCRIPT_FILE_BYTE_LIMIT);
+    }
     const text = extractAgentTranscript(await file.text());
     assertUnderCaptureCap("transcript", text);
     return text;
