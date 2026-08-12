@@ -144,7 +144,11 @@ describe("transcript extractors", () => {
     await mkdir(dir, { recursive: true });
     await writeFile(
       join(dir, `${sessionId}.jsonl`),
-      `${JSON.stringify({ type: "user", message: { content: "builtin" } })}\n`,
+      [
+        "not-json",
+        JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use" }] } }),
+        JSON.stringify({ type: "user", message: { content: "builtin" } }),
+      ].join("\n"),
     );
     const out = await transcriptText(
       "p",
@@ -156,6 +160,21 @@ describe("transcript extractors", () => {
       },
     );
     expect(out).toBe("user:\nbuiltin");
+  });
+
+  test("builtin transcript keeps an unterminated final JSONL line", async () => {
+    const base = await mkdtemp(join(tmpdir(), "herdr-workflows-session-final-"));
+    dirs.push(base);
+    const cwd = "/repo";
+    const sessionId = "final";
+    const dir = join(base, slug(cwd));
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, `${sessionId}.jsonl`),
+      JSON.stringify({ type: "assistant", message: { content: "last" } }),
+    );
+
+    expect(await readClaudeTranscript(cwd, sessionId, base)).toBe("assistant:\nlast");
   });
 
   test("no entry + other kind names fix", async () => {
@@ -209,7 +228,7 @@ describe("transcript extractors", () => {
     });
   });
 
-  test("raw file over the transcript cap succeeds when extracted text is small", async () => {
+  test("streams large ignored JSONL lines without retaining them", async () => {
     const root = await mkdtemp(join(tmpdir(), "herdr-workflows-traw-"));
     dirs.push(root);
     const cwd = "/repo";
@@ -220,7 +239,7 @@ describe("transcript extractors", () => {
     const toolNoise = JSON.stringify({
       type: "user",
       message: {
-        content: [{ type: "tool_result", content: "x".repeat(CAPTURE_BYTE_LIMIT + 1) }],
+        content: [{ type: "tool_result", content: "x".repeat(CAPTURE_BYTE_LIMIT * 2) }],
       },
     });
     const jsonl = [

@@ -1,6 +1,11 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { CaptureLimitError, TRANSCRIPT_FILE_BYTE_LIMIT, assertUnderCaptureCap } from "./caps";
+import {
+  CAPTURE_BYTE_LIMIT,
+  CaptureLimitError,
+  TRANSCRIPT_FILE_BYTE_LIMIT,
+  assertUnderCaptureCap,
+} from "./caps";
 import type { TranscriptExtractor } from "./context";
 import type { AgentSessionInfo } from "./host";
 
@@ -22,23 +27,65 @@ function extractText(content: unknown): string {
   return parts.join("");
 }
 
+function extractEntry(line: string): string | undefined {
+  if (!line.trim()) return;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(line);
+  } catch {
+    return;
+  }
+  const row = parsed as { type?: unknown; message?: { content?: unknown } };
+  if (row.type !== "user" && row.type !== "assistant") return;
+  if (!row.message || row.message.content === undefined) return;
+  const text = extractText(row.message.content);
+  return text ? `${row.type}:\n${text}` : undefined;
+}
+
 export function extractAgentTranscript(jsonl: string): string {
   const entries: string[] = [];
   for (const line of jsonl.split("\n")) {
-    if (!line.trim()) continue;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    const row = parsed as { type?: unknown; message?: { content?: unknown } };
-    if (row.type !== "user" && row.type !== "assistant") continue;
-    if (!row.message || row.message.content === undefined) continue;
-    const text = extractText(row.message.content);
-    if (!text) continue;
-    entries.push(`${row.type}:\n${text}`);
+    const entry = extractEntry(line);
+    if (entry) entries.push(entry);
   }
+  return entries.join("\n\n");
+}
+
+function appendTranscriptEntry(entries: string[], entry: string, bytes: number): number {
+  const nextBytes = bytes + (entries.length ? 2 : 0) + Buffer.byteLength(entry);
+  if (nextBytes > CAPTURE_BYTE_LIMIT) {
+    throw new CaptureLimitError("transcript", nextBytes);
+  }
+  entries.push(entry);
+  return nextBytes;
+}
+
+async function readClaudeTranscriptStream(file: Bun.BunFile): Promise<string> {
+  const decoder = new TextDecoder();
+  let line = "";
+  const entries: string[] = [];
+  let transcriptBytes = 0;
+  let bytesRead = 0;
+
+  const consumeLine = (completedLine: string): void => {
+    const entry = extractEntry(completedLine);
+    if (entry) transcriptBytes = appendTranscriptEntry(entries, entry, transcriptBytes);
+  };
+
+  for await (const chunk of file.stream()) {
+    bytesRead += chunk.byteLength;
+    if (bytesRead > TRANSCRIPT_FILE_BYTE_LIMIT) {
+      throw new CaptureLimitError("transcript file", bytesRead, TRANSCRIPT_FILE_BYTE_LIMIT);
+    }
+    line += decoder.decode(chunk, { stream: true });
+    let newline;
+    while ((newline = line.indexOf("\n")) !== -1) {
+      consumeLine(line.slice(0, newline));
+      line = line.slice(newline + 1);
+    }
+  }
+  line += decoder.decode();
+  consumeLine(line);
   return entries.join("\n\n");
 }
 
@@ -58,9 +105,7 @@ export async function readClaudeTranscript(
     if (size > TRANSCRIPT_FILE_BYTE_LIMIT) {
       throw new CaptureLimitError("transcript file", size, TRANSCRIPT_FILE_BYTE_LIMIT);
     }
-    const text = extractAgentTranscript(await file.text());
-    assertUnderCaptureCap("transcript", text);
-    return text;
+    return await readClaudeTranscriptStream(file);
   } catch (error) {
     if (error instanceof HerdrError || error instanceof CaptureLimitError) throw error;
     throw new HerdrError(
