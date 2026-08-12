@@ -265,6 +265,7 @@ Layers, in increasing precedence: the global plugin config directory, `.hwf/conf
 | Inline agent prompt                                                         | 16 KiB  |
 | Command output, agent response, transcript, or dynamic-option output (each) | 8 MiB   |
 | Raw `claude` session file loaded by built-in extraction                     | 256 MiB |
+| One record in a raw `claude` session file                                   | 32 MiB  |
 | Dynamic options                                                             | 1,000   |
 | Dynamic option command                                                      | 10s     |
 | Transcript extractor                                                        | 30s     |

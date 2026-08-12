@@ -4,6 +4,7 @@ import {
   CAPTURE_BYTE_LIMIT,
   CaptureLimitError,
   TRANSCRIPT_FILE_BYTE_LIMIT,
+  TRANSCRIPT_RECORD_BYTE_LIMIT,
   assertUnderCaptureCap,
 } from "./caps";
 import type { TranscriptExtractor } from "./context";
@@ -68,6 +69,10 @@ async function readClaudeTranscriptStream(file: Bun.BunFile): Promise<string> {
   let bytesRead = 0;
 
   const consumeLine = (completedLine: string): void => {
+    const recordBytes = Buffer.byteLength(completedLine);
+    if (recordBytes > TRANSCRIPT_RECORD_BYTE_LIMIT) {
+      throw new CaptureLimitError("transcript record", recordBytes, TRANSCRIPT_RECORD_BYTE_LIMIT);
+    }
     const entry = extractEntry(completedLine);
     if (entry) transcriptBytes = appendTranscriptEntry(entries, entry, transcriptBytes);
   };
@@ -82,6 +87,15 @@ async function readClaudeTranscriptStream(file: Bun.BunFile): Promise<string> {
     while ((newline = line.indexOf("\n")) !== -1) {
       consumeLine(line.slice(0, newline));
       line = line.slice(newline + 1);
+    }
+    // UTF-16 length lower-bounds UTF-8 bytes: the partial record is rejected
+    // before it grows unbounded without an O(n^2) byte count per chunk.
+    if (line.length > TRANSCRIPT_RECORD_BYTE_LIMIT) {
+      throw new CaptureLimitError(
+        "transcript record",
+        Buffer.byteLength(line),
+        TRANSCRIPT_RECORD_BYTE_LIMIT,
+      );
     }
   }
   line += decoder.decode();

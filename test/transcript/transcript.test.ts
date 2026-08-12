@@ -2,7 +2,11 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CAPTURE_BYTE_LIMIT, TRANSCRIPT_FILE_BYTE_LIMIT } from "../../src/caps";
+import {
+  CAPTURE_BYTE_LIMIT,
+  TRANSCRIPT_FILE_BYTE_LIMIT,
+  TRANSCRIPT_RECORD_BYTE_LIMIT,
+} from "../../src/caps";
 import {
   extractAgentTranscript,
   readClaudeTranscript,
@@ -251,6 +255,29 @@ describe("transcript extractors", () => {
     expect(await readClaudeTranscript(cwd, sessionId, root)).toBe(
       "user:\nsmall ask\n\nassistant:\nok",
     );
+  });
+
+  test("single record over the per-record cap fails with source and limit", async () => {
+    const root = await mkdtemp(join(tmpdir(), "herdr-workflows-trec-"));
+    dirs.push(root);
+    const cwd = "/repo";
+    const sessionId = "huge-record";
+    const dir = join(root, slug(cwd));
+    await mkdir(dir, { recursive: true });
+    const path = join(dir, `${sessionId}.jsonl`);
+    const ignored = JSON.stringify({
+      type: "system",
+      message: { content: "z".repeat(TRANSCRIPT_RECORD_BYTE_LIMIT) },
+    });
+    await writeFile(
+      path,
+      `${ignored}\n${JSON.stringify({ type: "user", message: { content: "after" } })}\n`,
+    );
+    await expect(readClaudeTranscript(cwd, sessionId, root)).rejects.toMatchObject({
+      name: "CaptureLimitError",
+      source: "transcript record",
+      limit: TRANSCRIPT_RECORD_BYTE_LIMIT,
+    });
   });
 
   test("extracted text over the transcript cap fails with source and limit", async () => {
