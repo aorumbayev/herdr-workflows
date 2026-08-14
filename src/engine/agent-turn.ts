@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   assertUnderCaptureCap,
@@ -213,6 +213,9 @@ function responseDirOf(frame: StepFrame): string {
 async function preparedResponsePath(frame: StepFrame): Promise<string> {
   const path = managedResponsePath(frame.opts.runId, frame.stepIndex, responseDirOf(frame));
   await mkdir(dirname(path), { recursive: true });
+  // Child workflows reuse the parent runId with step indexes restarting at 0, so a
+  // leftover file at this path could pass for this turn's pickup and response.
+  await rm(path, { force: true });
   frame.opts.managedResponseFiles.push(path);
   return path;
 }
