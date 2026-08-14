@@ -114,6 +114,7 @@ if [ "$1 $2" = "agent get" ]; then
   target=$3
   status=done
   [ -f "$HWF_E2E_AGENT_STATE/$target" ] && status=$(cat "$HWF_E2E_AGENT_STATE/$target")
+  [ "$status" = working ] && echo done > "$HWF_E2E_AGENT_STATE/$target"
   printf '{"result":{"agent":{"name":"%s","pane_id":"%s","agent":"custom","agent_status":"%s","interactive_ready":true,"launch_pending":false,"cwd":"%s","agent_session":{"kind":"fake","value":"session"}}}}\\n' "$target" "$target" "$status" "$HERDR_WORKFLOWS_REPO_ROOT"
   exit 0
 fi
@@ -330,7 +331,8 @@ export class ExampleHarness {
       });
       const [stderr, exitCode] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
       if (exitCode !== 0) throw new Error(stderr || `fake agent exited ${exitCode}`);
-      await writeFile(join(this.root, "agent-state", target), "done");
+      // One-shot: the fake herdr CLI serves `working` once, then flips the state to done.
+      await writeFile(join(this.root, "agent-state", target), "working");
       return {
         type: "agent_prompted",
         agent: { name: target, pane_id: target, agent_status: "done" },

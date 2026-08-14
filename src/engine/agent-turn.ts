@@ -107,7 +107,7 @@ const AGENT_INTERACTIVE_DEADLINE_MS = 30_000;
 const AGENT_INTERACTIVE_POLL_MS = 100;
 /**
  * Fresh agents (esp. opencode) can report interactive_ready before they accept input.
- * Wait this long after each agent.prompt for status to leave idle.
+ * Wait this long after each agent.prompt for acceptance evidence.
  */
 const SUBMIT_PICKUP_DEADLINE_MS = 10_000;
 const SUBMIT_PICKUP_POLL_MS = 100;
@@ -370,25 +370,34 @@ async function managedResult(
   return { ok: true, result: { ...result, verdict: gate.verdict } };
 }
 
-/** Evidence the agent accepted input (not still sitting on a pristine idle welcome). */
-function promptPickedUp(status: string, before: string): boolean {
+/**
+ * Positive evidence the prompt was consumed: the agent is visibly working or
+ * blocked, or (managed turns) the response file exists. `done` is the same
+ * underlying ready state as `idle` — herdr flips a never-focused fresh tab
+ * idle→done from focus bookkeeping alone, so settling there proves nothing.
+ */
+async function promptAccepted(
+  deps: RunnerDeps,
+  target: string,
+  responsePath?: string,
+): Promise<boolean> {
+  const status = await deps.agentStatus(target);
   if (status === "working" || status === "blocked") return true;
-  return status !== "idle" && status !== before;
+  return responsePath !== undefined && (await fileHasText(responsePath));
 }
 
 async function waitForPromptPickup(
   deps: RunnerDeps,
   target: string,
-  before: string,
   deadlineMs: number,
+  responsePath?: string,
 ): Promise<boolean> {
   const deadline = deps.now() + deadlineMs;
   while (deps.now() < deadline) {
-    const status = await deps.agentStatus(target);
-    if (promptPickedUp(status, before)) return true;
+    if (await promptAccepted(deps, target, responsePath)) return true;
     await deps.sleep(SUBMIT_PICKUP_POLL_MS);
   }
-  return promptPickedUp(await deps.agentStatus(target), before);
+  return promptAccepted(deps, target, responsePath);
 }
 
 /** Spill oversized bodies so agent.prompt does not silently drop them. */
@@ -404,26 +413,30 @@ async function maybeSpillAgentPrompt(frame: StepFrame, text: string): Promise<st
 }
 
 /**
- * Submit until the agent leaves idle, re-sending the full prompt when a cold agent drops it.
+ * Submit until acceptance is proven, re-sending the full prompt when a cold agent drops it.
  * Enter nudge only handles the separate bracketed-paste case (text present, not submitted).
  */
-async function submitPrompt(frame: StepFrame, target: string, text: string): Promise<void> {
+async function submitPrompt(
+  frame: StepFrame,
+  target: string,
+  text: string,
+  responsePath?: string,
+): Promise<void> {
   const deps = frame.opts.deps;
   const body = await maybeSpillAgentPrompt(frame, text);
   for (let attempt = 1; attempt <= SUBMIT_MAX_ATTEMPTS; attempt++) {
     // A slow-but-successful earlier submit may land during backoff — never double-prompt.
-    if (attempt > 1 && promptPickedUp(await deps.agentStatus(target), "idle")) return;
-    const before = await deps.agentStatus(target);
+    if (attempt > 1 && (await promptAccepted(deps, target, responsePath))) return;
     await deps.herdrCall("agent.prompt", { target, text: body });
-    if (await waitForPromptPickup(deps, target, before, SUBMIT_PICKUP_DEADLINE_MS)) return;
+    if (await waitForPromptPickup(deps, target, SUBMIT_PICKUP_DEADLINE_MS, responsePath)) return;
     // Paste stall: text may be in the composer without an Enter. Never re-prompt if this wakes it.
     await deps.herdrCall("agent.send_keys", { target, keys: ["enter"] });
-    if (await waitForPromptPickup(deps, target, before, SUBMIT_ENTER_FOLLOWUP_MS)) return;
+    if (await waitForPromptPickup(deps, target, SUBMIT_ENTER_FOLLOWUP_MS, responsePath)) return;
     if (attempt < SUBMIT_MAX_ATTEMPTS) await deps.sleep(SUBMIT_RETRY_BACKOFF_MS);
   }
   throw new HerdrError(
     "agent_prompt_stalled",
-    `agent prompt to '${target}' was not accepted after ${SUBMIT_MAX_ATTEMPTS} attempts — agent never left idle (interactive_ready can be premature)`,
+    `agent prompt to '${target}' was not accepted after ${SUBMIT_MAX_ATTEMPTS} attempts — agent never showed working or blocked (a cold agent CLI can drop input typed before it listens)`,
   );
 }
 
@@ -497,6 +510,7 @@ async function newAgentTurn(frame: StepFrame, action: AgentAction): Promise<Step
       frame,
       placement.name,
       appendResponseInstruction(prompt, path, action.expect),
+      path,
     );
     const outcome = await managedResult(
       frame,
@@ -540,7 +554,7 @@ async function targetTurn(
       return { ok: true, launched: true };
     }
     const path = await preparedResponsePath(frame);
-    await submitPrompt(frame, target, appendResponseInstruction(prompt, path, action.expect));
+    await submitPrompt(frame, target, appendResponseInstruction(prompt, path, action.expect), path);
     return await managedResult(
       frame,
       target,
