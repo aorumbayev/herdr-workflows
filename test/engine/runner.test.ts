@@ -494,7 +494,7 @@ steps:
     expect(calls.filter((c) => c.method === "agent.start")).toHaveLength(0);
   });
 
-  test("new-agent fails fast when settled without managed response", async () => {
+  test("new-agent that settles without pickup evidence fails as a stalled prompt", async () => {
     const root = await repoWith({
       m: `version: v1alpha1
 steps:
@@ -514,7 +514,7 @@ steps:
       deps: { ...deps, ...clock },
     });
     const err = failed(result);
-    expect(err.error).toMatch(/managed response file was not written/);
+    expect(err.error).toMatch(/was not accepted after 3 attempts/);
     expect(err.error).not.toMatch(/within \d+s/);
     expect(calls.some((c) => c.method === "agent.prompt")).toBe(true);
   });
@@ -2131,8 +2131,169 @@ steps:
     });
     const err = failed(result);
     expect(err.error).toMatch(/was not accepted after 3 attempts/);
-    expect(err.error).toMatch(/never left idle/);
+    expect(err.error).toMatch(/never showed working or blocked/);
     expect(calls.filter((c) => c.method === "agent.prompt")).toHaveLength(3);
+  });
+
+  test("a parent step's managed response cannot stand in for a child step's turn", async () => {
+    const root = await repoWith({
+      child: `version: v1alpha1
+steps:
+  - id: inner
+    agent: child question
+    using: claude
+    pane: { open: beside }
+`,
+      parent: `version: v1alpha1
+steps:
+  - id: outer
+    agent: parent question
+    using: claude
+    pane: { open: beside }
+  - workflow: child
+`,
+    });
+    const { deps, calls, agents } = mockDeps({ writeManagedResponse: false });
+    const baseCall = deps.herdrCall;
+    let prompts = 0;
+    const result = await runWorkflow({
+      name: "parent",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: {
+        ...deps,
+        ...fastClock(),
+        herdrCall: async (method, params = {}) => {
+          if (method === "agent.prompt") {
+            prompts += 1;
+            calls.push({ method, params });
+            const target = String(params.target);
+            // Only the parent's turn answers; the child's prompt is never picked up.
+            if (prompts === 1) {
+              const path = /absolute path ([^\s,]+)/.exec(String(params.text ?? ""))?.[1];
+              if (path) {
+                await mkdir(join(path, ".."), { recursive: true });
+                await writeFile(path, "stale answer\n");
+              }
+              const info = agents.get(target);
+              if (info) agents.set(target, { ...info, status: "done" });
+            }
+            return {
+              type: "agent_prompted",
+              agent: {
+                name: target,
+                pane_id: "w1:p3",
+                agent_status: prompts === 1 ? "done" : "idle",
+              },
+            };
+          }
+          if (method === "agent.send_keys") {
+            calls.push({ method, params });
+            return { type: "ok" };
+          }
+          return baseCall(method, params);
+        },
+      },
+    });
+    const err = failed(result);
+    expect(err.error).toMatch(/was not accepted after 3 attempts/);
+    expect(calls.filter((c) => c.method === "agent.prompt")).toHaveLength(4);
+  });
+
+  test("background launch whose agent flips idle to done without working fails loudly", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: launch
+    agent: long job
+    using: claude
+    background: true
+    pane: { open: tab }
+`,
+    });
+    const { deps, calls, agents } = mockDeps({ writeManagedResponse: false });
+    const baseCall = deps.herdrCall;
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: {
+        ...deps,
+        ...fastClock(),
+        herdrCall: async (method, params = {}) => {
+          if (method === "agent.prompt") {
+            calls.push({ method, params });
+            const target = String(params.target);
+            const info = agents.get(target);
+            if (info) {
+              info.status = "done";
+              agents.set(target, info);
+            }
+            return {
+              type: "agent_prompted",
+              agent: { name: target, pane_id: "w1:p3", agent_status: "done" },
+            };
+          }
+          if (method === "agent.send_keys") {
+            calls.push({ method, params });
+            return { type: "ok" };
+          }
+          return baseCall(method, params);
+        },
+      },
+    });
+    const err = failed(result);
+    expect(err.error).toMatch(/was not accepted after 3 attempts/);
+    expect(calls.filter((c) => c.method === "agent.prompt")).toHaveLength(3);
+  });
+
+  test("background launch succeeds once the agent shows working", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: launch
+    agent: long job
+    using: claude
+    background: true
+    pane: { open: tab }
+`,
+    });
+    const { deps, calls, agents } = mockDeps({ writeManagedResponse: false });
+    const baseCall = deps.herdrCall;
+    const recorder = fakeRunRecorder();
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      recorder,
+      deps: {
+        ...deps,
+        ...fastClock(),
+        herdrCall: async (method, params = {}) => {
+          if (method === "agent.prompt") {
+            calls.push({ method, params });
+            const target = String(params.target);
+            const info = agents.get(target);
+            if (info) {
+              info.status = "working";
+              agents.set(target, info);
+            }
+            return {
+              type: "agent_prompted",
+              agent: { name: target, pane_id: "w1:p3", agent_status: "working" },
+            };
+          }
+          return baseCall(method, params);
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(calls.filter((c) => c.method === "agent.prompt")).toHaveLength(1);
+    expect(calls.filter((c) => c.method === "agent.send_keys")).toHaveLength(0);
+    expect(recorder.stepFinishedCalls.some((c) => c.outcomeKind === "launched")).toBe(true);
   });
 
   test("templated herdr enum param fails at runtime on a bad resolved value", async () => {
