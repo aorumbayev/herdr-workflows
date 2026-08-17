@@ -233,6 +233,30 @@ steps:
     ).toThrow(/pane.target applies only to beside\/below/);
   });
 
+  test("tab rejects size", () => {
+    expect(() =>
+      parse(`version: v1alpha1
+steps:
+  - agent: hi
+    pane:
+      open: tab
+      size: 40
+`),
+    ).toThrow(/pane.size applies only to beside\/below/);
+  });
+
+  test("beside rejects workspace", () => {
+    expect(() =>
+      parse(`version: v1alpha1
+steps:
+  - agent: hi
+    pane:
+      open: beside
+      workspace: main
+`),
+    ).toThrow(/pane.workspace applies only to tab/);
+  });
+
   test("ready_when requires timeout and pane", () => {
     expect(() =>
       parse(`version: v1alpha1\nsteps:\n  - run: sleep 1\n    ready_when: /ok/\n`),

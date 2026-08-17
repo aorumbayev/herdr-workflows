@@ -79,15 +79,18 @@ describe("spawnCapture caps", () => {
       child,
       `
 await Bun.write(${JSON.stringify(marker)}, "start");
-await Bun.sleep(5000);
+await Bun.sleep(350);
 await Bun.write(${JSON.stringify(marker)}, "done");
 `,
     );
-    const result = await spawnCapture(["bun", child], { cwd: root, timeoutMs: 200 });
+    // The compound command forces sh to fork bun instead of exec-replacing itself.
+    const argv = shellArgv(`bun ${child} && true`);
+    const result = await spawnCapture(argv, { cwd: root, timeoutMs: 300 });
     expect(result.timedOut).toBe(true);
-    await Bun.sleep(100);
-    expect(await Bun.file(marker).text()).toBe("start");
-    await Bun.sleep(300);
-    expect(await Bun.file(marker).text()).toBe("start");
+    const deadline = Date.now() + 900;
+    while (Date.now() < deadline) {
+      expect(await Bun.file(marker).text()).toBe("start");
+      await Bun.sleep(50);
+    }
   });
 });

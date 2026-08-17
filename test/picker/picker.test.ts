@@ -304,7 +304,7 @@ describe("formatInputPrompt", () => {
         type: "profile",
         description: "Agent to hand off to",
       }),
-    ).toBe("target — Agent to hand off to | pick one");
+    ).toBe("target - Agent to hand off to | pick one");
     expect(formatInputPrompt({ name: "focus", type: "text" })).toBe("focus | type free text");
     expect(
       formatInputPrompt({
@@ -313,7 +313,7 @@ describe("formatInputPrompt", () => {
         options: ["main"],
         description: "Which branch",
       }),
-    ).toBe("branch — Which branch | pick one of 1");
+    ).toBe("branch - Which branch | pick one of 1");
   });
 
   test("states the domain size, custom entry, default, and minimum length", () => {

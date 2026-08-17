@@ -53,8 +53,7 @@
     "verify:prose": "bun scripts/verify-prose.ts",
     "verify:no-archive": "bun scripts/verify-no-archive.ts",
     "verify:layers": "bun scripts/verify-layers.ts",
-    "verify:file-length": "bun scripts/verify-file-length.ts",
-    "verify:hardcoded-colors": "verifyx hardcoded-colors && verifyx hardcoded-colors --root docs/.vitepress/theme"
+    "verify:file-length": "bun scripts/verify-file-length.ts"
   },
   "dependencies": {
     "@opentui/core": "0.5.1",

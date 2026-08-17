@@ -3,8 +3,14 @@
  * index. Each file may import only files earlier in that list, so no file here may import the
  * orchestrator (`./index`). A back-import is what reverted the earlier attempt at this extraction.
  */
+import { chmod, mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { InvocationContext, TranscriptExtractor, WorkflowsConfig } from "../context";
+import {
+  ensureLocalConfigGitignored,
+  type InvocationContext,
+  type TranscriptExtractor,
+  type WorkflowsConfig,
+} from "../context";
 import type { ProgressOutcome, RunRecorder } from "../history";
 import { isTransportLoss } from "../host";
 import type { LoadedWorkflow, TemplateNamespace, WorkflowStep } from "../workflow/grammar";
@@ -127,4 +133,18 @@ export function dispatchFailure(action: string, err: unknown): StepOutcome {
 /** Repo-local scratch for agent-readable/writable run files (transcripts, prompts, responses). */
 export function runScratchDir(repoRoot: string): string {
   return join(repoRoot, ".hwf", "tmp");
+}
+
+/**
+ * Sole creator of the run scratch dir: owner-only perms (repaired when the dir
+ * already exists, because recursive mkdir never chmods) and gitignore cover.
+ */
+export async function ensureRunScratchDir(
+  repoRoot: string,
+  dir: string = runScratchDir(repoRoot),
+): Promise<string> {
+  await ensureLocalConfigGitignored(repoRoot);
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  await chmod(dir, 0o700);
+  return dir;
 }

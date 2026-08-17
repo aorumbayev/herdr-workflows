@@ -29,11 +29,11 @@ import { sanitizeDisplay, latest, type InvocationContext } from "./context";
 import { runWorkbenchRoute } from "./workbench";
 import type { WorkflowListEntry } from "./workflow/grammar";
 
-const SEP = " · ";
+export const SEP = " | ";
 
 export type RunsScope = "current" | "all";
 
-/** Shared list/detail summary: status · display id · checkout root. */
+/** Shared list/detail summary: status | display id | checkout root. */
 function formatRunSummary(run: {
   status: RunProjectedStatus;
   display_id: string;
@@ -67,15 +67,16 @@ function formatRunsOptions(
   }));
 }
 
-function runsFooter(scope: RunsScope, index: number, total: number): string {
+export function runsFooter(scope: RunsScope, index: number, total: number): string {
   const scopeLabel = scope === "current" ? "Current" : "All";
   const pos = total === 0 ? "0/0" : `${index + 1}/${total}`;
-  return `tab workflows · ctrl+g ${scopeLabel} · enter detail · esc quit · ${pos}`;
+  return ["tab workflows", `ctrl+g ${scopeLabel}`, "enter detail", "esc quit", pos].join(SEP);
 }
 
-function runDetailFooter(opts: { allowWorkbench?: boolean } = {}): string {
+export function runDetailFooter(opts: { allowWorkbench?: boolean } = {}): string {
   const allow = opts.allowWorkbench !== false;
-  return allow ? "w workbench · esc back · up/down scroll" : "esc back · up/down scroll";
+  const parts = ["esc back", "up/down scroll"];
+  return (allow ? ["w workbench", ...parts] : parts).join(SEP);
 }
 
 function abbreviateStatus(status: RunProjectedStatus, width: number): string {
@@ -86,7 +87,7 @@ function abbreviateStatus(status: RunProjectedStatus, width: number): string {
   if (status === "failed") return width >= 4 ? "FAIL" : "F";
   if (status === "running") return width >= 3 ? "RUN" : "R";
   if (status === "stale") return width >= 3 ? "STL" : "S";
-  return width >= 3 ? "…" : "";
+  return width >= 3 ? "..." : "";
 }
 
 /** One list row; priority: status, progress, elapsed, workflow, optional location. */
@@ -137,14 +138,19 @@ function blockToLines(block: RunDetailBlock, width: number): string[] {
   return lines;
 }
 
+/** `parseProgressLine` matches the `…` wire token. Only the detail pane converts the token to ASCII. */
+function asciiGlyphs(line: string): string {
+  return line.replaceAll("…", "...");
+}
+
 export function formatRunDetailLines(blocks: RunDetailBlock[], width: number): string[] {
-  return blocks.flatMap((block) => blockToLines(block, width));
+  return blocks.flatMap((block) => blockToLines(block, width)).map(asciiGlyphs);
 }
 
 function formatStartingDetail(workflow: string, id: string, width: number): string[] {
   return [
     truncate(`STARTING${SEP}${workflow}${SEP}${id.slice(0, 8)}`, width),
-    truncate("claiming run history…", width),
+    truncate("claiming run history...", width),
   ];
 }
 
@@ -214,21 +220,26 @@ export function detailLines(view: RunDetailView, width: number): string[] {
   if (view.kind === "starting") return formatStartingDetail(view.workflow, view.id, width);
   if (view.kind === "local-failure") {
     return [
-      `LAUNCH FAILED · ${view.workflow} · ${view.id.slice(0, 8)}`.slice(0, width),
-      view.message.slice(0, width),
+      ["LAUNCH FAILED", view.workflow, view.id.slice(0, 8)].join(SEP).slice(0, width),
+      asciiGlyphs(view.message.slice(0, width)),
     ];
   }
   if (view.kind === "history-unavailable") {
-    const head = view.finished
-      ? `${view.finished.toUpperCase()} · HISTORY UNAVAILABLE · ${view.workflow}`
-      : `RUNNING · HISTORY UNAVAILABLE · ${view.workflow}`;
-    const lines = [head.slice(0, width), ...view.progress.map((line) => line.slice(0, width))];
-    if (view.message) lines.push(view.message.slice(0, width));
+    const head = [
+      view.finished ? view.finished.toUpperCase() : "RUNNING",
+      "HISTORY UNAVAILABLE",
+      view.workflow,
+    ].join(SEP);
+    const lines = [
+      head.slice(0, width),
+      ...view.progress.map((line) => asciiGlyphs(line.slice(0, width))),
+    ];
+    if (view.message) lines.push(asciiGlyphs(view.message.slice(0, width)));
     return lines;
   }
   const lines = formatRunDetailLines(view.blocks, width);
   if (view.progress?.length) {
-    return [...lines, "", ...view.progress.map((line) => line.slice(0, width))];
+    return [...lines, "", ...view.progress.map((line) => asciiGlyphs(line.slice(0, width)))];
   }
   return lines;
 }

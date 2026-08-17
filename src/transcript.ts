@@ -43,15 +43,6 @@ function extractEntry(line: string): string | undefined {
   return text ? `${row.type}:\n${text}` : undefined;
 }
 
-export function extractAgentTranscript(jsonl: string): string {
-  const entries: string[] = [];
-  for (const line of jsonl.split("\n")) {
-    const entry = extractEntry(line);
-    if (entry) entries.push(entry);
-  }
-  return entries.join("\n\n");
-}
-
 function appendTranscriptEntry(entries: string[], entry: string, bytes: number): number {
   const nextBytes = bytes + (entries.length ? 2 : 0) + Buffer.byteLength(entry);
   if (nextBytes > CAPTURE_BYTE_LIMIT) {

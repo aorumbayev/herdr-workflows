@@ -16,7 +16,8 @@ The files themselves live in [`examples/`](https://github.com/aorumbayev/herdr-w
 - **`prompt-enhance`** shows reading a result back out of an agent and using it, and picking a clipboard command from the ones the host has.
 - **`review-gate`** shows `expect:` on an agent step. The agent ends with one token from `one_of:`, and `{{steps.review.verdict}}` branches the steps after it.
 - **`adversarial-revise`** shows two profiles in one run. An author drafts, a critic returns a verdict, and one revision step runs only when the verdict asks for it.
-- **`worktree`** shows dynamic choice options from commands, raw `herdr:` worktree and tab calls, a hidden child workflow shared by two paths, `retry:` on a herdr action, per-pane unique agent names, and a `when:` guard that skips a step whose work is already done.
+- **`worktree`** shows dynamic choice options from commands, raw `herdr:` worktree and tab calls, and a hidden child workflow shared by two paths.
+- **`worktree-layout`** is that hidden child. It shows how prior `run:` steps derive a unique agent name for each pane. It shows `retry:` on a herdr `agent.start` call while the shell of the new pane becomes ready. A `when:` guard skips the start when the pane already holds a named agent.
 
 ## Tips
 

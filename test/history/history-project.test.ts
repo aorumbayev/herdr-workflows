@@ -172,7 +172,7 @@ describe("presentRunDetail", () => {
         workflow: "live",
         status: "stale" as const,
       }),
-      needle: "writer heartbeat stale — not a failure",
+      needle: "writer heartbeat stale - not a failure",
     },
     {
       name: "remaining",

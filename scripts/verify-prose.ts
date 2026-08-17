@@ -3,7 +3,7 @@ import { join, relative } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
 const FILES = ["README.md", "CONTRIBUTING.md", "AGENTS.md"];
-const DIRS = ["docs", "openspec", ".agents/skills"];
+const DIRS = ["docs", "openspec", "skills", ".agents/skills"];
 const SKIP_DIRS = new Set([".vitepress", "node_modules"]);
 
 type Rule = { re: RegExp; use: string; why: string };
@@ -117,8 +117,9 @@ const RULES: Rule[] = [
   },
   { re: /\bemail address\b/gi, use: "email", why: "`address` is redundant" },
 
-  // Punctuation CONTRIBUTING.md bans outright
-  { re: /[a-z]; [a-z]/g, use: "two sentences", why: "no semicolons in prose" },
+  // Punctuation CONTRIBUTING.md bans outright. Masking blanks code spans, so a
+  // semicolon that follows one still ends prose and must match after spaces.
+  { re: /; +[^\s;]/g, use: "two sentences", why: "no semicolons in prose" },
 ];
 
 /** Replace code spans, fences, and link targets with spaces so offsets survive. */

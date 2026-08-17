@@ -38,7 +38,7 @@ truth about behavior, `docs/` describes the contract to users. When they disagre
 name **which one is wrong**, not merely that they differ.
 
 **6. herdr runtime behavior comes from the reference checkout.** Any claim about herdr must cite a
-path under `.agents/references/herdr/docs/versions/<version>/`. Recalled herdr behavior is not
+path under `.agents/references/herdr/website/src/content/docs/`. Recalled herdr behavior is not
 evidence. If the checkout is absent, follow `.agents/references/AGENTS.md` first.
 
 **7. File count is a cost, not a virtue.** This repository has been over-split before. Splitting a

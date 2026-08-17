@@ -695,8 +695,22 @@ async function handleConfig(
     } catch (error) {
       return json({ ok: false, error: errText(error) }, 400);
     }
+    const existing = await lstat(file).catch(() => undefined);
+    if (existing?.isSymbolicLink()) {
+      return json(
+        { ok: false, error: `refusing symlinked ${scope} config file; edit its target directly` },
+        400,
+      );
+    }
     await mkdir(dirname(file), { recursive: true });
-    await Bun.write(file, text);
+    const tmp = join(dirname(file), `.config.${randomUUID()}.tmp`);
+    try {
+      await writeFile(tmp, text, { mode: await existingFileMode(file) });
+      await rename(tmp, file);
+    } catch (error) {
+      await rm(tmp, { force: true }).catch(() => undefined);
+      return json({ ok: false, error: errText(error) }, 500);
+    }
     return json({ ok: true });
   }
   return new Response("method not allowed", { status: 405 });

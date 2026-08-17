@@ -315,7 +315,7 @@ The picker MUST distinguish no machine history, no runs in Current, and no filte
 - **THEN** the filter remains visible and the detail area reports no matching runs
 
 ### Requirement: A launched workflow opens matching run detail
-After the final input is accepted, the picker MUST allocate a full run UUID, launch the child with that private identity, and immediately open matching local detail in `STARTING` state. The child MUST exclusively claim that snapshot identity and send one machine-readable acknowledgement through the observed launch channel. A successful claim MUST move detail to attached `RUNNING`; unavailable storage MUST move it to `RUNNING · HISTORY UNAVAILABLE`; a rejected claim or spawn failure MUST remain a picker-local launch failure. Success, failure, and interruption MUST remain visible until the user leaves detail and MUST NOT auto-dismiss the picker.
+After the final input is accepted, the picker MUST allocate a full run UUID, launch the child with that private identity, and immediately open matching local detail in `STARTING` state. The child MUST exclusively claim that snapshot identity and send one machine-readable acknowledgement through the observed launch channel. A successful claim MUST move detail to attached `RUNNING`. Unavailable storage MUST move detail to `RUNNING | HISTORY UNAVAILABLE`. A rejected claim or spawn failure MUST remain a picker-local launch failure. Success, failure, and interruption MUST remain visible until the user leaves detail and MUST NOT auto-dismiss the picker.
 
 #### Scenario: Child acknowledges start
 - **WHEN** the picker spawns a workflow child and receives its successful snapshot-claim acknowledgement

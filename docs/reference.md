@@ -1,6 +1,6 @@
 # Reference
 
-Everything the `v1alpha1` format accepts. The loader checks the rules across fields; `docs/workflow.schema.json` covers shape only.
+Everything the `v1alpha1` format accepts. The loader checks the rules across fields. `docs/workflow.schema.json` covers shape only.
 
 ## Document
 
@@ -36,7 +36,7 @@ Other fields: `shell`, `cwd`, `env`, `pane`, `background`, `ready_when`, `timeou
 
 - `shell` accepts `sh`, `bash`, `zsh`, `pwsh`, `powershell`, and `cmd`. The Windows values stay valid syntax for compatibility. Native Windows execution isn't supported. `shell` is invalid on the list form.
 - `cwd` defaults to the directory the workflow was started from.
-- `env` values accept templates. Keys can't start with `HWF_`, in any case, because the runner owns that prefix. Runner values win over inherited ones.
+- `env` values accept templates. The `HWF_` prefix is reserved for exported inputs: a `run:` step fails on such a key at runtime rather than at load, and an agent step passes it through. Runner values win over inherited ones.
 - Inputs arrive as `HWF_<name>` variables. Step results don't — pass those through `env:`.
 - `timeout` accepts `<integer><ms|s|m|h>`. Omitting it means no workflow deadline. The command still has to finish. A timeout kills the command and its children. `timeout` is invalid with `background`.
 - `success_codes` is a non-empty list of unique integers, and defaults to `[0]`. Blocking local commands only. `failed` reports against this rule.
@@ -91,7 +91,7 @@ Other fields: `cwd`, `env`, `pane`, `background`, `timeout`, `expect`.
 
 Other fields: `params`, `retry`.
 
-Nothing is inferred. Every required or behavior-selecting parameter goes in `params:`, using the method's own field name. A method that would otherwise resolve a target from live UI focus is rejected without it. For herdr 0.8.0 that means, among others: `tab.create` needs `workspace_id`; `pane.split` needs `target_pane_id`; `layout.apply` and `layout.set_split_ratio` need exactly one of their paired selectors; `worktree.list`, `create`, and `open` need exactly one of `workspace_id` or `cwd`. `pane.list` and `tab.list` keep their filters optional.
+Nothing is inferred. Every required or behavior-selecting parameter goes in `params:`, using the method's own field name. A method that would otherwise resolve a target from live UI focus is rejected without it. For herdr 0.8.0 that means, among others: `tab.create` needs `workspace_id`, `pane.split` needs `target_pane_id`, `layout.apply` and `layout.set_split_ratio` need exactly one of their paired selectors, and `worktree.list`, `create`, and `open` need exactly one of `workspace_id` or `cwd`. `pane.list` and `tab.list` keep their filters optional.
 
 Method names, parameter types, and result paths are checked against the vendored herdr API schema at load time. A denied method fails at load. Success gives you the method's complete result.
 
@@ -134,7 +134,7 @@ herdr decides the effective split, so an extreme `size` may be approximated rath
 
 Foreground panes take focus by default. Background panes don't. An agent step that omits the whole block gets a new tab in the invocation workspace.
 
-`close` applies only to agent panes this step created. `success` closes after the turn settles and the response is captured; `always` closes after any outcome. Omit it to keep the pane, which is what you want for diagnosis. `close` is invalid on commands and on background steps.
+`close` applies only to agent panes this step created. `success` closes after the turn settles and the response is captured. `always` closes after any outcome. Omit it to keep the pane, which is what you want for diagnosis. `close` is invalid on commands and on background steps.
 
 Since herdr 0.8.0, closing the pane that hosts a workspace's last tab closes that workspace, matching the TUI. The runner does not guard against this: place a pane you want to survive `close` in a workspace that has another tab.
 
@@ -144,7 +144,7 @@ Since herdr 0.8.0, closing the pane that hosts a workspace's last tab closes tha
 
 `background: true` needs a pane of its own, unless `target:` already names an existing agent pane. It can't be combined with `ready_when`, `timeout`, `retry`, or `close`. There's no detached local background.
 
-Background processes belong to their pane. They survive a client detaching, not a server restart, and a later failure won't stop them. Background and skipped steps produce no result, so nothing can reference them.
+Background processes belong to their pane — lifetime details are in [the guide](/guide#put-steps-somewhere-you-can-see). Background and skipped steps produce no result, so nothing can reference them.
 
 A placed foreground command needs exactly one of `background` or `ready_when`.
 
@@ -160,14 +160,14 @@ The loader rejects duplicate step IDs, unknown paths, forward references, and re
 
 ### Context
 
-| Key                                             | Holds                                                                |
-| ----------------------------------------------- | -------------------------------------------------------------------- |
-| `workspace`, `tab`, `pane`, `worktree`, `agent` | Where the workflow started                                           |
-| `cwd`                                           | Project root of the invocation directory. Always set                 |
-| `selection`                                     | Selected text. Empty when there's none                               |
-| `platform`                                      | `macos` or `linux`. Windows is WSL2 only, where the value is `linux` |
-| `transcript`, `transcript_file`                 | Session transcript. Sensitive. Fails preflight if unavailable        |
-| `error`                                         | Recovery only, inside `on_failure`                                   |
+| Key                                             | Holds                                                         |
+| ----------------------------------------------- | ------------------------------------------------------------- |
+| `workspace`, `tab`, `pane`, `worktree`, `agent` | Where the workflow started                                    |
+| `cwd`                                           | Project root of the invocation directory. Always set          |
+| `selection`                                     | Selected text. Empty when there's none                        |
+| `platform`                                      | `macos` or `linux`. See [Portability](#portability)           |
+| `transcript`, `transcript_file`                 | Session transcript. Sensitive. Fails preflight if unavailable |
+| `error`                                         | Recovery only, inside `on_failure`                            |
 
 Identity values are captured at the start and don't follow your focus. Referencing an identity or transcript value that isn't available fails preflight, before step 1.
 
@@ -234,9 +234,7 @@ A condition is a whole-value template read for truthiness, or a comparison of on
 
 `continue_on_error` can't be used to make a result readable after a failure on `agent`, `herdr`, `workflow`, placed, readiness, or background steps, because those can fail without producing one. Spawn and runner failures stay hard failures.
 
-`on_failure` takes exactly one action and rejects `id`, `when`, `continue_on_error`, `background`, and `retry`. A recovery agent accepts `using`, `target`, `cwd`, `env`, `pane`, and `timeout`; a recovery command accepts `shell`, `cwd`, `env`, `pane`, `ready_when`, and `timeout`; a recovery herdr call accepts `params`; a recovery workflow accepts `inputs`. A failing recovery action is final and doesn't recurse. Parse, validation, and preflight failures never trigger recovery, and a successful recovery doesn't make the run succeed.
-
-If the herdr connection drops after a step was dispatched, the runner can't tell whether the action finished. It stops, keeps created panes, skips recovery, and says the action may still be active. It never replays or infers completion.
+`on_failure` takes exactly one action and rejects `id`, `when`, `continue_on_error`, `background`, and `retry`. A recovery agent accepts `using`, `target`, `cwd`, `env`, `pane`, and `timeout`. A recovery command accepts `shell`, `cwd`, `env`, `pane`, `ready_when`, and `timeout`. A recovery herdr call accepts `params`, and a recovery workflow accepts `inputs`. A failing recovery action is final and doesn't recurse. Parse, validation, and preflight failures never trigger recovery, and a successful recovery doesn't make the run succeed.
 
 ## Config
 
@@ -255,7 +253,7 @@ Only these three keys. `agents:` and `sessions:` are rejected. Profile names mat
 
 Layers, in increasing precedence: the global plugin config directory, `.hwf/config.yaml`, then `.hwf/config.local.yaml`. A later layer replaces a whole named entry. The highest-precedence `default_profile` wins and has to name a merged profile. Preflight fails when an agent step needs a default and there isn't a valid one.
 
-**Transcript extractors** are keyed by herdr agent kind. Extraction is built in for `claude`; any other kind needs an entry here, or referencing transcript context fails preflight. An extractor receives `HWF_TRANSCRIPT_PANE_ID`, `HWF_TRANSCRIPT_AGENT_KIND`, `HWF_TRANSCRIPT_CWD`, and, when herdr reports them, `HWF_TRANSCRIPT_SESSION_KIND` and `HWF_TRANSCRIPT_SESSION_VALUE`. It writes transcript text to stdout, must produce something, and must stay under the capture cap. A configured extractor replaces built-in extraction for that kind.
+**Transcript extractors** are keyed by herdr agent kind. Extraction is built in for `claude`. Any other kind needs an entry here, or referencing transcript context fails preflight. A configured extractor replaces built-in extraction for that kind. The environment an extractor receives and its output rules are in [the guide](/guide#support-another-agent-kind).
 
 ## Limits
 
@@ -284,11 +282,11 @@ A workflow file is code you're choosing to run. There's no sandbox. A `run:` ste
 
 Opening a repository never runs a workflow. The picker and workbench label repo or global provenance, and mark commands, transcript references, and sensitive herdr methods. Neither surface claims a per-run confirmation or a sandbox.
 
-**Denied methods.** Every `server.*` and `plugin.*` method, plus `events.subscribe`, `session.snapshot`, `popup.close`, every `pane.graphics.*` method, `pane.report_agent`, `pane.report_agent_session`, `pane.clear_agent_authority`, `pane.release_agent`, `agent.view.set`, and `agent.view.clear`. Each denial states the rule it protects. Beyond those, only `workspace.*`, `tab.*`, `pane.*`, `worktree.*`, `agent.*`, `layout.*`, `notification.show`, `client.window_title.*`, and `ping` are allowed. Anything newly generated outside them is denied until policy admits it. This is a rail against accidental misuse, not a security boundary.
+**Denied methods.** Every `server.*`, `plugin.*`, `events.*`, `integration.*`, and `pane.graphics.*` method, plus `session.snapshot`, `popup.close`, `pane.report_agent`, `pane.report_agent_session`, `pane.clear_agent_authority`, `pane.release_agent`, `agent.view.set`, and `agent.view.clear`. Each denial states the rule it protects. Beyond those, only `workspace.*`, `tab.*`, `pane.*`, `worktree.*`, `agent.*`, `layout.*`, `notification.show`, `client.window_title.*`, and `ping` are allowed. Anything newly generated outside them is denied until policy admits it. This is a rail against accidental misuse, not a security boundary.
 
-**Bundles.** Sharing produces `hwf workflow import "<bundle>"`, where the bundle is a gzip-compressed, base64-encoded `{name, yaml}[]` list. It starts from the exact file you selected and walks `workflow:` children with the same repo-first resolution a run uses. It carries no version, root, source, or config metadata. A cycle or a missing child fails the export.
+**Bundles.** Sharing produces `hwf workflow import "<bundle>"`, where the bundle is a gzip-compressed, base64-encoded `{name, yaml}[]` list carrying the selected workflow and every `workflow:` child it reaches. It carries no version, root, source, or config metadata. How export walks children is in [Run and manage · Share](/surfaces#share-a-workflow).
 
-The CLI accepts that command or the raw encoded bundle. The workbench import view also accepts a single raw workflow YAML document with an explicit name. Both show every YAML body and the combined warnings, then require one `repo` or `global` destination. A name conflict keeps the existing file until you confirm replace-all in the workbench, or rerun the CLI with `--force`. An import leaves the scope wholly as the bundle or wholly as it was. The old `{v, name, body}` payload is rejected — re-export instead. Neither surface can run what it imported.
+An import previews every YAML body and warning, requires one `repo` or `global` destination, and leaves the scope wholly as the bundle or wholly as it was. The old `{v, name, body}` payload is rejected — re-export instead. Neither surface can run what it imported. Surface behavior is in [Run and manage · Import](/surfaces#import-a-workflow).
 
 ## Portability
 

@@ -8,7 +8,7 @@ Runs happen in the picker or `hwf run`, because a run needs real herdr panes. Th
 
 Press `prefix+k`.
 
-Tab switches the Workflow browser and the Runs browser. The pane title stays static. The Workflow footer starts with `tab runs`; the Runs footer starts with `tab workflows`. The filter placeholders are `filter workflows...` and `filter runs...`.
+Tab switches the Workflow browser and the Runs browser. The pane title stays static. The Workflow footer starts with `tab runs`. The Runs footer starts with `tab workflows`. The filter placeholders are `filter workflows...` and `filter runs...`.
 
 One line per workflow, six at a time. Each line shows the title on the left, a warning marker in the middle when the workflow does something sensitive, and `repo`, `global`, or `invalid` on the right. Type to filter, which matches both the title you see and the file name. The counter on the right of the footer tells you where you are in the filtered list.
 
@@ -77,7 +77,7 @@ hwf response check /path/to/response.txt --one-of APPROVE,REJECT
 
 The offline verdict oracle behind [`expect:`](/reference#expect). It reads the final non-empty line of the file, trims it, and matches it against the comma-separated tokens, which follow the same rules as `expect.one_of`. A match exits 0 and prints the token. A mismatch exits nonzero and names both the offending line and the expected tokens. A missing or empty file exits nonzero and names the path. The command never writes to the file.
 
-`skills` and `response` are the two commands that never contact herdr and never run the version or protocol preflight, so an agent inside a turn can call `response check` and get an answer immediately. That is what the runner's appended instruction asks it to do: rerun the check against its own response file until it exits 0.
+Only `hwf launch`, `hwf run`, and `hwf picker` run the version and protocol preflight. `skills` and `response` never contact herdr at all, so an agent inside a turn can call `response check` and get an answer immediately. That is what the runner's appended instruction asks it to do: rerun the check against its own response file until it exits 0.
 
 ## The workbench
 

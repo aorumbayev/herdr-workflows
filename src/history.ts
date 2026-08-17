@@ -633,7 +633,7 @@ export function presentRunDetail(detail: RunDetail): RunDetailBlock[] {
   });
   blocks.push({ kind: "note", text: detail.checkout_root });
   if (detail.status === "stale") {
-    blocks.push({ kind: "note", text: "writer heartbeat stale — not a failure" });
+    blocks.push({ kind: "note", text: "writer heartbeat stale - not a failure" });
   }
   const hasSteps = detail.steps.length > 0 || Boolean(detail.current_step?.active);
   const hasRemaining = detail.remaining !== undefined && detail.remaining > 0;

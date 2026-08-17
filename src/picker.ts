@@ -300,7 +300,7 @@ export { CHOICE_HINT, CUSTOM_CHOICE_HINT, CUSTOM_CHOICE_LABEL, FAIL_HINT, RUN_HI
 /** What the prompt is collecting, then how to answer it. */
 export function formatInputPrompt(spec: InputSpec): string {
   const desc = spec.description?.trim();
-  const label = desc ? `${spec.name} — ${desc}` : spec.name;
+  const label = desc ? `${spec.name} - ${desc}` : spec.name;
   const hints: string[] = [];
   if (spec.type === "text") {
     hints.push("type free text");
@@ -491,7 +491,7 @@ function updateDetail(state: PickerState): void {
     return;
   }
   if (state.chrome.options().length === 0) {
-    const needle = state.chrome.filterValue().trim() || "…";
+    const needle = state.chrome.filterValue().trim() || "...";
     state.chrome.setDetail(
       formatDetailLines(`No workflows matching ${needle}`, state.contentWidth),
     );
@@ -909,7 +909,7 @@ function handleDeleteConfirmKey(state: PickerState, key: ChromeKeyEvent): void {
   key.preventDefault();
   const entry = beginConfirmedDelete(state);
   if (!entry) return;
-  showStatus(state, `Deleting ${entry.name}…`, { flexGrow: 1 });
+  showStatus(state, `Deleting ${entry.name}...`, { flexGrow: 1 });
   state.chrome.setFooter(DELETE_CONFIRM_HINT);
   void (async () => {
     try {

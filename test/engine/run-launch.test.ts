@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -649,7 +650,8 @@ await Bun.write(${JSON.stringify(envFile)}, JSON.stringify(env));
       }) as typeof Bun.spawn,
     });
 
-    await Bun.sleep(120);
+    const stderrLog = join(stateDir, "web-launch.stderr.log");
+    expect(await waitFor(() => existsSync(envFile) && existsSync(stderrLog))).toBe(true);
     expect(seenArgv.at(-2)).toBe("web");
     expect(seenArgv.at(-1)).toBe("import");
     expect(seenStdout).toBe("ignore");
@@ -891,8 +893,14 @@ describe("code-change retirement", () => {
     await writeFile(join(root, "cli.ts"), "export {};\n");
     let retired = 0;
     const stop = retireOnCodeChange(() => retired++, { path: root, recursive: true });
-    // The fixture's own cli.ts write can be delivered after the watcher arms, so let the
-    // directory settle and start counting from a live, quiet watcher.
+    // The watcher can drop writes made before its event stream starts, so re-touch a
+    // served file until an event proves it live, then drain stragglers before counting.
+    let armed = false;
+    for (let i = 0; i < 50 && !armed; i++) {
+      await writeFile(join(root, "arm.ts"), `export const arm = ${i};\n`);
+      armed = await waitFor(() => retired > 0, 100);
+    }
+    expect(armed).toBe(true);
     await Bun.sleep(200);
     retired = 0;
     await writeFile(join(root, "notes.md"), "not served\n");

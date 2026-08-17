@@ -15,7 +15,7 @@ This is the complete allowlist (59 methods, herdr 0.8.0 schema, protocol 19). An
 `plugin.*`, `server.*`, `popup.*`, `events.*`, `session.snapshot`, `integration.*`,
 `pane.graphics.*`, `agent.view.*`, `pane.report_agent*`, `pane.release_agent` and
 `pane.clear_agent_authority` are all denied even though their namespace prefixes look allowed.
-Method names match exactly; there are no wildcards.
+Method names match exactly. There are no wildcards.
 
 Selector required in `params:`
 
@@ -30,7 +30,7 @@ Selector required in `params:`
   moves the block to the end) `worktree.remove`
 - **`pane_id`** — `pane.edges` `pane.focus_direction` `pane.layout` `pane.neighbor`
   `pane.process_info` `pane.resize` `pane.zoom`
-- **`target_pane_id`** — `pane.split` (**not** `pane_id`; `pane_id` is not even a valid param there)
+- **`target_pane_id`** — `pane.split` (**not** `pane_id` — `pane_id` is not even a valid param there)
 - **`caller_pane_id`** — `pane.current` (**not** `pane_id`)
 - **`workspace_id`** — `tab.create`
 - **exactly one of `workspace_id` | `cwd`** — `worktree.create` `worktree.list` `worktree.open`
@@ -38,8 +38,8 @@ Selector required in `params:`
 - **exactly one of `tab_id` | `pane_id`** — `layout.set_split_ratio`
 - **at least one of `pane_id` | `tab_id`** — `layout.export`
 - **`direction` + `pane_id`, or `source_pane_id` + `target_pane_id`** — `pane.swap`
-- **`destination:` object** (`type: tab` needs `destination.target_pane_id`; `type: new_tab` needs
-  `destination.workspace_id`) — `pane.move`
+- **`destination:` object** (`type: tab` needs `destination.target_pane_id`, and `type: new_tab`
+  needs `destination.workspace_id`) — `pane.move`
 
 **exactly one** means exactly that: giving `worktree.create` both `workspace_id` and `cwd` fails to
 load. Selector values must be non-null and non-empty at runtime. A whole-value template such as

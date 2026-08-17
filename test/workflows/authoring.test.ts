@@ -242,15 +242,65 @@ steps:
       ),
     ).resolves.toBeTruthy();
 
-    for (const body of [
-      `version: v1alpha1\ninputs:\n  place: text\nsteps:\n  - run: [echo, hi]\n    pane: { open: "{{inputs.place}}" }\n    ready_when: /ready/\n    timeout: 1s\n`,
-      `version: v1alpha1\ninputs:\n  place:\n    type: choice\n    options: [tab, beside]\n    allow_custom: true\nsteps:\n  - run: [echo, hi]\n    pane: { open: "{{inputs.place}}" }\n    ready_when: /ready/\n    timeout: 1s\n`,
-      `version: v1alpha1\ninputs:\n  place:\n    type: choice\n    options: { run: [echo, tab] }\nsteps:\n  - run: [echo, hi]\n    pane: { open: "{{inputs.place}}" }\n    ready_when: /ready/\n    timeout: 1s\n`,
-      `version: v1alpha1\ninputs:\n  mode: [a, b]\n  place:\n    type: choice\n    options: [tab, beside, below]\n    when: '{{inputs.mode}} == "a"'\nsteps:\n  - run: [echo, hi]\n    pane: { open: "{{inputs.place}}" }\n    ready_when: /ready/\n    timeout: 1s\n    when: '{{inputs.mode}} == "a"'\n`,
-      `version: v1alpha1\nsteps:\n  - run: [echo, hi]\n    pane: { open: "{{context.platform}}" }\n    ready_when: /ready/\n    timeout: 1s\n`,
-    ]) {
-      await expect(parseWorkflowText("bad", body)).rejects.toThrow(/pane\.open/);
+    const rejected: Array<[string, RegExp]> = [
+      [
+        `version: v1alpha1\ninputs:\n  place: text\nsteps:\n  - run: [echo, hi]\n    pane: { open: "{{inputs.place}}" }\n    ready_when: /ready/\n    timeout: 1s\n`,
+        /pane\.open input 'place' must be a closed static choice/,
+      ],
+      [
+        `version: v1alpha1\ninputs:\n  place:\n    type: choice\n    options: [tab, beside]\n    allow_custom: true\nsteps:\n  - run: [echo, hi]\n    pane: { open: "{{inputs.place}}" }\n    ready_when: /ready/\n    timeout: 1s\n`,
+        /pane\.open input 'place' must be a closed static choice/,
+      ],
+      [
+        `version: v1alpha1\ninputs:\n  place:\n    type: choice\n    options: { run: [echo, tab] }\nsteps:\n  - run: [echo, hi]\n    pane: { open: "{{inputs.place}}" }\n    ready_when: /ready/\n    timeout: 1s\n`,
+        /pane\.open input 'place' must be a closed static choice/,
+      ],
+      [
+        `version: v1alpha1\ninputs:\n  mode: [a, b]\n  place:\n    type: choice\n    options: [tab, beside, below]\n    when: '{{inputs.mode}} == "a"'\nsteps:\n  - run: [echo, hi]\n    pane: { open: "{{inputs.place}}" }\n    ready_when: /ready/\n    timeout: 1s\n    when: '{{inputs.mode}} == "a"'\n`,
+        /pane\.open input 'place' must be unconditional/,
+      ],
+      [
+        `version: v1alpha1\nsteps:\n  - run: [echo, hi]\n    pane: { open: "{{context.platform}}" }\n    ready_when: /ready/\n    timeout: 1s\n`,
+        /pane\.open must reference an unconditional closed static choice input/,
+      ],
+    ];
+    for (const [body, message] of rejected) {
+      await expect(parseWorkflowText("bad", body)).rejects.toThrow(message);
     }
+  });
+
+  test("template open spanning tab rejects target/size", async () => {
+    await expect(
+      parseWorkflowText(
+        "size",
+        `version: v1alpha1
+inputs:
+  place: [tab, beside]
+steps:
+  - run: [echo, hi]
+    pane: { open: "{{inputs.place}}", size: 40 }
+    ready_when: /ready/
+    timeout: 1s
+`,
+      ),
+    ).rejects.toThrow(/pane\.target\/size are invalid when pane\.open can resolve to tab/);
+  });
+
+  test("template open spanning beside/below rejects workspace", async () => {
+    await expect(
+      parseWorkflowText(
+        "workspace",
+        `version: v1alpha1
+inputs:
+  place: [beside, below]
+steps:
+  - run: [echo, hi]
+    pane: { open: "{{inputs.place}}", workspace: main }
+    ready_when: /ready/
+    timeout: 1s
+`,
+      ),
+    ).rejects.toThrow(/pane\.workspace is invalid when pane\.open can resolve to beside\/below/);
   });
 });
 

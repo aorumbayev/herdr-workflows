@@ -1,14 +1,9 @@
 import { closeSync, mkdirSync, openSync, statSync, watch, type FSWatcher } from "node:fs";
 import { join, dirname } from "node:path";
-import { mkdir, writeFile, rm } from "node:fs/promises";
+import { writeFile, rm } from "node:fs/promises";
 import { z } from "zod";
 import { assertHwfEnvValues } from "../caps";
-import {
-  pluginStateDir,
-  ensureLocalConfigGitignored,
-  type InvocationContext,
-  type WorkflowsConfig,
-} from "../context";
+import { pluginStateDir, type InvocationContext, type WorkflowsConfig } from "../context";
 import { transcriptText } from "../transcript";
 import {
   buildTemplateNamespace,
@@ -42,8 +37,8 @@ import type {
   RecoveryAction,
 } from "../workflow/grammar";
 import {
+  ensureRunScratchDir,
   errorText,
-  runScratchDir,
   type RunnerDeps,
   type StepFailure,
   type StepFrame,
@@ -848,9 +843,7 @@ async function invokingAgentTarget(args: PreflightArgs): Promise<string> {
 }
 
 async function writeTranscriptFile(repoRoot: string, runId: string, text: string): Promise<string> {
-  const dir = runScratchDir(repoRoot);
-  await ensureLocalConfigGitignored(repoRoot);
-  await mkdir(dir, { recursive: true, mode: 0o700 });
+  const dir = await ensureRunScratchDir(repoRoot);
   const path = join(dir, `${runId}-transcript.txt`);
   await writeFile(path, text, { mode: 0o600 });
   return path;
