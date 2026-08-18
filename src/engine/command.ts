@@ -348,7 +348,7 @@ async function placedCommand(
     focus: pane.focus ?? action.background !== true,
     cwd,
     env: paneEnv,
-    label: frame.step.id ?? "hwf-run",
+    label: sub(pane.name) ?? frame.step.id ?? "hwf-run",
     argv: commandArgv(action, frame.values),
     deps: frame.opts.deps,
     invocation: frame.opts.ctx,

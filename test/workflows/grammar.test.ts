@@ -257,6 +257,34 @@ steps:
     ).toThrow(/pane.workspace applies only to tab/);
   });
 
+  test("tab keeps a templated name", () => {
+    const doc = parse(`version: v1alpha1
+inputs:
+  branch: text
+steps:
+  - agent: hi
+    pane:
+      open: tab
+      name: "review {{inputs.branch}}"
+`);
+    expect(doc.steps[0]!.action).toMatchObject({
+      kind: "agent",
+      pane: { open: "tab", name: "review {{inputs.branch}}" },
+    });
+  });
+
+  test("split rejects name", () => {
+    expect(() =>
+      parse(`version: v1alpha1
+steps:
+  - agent: hi
+    pane:
+      open: beside
+      name: logs
+`),
+    ).toThrow(/pane.name applies only to tab/);
+  });
+
   test("ready_when requires timeout and pane", () => {
     expect(() =>
       parse(`version: v1alpha1\nsteps:\n  - run: sleep 1\n    ready_when: /ok/\n`),

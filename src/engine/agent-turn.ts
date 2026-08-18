@@ -465,7 +465,7 @@ async function placeNewAgentPane(
     env: Object.fromEntries(
       Object.entries(action.env ?? {}).map(([k, v]) => [k, substituteText(v, frame.values)]),
     ),
-    label: frame.step.id ?? "hwf-agent",
+    label: sub(pane.name) ?? frame.step.id ?? "hwf-agent",
     deps: frame.opts.deps,
     invocation: frame.opts.ctx,
   });
