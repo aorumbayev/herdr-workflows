@@ -89,6 +89,31 @@ describe("placeCommandPane", () => {
     });
   });
 
+  test("tab label reaches layout.apply as tab_label", async () => {
+    const calls: { method: string; params: Record<string, unknown> }[] = [];
+    await placeCommandPane({
+      open: "tab",
+      focus: true,
+      label: "dev server",
+      argv: ["sh", "-c", "echo hi"],
+      deps: {
+        herdrCall: async (method, params = {}) => {
+          calls.push({ method, params });
+          return {
+            layout: {
+              tab_id: "w1:t2",
+              workspace_id: "w1",
+              focused_pane_id: "w1:pTab",
+              root: { type: "pane", pane_id: "w1:pTab" },
+            },
+          };
+        },
+      },
+      invocation: { workspaceId: "w1" },
+    });
+    expect(calls[0]?.params.tab_label).toBe("dev server");
+  });
+
   test("quoteArgvForShell preserves simple tokens and quotes spaces", () => {
     expect(quoteArgvForShell(["echo", "hi"])).toBe("echo hi");
     expect(quoteArgvForShell(["sh", "-c", "echo LISTENING; sleep 1"])).toBe(

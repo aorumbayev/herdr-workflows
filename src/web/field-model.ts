@@ -63,8 +63,14 @@ const FIELD_INFO = {
     group: "where",
     order: 8,
   },
-  "pane.focus": { label: "focus the new pane", group: "where", order: 9 },
-  "pane.close": { label: "close the pane", group: "where", order: 10 },
+  "pane.name": {
+    label: "tab name",
+    placeholder: "new tabs only — empty uses the step ID",
+    group: "where",
+    order: 9,
+  },
+  "pane.focus": { label: "focus the new pane", group: "where", order: 10 },
+  "pane.close": { label: "close the pane", group: "where", order: 11 },
   when: {
     label: "condition",
     help: "one clause, or a list of clauses that all must hold",

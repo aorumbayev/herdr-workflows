@@ -1,5 +1,5 @@
 import { HerdrError } from "../host";
-import { renderScalar, substituteValue } from "../workflow/grammar";
+import { renderScalar, substituteText, substituteValue } from "../workflow/grammar";
 import type { PaneOpen, TemplateNamespace } from "../workflow/grammar";
 import type { ReadinessIds } from "../workflow/results";
 import type { RunnerDeps } from "./contract";
@@ -160,6 +160,16 @@ export async function placeCommandPane(o: PlaceOpts & { argv: string[] }): Promi
     keys: ["Enter"],
   });
   return placed;
+}
+
+/** `pane.name` is non-empty text, so a template that renders blank falls back to the step label. */
+export function resolvePaneLabel(
+  name: string | undefined,
+  ns: TemplateNamespace,
+  fallback: string,
+): string {
+  const rendered = name === undefined ? "" : substituteText(name, ns).trim();
+  return rendered === "" ? fallback : rendered;
 }
 
 export function resolvePaneOpen(open: string, ns: TemplateNamespace): PaneOpen {

@@ -10,7 +10,7 @@ import {
   type StepFrame,
   type StepOutcome,
 } from "./contract";
-import { placeCommandPane, resolvePaneOpen } from "./pane";
+import { placeCommandPane, resolvePaneLabel, resolvePaneOpen } from "./pane";
 
 export async function herdrStep(frame: StepFrame): Promise<StepOutcome> {
   const action = frame.step.action;
@@ -348,7 +348,7 @@ async function placedCommand(
     focus: pane.focus ?? action.background !== true,
     cwd,
     env: paneEnv,
-    label: frame.step.id ?? "hwf-run",
+    label: resolvePaneLabel(pane.name, frame.values, frame.step.id ?? "hwf-run"),
     argv: commandArgv(action, frame.values),
     deps: frame.opts.deps,
     invocation: frame.opts.ctx,

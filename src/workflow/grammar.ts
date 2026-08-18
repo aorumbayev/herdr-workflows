@@ -65,6 +65,7 @@ type PaneSpec = {
   workspace?: string;
   size?: number;
   focus?: boolean;
+  name?: string;
   close?: PaneClose;
 };
 
@@ -565,6 +566,13 @@ const paneSchema = z
       )
       .optional(),
     focus: z.boolean().describe("Focus the new pane once it opens.").optional(),
+    name: z
+      .string()
+      .min(1)
+      .describe(
+        "Name for the created tab, set when the tab opens. `tab` only, because a split joins an existing tab. Template-capable. Defaults to the step ID, which also covers a name that renders blank.",
+      )
+      .optional(),
     close: z
       .enum(["success", "always"])
       .describe(
@@ -592,11 +600,20 @@ const paneSchema = z
           path: ["size"],
         });
       }
-    } else if (pane.workspace !== undefined) {
+      return;
+    }
+    if (pane.workspace !== undefined) {
       ctx.addIssue({
         code: "custom",
         message: "pane.workspace applies only to tab",
         path: ["workspace"],
+      });
+    }
+    if (pane.name !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "pane.name applies only to tab — a split joins an existing tab",
+        path: ["name"],
       });
     }
   });
@@ -1484,6 +1501,7 @@ function parsePane(pane: z.infer<typeof paneSchema>): PaneSpec {
     ...(pane.workspace !== undefined ? { workspace: pane.workspace } : {}),
     ...(pane.size !== undefined ? { size: pane.size } : {}),
     ...(pane.focus !== undefined ? { focus: pane.focus } : {}),
+    ...(pane.name !== undefined ? { name: pane.name } : {}),
     ...(pane.close !== undefined ? { close: pane.close } : {}),
   };
 }
