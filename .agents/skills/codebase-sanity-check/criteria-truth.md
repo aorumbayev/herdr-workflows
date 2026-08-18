@@ -96,9 +96,10 @@ examples stay unchanged.
 
 ### How to measure
 
-- The reference checkout is `.agents/references/herdr/docs/versions/<version>/`. If absent, report
-  "Not measured" and stop this section. Do not infer from memory
-- `rg -n "<method name>" .agents/references/herdr/docs/versions/<version>/` for each method in
+- The reference checkout is `.agents/references/herdr/website/src/content/docs/`, detached at the
+  pinned release tag. If absent, follow `.agents/references/AGENTS.md` to clone it. If it still
+  cannot be read, report "Not measured" and stop this section. Do not infer from memory
+- `rg -n "<method name>" .agents/references/herdr/website/src/content/docs/` for each method in
   `schemas/herdr-api.schema.json` and `src/host.ts`
 - `rg -n "0\.7\.[0-9]+" AGENTS.md CONTRIBUTING.md README.md herdr-plugin.toml docs/*.md`
 
@@ -254,9 +255,7 @@ A check that cannot fire is worse than no check, because it reports safety it do
 ### How to measure
 
 - Read every `verify:*` script in `package.json`. For each, resolve its root or glob and confirm the
-  pattern exists there. `verify:hardcoded-colors` runs twice, once at the default root and once with
-  `--root docs/.vitepress/theme`. Confirm both roots still hold color literals, and that no third
-  place does
+  pattern exists there
 - For each `verify.config.json` ignore, count what it excludes: `rg -l "<pattern>" | wc -l`. An
   ignore excluding the only files the check would ever flag disables the check
 - `git config core.hooksPath` and the `prepare` script. A hook path set only by a script a

@@ -153,18 +153,20 @@ async function existingFileMode(file: string): Promise<number> {
 
 /**
  * Refuse symlinked path components (including intermediate parents), symlinked
- * workflow roots/files, and any path that resolves outside the trusted base.
+ * leaf files, and any path that resolves outside the trusted base. Serves both
+ * workflow saves and config saves; `root` names the base in error messages.
  */
 async function refuseUnsafeWorkflowPath(
   file: string,
   trustedBase: string,
   label: string,
+  root = "workflow root",
 ): Promise<Response | undefined> {
   const absBase = resolve(trustedBase);
   const absFile = resolve(file);
   const rel = relative(absBase, absFile);
   if (!rel || rel.startsWith("..") || isAbsolute(rel)) {
-    return json({ ok: false, error: `refusing path outside workflow root for ${label}` }, 400);
+    return json({ ok: false, error: `refusing path outside ${root} for ${label}` }, 400);
   }
   let realBase: string;
   try {
@@ -183,7 +185,7 @@ async function refuseUnsafeWorkflowPath(
       if (errCode(error) !== "ENOENT") return json({ ok: false, error: errText(error) }, 500);
       const realParent = await realpath(dirname(cur));
       if (!pathInsideRoot(realParent, realBase)) {
-        return json({ ok: false, error: `refusing path outside workflow root for ${label}` }, 400);
+        return json({ ok: false, error: `refusing path outside ${root} for ${label}` }, 400);
       }
       // The first missing component proves every remaining descendant is also absent.
       // The caller creates the directory chain, then runs this check again before writing.
@@ -201,7 +203,7 @@ async function refuseUnsafeWorkflowPath(
   }
   const realFile = await realpath(absFile);
   if (!pathInsideRoot(realFile, realBase)) {
-    return json({ ok: false, error: `refusing path outside workflow root for ${label}` }, 400);
+    return json({ ok: false, error: `refusing path outside ${root} for ${label}` }, 400);
   }
 }
 
@@ -695,8 +697,37 @@ async function handleConfig(
     } catch (error) {
       return json({ ok: false, error: errText(error) }, 400);
     }
+    const existing = await lstat(file).catch(() => undefined);
+    if (existing?.isSymbolicLink()) {
+      return json(
+        { ok: false, error: `refusing symlinked ${scope} config file; edit its target directly` },
+        400,
+      );
+    }
+    const trustedBase = scope === "repo" ? repoRoot : dirname(file);
+    const unsafe = await refuseUnsafeWorkflowPath(
+      file,
+      trustedBase,
+      `${scope} config`,
+      "config root",
+    );
+    if (unsafe) return unsafe;
     await mkdir(dirname(file), { recursive: true });
-    await Bun.write(file, text);
+    const underDir = await refuseUnsafeWorkflowPath(
+      file,
+      trustedBase,
+      `${scope} config`,
+      "config root",
+    );
+    if (underDir) return underDir;
+    const tmp = join(dirname(file), `.config.${randomUUID()}.tmp`);
+    try {
+      await writeFile(tmp, text, { mode: await existingFileMode(file) });
+      await rename(tmp, file);
+    } catch (error) {
+      await rm(tmp, { force: true }).catch(() => undefined);
+      return json({ ok: false, error: errText(error) }, 500);
+    }
     return json({ ok: true });
   }
   return new Response("method not allowed", { status: 405 });

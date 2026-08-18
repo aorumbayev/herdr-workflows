@@ -310,7 +310,7 @@ describe("picker run history formatting", () => {
       status: "interrupted",
     });
     const narrow = formatRunRow(row, 20);
-    expect(narrow).toBe("INTERRUPTED · . · 1s");
+    expect(narrow).toBe("INTERRUPTED | . | 1s");
     expect(narrow.length).toBeLessThanOrEqual(20);
   });
 });

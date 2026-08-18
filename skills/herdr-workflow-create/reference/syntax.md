@@ -67,7 +67,7 @@ inputs:
 Exactly one of `agent`, `run`, `herdr`, `workflow`.
 
 Optional `id:` on any step — **must match `[a-z][a-z0-9_]{0,31}`**: lowercase, first character a
-letter, underscores only. `id: run-tests` fails to load; use `run_tests`. Only a step with an `id:`
+letter, underscores only. `id: run-tests` fails to load — use `run_tests`. Only a step with an `id:`
 can be referenced by `{{steps.<id>.…}}`.
 
 ### `run:`
@@ -133,7 +133,7 @@ unrelated param does not waive the requirement, and a method not on the allowlis
 ```
 
 The child is resolved from `.hwf/workflows/` relative to the current directory, so validate from
-the project root. The child's `returns:` becomes this step's result; referencing a result of a
+the project root. The child's `returns:` becomes this step's result. Referencing a result of a
 child that declares no `returns:` fails to load.
 
 ## Templates
@@ -173,11 +173,11 @@ Neither, or both, fails to load.
 
 ## Control flow
 
-- `when:` one clause or ordered list (AND): scalar truthiness or `==` / `!=`; it rejects structured
+- `when:` one clause or ordered list (AND): scalar truthiness or `==` / `!=`. It rejects structured
   sources — reference a scalar field such as `{{steps.x.stdout}}`, not `{{steps.x}}`
-- Mapped inputs may declare `when:` (earlier inputs only); inactive inputs are skipped
+- Mapped inputs may declare `when:` (earlier inputs only). Inactive inputs are skipped
 - Conditional input refs (templates or shell `$HWF_<name>`) need matching step `when:` guards
-- `allow_custom: true` on choices only; `min_length` on mapped inputs; `success_codes` on blocking
+- `allow_custom: true` on choices only, `min_length` on mapped inputs, `success_codes` on blocking
   local `run:` only
 - `pane.open` may be `{{inputs.place}}` when `place` is an unconditional closed static choice of
   `tab`/`beside`/`below`
@@ -189,5 +189,5 @@ Neither, or both, fails to load.
 
 16 KiB per managed agent prompt — a longer prompt is written to a run-owned file and the agent is
 told to read that path instead, so keep prompts small if the agent must see them inline.
-24 KiB `HWF_*` env (entry and child); 8 MiB per capture; 1,000 dynamic choices / 10s;
+24 KiB `HWF_*` env (entry and child). 8 MiB per capture. 1,000 dynamic choices / 10s.
 30s transcript extractors.

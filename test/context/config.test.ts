@@ -15,7 +15,7 @@ import {
   resolvePluginConfigDir,
   resolveRepoRoot,
 } from "../../src/context";
-import { CAPTURE_BYTE_LIMIT, HWF_ENV_BYTE_LIMIT, assertUnderHwfEnvCap } from "../../src/caps";
+import { CAPTURE_BYTE_LIMIT, HWF_ENV_BYTE_LIMIT, assertHwfEnvValues } from "../../src/caps";
 import { hasTranscriptSupport } from "../../src/transcript";
 import {
   completeWorkflowInputs,
@@ -137,7 +137,9 @@ describe("profiles config", () => {
 
   test("shared caps and sensitive transcript detection", () => {
     expect(HWF_ENV_BYTE_LIMIT).toBe(24 * 1024);
-    expect(() => assertUnderHwfEnvCap("hwf env", "x".repeat(HWF_ENV_BYTE_LIMIT + 1))).toThrow(/24/);
+    expect(() =>
+      assertHwfEnvValues("hwf env", { PAD: "x".repeat(HWF_ENV_BYTE_LIMIT + 1) }),
+    ).toThrow(/24/);
     expect(
       workflowNeedsTranscript([
         {

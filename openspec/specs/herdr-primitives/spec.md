@@ -53,7 +53,7 @@ Authors MUST supply every required or behavior-selecting target under `params:`,
 
 The loader MUST reject any allowed `herdr:` call that omits a schema parameter Herdr would otherwise resolve from live UI state. That required-selector set MUST be derived from the generated schema so a regenerated method is rejected until policy classifies it. An unclassified allowed method MUST NOT load. Genuine list/filter scopes MAY omit their scope selectors when policy explicitly opts them out.
 
-Non-normative illustration for pinned Herdr 0.8.0 (derived output, not the completeness guarantee): `tab.create` requires `workspace_id`; `pane.split` requires `target_pane_id`; `pane.swap` requires its direction+`pane_id` form or both source/target IDs; `layout.apply` and `layout.set_split_ratio` require exactly one of their paired selectors; `worktree.list` / `create` / `open` require exactly one of `workspace_id` or `cwd`; `pane.list` and `tab.list` keep optional filter scopes.
+Non-normative illustration for pinned Herdr 0.8.0 (derived output, not the completeness guarantee): `tab.create` requires `workspace_id`, `pane.split` requires `target_pane_id`, `pane.swap` requires its direction+`pane_id` form or both source/target IDs, `layout.apply` and `layout.set_split_ratio` require exactly one of their paired selectors, `worktree.list` / `create` / `open` require exactly one of `workspace_id` or `cwd`, and `pane.list` and `tab.list` keep optional filter scopes.
 
 #### Scenario: Invocation tab rename
 - **WHEN** a workflow intends to rename its invocation tab

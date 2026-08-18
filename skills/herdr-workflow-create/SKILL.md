@@ -36,7 +36,7 @@ stricter rule — see Rules. Edit in `hwf web`. Run with `prefix+k` or `hwf run 
 ### 1. Interview
 
 Ask once in a single turn (skip answers already given). Prefer the host's structured
-question UI when available; otherwise ask conversationally:
+question UI when available. Otherwise ask conversationally:
 
 - **Scope** — repo (`.hwf/workflows/`) or global (`~/.hwf/workflows/`)?
 - **Shape** — shell only / managed agent / agent + shell / explicit Herdr layout?
@@ -143,18 +143,18 @@ version. If a file needs one before its first workbench save, pin the tag:
 
 1. **Step `id:` must match `[a-z][a-z0-9_]{0,31}`** — lowercase, starts with a letter, `_` only.
    Hyphens are rejected: `id: check-lint` fails to load, use `check_lint`. **Input names follow the
-   same rule.** Workflow _file_ names use the looser `[a-z0-9][a-z0-9-_]*`; do not confuse the two.
+   same rule.** Workflow _file_ names use the looser `[a-z0-9][a-z0-9-_]*` — do not confuse the two.
 2. **No templates in string `run:` text.** Use argv `run: [git, checkout, "{{inputs.branch}}"]` or `env:` / `$HWF_…`. Shell `$HWF_<conditional>` needs the step's matching `when:` guards.
 3. **Every declared input must be referenced** — by a template, a later input's `when:`, `returns:`, `on_failure:`, or `$HWF_<name>` in shell text. Otherwise: `unused input`.
 4. **`retry`** only on blocking local `run:` or `herdr:` — never on a placed, background or `on_failure` step.
-5. **`target:`** requires an existing idle/done agent; rejects `pane:`, `cwd:`, `env:` and `using:`. Warn the user if the invoking pane may still be busy.
+5. **`target:`** requires an existing idle/done agent, and rejects `pane:`, `cwd:`, `env:` and `using:`. Warn the user if the invoking pane may still be busy.
 6. **A `run:` step with `pane:` must set exactly one of `background: true` or `ready_when:`** — a bare placed run fails to load. `background:` also rejects `timeout:`, `retry:` and `pane.close`.
-7. **`pane.size` and `pane.target` are valid only for `open: beside`/`below`**; `pane.workspace` only for `open: tab`. A tab has no size, so "a tab at 40%" must become `open: beside, size: 40` — say so instead of silently dropping the size.
+7. **`pane.size` and `pane.target` are valid only for `open: beside`/`below`**, and `pane.workspace` only for `open: tab`. A tab has no size, so "a tab at 40%" must become `open: beside, size: 40` — say so instead of silently dropping the size.
 8. **`ready_when`** is a `/regex/` with **no flags**, requires `timeout:`, scrapes the recent 80 rows, does not detect process exit, and rejects `retry:`.
-9. **`herdr:` steps need that method's exact selector** (table in reference/herdr-api.md). Nothing is autofilled from live UI focus; a template on an unrelated param does not waive it; for an `exactly one of` method, passing _both_ selectors also fails.
+9. **`herdr:` steps need that method's exact selector** (table in reference/herdr-api.md). Nothing is autofilled from live UI focus, and a template on an unrelated param does not waive it. For an `exactly one of` method, passing _both_ selectors also fails.
 10. **`on_failure`** is entry-only, one action, once. `{{context.error.*}}` has `message`, `workflow`, `action`, `step_number`, `workflow_path`, `details`, and optional `step_id`, only there.
 11. **Denied Herdr methods fail at load** — the allowlist is a misuse rail, not a sandbox.
-12. **`when:`** lists are ordered AND; they reject structured sources (use a scalar field). `allow_custom` only on choices. A closed choice's `default:` must be one of its `options:`.
+12. **`when:`** lists are ordered AND, and they reject structured sources (use a scalar field). `allow_custom` only on choices. A closed choice's `default:` must be one of its `options:`.
 13. **No `out:`, `wait:`, `in:`, `use:`, `with:`, `for:`/`as:`, `allow_fail`, `on_error`, dotted method keys, flat `{name}`.**
 14. **Transcript / identity context** unavailable → preflight failure.
 

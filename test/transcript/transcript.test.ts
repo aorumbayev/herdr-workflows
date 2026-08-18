@@ -7,12 +7,7 @@ import {
   TRANSCRIPT_FILE_BYTE_LIMIT,
   TRANSCRIPT_RECORD_BYTE_LIMIT,
 } from "../../src/caps";
-import {
-  extractAgentTranscript,
-  readClaudeTranscript,
-  slug,
-  transcriptText,
-} from "../../src/transcript";
+import { readClaudeTranscript, slug, transcriptText } from "../../src/transcript";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -24,7 +19,7 @@ describe("transcript extractors", () => {
     expect(slug("/Users/x/y")).toBe("-Users-x-y");
   });
 
-  test("extracts string and text-block content; skips tools and bad JSON", () => {
+  test("extracts string and text-block content; skips tools and bad JSON", async () => {
     const jsonl = [
       JSON.stringify({
         type: "user",
@@ -47,7 +42,15 @@ describe("transcript extractors", () => {
       }),
       JSON.stringify({ type: "system", message: { content: "ignore" } }),
     ].join("\n");
-    expect(extractAgentTranscript(jsonl)).toBe("user:\nhello\n\nassistant:\nworld");
+    const base = await mkdtemp(join(tmpdir(), "herdr-workflows-extract-"));
+    dirs.push(base);
+    const cwd = "/Users/x/y";
+    const dir = join(base, slug(cwd));
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "extract.jsonl"), `${jsonl}\n`);
+    expect(await readClaudeTranscript(cwd, "extract", base)).toBe(
+      "user:\nhello\n\nassistant:\nworld",
+    );
   });
 
   test("readClaudeTranscript loads fixture; missing file names path", async () => {

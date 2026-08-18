@@ -47,8 +47,9 @@ no interview, no workflow reads, no edits.
 
 ### 2. Plugin compatibility gate
 
-On the latest herdr, exercise the plugin (`hwf workflow inspect <name>` on any existing
-workflow). The plugin checks version and protocol at startup; a refusal names the installed and
+On the latest herdr, exercise the plugin with a command that runs the version and protocol
+preflight: `hwf run <name>` on any existing workflow, or `hwf picker`. `hwf workflow inspect`
+never contacts herdr, so it cannot surface the refusal. A refusal names the installed and
 required versions and both protocols, in this shape:
 
 ```
@@ -64,7 +65,7 @@ edit can resolve it.
 hwf update
 ```
 
-- It updates → verify with `hwf workflow inspect <name>`, then continue to the interview.
+- It updates → verify with `hwf run <name>` or `hwf picker`, then continue to the interview.
 - Already on the latest plugin release and still refused → the session ends here. Tell the user
   to open an issue on `aorumbayev/herdr-workflows` quoting the exact installed/required
   versions and both protocol numbers. Never patch the plugin and never edit workflows to route
@@ -73,7 +74,7 @@ hwf update
 ### 3. Interview — before any edit
 
 Ask once in a single turn (skip answers already given). Prefer the host's structured question UI
-when available; otherwise ask conversationally:
+when available. Otherwise ask conversationally:
 
 - **Scope** — every workflow in `.hwf/workflows/`, or a named subset? Global `~/.hwf/workflows/`
   as well?
@@ -111,4 +112,4 @@ hwf workflow inspect <name>
 ```
 
 Exit 0 with printed input metadata means the file loads. Re-inspect after every fix and quote
-the result. A file that still fails to load is not finished; the error names the exact key.
+the result. A file that still fails to load is not finished. The error names the exact key.

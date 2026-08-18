@@ -38,7 +38,7 @@ export function assertUnderCaptureCap(source: string, text: string): void {
   if (bytes > CAPTURE_BYTE_LIMIT) throw new CaptureLimitError(source, bytes);
 }
 
-export function assertUnderHwfEnvCap(source: string, text: string): void {
+function assertUnderHwfEnvCap(source: string, text: string): void {
   const bytes = Buffer.byteLength(text);
   if (bytes > HWF_ENV_BYTE_LIMIT) throw new CaptureLimitError(source, bytes, HWF_ENV_BYTE_LIMIT);
 }

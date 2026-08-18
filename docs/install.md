@@ -55,9 +55,9 @@ hwf init            # for this repo, shared with your team
 hwf init --global   # for you, on this machine
 ```
 
-Both commands look for `claude`, `codex`, `cursor`, and `opencode` on your `PATH`. Each one found becomes a profile with the same name. The first name alphabetically becomes `default_profile`.
+Both commands look for `claude`, `codex`, `cursor`, `opencode`, `grok`, and `agy` on your `PATH`. Each one found becomes a profile with the same name. The first name alphabetically becomes `default_profile`.
 
-`hwf init` also creates `.hwf/workflows/` and writes a `.hwf/.gitignore` covering `config.local.yaml` and `tmp/`. Running it again asks before it overwrites, or use `--force` to skip the question. Existing `transcripts:` entries survive an overwrite.
+Without `--global`, `hwf init` also creates `.hwf/workflows/` and writes a `.hwf/.gitignore` covering `config.local.yaml` and `tmp/`. Running either form again asks before it overwrites, or use `--force` to skip the question. Existing `transcripts:` entries survive an overwrite.
 
 Use the repo form when your team shares profiles in git. Use `--global` when you keep your workflows in `~/.hwf/workflows` and don't want to touch the repo.
 
@@ -95,7 +95,7 @@ A `using:` name that isn't in your config fails when the file loads. A name that
 
 ### Kinds herdr supports
 
-`hwf init` only probes four binaries, because those four are named after their kind. herdr starts more than that. Add the rest by hand:
+`hwf init` probes six binaries — `claude`, `codex`, `cursor`, `opencode`, `grok`, and `agy` — the kinds whose executable name is known to the plugin. herdr starts more than that. Add the rest by hand:
 
 ```yaml
 profiles:

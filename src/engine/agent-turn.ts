@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   assertUnderCaptureCap,
@@ -26,6 +26,7 @@ import {
 } from "../workflow/results";
 import {
   dispatchFailure,
+  ensureRunScratchDir,
   runScratchDir,
   type RunnerDeps,
   type StepFrame,
@@ -212,7 +213,7 @@ function responseDirOf(frame: StepFrame): string {
 
 async function preparedResponsePath(frame: StepFrame): Promise<string> {
   const path = managedResponsePath(frame.opts.runId, frame.stepIndex, responseDirOf(frame));
-  await mkdir(dirname(path), { recursive: true });
+  await ensureRunScratchDir(frame.opts.repoRoot, dirname(path));
   // Child workflows reuse the parent runId with step indexes restarting at 0, so a
   // leftover file at this path could pass for this turn's pickup and response.
   await rm(path, { force: true });
@@ -409,7 +410,7 @@ async function maybeSpillAgentPrompt(frame: StepFrame, text: string): Promise<st
   if (bytes <= AGENT_PROMPT_BYTE_LIMIT) return text;
   assertUnderCaptureCap("agent prompt", text);
   const spill = managedPromptSpillPath(frame.opts.runId, frame.stepIndex, responseDirOf(frame));
-  await mkdir(dirname(spill), { recursive: true, mode: 0o700 });
+  await ensureRunScratchDir(frame.opts.repoRoot, dirname(spill));
   await writeFile(spill, text, { mode: 0o600 });
   frame.opts.managedResponseFiles.push(spill);
   return spilledPromptInstruction(spill);

@@ -11,7 +11,7 @@ This skill belongs to the herdr-workflows repository. Do not assume a fixed abso
 
 **Shared binary limit:** `up` still runs `bun run install:dev` in this checkout. That rebuilds shared `bin/herdr-workflows`. The user's live Herdr picks up the same binary on its next plugin action. Config, socket, and panes are isolated. The plugin binary is not.
 
-**Platforms:** This smoke sandbox is POSIX/tmux-only (Linux and macOS). Windows users run Herdr and this plugin inside WSL2; do not point the sandbox at a native Windows Herdr.
+**Platforms:** This smoke sandbox is POSIX/tmux-only (Linux and macOS). Windows users run Herdr and this plugin inside WSL2. Do not point the sandbox at a native Windows Herdr.
 
 ## Bring it up
 

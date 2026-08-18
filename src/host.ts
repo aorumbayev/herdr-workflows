@@ -1,5 +1,6 @@
 import { connect } from "node:net";
 import { randomUUID } from "node:crypto";
+import { CAPTURE_BYTE_LIMIT, CaptureLimitError } from "./caps";
 import { WHOLE_TEMPLATE_RE } from "./context";
 import {
   HERDR_FOCUS_POLICY,
@@ -289,6 +290,7 @@ export function herdrRequest(
   return new Promise((resolve, reject) => {
     const sock = connect(address);
     let buf = "";
+    let bytes = 0;
     let settled = false;
     const settle = (fn: () => void) => {
       if (settled) return;
@@ -304,7 +306,13 @@ export function herdrRequest(
     }, RPC_TIMEOUT_MS);
     sock.on("connect", () => sock.write(payload));
     sock.on("data", (chunk) => {
+      bytes += chunk.length;
       buf += chunk.toString("utf8");
+      if (bytes > CAPTURE_BYTE_LIMIT) {
+        sock.destroy();
+        settle(() => reject(new CaptureLimitError("herdr result", bytes)));
+        return;
+      }
       const nl = buf.indexOf("\n");
       if (nl === -1) return;
       sock.end();

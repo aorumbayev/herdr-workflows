@@ -4,7 +4,6 @@ import {
   clausesContain,
   DYNAMIC_ARGV_ROOT_RULE,
   evaluateWhen,
-  IDENT_RE,
   isWholeValueTemplate,
   parseTemplatePath,
   textTemplates,
@@ -132,9 +131,6 @@ function assertUniqueStepIds(file: string, steps: WorkflowStep[]): void {
     const id = steps[i]!.id;
     if (!id) continue;
     const index = i + 1;
-    if (!IDENT_RE.test(id)) {
-      bail(file, index, "id", "id must match [a-z][a-z0-9_]{0,31}");
-    }
     const prev = seen.get(id);
     if (prev !== undefined) {
       bail(file, index, "id", `duplicate step id '${id}' (also step ${prev})`);

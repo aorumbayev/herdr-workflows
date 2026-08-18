@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, utimesSync } from "node:fs";
-import { chmod, mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pluginStateDir } from "../../src/context";
@@ -915,6 +915,59 @@ steps:
     expect(data.ok).toBe(false);
     expect(data.error).toMatch(/symlink/i);
     expect(await Bun.file(trap).exists()).toBe(false);
+  });
+
+  test("symlinked config file is refused without writing through", async () => {
+    const root = await repo();
+    const outside = join(root, "outside-config");
+    await mkdir(outside, { recursive: true });
+    const target = join(outside, "config.yaml");
+    const original = "profiles:\n  claude:\n    kind: claude\ndefault_profile: claude\n";
+    await writeFile(target, original);
+    const link = join(root, ".hwf", "config.yaml");
+    await rm(link, { force: true });
+    await symlink(target, link);
+    const { base, token } = await serve(root);
+    const res = await fetch(`${base}/api/config`, {
+      method: "PUT",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        scope: "repo",
+        text: "profiles:\n  other:\n    kind: claude\ndefault_profile: other\n",
+      }),
+    });
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { ok: boolean; error?: string };
+    expect(data.ok).toBe(false);
+    expect(data.error).toMatch(/symlink/i);
+    expect(await Bun.file(target).text()).toBe(original);
+    expect((await lstat(link)).isSymbolicLink()).toBe(true);
+  });
+
+  test("intermediate .hwf symlink cannot redirect a config write", async () => {
+    const root = await repo();
+    const outside = join(root, "outside-hwf");
+    await mkdir(outside, { recursive: true });
+    const target = join(outside, "config.yaml");
+    const original = "profiles:\n  claude:\n    kind: claude\ndefault_profile: claude\n";
+    await writeFile(target, original);
+    await rm(join(root, ".hwf"), { recursive: true, force: true });
+    await symlink(outside, join(root, ".hwf"));
+    const { base, token } = await serve(root);
+    const res = await fetch(`${base}/api/config`, {
+      method: "PUT",
+      headers: { "x-hwf-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        scope: "repo",
+        text: "profiles:\n  other:\n    kind: claude\ndefault_profile: other\n",
+      }),
+    });
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { ok: boolean; error?: string };
+    expect(data.ok).toBe(false);
+    expect(data.error).toMatch(/symlink/i);
+    expect(await Bun.file(target).text()).toBe(original);
+    expect((await lstat(join(root, ".hwf"))).isSymbolicLink()).toBe(true);
   });
 
   test("stale save claim is reclaimed and old owner cannot clear successor", async () => {

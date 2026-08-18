@@ -54,7 +54,7 @@ Use the OpenSpec slash commands in your agent harness when available:
 3. Review the artifacts under `openspec/changes/<name>/`.
 4. `/opsx:apply` — implement against the tasks and the cited main specs.
 5. Run tests and checks (see [Checks](#checks)).
-6. `/opsx:archive` — archive the change so delta specs merge into the main specs on the feature branch. Include the archive and main-spec updates in the pull request before merge.
+6. `/opsx:archive` — archive the change so delta specs merge into the main specs on the feature branch. `openspec archive` also moves the change into `openspec/changes/archive/`. Delete that archived content in the same commit — main keeps no archived specs, and `verify:no-archive` fails the pre-commit gate while the folder holds anything. The pull request carries the main-spec updates only.
 
 You can drive the same steps with the `openspec` CLI by hand. Keep the root `openspec/` layout.
 
@@ -81,7 +81,9 @@ bun run docs:build
 openspec validate --all --strict
 ```
 
-Test the module whose interface you changed, in that module's folder under `test/`; real compiled-binary coverage lives in `test/e2e/`.
+Test the module whose interface you changed, in that module's folder under `test/`. Real compiled-binary coverage lives in `test/e2e/`.
+
+`npm run verify` fans out every `verify:*` script in `package.json`, including `verify:no-archive`, which fails while `openspec/changes/archive/` holds anything.
 
 Pre-commit runs `CI=1 npm run verify` only. It does not run tests. CI runs tests on Linux and macOS, then verify and the docs build on Linux. `openspec validate` runs locally only.
 

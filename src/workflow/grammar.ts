@@ -50,7 +50,7 @@ export function bail(
 export const WORKFLOW_FORMAT = "v1alpha1" as const;
 type WorkflowFormat = typeof WORKFLOW_FORMAT;
 
-export const IDENT_RE = /^[a-z][a-z0-9_]{0,31}$/;
+const IDENT_RE = /^[a-z][a-z0-9_]{0,31}$/;
 export const WORKFLOW_NAME_RE = /^[a-z0-9][a-z0-9-_]*$/;
 const DURATION_RE = /^([1-9]\d*)(ms|s|m|h)$/;
 const TEMPLATE_INNER = "(?:inputs|steps|context)(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)+";

@@ -72,6 +72,7 @@ const SIDEWAYS = new Set([
   "runs-browser->workbench",
   "context->host",
   "host->context",
+  "host->caps",
   "transcript->context",
   "transcript->caps",
   "transcript->host",
