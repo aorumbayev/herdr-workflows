@@ -2341,6 +2341,51 @@ steps:
     expect(calls.find((c) => c.method === "tab.create")?.params.label).toBe("review fix-tabs");
   });
 
+  test("a pane.name that renders blank keeps the step ID as the tab label", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+inputs:
+  branch: text
+steps:
+  - id: launch
+    agent: long job
+    using: claude
+    background: true
+    pane: { open: tab, name: "{{inputs.branch}}" }
+`,
+    });
+    const { deps, calls, agents } = mockDeps({ writeManagedResponse: false });
+    const baseCall = deps.herdrCall;
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      inputs: { branch: "  " },
+      deps: {
+        ...deps,
+        ...fastClock(),
+        herdrCall: async (method, params = {}) => {
+          if (method === "agent.prompt") {
+            const target = String(params.target);
+            const info = agents.get(target);
+            if (info) {
+              info.status = "working";
+              agents.set(target, info);
+            }
+            return {
+              type: "agent_prompted",
+              agent: { name: target, pane_id: "w1:p3", agent_status: "working" },
+            };
+          }
+          return baseCall(method, params);
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(calls.find((c) => c.method === "tab.create")?.params.label).toBe("launch");
+  });
+
   test("templated herdr enum param fails at runtime on a bad resolved value", async () => {
     const root = await repoWith({
       m: `version: v1alpha1

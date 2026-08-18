@@ -135,7 +135,7 @@ herdr decides the effective split, so an extreme `size` may be approximated rath
 
 Foreground panes take focus by default. Background panes don't. An agent step that omits the whole block gets a new tab in the invocation workspace.
 
-`name` names the tab the step creates, at the moment it opens, so a `background: true` step gets a readable tab without a rename step. It takes templates. It is `tab` only, because `beside` and `below` join a tab the step did not create, and a literal `beside` or `below` with `name` fails at load. With a templated `open`, `name` applies only when the resolved placement creates a tab. Omit `name` to keep the step ID as the tab name.
+`name` names the tab the step creates, at the moment it opens, so a `background: true` step gets a readable tab without a rename step. It takes templates. It is `tab` only, because `beside` and `below` join a tab the step did not create, and a literal `beside` or `below` with `name` fails at load. With a templated `open`, `name` applies only when the resolved placement creates a tab. Omit `name` to keep the step ID as the tab name. A `name` whose templates render to blank text keeps that same default, so the tab stays identifiable.
 
 `close` applies only to agent panes this step created. `success` closes after the turn settles and the response is captured. `always` closes after any outcome. Omit it to keep the pane, which is what you want for diagnosis. `close` is invalid on commands and on background steps.
 

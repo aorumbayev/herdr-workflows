@@ -9,12 +9,14 @@
 
 - [x] 2.1 `src/engine/agent-turn.ts`: prefer the rendered `pane.name` over the `hwf-agent` step-ID label.
 - [x] 2.2 `src/engine/command.ts`: prefer the rendered `pane.name` over the `hwf-run` step-ID label.
+- [x] 2.3 `src/engine/pane.ts`: `resolvePaneLabel` renders the name once for both paths and falls back to the step-ID label when the result is blank.
 
 ## 3. Coverage
 
 - [x] 3.1 `test/workflows/grammar.test.ts`: `name` loads on `open: tab`, fails on `open: beside`, and survives parse as a template string.
 - [x] 3.2 `test/engine/pane.test.ts`: `open: tab` sends the label to `layout.apply` as `tab_label`.
 - [x] 3.3 `test/engine/runner.test.ts`: a background agent step with `pane.name` templates renders the name into `tab.create`.
+- [x] 3.4 `test/engine/runner.test.ts`: a `pane.name` that renders blank sends the step ID to `tab.create`.
 
 ## 4. Docs
 

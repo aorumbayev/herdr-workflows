@@ -570,7 +570,7 @@ const paneSchema = z
       .string()
       .min(1)
       .describe(
-        "Name for the created tab, set when the tab opens. `tab` only, because a split joins an existing tab. Template-capable. Defaults to the step ID.",
+        "Name for the created tab, set when the tab opens. `tab` only, because a split joins an existing tab. Template-capable. Defaults to the step ID, which also covers a name that renders blank.",
       )
       .optional(),
     close: z

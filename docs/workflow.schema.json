@@ -265,7 +265,7 @@
             "name": {
               "type": "string",
               "minLength": 1,
-              "description": "Name for the created tab, set when the tab opens. `tab` only, because a split joins an existing tab. Template-capable. Defaults to the step ID."
+              "description": "Name for the created tab, set when the tab opens. `tab` only, because a split joins an existing tab. Template-capable. Defaults to the step ID, which also covers a name that renders blank."
             },
             "close": {
               "type": "string",
@@ -488,7 +488,7 @@
               "name": {
                 "type": "string",
                 "minLength": 1,
-                "description": "Name for the created tab, set when the tab opens. `tab` only, because a split joins an existing tab. Template-capable. Defaults to the step ID."
+                "description": "Name for the created tab, set when the tab opens. `tab` only, because a split joins an existing tab. Template-capable. Defaults to the step ID, which also covers a name that renders blank."
               },
               "close": {
                 "type": "string",

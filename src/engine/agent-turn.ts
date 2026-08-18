@@ -32,7 +32,13 @@ import {
   type StepFrame,
   type StepOutcome,
 } from "./contract";
-import { placeEmptyPane, quotePosixArg, resolvePaneOpen, type PlacedPane } from "./pane";
+import {
+  placeEmptyPane,
+  quotePosixArg,
+  resolvePaneLabel,
+  resolvePaneOpen,
+  type PlacedPane,
+} from "./pane";
 
 const AGENT_NAME_MAX = 32;
 
@@ -465,7 +471,7 @@ async function placeNewAgentPane(
     env: Object.fromEntries(
       Object.entries(action.env ?? {}).map(([k, v]) => [k, substituteText(v, frame.values)]),
     ),
-    label: sub(pane.name) ?? frame.step.id ?? "hwf-agent",
+    label: resolvePaneLabel(pane.name, frame.values, frame.step.id ?? "hwf-agent"),
     deps: frame.opts.deps,
     invocation: frame.opts.ctx,
   });
