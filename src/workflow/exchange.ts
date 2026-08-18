@@ -482,11 +482,6 @@ async function writeBundleAtomic(
   await mkdir(dirname(dir), { recursive: true });
   await recoverInterruptedImport(dir);
 
-  const conflicts = await preflightConflicts(bundle, dir);
-  if (conflicts.length > 0 && !replaceAll) {
-    return { status: "conflicts", conflicts };
-  }
-
   const id = randomUUID();
   const staging = `${dir}.${id}.staging`;
   const previous = `${dir}.${id}.prev`;
@@ -498,10 +493,17 @@ async function writeBundleAtomic(
       await recoverInterruptedImport(dir);
       if (!(await Bun.file(importJournalPath(dir)).exists())) break;
     }
-    const again = await preflightConflicts(bundle, dir);
-    if (again.length > 0 && !replaceAll) return { status: "conflicts", conflicts: again };
     if (!(await claimJournal(journal))) {
       throw new WorkflowLoadError(`import already in progress for ${dir}`);
+    }
+  }
+
+  // Only a post-claim check is authoritative: a peer can finish between preflight and claim.
+  if (!replaceAll) {
+    const conflicts = await preflightConflicts(bundle, dir);
+    if (conflicts.length > 0) {
+      await unlink(importJournalPath(dir)).catch(() => undefined);
+      return { status: "conflicts", conflicts };
     }
   }
 
