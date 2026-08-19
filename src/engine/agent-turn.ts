@@ -78,6 +78,10 @@ function appendResponseInstruction(prompt: string, path: string, expect?: Expect
   return `${base}\n\nRequired verdict: the final non-empty line of that file must be exactly one of these tokens and nothing else: ${tokens}. Put your reasoning above it. Before you finish the turn, run \`${check}\` and correct the file until that command exits 0.`;
 }
 
+function missingResponseReminder(path: string): string {
+  return `Your chat turn ended but the required response file is still missing. Use your file-write tool to write your full answer as plain UTF-8 text to the absolute path ${path} now, overwriting whatever is there. Printing the answer in chat is not enough — the workflow only reads that file.`;
+}
+
 function spilledPromptInstruction(spillPath: string): string {
   return `Read the absolute path ${spillPath} as UTF-8 and follow its instructions exactly. Do not invent content beyond that file.`;
 }
@@ -105,8 +109,14 @@ type AgentAction = Extract<StepAction, { kind: "agent" }>;
 const TURN_TIMEOUT_MS = 1_800_000;
 const POLL_MS = 1_000;
 const SETTLED = new Set(["idle", "done"]);
-/** New-agent only: consecutive settled+empty polls before missing-response failure. */
-const SETTLED_EMPTY_GRACE_POLLS = 2;
+/**
+ * New-agent only: consecutive settled+empty polls before missing-response failure.
+ * Real agents end a chat turn mid-task and write the file minutes later, so the
+ * grace spans about two minutes at POLL_MS.
+ */
+const SETTLED_EMPTY_GRACE_POLLS = 120;
+/** Consecutive settled+empty polls before the one-per-turn write-the-file reminder. */
+const SETTLED_EMPTY_REPROMPT_POLLS = 10;
 const SHELL_READY_DEADLINE_MS = 5_000;
 const SHELL_READY_POLL_MS = 50;
 /** Socket agent.start returns at launch_pending; CLI waits for interactive_ready (default 30s). */
@@ -193,7 +203,7 @@ type ProfileChoice =
   | { ok: true; name: string; profile: AgentProfile }
   | { ok: false; error: string };
 
-/** Target mode keeps waiting for the exact managed file; new-agent fails after a short settled grace. */
+/** Target mode keeps waiting for the exact managed file; new-agent nudges, reminds once, then fails after the settled grace. */
 type ManagedWaitMode = "new-agent" | "target";
 
 async function chooseProfile(frame: StepFrame, action: AgentAction): Promise<ProfileChoice> {
@@ -252,6 +262,7 @@ async function awaitManagedTurn(
   let notifiedBlocked = false;
   let sawActive = false;
   let settledEmptyPolls = 0;
+  let remindedEmpty = false;
   for (;;) {
     const status = await deps.agentStatus(target);
     const hasText = await fileHasText(path);
@@ -266,6 +277,12 @@ async function awaitManagedTurn(
       // A paste stall can slip past submit-time pickup checks when detection flickers off idle.
       if (settledEmptyPolls === 1) {
         await deps.herdrCall("agent.send_keys", { target, keys: ["enter"] }).catch(() => undefined);
+      }
+      if (!remindedEmpty && settledEmptyPolls >= SETTLED_EMPTY_REPROMPT_POLLS) {
+        remindedEmpty = true;
+        await deps
+          .herdrCall("agent.prompt", { target, text: missingResponseReminder(path) })
+          .catch(() => undefined);
       }
       if (settledEmptyPolls > SETTLED_EMPTY_GRACE_POLLS) {
         return { settled: false, error: await missingManagedError(path) };

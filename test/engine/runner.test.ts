@@ -519,7 +519,7 @@ steps:
     expect(calls.some((c) => c.method === "agent.prompt")).toBe(true);
   });
 
-  test("new-agent fail-fasts after pickup if it settles without a managed response", async () => {
+  test("new-agent settled without a response reminds once then fails after the full grace", async () => {
     const root = await repoWith({
       m: `version: v1alpha1
 steps:
@@ -529,7 +529,7 @@ steps:
     pane: { open: beside }
 `,
     });
-    const { deps, agents } = mockDeps({ writeManagedResponse: false });
+    const { deps, calls, agents } = mockDeps({ writeManagedResponse: false });
     const baseCall = deps.herdrCall;
     let polls = 0;
     const result = await runWorkflow({
@@ -542,7 +542,7 @@ steps:
         ...fastClock(),
         herdrCall: async (method, params = {}) => {
           const out = await baseCall(method, params);
-          if (method === "agent.prompt") {
+          if (method === "agent.prompt" && !String(params.text ?? "").includes("still missing")) {
             const target = String(params.target);
             const info = agents.get(target);
             if (info) {
@@ -568,6 +568,114 @@ steps:
     const err = failed(result);
     expect(err.error).toMatch(/managed response file was not written/);
     expect(err.error).not.toMatch(/within \d+s/);
+    const reminders = calls.filter(
+      (c) => c.method === "agent.prompt" && String(c.params.text ?? "").includes("still missing"),
+    );
+    expect(reminders).toHaveLength(1);
+  });
+
+  test("idle flicker shorter than the settled grace does not fail the turn", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: summarize
+    using: claude
+    pane: { open: beside }
+`,
+    });
+    const { deps, calls } = mockDeps({ writeManagedResponse: false });
+    const baseCall = deps.herdrCall;
+    let responsePath = "";
+    let polls = 0;
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: {
+        ...deps,
+        ...fastClock(),
+        herdrCall: async (method, params = {}) => {
+          const out = await baseCall(method, params);
+          if (method === "agent.prompt" && !responsePath) {
+            responsePath = /absolute path ([^\s,]+)/.exec(String(params.text ?? ""))?.[1] ?? "";
+            polls = 0;
+          }
+          return out;
+        },
+        agentStatus: async () => {
+          polls += 1;
+          if (polls <= 3) return "working";
+          if (polls === 9 && responsePath) await Bun.write(responsePath, "late answer\n");
+          return "done";
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    const reminders = calls.filter(
+      (c) => c.method === "agent.prompt" && String(c.params.text ?? "").includes("still missing"),
+    );
+    expect(reminders).toHaveLength(0);
+  });
+
+  test("write-the-file reminder fires once and a response written after it succeeds", async () => {
+    const root = await repoWith({
+      m: `version: v1alpha1
+steps:
+  - id: review
+    agent: summarize
+    using: claude
+    pane: { open: beside }
+`,
+    });
+    const { deps, calls, agents } = mockDeps({ writeManagedResponse: false });
+    const baseCall = deps.herdrCall;
+    let responsePath = "";
+    let polls = 0;
+    const result = await runWorkflow({
+      name: "m",
+      repoRoot: root,
+      config: baseConfig,
+      ctx: { selection: "", cwd: root, workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1" },
+      deps: {
+        ...deps,
+        ...fastClock(),
+        herdrCall: async (method, params = {}) => {
+          const out = await baseCall(method, params);
+          const text = String(params.text ?? "");
+          if (method === "agent.prompt" && !text.includes("still missing")) {
+            responsePath = /absolute path ([^\s,]+)/.exec(text)?.[1] ?? "";
+            const target = String(params.target);
+            const info = agents.get(target);
+            if (info) {
+              info.status = "working";
+              agents.set(target, info);
+            }
+            polls = 0;
+          }
+          if (method === "agent.prompt" && text.includes("still missing") && responsePath) {
+            await Bun.write(responsePath, "reminded answer\n");
+          }
+          return out;
+        },
+        agentStatus: async (target) => {
+          const info = agents.get(target);
+          if (!info) return "idle";
+          polls += 1;
+          if (polls > 3) {
+            info.status = "done";
+            agents.set(target, info);
+          }
+          return info.status;
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    const reminders = calls.filter(
+      (c) => c.method === "agent.prompt" && String(c.params.text ?? "").includes("still missing"),
+    );
+    expect(reminders).toHaveLength(1);
   });
 
   test("settled-empty grace sends one Enter nudge and accepts a late response", async () => {
