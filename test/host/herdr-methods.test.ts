@@ -96,7 +96,7 @@ describe("herdr method validators", () => {
       protocol: HERDR_PROTOCOL,
       version: MIN_HERDR_VERSION,
     });
-    expect(checkHerdrStartup({ protocol: HERDR_PROTOCOL, version: "0.8.0" })).toMatchObject({
+    expect(checkHerdrStartup({ protocol: HERDR_PROTOCOL, version: "0.9.0" })).toMatchObject({
       ok: true,
     });
   });
@@ -108,7 +108,7 @@ describe("herdr method validators", () => {
   });
 
   test("per-method result paths stay method-scoped", () => {
-    expect(HERDR_PROTOCOL).toBe(19);
+    expect(HERDR_PROTOCOL).toBe(20);
     expect(MIN_HERDR_VERSION).toBe(manifest.min_herdr_version);
     const notify = METHOD_RESULT_VARIANTS.get("notification.show");
     expect(notify?.map((v) => v.type)).toEqual(["notification_show"]);

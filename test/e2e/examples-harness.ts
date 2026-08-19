@@ -224,7 +224,7 @@ export class ExampleHarness {
   }): Promise<Record<string, unknown>> {
     const { method, params } = request;
     this.calls.push({ method, params });
-    if (method === "ping") return { type: "pong", protocol: 19, version: "0.8.0" };
+    if (method === "ping") return { type: "pong", protocol: 20, version: "0.8.2" };
     if (method === "tab.create") {
       const tabId = `w1:t${this.nextTab++}`;
       const paneId = `w1:p${this.nextPane++}`;

@@ -276,6 +276,7 @@ const OK_RESULT_METHODS = new Set([
   "pane.send_text",
   "pane.send_keys",
   "pane.send_input",
+  "pane.input.set",
   "pane.close",
   "pane.graphics.set",
   "pane.graphics.clear",

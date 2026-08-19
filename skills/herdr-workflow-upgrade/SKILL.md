@@ -53,7 +53,7 @@ never contacts herdr, so it cannot surface the refusal. A refusal names the inst
 required versions and both protocols, in this shape:
 
 ```
-herdr protocol mismatch: connected=20, pinned=19 (installed=0.9.0, required≥0.8.0)
+herdr protocol mismatch: connected=21, pinned=20 (installed=0.9.0, required≥0.8.2)
 ```
 
 Refused → check whether a compatible plugin release exists. The refusal is a build
