@@ -540,7 +540,7 @@ function presentUpdateResult(result: UpdateResult): void {
   }
 }
 
-/** Kinds `herdr agent start --kind` accepts (herdr 0.8.0 cli-reference). Native start stays authoritative. */
+/** Kinds `herdr agent start --kind` accepts (herdr 0.8.2 cli-reference). Native start stays authoritative. */
 const HERDR_AGENT_KINDS = [
   "pi",
   "claude",
@@ -562,6 +562,7 @@ const HERDR_AGENT_KINDS = [
   "hermes",
   "kilo",
   "qodercli",
+  "qwen",
   "maki",
 ] as const;
 

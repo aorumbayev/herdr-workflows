@@ -1,10 +1,10 @@
 # herdr-workflows
 
-herdr ≥ 0.8.0 plugin. It sequences short linear YAML workflows (`agent` / `run` / `herdr` / `workflow`). herdr owns host panes and lifecycle. This repository owns the picker and browser workbench, and loads and runs workflow steps. Runtime is Bun + TypeScript ESM.
+herdr ≥ 0.8.2 plugin. It sequences short linear YAML workflows (`agent` / `run` / `herdr` / `workflow`). herdr owns host panes and lifecycle. This repository owns the picker and browser workbench, and loads and runs workflow steps. Runtime is Bun + TypeScript ESM.
 
 Workflow format is `version: v1alpha1`. The package stays semver `0.x`. A later incompatible alpha increments `v1alphaN`. Workflow YAML never declares a herdr version. The plugin manifest and CLI own minimum version and protocol enforcement.
 
-Spec of record: `openspec/specs/*/spec.md`. Product docs in `docs/` describe the current v1alpha1 contract. herdr runtime behavior comes from `.agents/references/herdr/website/src/content/docs/` with the checkout detached at the release tag (currently v0.8.0). Never invent it from memory. Clone and update that checkout with `.agents/references/AGENTS.md`.
+Spec of record: `openspec/specs/*/spec.md`. Product docs in `docs/` describe the current v1alpha1 contract. herdr runtime behavior comes from `.agents/references/herdr/website/src/content/docs/` with the checkout detached at the release tag (currently v0.8.2). Never invent it from memory. Clone and update that checkout with `.agents/references/AGENTS.md`.
 
 Before behavior work, read and cite the relevant `openspec/specs/*/spec.md`. See `CONTRIBUTING.md`.
 

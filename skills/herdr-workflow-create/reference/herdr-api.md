@@ -11,7 +11,7 @@ Dotted YAML keys are not actions. Params are never autofilled from UI focus.
 
 ## Allowed methods and the selector each one requires
 
-This is the complete allowlist (59 methods, herdr 0.8.0 schema, protocol 19). Anything **not** on this list fails at load —
+This is the complete allowlist (60 methods, herdr 0.8.2 schema, protocol 20). Anything **not** on this list fails at load —
 `plugin.*`, `server.*`, `popup.*`, `events.*`, `session.snapshot`, `integration.*`,
 `pane.graphics.*`, `agent.view.*`, `pane.report_agent*`, `pane.release_agent` and
 `pane.clear_agent_authority` are all denied even though their namespace prefixes look allowed.
@@ -22,7 +22,7 @@ Selector required in `params:`
 - **none beyond the method's own schema** — `agent.explain` `agent.focus` `agent.get` `agent.list`
   `agent.prompt` `agent.read` `agent.rename` `agent.send_keys` `agent.start` `agent.wait`
   `client.window_title.clear` `client.window_title.set` `notification.show` `pane.close`
-  `pane.focus` `pane.get` `pane.list` `pane.read` `pane.rename` `pane.report_metadata`
+  `pane.focus` `pane.get` `pane.input.set` `pane.list` `pane.read` `pane.rename` `pane.report_metadata`
   `pane.send_input` `pane.send_keys` `pane.send_text` `pane.wait_for_output` `ping` `tab.close`
   `tab.focus` `tab.get` `tab.list` `tab.move` `tab.rename` `workspace.close` `workspace.create`
   `workspace.focus` `workspace.get` `workspace.list` `workspace.move` `workspace.rename`
@@ -63,7 +63,7 @@ This skill is installed outside the herdr-workflows checkout, so its `src/`, `do
 
 1. The workbench: `GET /api/methods` with the `x-hwf-token` header, on the `hwf web` instance you
    already started. It returns `{methods: [{method, allowed, reason?, params:{required, properties}}]}`
-   for all 90 known methods. Use it as the authority for **param names**. Use the endpoint when the
+   for all 91 known methods. Use it as the authority for **param names**. Use the endpoint when the
    table above omits a method. The table covers every method a workflow normally uses. The selector
    rules above are an extra load-time check and do not appear in the payload.
 2. `scripts/validate.sh` — its error text names the exact missing selector, e.g.

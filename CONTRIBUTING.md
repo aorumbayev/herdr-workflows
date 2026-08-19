@@ -6,7 +6,7 @@ Thanks for contributing to herdr-workflows.
 
 - [Bun](https://bun.sh)
 - [Node.js](https://nodejs.org) with `npm` (OpenSpec CLI install)
-- [herdr](https://herdr.dev) **0.8.0** or newer for live plugin work
+- [herdr](https://herdr.dev) **0.8.2** or newer for live plugin work
 - Git
 
 ## Local setup

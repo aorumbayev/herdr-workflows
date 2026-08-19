@@ -6,7 +6,7 @@ Get the plugin onto your machine, then tell it which agents you have.
 
 | You need                   | Version        |
 | -------------------------- | -------------- |
-| [herdr](https://herdr.dev) | 0.8.0 or later |
+| [herdr](https://herdr.dev) | 0.8.2 or later |
 | [Bun](https://bun.sh)      | 1.3 or later   |
 | Linux or macOS             | Any            |
 
@@ -106,7 +106,7 @@ profiles:
     args: ["--full-auto"]
 ```
 
-As of herdr 0.8.0 the kinds are `pi`, `claude`, `codex`, `gemini`, `cursor`, `devin`, `agy`, `cline`, `omp`, `mastracode`, `opencode`, `copilot`, `kimi`, `kiro`, `droid`, `amp`, `grok`, `hermes`, `kilo`, `qodercli`, and `maki`. herdr owns that list and a newer herdr may accept more, so check your version's docs rather than this page. A kind herdr doesn't accept fails when the step tries to start it, and nothing else launches in its place.
+As of herdr 0.8.2 the kinds are `pi`, `claude`, `codex`, `gemini`, `cursor`, `devin`, `agy`, `cline`, `omp`, `mastracode`, `opencode`, `copilot`, `kimi`, `kiro`, `droid`, `amp`, `grok`, `hermes`, `kilo`, `qodercli`, `qwen`, and `maki`. herdr owns that list and a newer herdr may accept more, so check your version's docs rather than this page. A kind herdr doesn't accept fails when the step tries to start it, and nothing else launches in its place.
 
 ### Agents herdr doesn't support
 

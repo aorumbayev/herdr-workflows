@@ -91,7 +91,7 @@ Other fields: `cwd`, `env`, `pane`, `background`, `timeout`, `expect`.
 
 Other fields: `params`, `retry`.
 
-Nothing is inferred. Every required or behavior-selecting parameter goes in `params:`, using the method's own field name. A method that would otherwise resolve a target from live UI focus is rejected without it. For herdr 0.8.0 that means, among others: `tab.create` needs `workspace_id`, `pane.split` needs `target_pane_id`, `layout.apply` and `layout.set_split_ratio` need exactly one of their paired selectors, and `worktree.list`, `create`, and `open` need exactly one of `workspace_id` or `cwd`. `pane.list` and `tab.list` keep their filters optional.
+Nothing is inferred. Every required or behavior-selecting parameter goes in `params:`, using the method's own field name. A method that would otherwise resolve a target from live UI focus is rejected without it. For herdr 0.8.2 that means, among others: `tab.create` needs `workspace_id`, `pane.split` needs `target_pane_id`, `layout.apply` and `layout.set_split_ratio` need exactly one of their paired selectors, and `worktree.list`, `create`, and `open` need exactly one of `workspace_id` or `cwd`. `pane.list` and `tab.list` keep their filters optional.
 
 Method names, parameter types, and result paths are checked against the vendored herdr API schema at load time. A denied method fails at load. Success gives you the method's complete result.
 
