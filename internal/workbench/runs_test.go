@@ -18,6 +18,7 @@ import (
 func histRepo(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
+	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", t.TempDir())
 	if err := os.MkdirAll(filepath.Join(root, ".hwf", "workflows"), 0o755); err != nil {
 		t.Fatal(err)
 	}

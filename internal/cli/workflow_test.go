@@ -121,7 +121,7 @@ func TestWorkflowInspectHelpAndProtocolIndependence(t *testing.T) {
 		"",
 	}, "\n"))
 
-	help := runCLI([]string{"workflow", "inspect", "--help"}, root, map[string]string{
+	help := runCLIEnv(t, []string{"workflow", "inspect", "--help"}, root, map[string]string{
 		"HERDR_WORKFLOWS_REPO_ROOT": root,
 	}, "")
 	if help.code != 0 {
@@ -131,7 +131,7 @@ func TestWorkflowInspectHelpAndProtocolIndependence(t *testing.T) {
 		t.Fatalf("help stdout = %q", help.stdout)
 	}
 
-	inspected := runCLI([]string{"workflow", "inspect", "inspect-me", "--input", "mode=create"}, root, map[string]string{
+	inspected := runCLIEnv(t, []string{"workflow", "inspect", "inspect-me", "--input", "mode=create"}, root, map[string]string{
 		"HERDR_WORKFLOWS_REPO_ROOT": root,
 		"HERDR_SOCKET_PATH":         "/tmp/hwf-missing-herdr.sock",
 	}, "")
@@ -165,7 +165,7 @@ func TestWorkflowInspectResolveHonorsDependentChoicePrecondition(t *testing.T) {
 		"",
 	}, "\n"))
 
-	unresolved := runCLI([]string{"workflow", "inspect", "cascade", "--resolve"}, root, map[string]string{
+	unresolved := runCLIEnv(t, []string{"workflow", "inspect", "cascade", "--resolve"}, root, map[string]string{
 		"HERDR_WORKFLOWS_REPO_ROOT": root,
 	}, "")
 	if unresolved.code != 0 {
@@ -187,7 +187,7 @@ func TestWorkflowInspectResolveHonorsDependentChoicePrecondition(t *testing.T) {
 		t.Fatal("dependent-ran should not exist")
 	}
 
-	resolved := runCLI([]string{"workflow", "inspect", "cascade", "--resolve", "--input", "repo=beta"}, root, map[string]string{
+	resolved := runCLIEnv(t, []string{"workflow", "inspect", "cascade", "--resolve", "--input", "repo=beta"}, root, map[string]string{
 		"HERDR_WORKFLOWS_REPO_ROOT": root,
 	}, "")
 	if resolved.code != 0 {
