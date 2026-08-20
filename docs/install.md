@@ -7,7 +7,7 @@ Get the plugin onto your machine, then tell it which agents you have.
 | You need                   | Version        |
 | -------------------------- | -------------- |
 | [herdr](https://herdr.dev) | 0.8.2 or later |
-| [Go](https://go.dev)       | 1.25 or later  |
+| [Go](https://go.dev)       | 1.27 or later  |
 | Linux or macOS             | Any            |
 
 On Windows, install herdr **and** this plugin inside WSL2. A native Windows herdr can't talk to `hwf` running in WSL, because they're separate servers with separate sockets.

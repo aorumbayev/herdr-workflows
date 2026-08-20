@@ -17,44 +17,115 @@ func readRepoFile(t *testing.T, rel string) string {
 	return string(data)
 }
 
-func TestVerifyWorkflowHasNoBunOrRootNpmVerify(t *testing.T) {
+func TestVerifyWorkflowUsesUnifiedGoToolVerify(t *testing.T) {
 	text := readRepoFile(t, filepath.Join(".github", "workflows", "verify.yml"))
 	for _, forbidden := range []string{
 		"setup-bun",
 		"bun test",
 		"npm run verify",
 		"bun install",
+		"go-test:",
+		"go-lint:",
+		"go-verify:",
+		"go test -race ./...",
+		"go run ./scripts/verify-prose",
+		"go run ./scripts/verify-no-archive",
+		"go run ./scripts/verify-file-length",
+		"go run ./scripts/verify-comments",
+		"go tool verify -fast",
 	} {
 		if strings.Contains(text, forbidden) {
 			t.Fatalf(".github/workflows/verify.yml must not contain %q", forbidden)
 		}
 	}
 	for _, want := range []string{
-		"npm ci",
-		"working-directory: docs",
-		"go test -race ./...",
-		"go run ./scripts/verify-prose",
+		"go tool verify",
+		`go-version: "1.27`,
+		"ubuntu-latest",
+		"macos-latest",
+		"actions/setup-node@",
+		"golangci/golangci-lint-action@",
+		"install-only: true",
+		"install-mode: goinstall",
+		"@fission-ai/openspec",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf(".github/workflows/verify.yml missing %q", want)
 		}
 	}
+	if strings.Count(text, "go tool verify") < 1 {
+		t.Fatal(".github/workflows/verify.yml must invoke go tool verify")
+	}
 }
 
-func TestPreCommitHasNoRootNpmVerify(t *testing.T) {
+func TestGoModDeclaresVerifyTool(t *testing.T) {
+	text := readRepoFile(t, "go.mod")
+	for _, want := range []string{
+		"github.com/aorumbayev/herdr-workflows/scripts/verify",
+		"golang.org/x/vuln/cmd/govulncheck",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("go.mod missing %q", want)
+		}
+	}
+}
+
+func TestPreCommitUsesGoToolVerifyFast(t *testing.T) {
 	text := readRepoFile(t, filepath.Join(".githooks", "pre-commit"))
 	if strings.Contains(text, "npm run verify") {
 		t.Fatal(".githooks/pre-commit must not run root npm run verify")
 	}
-	for _, want := range []string{
+	if !strings.Contains(text, "go tool verify -fast") {
+		t.Fatal(`.githooks/pre-commit missing "go tool verify -fast"`)
+	}
+	for _, forbidden := range []string{
 		"go test -race",
 		"verify-prose",
 		"verify-no-archive",
 		"verify-file-length",
 		"verify-comments",
+		"golangci-lint run",
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf(".githooks/pre-commit must not contain duplicated check %q", forbidden)
+		}
+	}
+}
+
+func TestReleaseAndDocsWorkflowsUseGo127(t *testing.T) {
+	for _, rel := range []string{
+		filepath.Join(".github", "workflows", "release.yml"),
+		filepath.Join(".github", "workflows", "docs.yml"),
+	} {
+		text := readRepoFile(t, rel)
+		if !strings.Contains(text, `go-version: "1.27`) {
+			t.Fatalf("%s missing go-version 1.27", rel)
+		}
+		if strings.Contains(text, `go-version: "1.25`) {
+			t.Fatalf("%s still pins Go 1.25", rel)
+		}
+	}
+}
+
+func TestContributingDocumentsUnifiedVerify(t *testing.T) {
+	text := readRepoFile(t, "CONTRIBUTING.md")
+	if !strings.Contains(text, "**1.27**") {
+		t.Fatal(`CONTRIBUTING.md must require Go **1.27** or newer`)
+	}
+	for _, want := range []string{
+		"go tool verify",
+		"go tool verify -fast",
 	} {
 		if !strings.Contains(text, want) {
-			t.Fatalf(".githooks/pre-commit missing %q", want)
+			t.Fatalf("CONTRIBUTING.md missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"go test ./...\ngolangci-lint run\ngo run ./scripts/verify-prose",
+		"**1.25**",
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("CONTRIBUTING.md must not contain legacy checks block %q", forbidden)
 		}
 	}
 }

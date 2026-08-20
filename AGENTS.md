@@ -58,7 +58,7 @@ Go packages under `internal/` and `embed/` (workbench HTML and field-model bytes
 | `.agents/skills/promptfoo-skill-eval/`       | tracked eval for user-facing skills — the loader is the oracle, not a judge                                   |
 | `.agents/skills/codebase-sanity-check/`      | tracked whole-repository review — gates first, one agent per criteria group, additions face three whys        |
 | `.semrelrc`                                  | go-semantic-release plugin config (`.github/workflows/release.yml` dispatches tagged releases)                  |
-| `scripts/write-release-notes/`               | appends Go 1.25 install footer to dry-run changelog for `gh release create`                                   |
+| `scripts/write-release-notes/`               | appends Go 1.27 install footer to dry-run changelog for `gh release create`                                   |
 | `.agents/references/AGENTS.md`               | tracked Herdr checkout instructions (clone contents are local-only)                                           |
 
 Gitignored local-only: `.agents/references/*` except `AGENTS.md`, `.plans/`, `.opencode/`, `.cursor/`. Do not commit them.

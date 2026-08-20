@@ -293,7 +293,7 @@ func TestSemrelrcUsesGitHubProvider(t *testing.T) {
 	}
 }
 
-const releaseNotesFooter = "### Install requirements\n\nRemote install via Herdr requires **Go 1.25** or newer on the host."
+const releaseNotesFooter = "### Install requirements\n\nRemote install via Herdr requires **Go 1.27** or newer on the host."
 
 func TestWriteReleaseNotesAppendsGoToolchainFooter(t *testing.T) {
 	root := repoRoot(t)

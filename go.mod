@@ -1,6 +1,11 @@
 module github.com/aorumbayev/herdr-workflows
 
-go 1.25.0
+go 1.27.0
+
+tool (
+	github.com/aorumbayev/herdr-workflows/scripts/verify
+	golang.org/x/vuln/cmd/govulncheck
+)
 
 require (
 	charm.land/bubbletea/v2 v2.0.9
@@ -32,6 +37,10 @@ require (
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
+	golang.org/x/mod v0.39.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/telemetry v0.0.0-20260811182544-a038080d80e5 // indirect
+	golang.org/x/tools v0.49.0 // indirect
+	golang.org/x/vuln v1.7.0 // indirect
 )

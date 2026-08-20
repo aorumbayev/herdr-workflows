@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-const footer = "### Install requirements\n\nRemote install via Herdr requires **Go 1.25** or newer on the host."
+const footer = "### Install requirements\n\nRemote install via Herdr requires **Go 1.27** or newer on the host."
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {

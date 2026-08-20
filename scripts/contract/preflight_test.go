@@ -48,6 +48,16 @@ func TestPreflightPassesWithHostGo(t *testing.T) {
 	}
 }
 
+func TestGoModDeclaresGo127(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`(?m)^go 1\.27\.0$`).Match(raw) {
+		t.Fatalf("go.mod must declare go 1.27.0:\n%s", raw)
+	}
+}
+
 func TestPreflightFailsWhenGoAbsent(t *testing.T) {
 	dir := t.TempDir()
 	env := append([]string{}, os.Environ()...)
@@ -56,7 +66,7 @@ func TestPreflightFailsWhenGoAbsent(t *testing.T) {
 	if code == 0 {
 		t.Fatal("expected non-zero exit")
 	}
-	if !regexp.MustCompile(`requires Go >= 1\.25`).MatchString(stderr) {
+	if !regexp.MustCompile(`requires Go >= 1\.27`).MatchString(stderr) {
 		t.Fatalf("stderr = %q", stderr)
 	}
 	if !strings.Contains(stderr, "not found") {
@@ -67,7 +77,7 @@ func TestPreflightFailsWhenGoAbsent(t *testing.T) {
 func TestPreflightFailsWhenGoTooOld(t *testing.T) {
 	dir := t.TempDir()
 	fakeGo := filepath.Join(dir, "go")
-	if err := os.WriteFile(fakeGo, []byte("#!/bin/sh\necho go version go1.24.0 darwin/arm64\n"), 0o755); err != nil {
+	if err := os.WriteFile(fakeGo, []byte("#!/bin/sh\necho go version go1.26.0 darwin/arm64\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	env := append([]string{}, os.Environ()...)
@@ -76,10 +86,10 @@ func TestPreflightFailsWhenGoTooOld(t *testing.T) {
 	if code == 0 {
 		t.Fatal("expected non-zero exit")
 	}
-	if !regexp.MustCompile(`requires Go >= 1\.25`).MatchString(stderr) {
+	if !regexp.MustCompile(`requires Go >= 1\.27`).MatchString(stderr) {
 		t.Fatalf("stderr = %q", stderr)
 	}
-	if !regexp.MustCompile(`found 1\.24`).MatchString(stderr) {
+	if !regexp.MustCompile(`found 1\.26`).MatchString(stderr) {
 		t.Fatalf("stderr = %q", stderr)
 	}
 }

@@ -2,7 +2,7 @@
 # Fail before install/build when Go is missing or older than go.mod requires.
 set -eu
 MIN_MAJOR=1
-MIN_MINOR=25
+MIN_MINOR=27
 MIN_LABEL="${MIN_MAJOR}.${MIN_MINOR}"
 
 if ! command -v go >/dev/null 2>&1; then
