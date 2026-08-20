@@ -55,16 +55,21 @@ func StartWebServer(opts Options) (*Server, error) {
 		}
 		return nil, err
 	}
+	return serveListener(opts.RepoRoot, token, ln), nil
+}
+
+func serveListener(repoRoot, token string, ln net.Listener) *Server {
+	port := ln.Addr().(*net.TCPAddr).Port
 	s := &Server{
 		URL:      originOf(port) + "/?token=" + token,
 		Token:    token,
-		repoRoot: opts.RepoRoot,
+		repoRoot: repoRoot,
 		port:     port,
+		ln:       ln,
 	}
 	s.http = &http.Server{Handler: s, ReadHeaderTimeout: 10 * time.Second}
-	s.ln = ln
 	go func() { _ = s.http.Serve(ln) }()
-	return s, nil
+	return s
 }
 
 // Stop closes the listener.

@@ -1,10 +1,19 @@
 package workbench
 
 import (
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+func TestMain(m *testing.M) {
+	if tr, ok := http.DefaultTransport.(*http.Transport); ok {
+		tr.DisableKeepAlives = true
+	}
+	os.Exit(m.Run())
+}
 
 func testRepo(t *testing.T) string {
 	t.Helper()
@@ -23,10 +32,15 @@ func testRepo(t *testing.T) string {
 
 func startTestServer(t *testing.T, root string) *Server {
 	t.Helper()
-	s, err := StartWebServer(Options{RepoRoot: root})
+	token, err := newToken()
 	if err != nil {
 		t.Fatal(err)
 	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := serveListener(root, token, ln)
 	t.Cleanup(s.Stop)
 	return s
 }
