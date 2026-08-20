@@ -1,6 +1,6 @@
 # Group B: Truth and Enforcement
 
-Three artifacts describe one product. `openspec/specs/*/spec.md` is the spec of record, `src/` is the
+Three artifacts describe one product. `openspec/specs/*/spec.md` is the spec of record, `internal/` is the
 truth about behavior, `docs/` is the promise to users. You find where they disagree and name **which
 one is wrong**. Then you check whether the rules they state are enforced by a machine or only
 remembered.
@@ -23,16 +23,16 @@ examples stay unchanged.
 - A capability claim in `README.md`, `docs/guide.md`, `docs/reference.md`, `docs/install.md`, or
   `docs/surfaces.md` that the code does not implement
 - Two pages that state the same fact differently. One of them is wrong
-- A command, flag, path, env var, or key documented but absent from `src/`
+- A command, flag, path, env var, or key documented but absent from `internal/` or `main.go`
 - A version, minimum herdr version, or format string that differs between docs and
-  `herdr-plugin.toml` or `package.json`
+  `herdr-plugin.toml` or `go.mod`
 
 ### How to measure
 
-- For each claim, grep the implementing surface and cite it: `rg -n "<flag|command|key>" src`
+- For each claim, grep the implementing surface and cite it: `rg -n "<flag|command|key>" internal main.go`
 - For cross-page contradictions, grep the fact across `README.md docs/*.md AGENTS.md`. When two
   pages disagree, read the code and state the wrong line by `file:line`
-- `rg -n "0\.[0-9]+\.[0-9]+|v1alpha[0-9]+" README.md docs/*.md herdr-plugin.toml package.json` for
+- `rg -n "0\.[0-9]+\.[0-9]+|v1alpha[0-9]+" README.md docs/*.md herdr-plugin.toml go.mod` for
   version drift
 
 ### Not a finding
@@ -44,8 +44,8 @@ examples stay unchanged.
 
 ### What to check
 
-- A spec requirement the code contradicts, meaning `src/` does something the spec says it does not
-- Behavior in `src/` that no main spec covers
+- A spec requirement the code contradicts, meaning `internal/` does something the spec says it does not
+- Behavior in `internal/` that no main spec covers
 - A capability directory under `openspec/specs/` whose subject no longer exists
 
 ### How to measure
@@ -53,13 +53,13 @@ examples stay unchanged.
 - `ls openspec/specs/` for the capability list. For each,
   `rg -n "MUST|SHALL" openspec/specs/<cap>/spec.md`
 - For each requirement, read the implementing code and say whether it agrees. Find it by the
-  requirement's own words: `rg -n "<distinctive phrase from the requirement>" src`. A requirement
+  requirement's own words: `rg -n "<distinctive phrase from the requirement>" internal main.go`. A requirement
   with no site at all is section 9's finding. A site that behaves differently is this section's
 - `openspec validate --all --strict` result comes from Phase 0. Quote it. Do not re-run
 
 ### Not a finding
 
-- A requirement enforced by a Zod schema rather than an explicit branch. The schema is the
+- A requirement enforced by the loader rather than an explicit branch. The loader is the
   enforcing site
 
 ## 3. Generated artifacts
@@ -72,13 +72,13 @@ examples stay unchanged.
 
 ### How to measure
 
-- Phase 0 already ran `bun run schema` and diffed. Quote the diff. Non-empty is
+- Phase 0 already ran `go run ./scripts/generate-workflow-schema` and diffed. Quote the diff. Non-empty is
   the finding
-- `rg -l "generated" src docs/.vitepress/theme` and check each hit against the `AGENTS.md` command
+- `rg -l "generated" internal docs/.vitepress/theme` and check each hit against the `AGENTS.md` command
   list
-- `bun run schema:herdr` is release-time only and must not run from the plugin build. Confirm no
+- `go run ./scripts/gen-herdr-methods` is release-time only and must not run from the plugin build. Confirm no
   build or install path invokes it:
-  `rg -n "schema:herdr|herdr api schema" package.json herdr-plugin.toml scripts`
+  `rg -n "gen-herdr-methods|herdr api schema" herdr-plugin.toml scripts`
 
 ### Not a finding
 
@@ -90,7 +90,7 @@ examples stay unchanged.
 ### What to check
 
 - Any statement about herdr behavior with no reference path behind it
-- A herdr method, param, or event named in `src/`, docs, or a spec that the pinned reference version
+- A herdr method, param, or event named in `internal/`, docs, or a spec that the pinned reference version
   does not define
 - A pinned version in `AGENTS.md` and `CONTRIBUTING.md` that differs from the manifest
 
@@ -100,7 +100,7 @@ examples stay unchanged.
   pinned release tag. If absent, follow `.agents/references/AGENTS.md` to clone it. If it still
   cannot be read, report "Not measured" and stop this section. Do not infer from memory
 - `rg -n "<method name>" .agents/references/herdr/website/src/content/docs/` for each method in
-  `schemas/herdr-api.schema.json` and `src/host.ts`
+  `schemas/herdr-api.schema.json` and `internal/host/`
 - `rg -n "0\.7\.[0-9]+" AGENTS.md CONTRIBUTING.md README.md herdr-plugin.toml docs/*.md`
 
 ### Not a finding
@@ -122,11 +122,11 @@ examples stay unchanged.
 - `AGENTS.md` states cross-field rules live in the loader. Grep the schema for conditional keywords:
   `rg -n "allOf|anyOf|if\"|dependentRequired" docs/workflow.schema.json`
 - Load every file under `examples/` through the real loader rather than reading it:
-  `bun test ./test -t 'example'`, or run `hwf` against the file when a built binary exists. Quote
+  `go test ./scripts/build-examples -run Example`, or run `hwf` against the file when a built binary exists. Quote
   the result
-- `rg -n '```yaml' -A20 docs/*.md README.md` and compare each snippet's keys against the Zod schema
-  in `src/workflow/grammar.ts`. Cite both sides
-- For key coverage, list `.strict()` object keys in `src/workflow/grammar.ts` and grep each in
+- `rg -n '```yaml' -A20 docs/*.md README.md` and compare each snippet's keys against the loader in
+  `internal/workflow/`. Cite both sides
+- For key coverage, list schema keys in `internal/workflow/` and grep each in
   `docs/reference.md`
 
 ### Not a finding
@@ -174,15 +174,15 @@ both in order and name the first step that fails or that needs knowledge the pag
 - Errors a user hits first are documented with the fix
 - A contributor can clone, install, build, test, change one thing, verify, and open a pull request
   from `CONTRIBUTING.md` and `AGENTS.md` alone
-- Commands in `AGENTS.md` "Commands" all exist in `package.json`
+- Commands in `AGENTS.md` "Commands" all exist and run on this branch
 - OpenSpec instructions match the installed CLI's actual commands
 
 ### How to measure
 
-- `rg -n '```bash' -A5 README.md docs/install.md` and check each command against `package.json`
-  scripts and `src/cli.ts`
+- `rg -n '```bash' -A5 README.md docs/install.md` and check each command against the `AGENTS.md`
+  "Commands" block and `internal/cli/`
 - `rg -in "windows|wsl" README.md docs/*.md` and report where in the reading order it appears
-- `jq -r '.scripts | keys[]' package.json` against the command block in `AGENTS.md`
+- Compare the command block in `AGENTS.md` against `CONTRIBUTING.md` "Checks"
 - `openspec validate --help` and `openspec --help` against the commands `CONTRIBUTING.md` names
 - Run the check commands `CONTRIBUTING.md` lists. Phase 0 covers most. Quote any that fail
 
@@ -204,7 +204,7 @@ both in order and name the first step that fails or that needs knowledge the pag
 - `ls docs/` and `find docs -maxdepth 1 -type d`. For each, grep for references:
   `rg -n "<dirname>" docs/.vitepress/config.mts docs/*.md`
 - Compare against `docs/.vitepress/config.mts` nav and sidebar entries
-- `bun run docs:build` output from Phase 0 reports dead links. Quote it
+- `npm run build --prefix docs` output from Phase 0 reports dead links. Quote it
 
 ### Not a finding
 
@@ -228,9 +228,9 @@ each, find the site that rejects a violation, then rank it:
 ### How to measure
 
 - For each rule, grep for its error text, then its rule name, then the concept:
-  `rg -n "<distinctive phrase>" src test .githooks .github`
-- Report level 5 as High and name the cheapest available upgrade. Prefer a refinement in an existing
-  Zod schema or one assertion in an existing test file over any new file
+  `rg -n "<distinctive phrase>" internal e2e .githooks .github`
+- Report level 5 as High and name the cheapest available upgrade. Prefer a loader refinement or one
+  assertion in an existing test file over any new file
 - Rank the enforcement, then stop. Whether the rule also has a test pinning its message is Group A's
   finding
 - Some rules are unenforceable by a machine, such as "question speculative need". Say so plainly and
@@ -254,12 +254,12 @@ A check that cannot fire is worse than no check, because it reports safety it do
 
 ### How to measure
 
-- Read every `verify:*` script in `package.json`. For each, resolve its root or glob and confirm the
+- Read every `go run ./scripts/verify-*` gate. For each, resolve its root or glob and confirm the
   pattern exists there
-- For each `verify.config.json` ignore, count what it excludes: `rg -l "<pattern>" | wc -l`. An
-  ignore excluding the only files the check would ever flag disables the check
-- `git config core.hooksPath` and the `prepare` script. A hook path set only by a script a
-  contributor may never run is a gap. Say whether `bun install` runs it
+- For each ignore list in a verify script, count what it excludes. An ignore excluding the only
+  files the check would ever flag disables the check
+- `git config core.hooksPath` and `.githooks/pre-commit`. A hook path set only by a script a
+  contributor may never run is a gap. Say whether `go run ./scripts/install-dev` sets it
 
 ### Not a finding
 
@@ -284,13 +284,12 @@ A check that cannot fire is worse than no check, because it reports safety it do
   a finding, and you must say which. Cite `file:line` on both sides
 - Count the jobs in `verify.yml` and confirm `AGENTS.md` and `CONTRIBUTING.md` name every one
 - Check these by name, because they are cheap to lose: tests run on two operating systems while
-  `npm run verify` runs on one, pre-commit runs verify without tests, and `openspec validate --all
+  Go verify scripts run on one, pre-commit runs Go tests without e2e, and `openspec validate --all
 --strict` appears in `CONTRIBUTING.md` — confirm whether any CI job runs it
-- The tunable values are few: the 2,500-line cap in `verify:file-length`, the `eslint/complexity`
-  ceiling in `.oxlintrc.json`, `--max-warnings` on `verify:lint`, and the ignore lists in
-  `verify.config.json` and `knip.json`. Note the direction before you judge one: raising the
-  file-length or cyclomatic ceiling loosens the gate. Enumerate the values, then run
-  `git log -p -- .oxlintrc.json knip.json package.json scripts/verify-file-length.ts | rg -n "2500|complexity|max-warnings|ignore"`
+- The tunable values are few: the file-length cap in `scripts/verify-file-length`, and comment-block
+  limits in `scripts/verify-comments`. Note the direction before you judge one: raising the
+  file-length ceiling loosens the gate. Enumerate the values, then run
+  `git log -p -- scripts/verify-file-length scripts/verify-comments | rg -n "2500|comment"`
   and name the commit behind each. No reason in the message is a finding, and the fix is one line of
   prose
 - `ls -la CLAUDE.md AGENTS.md` — expect a symlink. Two regular files is the finding

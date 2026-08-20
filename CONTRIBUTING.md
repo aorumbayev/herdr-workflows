@@ -4,21 +4,21 @@ Thanks for contributing to herdr-workflows.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh)
-- [Node.js](https://nodejs.org) with `npm` (OpenSpec CLI install)
+- [Go](https://go.dev) **1.25** or newer
+- [Node.js](https://nodejs.org) **22** or newer with `npm` (VitePress docs and OpenSpec CLI install)
 - [herdr](https://herdr.dev) **0.8.2** or newer for live plugin work
 - Git
 
 ## Local setup
 
 ```bash
-bun install --frozen-lockfile
+go mod download
 ```
 
 Optional live link into herdr:
 
 ```bash
-bun run install:dev
+go run ./scripts/install-dev
 ```
 
 Herdr runtime docs and schema live in a local checkout. Follow `.agents/references/AGENTS.md` to clone and update `.agents/references/herdr`.
@@ -74,20 +74,21 @@ openspec validate --all --strict
 ## Checks
 
 ```bash
-bun test ./test
-bun test test/engine
-CI=1 npm run verify
-bun run docs:build
+go test ./...
+golangci-lint run
+go run ./scripts/verify-prose
+go run ./scripts/verify-no-archive
+go run ./scripts/verify-file-length
+go run ./scripts/verify-comments
+npm ci --prefix docs && npm run build --prefix docs
 openspec validate --all --strict
 ```
 
-Test the module whose interface you changed, in that module's folder under `test/`. Real compiled-binary coverage lives in `test/e2e/`.
+Test the Go package whose interface you changed.
 
-`npm run verify` fans out every `verify:*` script in `package.json`, including `verify:no-archive`, which fails while `openspec/changes/archive/` holds anything.
+`go run ./scripts/verify-no-archive` fails while `openspec/changes/archive/` holds anything.
 
-Pre-commit runs `CI=1 npm run verify` only. It does not run tests. CI runs tests on Linux and macOS, then verify and the docs build on Linux. `openspec validate` runs locally only.
-
-Local `npm run verify` auto-fixes lint and format. Under `CI=1` it only checks.
+Pre-commit runs Go tests excluding `e2e`, optional golangci-lint, and the Go verify scripts. CI runs the same Go gates plus the docs build. Docs publish uses `npm ci && npm run build` in `docs/`. `openspec validate` runs locally only.
 
 ## Documentation style
 

@@ -9,7 +9,7 @@ Run the plugin against a second Herdr instance. A broken build, a bad keybinding
 
 This skill belongs to the herdr-workflows repository. Do not assume a fixed absolute repository location or a fixed working directory — "Bring it up" shows how the root is derived.
 
-**Shared binary limit:** `up` still runs `bun run install:dev` in this checkout. That rebuilds shared `bin/herdr-workflows`. The user's live Herdr picks up the same binary on its next plugin action. Config, socket, and panes are isolated. The plugin binary is not.
+**Shared binary limit:** `up` still runs `go build -o bin/herdr-workflows .` and then `bin/herdr-workflows setup` in this checkout. That rebuilds shared `bin/herdr-workflows`. The user's live Herdr picks up the same binary on its next plugin action. Config, socket, and panes are isolated. The plugin binary is not.
 
 **Platforms:** This smoke sandbox is POSIX/tmux-only (Linux and macOS). Windows users run Herdr and this plugin inside WSL2. Do not point the sandbox at a native Windows Herdr.
 
@@ -31,7 +31,7 @@ Callers outside the repository must substitute an absolute path to the checkout 
 1. Claims `/tmp/hwf-sandbox` with an exclusive `mkdir` when the path is absent, then writes the ownership sentinel (`hwf-sandbox`, `session=hwf-sandbox`, `plugin_root=<this checkout>`). If the path already exists, it validates that complete sentinel (session and plugin-root must match) and reuses the tree. It refuses missing, partial, or mismatched sentinels. It never overwrites or claims unknown contents. It refuses paths outside `/tmp/hwf-sandbox`.
 2. Seeds `repo/` as a git repo (initial commit, a `feature/sandbox` branch, a dirty `src/app.ts` so `git diff HEAD` is non-empty).
 3. Starts Herdr in fixed tmux session `hwf-sandbox` on its own socket. The session name is not overridable. Kill only when that session's `HERDR_SOCKET_PATH` exactly matches the sandbox socket. A sentinel alone is never enough.
-4. Runs `bun run install:dev` against that instance (**shared binary mutation**).
+4. Runs `go build -o bin/herdr-workflows .` and then `bin/herdr-workflows setup` against that instance (**shared binary mutation**).
 5. Runs `hwf init`, then proves the chain with a `sandbox-selfcheck` workflow.
 
 Other actions: `sandbox.sh status`, `sandbox.sh down` (stops the server, kills the `hwf-sandbox` tmux session only when its socket matches, deletes `/tmp/hwf-sandbox` only after the same complete ownership validator passes), `sandbox.sh guard-check` (non-destructive ownership and kill-guard checks. Never starts Herdr).
@@ -81,5 +81,5 @@ For YAML syntax, load errors, and the Herdr method allowlist, use the `herdr-wor
 
 - Herdr refuses to launch inside a Herdr-managed pane. The sandbox config sets `[experimental] allow_nested = true`. That is why `up` must not overwrite an existing `config.toml`.
 - `hwf run` needs the sandbox repo as cwd. Workflow lookup is repo-rooted.
-- `herdr server reload-config` needs the sandbox server already up. Never run `install:dev` before `sandbox.sh up` has started it.
+- `herdr server reload-config` needs the sandbox server already up. Never run the Go build and `setup` before `sandbox.sh up` has started it.
 - For a cold start over a leftover owned sandbox, run `down` first — `up` reuses an owned `/tmp/hwf-sandbox` as-is.

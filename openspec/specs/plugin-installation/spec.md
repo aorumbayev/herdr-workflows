@@ -1,7 +1,7 @@
 # plugin-installation Specification
 
 ## Purpose
-Versioned releases, Bun-compiled remote installation, native setup, CLI/keybinding installation, repeat installation, and Herdr-owned update contract for the plugin.
+Versioned releases, Go-compiled remote installation, native setup, CLI/keybinding installation, repeat installation, and Herdr-owned update contract for the plugin.
 
 ## Requirements
 ### Requirement: Releases publish versioned tags and notes
@@ -15,16 +15,16 @@ Every automated plugin release MUST derive its version and notes from convention
 - **WHEN** a conventional commit marks a breaking change while the current product major is zero
 - **THEN** release analysis increments the minor version rather than publishing `1.0.0`
 
-### Requirement: Remote installation compiles the checkout with Bun
-The plugin manifest MUST declare `linux` and `macos` as its only platforms, so Herdr refuses native Windows installation at install time with its platform error. Windows users are supported through WSL2, where Linux behavior applies unchanged. Remote installation MUST run entirely through Herdr's managed build: a preflight that names the required minimum Bun version and fails with it when the host Bun is absent or older, `bun install --production --frozen-lockfile` so only the pinned runtime dependencies are installed, and `bun build --compile` producing the manifest command binary from the checkout. Herdr MUST remain responsible for registering, replacing, and rolling back the managed checkout. Linked development checkouts MUST keep compiling the working tree through `bun run install:dev` without manifest build commands.
+### Requirement: Remote installation compiles the checkout with Go
+The plugin manifest MUST declare `linux` and `macos` as its only platforms, so Herdr refuses native Windows installation at install time with its platform error. Windows users are supported through WSL2, where Linux behavior applies unchanged. Remote installation MUST run entirely through Herdr's managed build: a preflight that names the required minimum Go version and fails with it when the host Go toolchain is absent or older, `go build -o bin/herdr-workflows .` producing the manifest command binary from the checkout, and `bin/herdr-workflows setup` installing the host commands. Herdr MUST remain responsible for registering, replacing, and rolling back the managed checkout. Linked development checkouts MUST keep compiling the working tree through `go run ./scripts/install-dev` without manifest build commands.
 
-#### Scenario: Fresh install with Bun present
-- **WHEN** a user with Herdr and a supported Bun runs `herdr plugin install aorumbayev/herdr-workflows`
-- **THEN** the build installs only production dependencies from the frozen lockfile, compiles the checkout binary, and Herdr registers the plugin
+#### Scenario: Fresh install with Go present
+- **WHEN** a user with Herdr and a supported Go toolchain runs `herdr plugin install aorumbayev/herdr-workflows`
+- **THEN** the build compiles the checkout binary from the pinned module dependencies, runs native setup, and Herdr registers the plugin
 
-#### Scenario: Bun missing or too old
-- **WHEN** the host has no Bun or a Bun older than the required minimum
-- **THEN** the build fails naming the required minimum Bun version before dependency installation, and Herdr leaves the prior installation in place
+#### Scenario: Go missing or too old
+- **WHEN** the host has no Go toolchain or a Go older than the required minimum
+- **THEN** the build fails naming the required minimum Go version before compilation, and Herdr leaves the prior installation in place
 
 #### Scenario: Native Windows install refused
 - **WHEN** Herdr on native Windows previews the manifest

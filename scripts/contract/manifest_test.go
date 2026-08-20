@@ -1,0 +1,38 @@
+package contract_test
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestManifestBuildUsesGoToolchain(t *testing.T) {
+	root := repoRoot(t)
+	data, err := os.ReadFile(filepath.Join(root, "herdr-plugin.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	flat := strings.Join(strings.Fields(text), " ")
+
+	for _, want := range []string{
+		"scripts/preflight.sh",
+		"go build",
+		"bin/herdr-workflows",
+		"setup",
+	} {
+		if !strings.Contains(flat, want) {
+			t.Fatalf("herdr-plugin.toml missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"bun install",
+		"bun build",
+		"src/cli.ts",
+	} {
+		if strings.Contains(flat, forbidden) {
+			t.Fatalf("herdr-plugin.toml must not contain %q", forbidden)
+		}
+	}
+}

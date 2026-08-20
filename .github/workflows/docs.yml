@@ -6,8 +6,6 @@ on:
     paths:
       - "docs/**"
       - "examples/**"
-      - "package.json"
-      - "bun.lock"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
@@ -25,17 +23,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          bun-version: 1.3.14
+          go-version: "1.25"
+          cache: true
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: docs/.vitepress/cache
-          key: ${{ runner.os }}-vitepress-${{ hashFiles('docs/**', 'package.json', 'bun.lock') }}
+          key: ${{ runner.os }}-vitepress-${{ hashFiles('docs/**') }}
           restore-keys: |
             ${{ runner.os }}-vitepress-
-      - run: bun install --frozen-lockfile
-      - run: bun run docs:build
+      - run: npm ci
+        working-directory: docs
+      - run: npm run build
+        working-directory: docs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: vitepress-dist

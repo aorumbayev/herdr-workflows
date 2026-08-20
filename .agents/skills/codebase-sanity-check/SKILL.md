@@ -15,7 +15,7 @@ assume a fixed absolute path.
 
 Read these before Phase 0. They decide which findings survive.
 
-**1. The gates are the oracle, not a rubric.** `bun test`, `verifyx`, the loader, `docs:build`, and
+**1. The gates are the oracle, not a rubric.** `go test ./...`, the Go verify scripts under `scripts/verify-*`, the loader, `npm run build` in `docs/`, and
 `openspec validate` answer questions objectively. A finding that contradicts gate output is wrong.
 A claim that a check "would fail" is worthless until the check ran.
 
@@ -33,7 +33,7 @@ line of real output.
 ignore, skipping a test, or widening a type to make the gate green is itself a critical finding.
 See [criteria-risk.md](criteria-risk.md).
 
-**5. Three sources, one truth.** `openspec/specs/*/spec.md` is the spec of record, `src/` is the
+**5. Three sources, one truth.** `openspec/specs/*/spec.md` is the spec of record, `internal/` is the
 truth about behavior, `docs/` describes the contract to users. When they disagree, the finding must
 name **which one is wrong**, not merely that they differ.
 
@@ -62,9 +62,12 @@ because it "should pass" — the point is measurement. All four are read-only: `
 check instead of auto-fixing, and the docs build writes only gitignored paths.
 
 ```bash
-bun test ./test
-CI=1 npm run verify
-bun run docs:build
+go test ./...
+go run ./scripts/verify-prose
+go run ./scripts/verify-no-archive
+go run ./scripts/verify-file-length
+go run ./scripts/verify-comments
+npm ci --prefix docs && npm run build --prefix docs
 openspec validate --all --strict
 ```
 
@@ -72,7 +75,7 @@ Then check that generated artifacts still regenerate to identical bytes:
 
 ```bash
 git status --porcelain -- docs/workflow.schema.json
-bun run schema
+go run ./scripts/generate-workflow-schema
 git diff --stat -- docs/workflow.schema.json
 git checkout -- docs/workflow.schema.json
 ```
@@ -86,11 +89,11 @@ final `git checkout` restores the tree either way.
 Then capture shape metrics, which several groups consume:
 
 ```bash
-find src -name '*.ts' | wc -l
-find src test -name '*.ts' | xargs wc -l | sort -rn | head -20
+find internal -name '*.go' | wc -l
+find internal -name '*.go' | xargs wc -l 2>/dev/null | sort -rn | head -20
 ```
 
-**A red gate outranks every opinion.** If `bun test` or `npm run verify` fails, report that first,
+**A red gate outranks every opinion.** If `go test ./...` or a Go verify script fails, report that first,
 with the failing name and the shortest decisive output line, and continue the review — do not stop.
 
 If a command is unavailable (no `openspec` CLI, no herdr reference checkout), say so in the report

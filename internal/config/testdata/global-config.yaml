@@ -1,0 +1,29 @@
+profiles:
+  claude:
+    kind: "claude"
+  codex:
+    kind: "codex"
+  cursor:
+    kind: "cursor"
+  opencode:
+    kind: "opencode"
+default_profile: "claude"
+transcripts:
+  codex:
+    command:
+      [
+        bun,
+        /Users/example/.config/herdr/plugins/config/herdr-workflows/extractors/codex.ts,
+      ]
+  opencode:
+    command:
+      [
+        bun,
+        /Users/example/.config/herdr/plugins/config/herdr-workflows/extractors/opencode.ts,
+      ]
+  kimi:
+    command:
+      [
+        bun,
+        /Users/example/.config/herdr/plugins/config/herdr-workflows/extractors/kimi.ts,
+      ]

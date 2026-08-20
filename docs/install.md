@@ -7,7 +7,7 @@ Get the plugin onto your machine, then tell it which agents you have.
 | You need                   | Version        |
 | -------------------------- | -------------- |
 | [herdr](https://herdr.dev) | 0.8.2 or later |
-| [Bun](https://bun.sh)      | 1.3 or later   |
+| [Go](https://go.dev)       | 1.25 or later  |
 | Linux or macOS             | Any            |
 
 On Windows, install herdr **and** this plugin inside WSL2. A native Windows herdr can't talk to `hwf` running in WSL, because they're separate servers with separate sockets.
@@ -18,7 +18,7 @@ On Windows, install herdr **and** this plugin inside WSL2. A native Windows herd
 herdr plugin install aorumbayev/herdr-workflows
 ```
 
-herdr builds the plugin from source on your machine: it checks your Bun version, runs `bun install --production --frozen-lockfile`, compiles a binary with `bun build --compile`, then runs setup. If Bun is missing or too old, the build stops and tells you the minimum version.
+herdr builds the plugin from source on your machine: it checks your Go version, runs `go build -o bin/herdr-workflows .`, then runs setup. If Go is missing or too old, the build stops and tells you the minimum version.
 
 There are no prebuilt binaries and no npm package. Releases are GitHub Releases: a tag and notes, nothing to download.
 
@@ -44,7 +44,7 @@ The picker also tells you: when a newer release exists, list mode shows a `run h
 Cases where `hwf update` won't run:
 
 - **Your install predates the command.** Run `herdr plugin install aorumbayev/herdr-workflows` once more to get it. After that, `hwf update` works.
-- **You linked a development checkout.** Use `bun run install:dev`, which compiles your working tree and relinks it.
+- **You linked a development checkout.** Use `go run ./scripts/install-dev`, which compiles your working tree and relinks it.
 - **Your binary is unregistered or directly copied.** Install it through herdr with `herdr plugin install aorumbayev/herdr-workflows`.
 
 ## Tell it about your agents
