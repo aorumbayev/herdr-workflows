@@ -112,20 +112,32 @@ func TestContributingDocumentsUnifiedVerify(t *testing.T) {
 	if !strings.Contains(text, "**1.27**") {
 		t.Fatal(`CONTRIBUTING.md must require Go **1.27** or newer`)
 	}
+	if strings.Contains(text, "**1.25**") {
+		t.Fatal(`CONTRIBUTING.md must not contain legacy checks block "**1.25**"`)
+	}
+	for _, rel := range []string{"CONTRIBUTING.md", "AGENTS.md", "CLAUDE.md"} {
+		assertDocumentsUnifiedVerify(t, rel)
+	}
+}
+
+func assertDocumentsUnifiedVerify(t *testing.T, rel string) {
+	t.Helper()
+	text := readRepoFile(t, rel)
 	for _, want := range []string{
 		"go tool verify",
 		"go tool verify -fast",
 	} {
 		if !strings.Contains(text, want) {
-			t.Fatalf("CONTRIBUTING.md missing %q", want)
+			t.Fatalf("%s missing %q", rel, want)
 		}
 	}
 	for _, forbidden := range []string{
 		"go test ./...\ngolangci-lint run\ngo run ./scripts/verify-prose",
-		"**1.25**",
+		"Go tests excluding `e2e`, optional `golangci-lint`, and the `go run ./scripts/verify-*` gates.",
+		"`go test ./...`, golangci-lint, and the Go verify scripts",
 	} {
 		if strings.Contains(text, forbidden) {
-			t.Fatalf("CONTRIBUTING.md must not contain legacy checks block %q", forbidden)
+			t.Fatalf("%s must not contain legacy checks block %q", rel, forbidden)
 		}
 	}
 }

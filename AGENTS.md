@@ -11,19 +11,15 @@ Before behavior work, read and cite the relevant `openspec/specs/*/spec.md`. See
 ## Commands
 
 ```bash
-go test ./...                              # Go unit and integration tests
-go test ./scripts/build-examples           # docs example gallery helper
-golangci-lint run                          # Go static checks
-go run ./scripts/verify-prose              # prose style gate
-go run ./scripts/verify-comments           # comment block gate
+go tool verify                             # every host-feasible check (same as CI)
+go tool verify -fast                       # pre-commit
 go run ./scripts/generate-workflow-schema  # regenerate docs/workflow.schema.json
 go run ./scripts/gen-herdr-methods         # regenerate internal/host/herdr_methods.gen.go
-npm ci --prefix docs && npm run build --prefix docs  # VitePress docs
 go run ./scripts/install-dev               # compile + herdr plugin link + keybindings + reload
 ```
 
-- Pre-commit (`.githooks/pre-commit`): Go tests excluding `e2e`, optional `golangci-lint`, and the `go run ./scripts/verify-*` gates.
-- CI (`.github/workflows/verify.yml`): `go test ./...`, golangci-lint, and the Go verify scripts. Docs build in that workflow and in `.github/workflows/docs.yml` runs `npm ci && npm run build` in `docs/` with the Go `build-examples` helper.
+- Pre-commit (`.githooks/pre-commit`): `go tool verify -fast`.
+- CI (`.github/workflows/verify.yml`): `go tool verify` on Linux and macOS after it installs Node.js, golangci-lint, and the OpenSpec CLI. Docs publish (`.github/workflows/docs.yml`) runs `npm ci && npm run build` in `docs/`.
 - After `go run ./scripts/install-dev`, the live binary is `bin/herdr-workflows`.
 - Remote GitHub install runs the manifest build: Go preflight, `go build -o bin/herdr-workflows .`, then `bin/herdr-workflows setup`. Local link/dev compiles with `go build` / `go run ./scripts/install-dev`.
 
