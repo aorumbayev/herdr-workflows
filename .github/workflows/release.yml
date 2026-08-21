@@ -46,6 +46,58 @@ jobs:
           set -eu
           echo "No feat, fix, perf, or revert commit since the last release."
 
+      - name: Recover a tagged release with missing assets
+        id: recover
+        if: steps.dry.outputs.version == ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -eu
+          VERSION=$(sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' herdr-plugin.toml | head -n 1)
+          if [ -z "$VERSION" ]; then
+            echo "herdr-plugin.toml version missing" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          tag="v$VERSION"
+          head=$(git rev-parse HEAD)
+          remote=$(git ls-remote origin "refs/tags/$tag" | awk '{ print $1 }')
+          local=""
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            local=$(git rev-parse "$tag")
+          fi
+          tip="$remote"
+          if [ -z "$tip" ]; then
+            tip="$local"
+          fi
+          if [ -z "$tip" ] || [ "$tip" != "$head" ]; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "No tagged HEAD $tag to recover."
+            exit 0
+          fi
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "GitHub Release $tag is missing."
+            exit 0
+          fi
+          assets=$(gh release view "$tag" --json assets --jq '.assets[].name')
+          needed=false
+          for name in \
+            "herdr-workflows_${VERSION}_linux_amd64.tar.gz" \
+            "herdr-workflows_${VERSION}_linux_arm64.tar.gz" \
+            "herdr-workflows_${VERSION}_darwin_amd64.tar.gz" \
+            "herdr-workflows_${VERSION}_darwin_arm64.tar.gz" \
+            checksums.txt
+          do
+            if ! printf '%s\n' "$assets" | grep -Fxq "$name"; then
+              needed=true
+            fi
+          done
+          echo "needed=$needed" >> "$GITHUB_OUTPUT"
+          if [ "$needed" = true ]; then
+            echo "GitHub Release $tag is missing one or more of the five assets."
+          fi
+
       - name: Stamp plugin version files
         if: steps.dry.outputs.version != ''
         env:
@@ -95,7 +147,7 @@ jobs:
           fi
 
       - name: Build release archives
-        if: steps.dry.outputs.version != ''
+        if: steps.dry.outputs.version != '' || steps.recover.outputs.needed == 'true'
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
         with:
           distribution: goreleaser
@@ -103,16 +155,25 @@ jobs:
           args: release --clean --skip=publish
 
       - name: Publish GitHub release
-        if: steps.dry.outputs.version != ''
+        if: steps.dry.outputs.version != '' || steps.recover.outputs.needed == 'true'
         env:
-          VERSION: ${{ steps.dry.outputs.version }}
+          VERSION: ${{ steps.dry.outputs.version || steps.recover.outputs.version }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -eu
-          gh release create "v$VERSION" \
-            --notes-file "${RUNNER_TEMP}/release-notes.md" \
-            "dist/herdr-workflows_${VERSION}_linux_amd64.tar.gz" \
-            "dist/herdr-workflows_${VERSION}_linux_arm64.tar.gz" \
-            "dist/herdr-workflows_${VERSION}_darwin_amd64.tar.gz" \
-            "dist/herdr-workflows_${VERSION}_darwin_arm64.tar.gz" \
-            dist/checksums.txt
+          notes="${RUNNER_TEMP}/release-notes.md"
+          if [ ! -f "$notes" ]; then
+            go run ./scripts/write-release-notes "$notes"
+          fi
+          linux_amd64="dist/herdr-workflows_${VERSION}_linux_amd64.tar.gz"
+          linux_arm64="dist/herdr-workflows_${VERSION}_linux_arm64.tar.gz"
+          darwin_amd64="dist/herdr-workflows_${VERSION}_darwin_amd64.tar.gz"
+          darwin_arm64="dist/herdr-workflows_${VERSION}_darwin_arm64.tar.gz"
+          checksums=dist/checksums.txt
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            gh release upload "v$VERSION" --clobber \
+              "$linux_amd64" "$linux_arm64" "$darwin_amd64" "$darwin_arm64" "$checksums"
+          else
+            gh release create "v$VERSION" --notes-file "$notes" \
+              "$linux_amd64" "$linux_arm64" "$darwin_amd64" "$darwin_arm64" "$checksums"
+          fi

@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func runPrepareRelease(t *testing.T, args ...string) (stdout, stderr string, code int) {
@@ -224,7 +226,7 @@ func TestReleaseWorkflowRunsSemanticReleaseByDispatch(t *testing.T) {
 		t.Fatal("expected release commit message")
 	}
 	if !strings.Contains(text, "gh release create") {
-		t.Fatal("expected gh release create for notes-only publish")
+		t.Fatal("expected gh release create")
 	}
 	if !strings.Contains(text, "CHANGELOG_JSON: ${{ toJSON(steps.dry.outputs.changelog) }}") {
 		t.Fatal("expected toJSON changelog env so multiline notes survive YAML")
@@ -242,6 +244,121 @@ func TestReleaseWorkflowRunsSemanticReleaseByDispatch(t *testing.T) {
 		t.Fatal("expected tar.gz archives attached to the release")
 	}
 	assertGoreleaserArtifactContract(t)
+}
+
+func TestReleaseWorkflowRecoversIncompleteGitHubRelease(t *testing.T) {
+	text := readRepoFile(t, filepath.Join(".github", "workflows", "release.yml"))
+	steps := parseReleaseSteps(t, text)
+
+	tag := mustReleaseStep(t, steps, "Point the release tag at HEAD")
+	if tag.If != "steps.dry.outputs.version != ''" {
+		t.Fatalf("tag step if = %q (new tags still require a dry version)", tag.If)
+	}
+	if !strings.Contains(tag.Run, "not moving the tag") {
+		t.Fatal("tag step must keep tag idempotence")
+	}
+
+	stamp := mustReleaseStep(t, steps, "Stamp plugin version files")
+	if stamp.If != "steps.dry.outputs.version != ''" {
+		t.Fatalf("stamp step if = %q (recovery must not invent a dry version)", stamp.If)
+	}
+
+	recover := mustReleaseStep(t, steps, "Recover a tagged release with missing assets")
+	if recover.If != "steps.dry.outputs.version == ''" {
+		t.Fatalf("recover step if = %q", recover.If)
+	}
+	if !strings.Contains(recover.Run, "herdr-plugin.toml") {
+		t.Fatal("recovery version must come from the stamped manifest")
+	}
+	if !strings.Contains(recover.Run, "GITHUB_OUTPUT") {
+		t.Fatal("recovery must publish needed/version outputs")
+	}
+	if !strings.Contains(recover.Run, "gh release view") {
+		t.Fatal("recovery must inspect the GitHub Release")
+	}
+	for _, name := range supportedReleaseAssetNames("${VERSION}") {
+		if !strings.Contains(recover.Run, name) {
+			t.Fatalf("recovery must require asset %q", name)
+		}
+	}
+
+	build := mustReleaseStep(t, steps, "Build release archives")
+	assertRunsWithoutNewDryVersion(t, "Build release archives", build.If)
+
+	publish := mustReleaseStep(t, steps, "Publish GitHub release")
+	assertRunsWithoutNewDryVersion(t, "Publish GitHub release", publish.If)
+	if !strings.Contains(publish.Run, "gh release create") {
+		t.Fatal("missing GitHub Release must still be created")
+	}
+	if !strings.Contains(publish.Run, "gh release upload") {
+		t.Fatal("incomplete GitHub Release must upload the five assets")
+	}
+	if !strings.Contains(publish.If, "steps.recover.outputs.needed") {
+		t.Fatal("publish must honor recovery needed")
+	}
+	for _, name := range supportedReleaseAssetNames("${VERSION}") {
+		if !strings.Contains(publish.Run, name) {
+			t.Fatalf("publish must attach %q", name)
+		}
+	}
+}
+
+func supportedReleaseAssetNames(version string) []string {
+	return []string{
+		"herdr-workflows_" + version + "_linux_amd64.tar.gz",
+		"herdr-workflows_" + version + "_linux_arm64.tar.gz",
+		"herdr-workflows_" + version + "_darwin_amd64.tar.gz",
+		"herdr-workflows_" + version + "_darwin_arm64.tar.gz",
+		"checksums.txt",
+	}
+}
+
+func assertRunsWithoutNewDryVersion(t *testing.T, name, cond string) {
+	t.Helper()
+	if cond == "steps.dry.outputs.version != ''" {
+		t.Fatalf("%s is gated only on a new dry version; tagged recovery cannot publish assets", name)
+	}
+	if !strings.Contains(cond, "steps.recover.outputs.needed") {
+		t.Fatalf("%s if = %q (must run when recovery is needed)", name, cond)
+	}
+	if !strings.Contains(cond, "steps.dry.outputs.version") {
+		t.Fatalf("%s if = %q (new versions must still publish)", name, cond)
+	}
+}
+
+type releaseWorkflowStep struct {
+	Name string `yaml:"name"`
+	If   string `yaml:"if"`
+	Run  string `yaml:"run"`
+	Uses string `yaml:"uses"`
+}
+
+func parseReleaseSteps(t *testing.T, text string) []releaseWorkflowStep {
+	t.Helper()
+	var doc struct {
+		Jobs map[string]struct {
+			Steps []releaseWorkflowStep `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal([]byte(text), &doc); err != nil {
+		t.Fatalf("parse release.yml: %v", err)
+	}
+	job, ok := doc.Jobs["semantic-release"]
+	if !ok {
+		t.Fatal("expected semantic-release job")
+	}
+	return job.Steps
+}
+
+func mustReleaseStep(t *testing.T, steps []releaseWorkflowStep, name string) releaseWorkflowStep {
+	t.Helper()
+	for _, step := range steps {
+		if step.Name == name {
+			return step
+		}
+	}
+	t.Fatalf("missing release.yml step %q", name)
+	return releaseWorkflowStep{}
 }
 
 func TestGoreleaserDefinesSupportedArtifactSet(t *testing.T) {
