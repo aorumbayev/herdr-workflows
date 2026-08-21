@@ -243,6 +243,7 @@ func TestPlatformNameFor(t *testing.T) {
 		"linux":   PlatformLinux,
 		"win32":   PlatformLinux,
 		"freebsd": PlatformLinux,
+		"windows": PlatformLinux,
 	}
 	for goos, want := range cases {
 		if got := PlatformNameFor(goos); got != want {

@@ -39,8 +39,8 @@ Go packages under `internal/` and `embed/` (workbench HTML and field-model bytes
 | `internal/workbench/`                        | browser workbench server, adopt/lock endpoint, embedded page                                                  |
 | `internal/workflow/`                         | Workflow Authoring: Definition, document parse, templates, conditions (`when:`), trust, exchange, inputs      |
 | `internal/engine/`                           | Workflow Execution: Run, workflow runner, step runners, pane placement, agent turns, detached launch          |
-| `internal/history/`                          | atomic run snapshots, list/detail, project claims, recorder, retention                                        |
-| `internal/host/`                             | herdr socket RPC, CLI wrappers, protocol check, generated method table                                        |
+| `internal/history/`                          | Run Observation: Snapshot, Summary, Detail, project claims, recorder, retention                               |
+| `internal/host/`                             | Herdr Adapter: explicit identities, generated params/result validation, denylist rail, socket RPC, CLI        |
 | `internal/config/`                           | profile/transcript config layers, repo root, invocation context                                               |
 | `internal/caps/`                             | byte caps and their guards                                                                                    |
 | `internal/transcript/`                       | transcript extractor table, built-in Claude transcript read                                                   |

@@ -144,6 +144,40 @@ func TestAgentsDocumentsWorkflowExecutionBoundary(t *testing.T) {
 	}
 }
 
+func TestAgentsDocumentsRunObservationBoundary(t *testing.T) {
+	for _, rel := range []string{"AGENTS.md", "CLAUDE.md"} {
+		text := readRepoFile(t, rel)
+		historyCell := layoutCell(t, rel, text, "`internal/history/`")
+		if !strings.Contains(historyCell, "Run Observation") {
+			t.Fatalf("%s history layout missing Run Observation: %s", rel, historyCell)
+		}
+		if !strings.Contains(historyCell, "Snapshot") || !strings.Contains(historyCell, "Summary") || !strings.Contains(historyCell, "Detail") {
+			t.Fatalf("%s history layout missing Snapshot/Summary/Detail: %s", rel, historyCell)
+		}
+	}
+}
+
+func TestAgentsDocumentsHerdrAdapterBoundary(t *testing.T) {
+	for _, rel := range []string{"AGENTS.md", "CLAUDE.md"} {
+		text := readRepoFile(t, rel)
+		hostCell := layoutCell(t, rel, text, "`internal/host/`")
+		if !strings.Contains(hostCell, "Herdr Adapter") {
+			t.Fatalf("%s host layout missing Herdr Adapter: %s", rel, hostCell)
+		}
+	}
+}
+
+func layoutCell(t *testing.T, rel, text, marker string) string {
+	t.Helper()
+	for _, line := range strings.Split(text, "\n") {
+		if strings.Contains(line, marker) {
+			return line
+		}
+	}
+	t.Fatalf("%s missing %s layout row", rel, marker)
+	return ""
+}
+
 func TestContributingDocumentsUnifiedVerify(t *testing.T) {
 	text := readRepoFile(t, "CONTRIBUTING.md")
 	if !strings.Contains(text, "**1.27**") {
