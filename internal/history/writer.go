@@ -112,7 +112,7 @@ func (w *Writer) Claim(meta ClaimMeta) ClaimResult {
 		return ClaimResult{OK: true, State: "unavailable", ID: id}
 	}
 	snap := Snapshot{
-		Version:      runHistoryVersion,
+		Version:      SnapshotVersion,
 		ID:           id,
 		Workflow:     meta.Workflow,
 		Title:        meta.Title,

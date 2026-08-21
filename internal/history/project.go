@@ -19,9 +19,9 @@ func ProjectStatus(snap Snapshot, now time.Time) string {
 	return "running"
 }
 
-func ToListItem(snap Snapshot, now time.Time) ListItem {
+func ToSummary(snap Snapshot, now time.Time) Summary {
 	status := ProjectStatus(snap, now)
-	item := ListItem{
+	item := Summary{
 		ID:           snap.ID,
 		DisplayID:    displayRunID(snap.ID),
 		Workflow:     snap.Workflow,

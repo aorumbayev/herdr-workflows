@@ -51,7 +51,7 @@ func TestLoadPreservesSelection(t *testing.T) {
 	if state.SelectedID != keepFirstID {
 		t.Fatalf("SelectedID = %q, want %q", state.SelectedID, keepFirstID)
 	}
-	if !slices.ContainsFunc(state.Items, func(item history.ListItem) bool { return item.ID == keepFirstID }) {
+	if !slices.ContainsFunc(state.Items, func(item history.Summary) bool { return item.ID == keepFirstID }) {
 		t.Fatalf("Items missing preserved id %q: %+v", keepFirstID, state.Items)
 	}
 }

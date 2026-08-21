@@ -1,4 +1,4 @@
-// Package history stores private per-run snapshots and their list/detail projections.
+// Package history is Run Observation: it stores and presents Run Snapshot, Summary, and Detail without inventing state or exposing private execution data.
 package history
 
 import (
@@ -14,7 +14,7 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/engine"
 )
 
-const runHistoryVersion = 1
+const SnapshotVersion = 1
 
 var isoLayouts = []string{time.RFC3339Nano, time.RFC3339}
 
@@ -81,7 +81,7 @@ func parseSnapshotValue(v any) (Snapshot, bool) {
 		return Snapshot{}, false
 	}
 	version, ok := jsonInt(m["version"])
-	if !ok || version != runHistoryVersion {
+	if !ok || version != SnapshotVersion {
 		return Snapshot{}, false
 	}
 	id, ok := asString(m["id"])
@@ -419,32 +419,56 @@ func jsonInt(v any) (int, bool) {
 	}
 }
 
+type snapshotLoad struct {
+	Snap         *Snapshot
+	Incompatible *IncompatibleSnapshot
+}
+
 func ReadSnapshot(id string, getenv config.Env) (*Snapshot, error) {
+	loaded, err := loadSnapshot(id, getenv)
+	if err != nil {
+		return nil, err
+	}
+	return loaded.Snap, nil
+}
+
+func loadSnapshot(id string, getenv config.Env) (snapshotLoad, error) {
 	normalized, ok := NormalizeRunUUID(id)
 	if !ok {
-		return nil, nil
+		return snapshotLoad{}, nil
 	}
 	if _, err := ensureRunsDir(getenv); err != nil {
-		return nil, err
+		return snapshotLoad{}, err
 	}
 	if err := credentials.AssertPrivateCredentialFile(SnapshotPath(normalized, getenv), historyACLOpts()); err != nil {
 		var store *credentials.StoreError
 		if errors.As(err, &store) {
-			return nil, err
+			return snapshotLoad{}, err
 		}
-		return nil, nil
+		return snapshotLoad{}, nil
 	}
 	raw, err := os.ReadFile(SnapshotPath(normalized, getenv))
 	if err != nil {
-		return nil, nil
+		return snapshotLoad{}, nil
 	}
 	var v any
 	if err := json.Unmarshal(raw, &v); err != nil {
-		return nil, nil
+		return snapshotLoad{}, nil
+	}
+	if version, ok := peekSnapshotVersion(v); ok && version != SnapshotVersion {
+		return snapshotLoad{Incompatible: &IncompatibleSnapshot{ID: normalized, Version: version}}, nil
 	}
 	snap, ok := parseSnapshotValue(v)
 	if !ok || snap.ID != normalized {
-		return nil, nil
+		return snapshotLoad{}, nil
 	}
-	return &snap, nil
+	return snapshotLoad{Snap: &snap}, nil
+}
+
+func peekSnapshotVersion(v any) (int, bool) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return 0, false
+	}
+	return jsonInt(m["version"])
 }

@@ -64,7 +64,7 @@ func abbreviateStatus(status string, width int) string {
 }
 
 // FormatRunRow lays out one list row: status, workflow, progress, elapsed, optional location.
-func FormatRunRow(item history.ListItem, width int, opts FormatRunRowOpts) string {
+func FormatRunRow(item history.Summary, width int, opts FormatRunRowOpts) string {
 	status := abbreviateStatus(item.Status, min(12, max(3, width)))
 	progress := ""
 	if item.Progress != nil {
@@ -265,7 +265,7 @@ func ScrollDetailLines(lines []string, scroll, viewport int) ([]string, int) {
 }
 
 // SelectedIndex finds the list cursor for selectedID.
-func SelectedIndex(items []history.ListItem, selectedID string) int {
+func SelectedIndex(items []history.Summary, selectedID string) int {
 	for i, item := range items {
 		if item.ID == selectedID {
 			return i
@@ -279,7 +279,7 @@ func IsDetailPollableStatus(status string) bool {
 	return status == "running" || status == "stale"
 }
 
-func formatRunSummary(item history.ListItem) string {
+func formatRunSummary(item history.Summary) string {
 	return strings.Join([]string{
 		history.StatusLabel(item.Status),
 		item.DisplayID,

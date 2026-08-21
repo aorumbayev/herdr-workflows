@@ -18,9 +18,9 @@ func isASCII(s string) bool {
 	return true
 }
 
-func testListItem(t *testing.T, partial history.ListItem) history.ListItem {
+func testListItem(t *testing.T, partial history.Summary) history.Summary {
 	t.Helper()
-	item := history.ListItem{
+	item := history.Summary{
 		DisplayID:    partial.ID[:8],
 		Source:       "repo",
 		CheckoutRoot: "/repo",
@@ -82,7 +82,7 @@ func TestFormatRunListEmpty(t *testing.T) {
 
 func TestFormatRunRowNarrowTruncation(t *testing.T) {
 	// Ports test/history/run-history.test.ts "narrow truncation keeps status".
-	row := testListItem(t, history.ListItem{
+	row := testListItem(t, history.Summary{
 		ID:       "550e8400-e29b-41d4-a716-446655440000",
 		Workflow: "workflow-with-a-very-long-name",
 		Status:   "interrupted",
@@ -235,7 +235,7 @@ func TestScrollDetailLines(t *testing.T) {
 }
 
 func TestSelectedIndex(t *testing.T) {
-	items := []history.ListItem{
+	items := []history.Summary{
 		{ID: "a", Workflow: "one"},
 		{ID: "b", Workflow: "two"},
 	}

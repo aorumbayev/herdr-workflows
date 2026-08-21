@@ -126,8 +126,8 @@ func TestRunHistoryListDetailExcludePrivateOutput(t *testing.T) {
 		t.Fatalf("list cache-control = %q", listRes.Header.Get("Cache-Control"))
 	}
 	var listBody struct {
-		OK   bool               `json:"ok"`
-		Runs []history.ListItem `json:"runs"`
+		OK   bool              `json:"ok"`
+		Runs []history.Summary `json:"runs"`
 	}
 	if err := json.NewDecoder(listRes.Body).Decode(&listBody); err != nil {
 		t.Fatal(err)

@@ -298,7 +298,7 @@ func (m *Model) syncSelectedID() {
 	}
 }
 
-func (m Model) selectedItem() *history.ListItem {
+func (m Model) selectedItem() *history.Summary {
 	if len(m.state.Items) == 0 || m.cursor < 0 || m.cursor >= len(m.state.Items) {
 		return nil
 	}

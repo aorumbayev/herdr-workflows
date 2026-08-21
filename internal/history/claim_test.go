@@ -11,6 +11,9 @@ func testWriterEnv(t *testing.T) (stateDir, checkout string, getenv func(string)
 	t.Helper()
 	stateDir = t.TempDir()
 	checkout = t.TempDir()
+	if err := os.Chmod(stateDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	getenv = func(key string) string {
 		if key == "HERDR_PLUGIN_STATE_DIR" {
 			return stateDir

@@ -304,6 +304,12 @@ func PresentRunDetail(detail Detail) []Block {
 			msg = "history unavailable"
 		}
 		return []Block{{Kind: "error", Text: msg}}
+	case "incompatible":
+		msg := detail.Message
+		if msg == "" {
+			msg = "run snapshot is incompatible"
+		}
+		return []Block{{Kind: "error", Text: msg}}
 	}
 	title := detail.Title
 	if title == "" {
@@ -387,14 +393,21 @@ func loadRunDetail(id string, getenv config.Env, now time.Time) Detail {
 	if _, err := ensureRunsDir(getenv); err != nil {
 		return Detail{Kind: "unavailable", ID: normalized, Message: "run history storage is unavailable"}
 	}
-	snap, err := ReadSnapshot(normalized, getenv)
+	loaded, err := loadSnapshot(normalized, getenv)
 	if err != nil {
 		return Detail{Kind: "unavailable", ID: normalized, Message: "run history storage is unavailable"}
 	}
-	if snap == nil {
+	if loaded.Incompatible != nil {
+		return Detail{
+			Kind:    "incompatible",
+			ID:      normalized,
+			Message: fmt.Sprintf("run snapshot version %d is incompatible", loaded.Incompatible.Version),
+		}
+	}
+	if loaded.Snap == nil {
 		return missingOrExpired(normalized, getenv)
 	}
-	return ToDetail(*snap, now)
+	return ToDetail(*loaded.Snap, now)
 }
 
 func missingOrExpired(id string, getenv config.Env) Detail {
