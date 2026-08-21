@@ -707,8 +707,8 @@ func buildProducers(steps []Step, childReturns map[string]*ReturnsSpec) map[stri
 	return result
 }
 
-// AssertWorkflowReferences validates references that require a loaded child graph.
-func AssertWorkflowReferences(file string, workflow LoadedWorkflow, childReturns map[string]*ReturnsSpec, profiles map[string]bool) (map[string]stepProducer, error) {
+// assertWorkflowReferences validates references that require a loaded child graph.
+func assertWorkflowReferences(file string, workflow Definition, childReturns map[string]*ReturnsSpec, profiles map[string]bool) (map[string]stepProducer, error) {
 	if err := assertUniqueStepIDs(file, workflow.Steps); err != nil {
 		return nil, err
 	}
@@ -752,9 +752,9 @@ func AssertWorkflowReferences(file string, workflow LoadedWorkflow, childReturns
 	return producers, nil
 }
 
-// AssertChildInputContract checks a workflow invocation without claiming to
+// assertChildInputContract checks a workflow invocation without claiming to
 // know values that will only exist after the parent runs.
-func AssertChildInputContract(file string, step int, passed map[string]string, child LoadedWorkflow, producers map[string]stepProducer, parentInputs []InputSpec, profiles map[string]bool, proven []WhenSpec) error {
+func assertChildInputContract(file string, step int, passed map[string]string, child Definition, producers map[string]stepProducer, parentInputs []InputSpec, profiles map[string]bool, proven []WhenSpec) error {
 	declared := map[string]InputSpec{}
 	for _, input := range child.Inputs {
 		declared[input.Name] = input
@@ -836,8 +836,8 @@ func assertChildInputValue(file string, step int, name, raw string, input InputS
 	return nil
 }
 
-// WorkflowChildNames returns direct workflow action targets, including recovery.
-func WorkflowChildNames(workflow LoadedWorkflow) []string {
+// workflowChildNames returns direct workflow action targets, including recovery.
+func workflowChildNames(workflow Definition) []string {
 	var names []string
 	for _, step := range workflow.Steps {
 		if action, ok := step.Action.(WorkflowAction); ok {

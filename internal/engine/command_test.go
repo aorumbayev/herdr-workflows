@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"syscall"
@@ -78,7 +79,19 @@ func TestShellArgv(t *testing.T) {
 	}
 }
 
+func TestNativeProcessTreePlatforms(t *testing.T) {
+	if !NativeProcessTree("linux") || !NativeProcessTree("darwin") {
+		t.Fatal("linux and darwin must own process-tree termination")
+	}
+	if NativeProcessTree("windows") {
+		t.Fatal("native Windows process-tree support must not exist")
+	}
+}
+
 func TestKillSpawn(t *testing.T) {
+	if !NativeProcessTree(runtime.GOOS) {
+		t.Skip("process-tree termination is native Linux and macOS")
+	}
 	t.Run("kills a process group and its grandchild", func(t *testing.T) {
 		tmpdir := t.TempDir()
 		pidFile := filepath.Join(tmpdir, "grandchild.pid")

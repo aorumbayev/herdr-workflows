@@ -21,8 +21,6 @@ import (
 
 const decodeLineTail = 64 * 1024
 
-var servedSourceRe = regexp.MustCompile(`\.(ts|html)$`)
-
 var progressLineRe = regexp.MustCompile(`^\[(\d+)/(\d+)\] (.+)$`)
 
 // LaunchPayload is the stdin JSON for a detached `hwf run --launch-payload`.
@@ -212,11 +210,6 @@ func RetireOnCodeChange(onRetire func(), path *CodeWatchPath) (stop func()) {
 	}
 	// context: fsnotify is out of scope for this slice; production watch lands later.
 	return func() {}
-}
-
-// ShouldRetireOnFile reports whether a watched path is a served .ts/.html source.
-func ShouldRetireOnFile(name string) bool {
-	return servedSourceRe.MatchString(name)
 }
 
 func selfArgv(executable, command string, args ...string) []string {

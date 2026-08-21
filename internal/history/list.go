@@ -27,11 +27,17 @@ type ListFilter struct {
 type ListResult struct {
 	OK            bool
 	Unavailable   bool
-	Runs          []ListItem
+	Runs          []Summary
+	Incompatible  []IncompatibleSnapshot
 	CheckoutRoots []string
 }
 
-type ListItem struct {
+type IncompatibleSnapshot struct {
+	ID      string
+	Version int
+}
+
+type Summary struct {
 	ID           string       `json:"id"`
 	DisplayID    string       `json:"display_id"`
 	Workflow     string       `json:"workflow"`
@@ -61,14 +67,14 @@ func ListRuns(filter ListFilter, getenv config.Env) ListResult {
 	if now.IsZero() {
 		now = time.Now()
 	}
-	snaps, err := loadAllSnapshots(getenv)
+	snaps, incompat, err := loadAllSnapshots(getenv)
 	if err != nil {
 		return ListResult{Unavailable: true}
 	}
-	items := make([]ListItem, 0, len(snaps))
+	items := make([]Summary, 0, len(snaps))
 	roots := map[string]struct{}{}
 	for _, snap := range snaps {
-		items = append(items, ToListItem(snap, now))
+		items = append(items, ToSummary(snap, now))
 		roots[snap.CheckoutRoot] = struct{}{}
 	}
 	checkout := filter.CheckoutRoot
@@ -87,7 +93,7 @@ func ListRuns(filter ListFilter, getenv config.Env) ListResult {
 		checkoutRoots = append(checkoutRoots, r)
 	}
 	slices.Sort(checkoutRoots)
-	return ListResult{OK: true, Runs: runs, CheckoutRoots: checkoutRoots}
+	return ListResult{OK: true, Runs: runs, Incompatible: incompat, CheckoutRoots: checkoutRoots}
 }
 
 func CanonicalRepoRoot(repoRoot string) string {
@@ -97,41 +103,46 @@ func CanonicalRepoRoot(repoRoot string) string {
 	return repoRoot
 }
 
-func loadAllSnapshots(getenv config.Env) ([]Snapshot, error) {
+func loadAllSnapshots(getenv config.Env) ([]Snapshot, []IncompatibleSnapshot, error) {
 	dir := RunsDir(getenv)
 	names, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return nil, nil, nil
 		}
-		return nil, err
+		return nil, nil, err
 	}
 	var out []Snapshot
+	var incompat []IncompatibleSnapshot
 	for _, name := range names {
 		n := name.Name()
 		if !strings.HasSuffix(n, ".json") || strings.HasPrefix(n, ".") {
 			continue
 		}
 		id := strings.TrimSuffix(n, ".json")
-		snap, err := ReadSnapshot(id, getenv)
+		loaded, err := loadSnapshot(id, getenv)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		if snap != nil {
-			out = append(out, *snap)
+		if loaded.Incompatible != nil {
+			incompat = append(incompat, *loaded.Incompatible)
+			continue
+		}
+		if loaded.Snap != nil {
+			out = append(out, *loaded.Snap)
 		}
 	}
-	return out, nil
+	return out, incompat, nil
 }
 
-func filterSortLimit(items []ListItem, filter ListFilter) []ListItem {
-	matched := make([]ListItem, 0, len(items))
+func filterSortLimit(items []Summary, filter ListFilter) []Summary {
+	matched := make([]Summary, 0, len(items))
 	for _, item := range items {
 		if matchesListFilter(item, filter) {
 			matched = append(matched, item)
 		}
 	}
-	slices.SortFunc(matched, func(a, b ListItem) int {
+	slices.SortFunc(matched, func(a, b Summary) int {
 		at, _ := parseISOTime(a.StartedAt)
 		bt, _ := parseISOTime(b.StartedAt)
 		if !at.Equal(bt) {
@@ -148,7 +159,7 @@ func filterSortLimit(items []ListItem, filter ListFilter) []ListItem {
 	return matched
 }
 
-func matchesListFilter(item ListItem, filter ListFilter) bool {
+func matchesListFilter(item Summary, filter ListFilter) bool {
 	if filter.CheckoutRoot != nil && item.CheckoutRoot != *filter.CheckoutRoot {
 		return false
 	}
@@ -162,7 +173,7 @@ func matchesListFilter(item ListItem, filter ListFilter) bool {
 	return true
 }
 
-func searchableText(item ListItem) string {
+func searchableText(item Summary) string {
 	parts := []string{
 		item.Workflow, item.Title, item.ID, item.DisplayID, item.Status,
 		item.CurrentLabel, item.Source, item.CheckoutRoot,

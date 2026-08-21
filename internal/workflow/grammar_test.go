@@ -6,7 +6,19 @@ import (
 	"time"
 )
 
-func mustParse(t *testing.T, text string) RawWorkflow {
+func TestDocumentIsParsedAuthoringValue(t *testing.T) {
+	var doc Document
+	parsed, err := ParseRaw("test.yaml", "version: v1alpha1\nsteps:\n  - run: \"true\"\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc = parsed
+	if doc.Version != Format || len(doc.Steps) != 1 {
+		t.Fatalf("unexpected document: %#v", doc)
+	}
+}
+
+func mustParse(t *testing.T, text string) Document {
 	t.Helper()
 	raw, err := ParseRaw("test.yaml", text)
 	if err != nil {
@@ -245,8 +257,5 @@ func TestWhenEvaluation(t *testing.T) {
 	}
 	if !EvaluateWhen([]WhenSpec{{Kind: WhenEqual, Path: "context.platform", Value: "macos"}}, ns) {
 		t.Fatal("equality evaluation failed")
-	}
-	if ClausesContain([]WhenSpec{truthy}, []WhenSpec{truthy}) == false || ClausesContain(nil, []WhenSpec{truthy}) {
-		t.Fatal("clause containment failed")
 	}
 }

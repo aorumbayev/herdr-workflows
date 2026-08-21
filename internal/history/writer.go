@@ -13,6 +13,7 @@ import (
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/credentials"
+	"github.com/aorumbayev/herdr-workflows/internal/engine"
 )
 
 type ClaimMeta struct {
@@ -73,7 +74,7 @@ func AllocateRunID() string {
 
 func NormalizeRunUUID(raw string) (string, bool) {
 	id := strings.ToLower(strings.TrimSpace(raw))
-	if !runUUIDRe.MatchString(id) {
+	if !engine.ValidRunID(id) {
 		return "", false
 	}
 	return id, true
@@ -111,7 +112,7 @@ func (w *Writer) Claim(meta ClaimMeta) ClaimResult {
 		return ClaimResult{OK: true, State: "unavailable", ID: id}
 	}
 	snap := Snapshot{
-		Version:      runHistoryVersion,
+		Version:      SnapshotVersion,
 		ID:           id,
 		Workflow:     meta.Workflow,
 		Title:        meta.Title,

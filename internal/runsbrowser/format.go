@@ -64,7 +64,7 @@ func abbreviateStatus(status string, width int) string {
 }
 
 // FormatRunRow lays out one list row: status, workflow, progress, elapsed, optional location.
-func FormatRunRow(item history.ListItem, width int, opts FormatRunRowOpts) string {
+func FormatRunRow(item history.Summary, width int, opts FormatRunRowOpts) string {
 	status := abbreviateStatus(item.Status, min(12, max(3, width)))
 	progress := ""
 	if item.Progress != nil {
@@ -138,22 +138,20 @@ func FormatRunListEmpty(opts RunListEmptyOpts) string {
 	return "no runs"
 }
 
-// RunsFooter is the list-mode footer hint plus scope label.
+// RunsFooter is the list-mode footer hint plus the scope label.
+// tui.FormatListFooter renders the position once. Do not embed the position here.
 func RunsFooter(scope Scope, index, total int) string {
 	scopeLabel := "Current"
 	if scope == ScopeAll {
 		scopeLabel = "All"
 	}
-	pos := "0/0"
-	if total > 0 {
-		pos = strconv.Itoa(index+1) + "/" + strconv.Itoa(total)
-	}
+	_ = index
+	_ = total
 	return strings.Join([]string{
 		"tab workflows",
 		"ctrl+g " + scopeLabel,
 		"enter detail",
 		"esc quit",
-		pos,
 	}, tui.ChromeSep)
 }
 
@@ -170,7 +168,11 @@ func RunDetailFooter(allowWorkbench bool) string {
 func DetailLines(view DetailView, width int) []string {
 	switch view.Kind {
 	case "starting":
-		return formatStartingDetail(view.Workflow, view.ID, width)
+		lines := formatStartingDetail(view.Workflow, view.ID, width)
+		if view.Message != "" {
+			lines = append(lines, asciiGlyphs(tui.Truncate(view.Message, width)))
+		}
+		return lines
 	case "local-failure":
 		head := strings.Join([]string{"LAUNCH FAILED", view.Workflow, shortID(view.ID)}, tui.ChromeSep)
 		return []string{tui.Truncate(head, width), asciiGlyphs(tui.Truncate(view.Message, width))}
@@ -265,7 +267,7 @@ func ScrollDetailLines(lines []string, scroll, viewport int) ([]string, int) {
 }
 
 // SelectedIndex finds the list cursor for selectedID.
-func SelectedIndex(items []history.ListItem, selectedID string) int {
+func SelectedIndex(items []history.Summary, selectedID string) int {
 	for i, item := range items {
 		if item.ID == selectedID {
 			return i
@@ -274,12 +276,7 @@ func SelectedIndex(items []history.ListItem, selectedID string) int {
 	return 0
 }
 
-// IsDetailPollableStatus reports whether snapshot detail should poll.
-func IsDetailPollableStatus(status string) bool {
-	return status == "running" || status == "stale"
-}
-
-func formatRunSummary(item history.ListItem) string {
+func formatRunSummary(item history.Summary) string {
 	return strings.Join([]string{
 		history.StatusLabel(item.Status),
 		item.DisplayID,

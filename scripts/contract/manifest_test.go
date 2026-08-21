@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestManifestBuildUsesGoToolchain(t *testing.T) {
+func TestManifestBuildDownloadsVerifiedArchive(t *testing.T) {
 	root := repoRoot(t)
 	data, err := os.ReadFile(filepath.Join(root, "herdr-plugin.toml"))
 	if err != nil {
@@ -17,8 +17,7 @@ func TestManifestBuildUsesGoToolchain(t *testing.T) {
 	flat := strings.Join(strings.Fields(text), " ")
 
 	for _, want := range []string{
-		"scripts/preflight.sh",
-		"go build",
+		"scripts/install-release.sh",
 		"bin/herdr-workflows",
 		"setup",
 	} {
@@ -27,6 +26,8 @@ func TestManifestBuildUsesGoToolchain(t *testing.T) {
 		}
 	}
 	for _, forbidden := range []string{
+		"go build",
+		"scripts/preflight.sh",
 		"bun install",
 		"bun build",
 		"src/cli.ts",

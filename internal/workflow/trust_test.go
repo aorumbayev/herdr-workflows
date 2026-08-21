@@ -20,7 +20,7 @@ func writeWorkflow(t *testing.T, root, name, body string) {
 	}
 }
 
-func readWorkflow(t *testing.T, root, name string) RawWorkflow {
+func readWorkflow(t *testing.T, root, name string) Document {
 	t.Helper()
 	file := filepath.Join(root, ".hwf", "workflows", name+".yaml")
 	body, err := os.ReadFile(file)

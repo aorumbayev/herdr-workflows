@@ -51,6 +51,30 @@ func TestFaviconIsPublicSVG(t *testing.T) {
 	}
 }
 
+func TestPageDoesNotImportEsbuild(t *testing.T) {
+	src, err := os.ReadFile("page.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(src), "github.com/evanw/esbuild") {
+		t.Fatal("page.go must not import esbuild; field-model.js is inlined with string replace")
+	}
+}
+
+func TestPageDoesNotStripExportPrefix(t *testing.T) {
+	src, err := os.ReadFile("page.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(src)
+	if strings.Contains(text, "exportPrefix") || strings.Contains(text, `^export `) {
+		t.Fatal("page.go must not strip exportPrefix; embed/field-model.js has no export statements")
+	}
+	if strings.Contains(text, `"regexp"`) {
+		t.Fatal("page.go must not import regexp after exportPrefix deletion")
+	}
+}
+
 func TestEmbeddedAssetsMatchSource(t *testing.T) {
 	wantPage, err := os.ReadFile(filepath.Join("..", "..", "embed", "page.html"))
 	if err != nil {
@@ -59,12 +83,12 @@ func TestEmbeddedAssetsMatchSource(t *testing.T) {
 	if assets.PageHTML != string(wantPage) {
 		t.Fatal("assets.PageHTML drifted from embed/page.html")
 	}
-	wantModel, err := os.ReadFile(filepath.Join("..", "..", "embed", "field-model.ts"))
+	wantModel, err := os.ReadFile(filepath.Join("..", "..", "embed", "field-model.js"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if assets.FieldModelTS != string(wantModel) {
-		t.Fatal("assets.FieldModelTS drifted from embed/field-model.ts")
+	if assets.FieldModelJS != string(wantModel) {
+		t.Fatal("assets.FieldModelJS drifted from embed/field-model.js")
 	}
 }
 

@@ -18,9 +18,9 @@ func isASCII(s string) bool {
 	return true
 }
 
-func testListItem(t *testing.T, partial history.ListItem) history.ListItem {
+func testListItem(t *testing.T, partial history.Summary) history.Summary {
 	t.Helper()
-	item := history.ListItem{
+	item := history.Summary{
 		DisplayID:    partial.ID[:8],
 		Source:       "repo",
 		CheckoutRoot: "/repo",
@@ -82,7 +82,7 @@ func TestFormatRunListEmpty(t *testing.T) {
 
 func TestFormatRunRowNarrowTruncation(t *testing.T) {
 	// Ports test/history/run-history.test.ts "narrow truncation keeps status".
-	row := testListItem(t, history.ListItem{
+	row := testListItem(t, history.Summary{
 		ID:       "550e8400-e29b-41d4-a716-446655440000",
 		Workflow: "workflow-with-a-very-long-name",
 		Status:   "interrupted",
@@ -113,11 +113,11 @@ func TestRunsFooterASCII(t *testing.T) {
 	if !strings.Contains(RunsFooter(ScopeAll, 0, 0), "All") {
 		t.Fatal("all scope label")
 	}
-	if !strings.Contains(RunsFooter(ScopeCurrent, 0, 0), "0/0") {
-		t.Fatal("zero total position")
+	if strings.Contains(RunsFooter(ScopeCurrent, 0, 0), "0/0") {
+		t.Fatal("RunsFooter must not embed 0/0")
 	}
-	if got := RunsFooter(ScopeCurrent, 2, 5); !strings.HasSuffix(got, "3/5") {
-		t.Fatalf("position = %q", got)
+	if got := RunsFooter(ScopeCurrent, 2, 5); strings.HasSuffix(got, "3/5") {
+		t.Fatalf("RunsFooter must not embed position: %q", got)
 	}
 }
 
@@ -235,7 +235,7 @@ func TestScrollDetailLines(t *testing.T) {
 }
 
 func TestSelectedIndex(t *testing.T) {
-	items := []history.ListItem{
+	items := []history.Summary{
 		{ID: "a", Workflow: "one"},
 		{ID: "b", Workflow: "two"},
 	}
@@ -247,18 +247,6 @@ func TestSelectedIndex(t *testing.T) {
 	}
 	if SelectedIndex(items, "") != 0 {
 		t.Fatalf("empty id = %d", SelectedIndex(items, ""))
-	}
-}
-
-func TestIsDetailPollableStatus(t *testing.T) {
-	// Ports test/history/run-history.test.ts "detail poll targets only running and stale statuses".
-	if !IsDetailPollableStatus("running") || !IsDetailPollableStatus("stale") {
-		t.Fatal("running and stale pollable")
-	}
-	for _, status := range []string{"succeeded", "failed", "interrupted"} {
-		if IsDetailPollableStatus(status) {
-			t.Fatalf("%q should not poll", status)
-		}
 	}
 }
 
@@ -309,8 +297,15 @@ func TestDetailLinesDetailWithProgress(t *testing.T) {
 
 func TestRunsFooterJoinsWithChromeSep(t *testing.T) {
 	parts := strings.Split(RunsFooter(ScopeCurrent, 0, 3), tui.ChromeSep)
-	if len(parts) != 5 {
+	if len(parts) != 4 {
 		t.Fatalf("parts = %v", parts)
+	}
+	for _, part := range parts {
+		if strings.Contains(part, "/") && part != "up/down scroll" {
+			if part == "1/3" || part == "0/0" {
+				t.Fatalf("RunsFooter must not embed position: %v", parts)
+			}
+		}
 	}
 }
 

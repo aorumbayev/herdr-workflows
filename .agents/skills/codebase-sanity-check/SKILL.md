@@ -15,7 +15,7 @@ assume a fixed absolute path.
 
 Read these before Phase 0. They decide which findings survive.
 
-**1. The gates are the oracle, not a rubric.** `go test ./...`, the Go verify scripts under `scripts/verify-*`, the loader, `npm run build` in `docs/`, and
+**1. The gates are the oracle, not a rubric.** `go tool verify`, the docs build (`npm run build` in `docs/`), and
 `openspec validate` answer questions objectively. A finding that contradicts gate output is wrong.
 A claim that a check "would fail" is worthless until the check ran.
 
@@ -58,18 +58,16 @@ may own this working tree. This review leaves no file modified, and no git ref, 
 stash changed. A clean `git status` is not proof of that — a fetch moves a ref and prints nothing.
 
 Then run these from the repository root. Capture output to the scratchpad. Do not skip a command
-because it "should pass" — the point is measurement. All four are read-only: `CI=1` makes verify
+because it "should pass" — the point is measurement. These commands are read-only: `CI=1` makes verify
 check instead of auto-fixing, and the docs build writes only gitignored paths.
 
 ```bash
-go test ./...
-go run ./scripts/verify-prose
-go run ./scripts/verify-no-archive
-go run ./scripts/verify-file-length
-go run ./scripts/verify-comments
+go tool verify
 npm ci --prefix docs && npm run build --prefix docs
 openspec validate --all --strict
 ```
+
+`go tool verify` runs every host-feasible check: format, vet, Go tests, lint, the `go run ./scripts/verify-*` gates, then docs, OpenSpec, `govulncheck`, and GoReleaser. `go tool verify -fast` is the pre-commit set and includes format and vet.
 
 Then check that generated artifacts still regenerate to identical bytes:
 
@@ -93,7 +91,7 @@ find internal -name '*.go' | wc -l
 find internal -name '*.go' | xargs wc -l 2>/dev/null | sort -rn | head -20
 ```
 
-**A red gate outranks every opinion.** If `go test ./...` or a Go verify script fails, report that first,
+**A red gate outranks every opinion.** If `go tool verify` fails, report that first,
 with the failing name and the shortest decisive output line, and continue the review — do not stop.
 
 If a command is unavailable (no `openspec` CLI, no herdr reference checkout), say so in the report

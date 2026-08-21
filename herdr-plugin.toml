@@ -5,13 +5,10 @@ min_herdr_version = "0.8.2"
 description = "Linear YAML workflow runner for herdr panes"
 platforms = ["linux", "macos"]
 
-# Remote GitHub install: Go preflight → go build → native setup.
+# Remote GitHub install: download+verify the tag's archive into bin/, then native setup.
 # Local `herdr plugin link` / `go run ./scripts/install-dev` do not run [[build]] — they compile the working tree.
 [[build]]
-command = ["sh", "scripts/preflight.sh"]
-
-[[build]]
-command = ["go", "build", "-o", "bin/herdr-workflows", "."]
+command = ["sh", "scripts/install-release.sh"]
 
 [[build]]
 command = ["bin/herdr-workflows", "setup"]

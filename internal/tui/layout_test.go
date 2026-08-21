@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestFormatListFooter(t *testing.T) {
@@ -19,6 +20,22 @@ func TestFormatListFooter(t *testing.T) {
 	}
 	if FormatListFooter(60, 0, 0, EmptyListHint) != EmptyListHint {
 		t.Fatalf("empty = %q", FormatListFooter(60, 0, 0, EmptyListHint))
+	}
+}
+
+func TestFormatListFooterNarrowUnicodeStaysWithinColumns(t *testing.T) {
+	hint := strings.Repeat("中", 20)
+	for _, width := range []int{8, 12, 16, 24} {
+		got := FormatListFooter(width, 0, 9, hint)
+		if Columns(got) > width {
+			t.Fatalf("width=%d footer cols %d > budget (%q)", width, Columns(got), got)
+		}
+		if !strings.HasSuffix(got, "1/9") {
+			t.Fatalf("width=%d missing counter: %q", width, got)
+		}
+		if !utf8.ValidString(got) {
+			t.Fatalf("width=%d invalid UTF-8: %q", width, got)
+		}
 	}
 }
 

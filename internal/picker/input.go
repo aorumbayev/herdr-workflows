@@ -9,12 +9,18 @@ import (
 )
 
 // FormatInputPrompt names the field and how to answer it.
-func FormatInputPrompt(spec workflow.InputSpec) string {
+// When position and total are both greater than 0, the prompt adds a 1-based collection ordinal.
+func FormatInputPrompt(spec workflow.InputSpec, ordinal ...int) string {
 	label := spec.Name
 	if desc := strings.TrimSpace(spec.Description); desc != "" {
 		label = spec.Name + " - " + desc
 	}
-	return label + tui.ChromeSep + strings.Join(promptHints(spec), tui.ChromeSep)
+	parts := []string{label}
+	if len(ordinal) >= 2 && ordinal[0] > 0 && ordinal[1] > 0 {
+		parts = append(parts, strconv.Itoa(ordinal[0])+" of "+strconv.Itoa(ordinal[1]))
+	}
+	parts = append(parts, promptHints(spec)...)
+	return strings.Join(parts, tui.ChromeSep)
 }
 
 func promptHints(spec workflow.InputSpec) []string {
@@ -81,15 +87,6 @@ func FilterChoiceOptions(options []string, filter string) []string {
 		}
 	}
 	return out
-}
-
-// CustomChoiceValue tags the sentinel row that opens a free-text field.
-type CustomChoiceValue struct{ Kind string }
-
-// IsCustomChoiceValue reports a tagged custom-choice option, never a string sentinel.
-func IsCustomChoiceValue(v any) bool {
-	c, ok := v.(CustomChoiceValue)
-	return ok && c.Kind == "custom"
 }
 
 // ShouldRestoreCustomChoiceText is true when backtrack should seed the custom field.

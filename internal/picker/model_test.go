@@ -62,6 +62,12 @@ func apply(m Model, keys ...string) Model {
 	return m
 }
 
+func applyMsg(m Model, msg tea.Msg) Model {
+	next, cmd := m.Update(msg)
+	m = next.(Model)
+	return runCmd(m, cmd)
+}
+
 func runCmd(m Model, cmd tea.Cmd) Model {
 	for cmd != nil {
 		msg := cmd()
@@ -178,8 +184,8 @@ func TestCustomChoiceInputAdvances(t *testing.T) {
 		Entries: []workflow.WorkflowListEntry{entry},
 		Width:   80,
 		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.LoadedWorkflow, error) {
-			return &workflow.LoadedWorkflow{
+		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format,
 				Inputs: []workflow.InputSpec{
 					{Name: "unit", Type: "choice", Options: []string{"new"}, AllowCustom: true},
@@ -214,8 +220,8 @@ func TestInputFailureScreen(t *testing.T) {
 		Entries: []workflow.WorkflowListEntry{entry},
 		Width:   80,
 		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.LoadedWorkflow, error) {
-			return &workflow.LoadedWorkflow{
+		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format,
 				Inputs: []workflow.InputSpec{
 					{Name: "unit", Type: "choice", Options: []string{"a", "b"}},
@@ -270,8 +276,8 @@ func TestShowCurrentDoesNotBlockUpdate(t *testing.T) {
 	m := New(Options{
 		Entries: []workflow.WorkflowListEntry{entry},
 		Width:   80,
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.LoadedWorkflow, error) {
-			return &workflow.LoadedWorkflow{
+		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format,
 				Inputs: []workflow.InputSpec{{
 					Name: "branch", Type: "choice",
@@ -311,8 +317,8 @@ func TestInputBackRestoresCollectedValue(t *testing.T) {
 		Entries: []workflow.WorkflowListEntry{entry},
 		Width:   80,
 		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.LoadedWorkflow, error) {
-			return &workflow.LoadedWorkflow{
+		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format,
 				Inputs: []workflow.InputSpec{
 					{Name: "unit", Type: "choice", Options: []string{"new", "existing"}, AllowCustom: true},
@@ -349,8 +355,8 @@ func TestAcceptCurrentPresentsSensitivityNames(t *testing.T) {
 	m := New(Options{
 		Entries: []workflow.WorkflowListEntry{entry},
 		Width:   80,
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.LoadedWorkflow, error) {
-			return &workflow.LoadedWorkflow{
+		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Deploy",
 				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
 			}, nil

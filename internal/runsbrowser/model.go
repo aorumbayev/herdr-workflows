@@ -9,6 +9,7 @@ import (
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/history"
+	"github.com/aorumbayev/herdr-workflows/internal/tui"
 )
 
 type screen int
@@ -22,6 +23,7 @@ const (
 type Options struct {
 	RepoRoot        string
 	Width           int
+	Height          int
 	Env             config.Env
 	LaunchWorkbench func(route string)
 }
@@ -30,6 +32,7 @@ type Options struct {
 type Model struct {
 	repoRoot        string
 	width           int
+	height          int
 	getenv          config.Env
 	launchWorkbench func(string)
 
@@ -44,6 +47,7 @@ type Model struct {
 	detailScroll int
 	detailGen    *config.Generation
 	refreshGen   *config.Generation
+	handoffErr   string
 }
 
 // SwitchToWorkflowsMsg tells the picker to return to the workflow list.
@@ -80,6 +84,7 @@ func New(opts Options) Model {
 	return Model{
 		repoRoot:        opts.RepoRoot,
 		width:           width,
+		height:          opts.Height,
 		getenv:          getenv,
 		launchWorkbench: opts.LaunchWorkbench,
 		screen:          screenList,
@@ -97,6 +102,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
+		m.height = msg.Height
 		if m.screen == screenList {
 			return m, m.refreshCmd(m.preserveSelection())
 		}
@@ -176,6 +182,7 @@ func (m Model) handleDetailKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.detailView = DetailView{}
 		m.detailScroll = 0
 		m.activeRunID = ""
+		m.handoffErr = ""
 		return m, m.refreshCmd(preserve)
 	case "up":
 		m.detailScroll = max(0, m.detailScroll-1)
@@ -200,6 +207,9 @@ func (m Model) handleDetailKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if m.launchWorkbench != nil {
 			m.launchWorkbench(WorkbenchRoute(id))
+			m.handoffErr = ""
+		} else {
+			m.handoffErr = tui.Truncate("workbench handoff unavailable", m.contentWidth())
 		}
 		return m, nil
 	case "tab":
@@ -235,10 +245,24 @@ func (m Model) applyListLoaded(msg listLoadedMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.state = msg.state
-	m.cursor = SelectedIndex(m.state.Items, m.state.SelectedID)
+	want := m.state.SelectedID
+	m.cursor = SelectedIndex(m.state.Items, want)
 	m.clampCursor()
+	if want != "" && !idInItems(m.state.Items, want) {
+		m.state.SelectedID = want
+		return m, nil
+	}
 	m.syncSelectedID()
 	return m, nil
+}
+
+func idInItems(items []history.Summary, id string) bool {
+	for _, item := range items {
+		if item.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 func (m Model) applyDetailLoaded(msg detailLoadedMsg) (Model, tea.Cmd) {
@@ -298,7 +322,7 @@ func (m *Model) syncSelectedID() {
 	}
 }
 
-func (m Model) selectedItem() *history.ListItem {
+func (m Model) selectedItem() *history.Summary {
 	if len(m.state.Items) == 0 || m.cursor < 0 || m.cursor >= len(m.state.Items) {
 		return nil
 	}
@@ -324,3 +348,41 @@ func viewAllowsWorkbench(view DetailView) bool {
 		return true
 	}
 }
+
+// OpenLocalDetail replaces the browser with a local detail screen that is not from history.
+func (m Model) OpenLocalDetail(view DetailView) Model {
+	m.screen = screenDetail
+	m.activeRunID = view.ID
+	m.detailView = view
+	m.detailScroll = 0
+	m.handoffErr = ""
+	m.state.SelectedID = view.ID
+	return m
+}
+
+// ApplyLocalDetail updates the open detail without leaving detail mode.
+func (m Model) ApplyLocalDetail(view DetailView) Model {
+	if view.ID == "" {
+		view.ID = m.activeRunID
+	}
+	m.detailView = view
+	m.activeRunID = view.ID
+	m.state.SelectedID = view.ID
+	m.detailScroll = 0
+	return m
+}
+
+// IsList reports list screen (not detail).
+func (m Model) IsList() bool { return m.screen == screenList }
+
+// ActiveRunID is the detail identity when detail is open.
+func (m Model) ActiveRunID() string { return m.activeRunID }
+
+// SelectedID is the list selection (or last detail id after return).
+func (m Model) SelectedID() string { return m.state.SelectedID }
+
+// DetailWorkflow is the workflow title on the open detail view.
+func (m Model) DetailWorkflow() string { return m.detailView.Workflow }
+
+// DetailKind is the open detail view kind.
+func (m Model) DetailKind() string { return m.detailView.Kind }

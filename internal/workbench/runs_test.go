@@ -126,8 +126,8 @@ func TestRunHistoryListDetailExcludePrivateOutput(t *testing.T) {
 		t.Fatalf("list cache-control = %q", listRes.Header.Get("Cache-Control"))
 	}
 	var listBody struct {
-		OK   bool               `json:"ok"`
-		Runs []history.ListItem `json:"runs"`
+		OK   bool              `json:"ok"`
+		Runs []history.Summary `json:"runs"`
 	}
 	if err := json.NewDecoder(listRes.Body).Decode(&listBody); err != nil {
 		t.Fatal(err)
@@ -304,7 +304,7 @@ func TestRunHistoryPriorSharedRunsJSONLDoesNotAppearInAll(t *testing.T) {
 func TestRouteParsingRequiresCompleteUUID(t *testing.T) {
 	// Ports test/workbench/web-server.test.ts "route parsing requires complete UUID".
 	id := history.AllocateRunID()
-	parsed := ParseWebRoute(RunWorkbenchRoute(id))
+	parsed := ParseWebRoute("run=" + id)
 	if parsed == nil || parsed.Kind != "run" || parsed.ID != id || parsed.Hash != "run="+id {
 		t.Fatalf("parsed = %+v", parsed)
 	}

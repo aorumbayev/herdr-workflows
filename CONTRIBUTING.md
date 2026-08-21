@@ -4,8 +4,9 @@ Thanks for contributing to herdr-workflows.
 
 ## Prerequisites
 
-- [Go](https://go.dev) **1.25** or newer
+- [Go](https://go.dev) **1.27** or newer
 - [Node.js](https://nodejs.org) **22** or newer with `npm` (VitePress docs and OpenSpec CLI install)
+- [golangci-lint](https://golangci-lint.run) **v2.13.1** or newer for full verification and lint in fast verification
 - [herdr](https://herdr.dev) **0.8.2** or newer for live plugin work
 - Git
 
@@ -73,22 +74,23 @@ openspec validate --all --strict
 
 ## Checks
 
+Full verification (same command CI runs on Linux and macOS):
+
 ```bash
-go test ./...
-golangci-lint run
-go run ./scripts/verify-prose
-go run ./scripts/verify-no-archive
-go run ./scripts/verify-file-length
-go run ./scripts/verify-comments
-npm ci --prefix docs && npm run build --prefix docs
-openspec validate --all --strict
+go tool verify
+```
+
+Fast verification for pre-commit:
+
+```bash
+go tool verify -fast
 ```
 
 Test the Go package whose interface you changed.
 
-`go run ./scripts/verify-no-archive` fails while `openspec/changes/archive/` holds anything.
+`go tool verify` fails while `openspec/changes/archive/` holds anything.
 
-Pre-commit runs Go tests excluding `e2e`, optional golangci-lint, and the Go verify scripts. CI runs the same Go gates plus the docs build. Docs publish uses `npm ci && npm run build` in `docs/`. `openspec validate` runs locally only.
+Pre-commit runs `go tool verify -fast`. CI runs `go tool verify` on Linux and macOS after it installs Node.js, golangci-lint, GoReleaser, and the OpenSpec CLI. Docs publish uses `npm ci && npm run build` in `docs/`.
 
 ## Documentation style
 

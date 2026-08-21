@@ -17,7 +17,8 @@ func isAllowedTSJSPath(root, path string) bool {
 	if strings.HasPrefix(rel, "docs/") {
 		return true
 	}
-	if rel == "embed/field-model.ts" {
+	// Product browser asset. .ts outside docs/ is never allowed.
+	if rel == "embed/field-model.js" {
 		return true
 	}
 	return false
@@ -57,7 +58,7 @@ func TestRepoHasNoProductTypeScriptOrJavaScript(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(violations) > 0 {
-		t.Fatalf("unexpected .ts/.js outside allowlist:\n%s", strings.Join(violations, "\n"))
+		t.Fatalf("unexpected .ts/.js outside allowlist (docs/ or embed/field-model.js):\n%s", strings.Join(violations, "\n"))
 	}
 }
 

@@ -15,22 +15,47 @@ type ScreenOpts struct {
 	Entries            []workflow.WorkflowListEntry
 	RepoRoot           string
 	Config             config.Config
+	Env                config.Env
 	CheckLatestRelease func() (*update.LatestRelease, error)
-	LoadWorkflow       func(workflow.WorkflowListEntry) (*workflow.LoadedWorkflow, error)
+	LoadWorkflow       func(workflow.WorkflowListEntry) (*workflow.Definition, error)
 	Chdir              func(string) error
 	CopyClipboard      func(string) error
+	LaunchWorkbench    func(route string)
+	OpenURL            func(url string) error
+	Notify             func(title string, body ...string) error
+	LaunchRun          func(LaunchRunOpts) LaunchRunHandle
+	AllocateRunID      func() string
+	ExportShare        func(entry workflow.WorkflowListEntry) (command string, err error)
 }
 
-// RunScreen mounts the picker with Prepare, FilterInput, and a background update check.
+// PrepareScreen changes the working directory and builds a picker model from ScreenOpts hooks.
+func PrepareScreen(opts ScreenOpts) (Model, error) {
+	copyFn := opts.CopyClipboard
+	if copyFn == nil {
+		copyFn = CopyToClipboard
+	}
+	return Prepare(Options{
+		Entries:         opts.Entries,
+		RepoRoot:        opts.RepoRoot,
+		Config:          opts.Config,
+		Env:             opts.Env,
+		LoadWorkflow:    opts.LoadWorkflow,
+		CopyClipboard:   copyFn,
+		Chdir:           opts.Chdir,
+		LaunchWorkbench: opts.LaunchWorkbench,
+		OpenURL:         opts.OpenURL,
+		Notify:          opts.Notify,
+		LaunchRun:       opts.LaunchRun,
+		AllocateRunID:   opts.AllocateRunID,
+		ExportShare:     opts.ExportShare,
+	})
+}
+
+// RunScreen mounts the picker with PrepareScreen, FilterInput, and a background update check.
 func RunScreen(opts ScreenOpts) (int, error) {
 	check := opts.CheckLatestRelease
 	if check == nil {
 		check = DefaultPickerReleaseCheck()
-	}
-	load := opts.LoadWorkflow
-	copyFn := opts.CopyClipboard
-	if copyFn == nil {
-		copyFn = CopyToClipboard
 	}
 
 	var program *tea.Program
@@ -48,14 +73,7 @@ func RunScreen(opts ScreenOpts) (int, error) {
 		OnNewer:         onNewer,
 	})
 
-	model, err := Prepare(Options{
-		Entries:       opts.Entries,
-		RepoRoot:      opts.RepoRoot,
-		Config:        opts.Config,
-		LoadWorkflow:  load,
-		CopyClipboard: copyFn,
-		Chdir:         opts.Chdir,
-	})
+	model, err := PrepareScreen(opts)
 	if err != nil {
 		return 1, err
 	}

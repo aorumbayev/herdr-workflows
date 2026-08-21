@@ -238,8 +238,13 @@ func TestUpdateRefusesLinkedDevelopmentCheckouts(t *testing.T) {
 	}
 }
 
-func TestUpdateExplainsUnregisteredBinaries(t *testing.T) {
+func TestUpdateStandaloneUnregisteredReplacesBinary(t *testing.T) {
 	herdr := writeFakeHerdr(t, emptyListJSON())
+	dest := filepath.Join(t.TempDir(), "herdr-workflows")
+	if err := os.WriteFile(dest, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var calls int
 	stdout, stderr, code := captureExecuteUpdate(t, updateDeps{
 		FetchLatest: func() (update.LatestRelease, error) {
 			return update.LatestRelease{Tag: "v" + updateNewer, Version: updateNewer}, nil
@@ -248,12 +253,30 @@ func TestUpdateExplainsUnregisteredBinaries(t *testing.T) {
 			src, err := update.ParsePluginListSource(emptyListJSON())
 			return src, err
 		},
+		Executable: func() (string, error) { return dest, nil },
+		InstallRelease: func(opts update.InstallOpts) error {
+			calls++
+			if opts.Version != updateNewer || opts.DestPath != dest {
+				t.Fatalf("opts %+v", opts)
+			}
+			return os.WriteFile(opts.DestPath, []byte("new"), 0o755)
+		},
 	}, map[string]string{"HERDR_BIN_PATH": herdr})
-	if code != 1 {
-		t.Fatalf("code = %d stdout = %q", code, stdout)
+	if code != 0 || stderr != "" {
+		t.Fatalf("code = %d stderr = %q stdout = %q", code, stderr, stdout)
 	}
-	if !strings.Contains(stderr, "herdr plugin install aorumbayev/herdr-workflows") {
-		t.Fatalf("stderr = %q", stderr)
+	if calls != 1 {
+		t.Fatalf("calls = %d", calls)
+	}
+	if !strings.Contains(stdout, "standalone binary replace") || !strings.Contains(stdout, "updated to "+updateNewer) {
+		t.Fatalf("stdout = %q", stdout)
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "new" {
+		t.Fatalf("dest = %q", got)
 	}
 }
 

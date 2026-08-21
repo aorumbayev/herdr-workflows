@@ -1614,20 +1614,20 @@ func orderedKeysOrSorted(values map[string]any, ordered []string) []string {
 }
 
 // ParseRaw parses and converts one v1alpha1 workflow document.
-func ParseRaw(file, text string) (RawWorkflow, error) {
+func ParseRaw(file, text string) (Document, error) {
 	var data any
 	if err := yaml.Unmarshal([]byte(text), &data); err != nil {
-		return RawWorkflow{}, bail(file, 0, "", err.Error())
+		return Document{}, bail(file, 0, "", err.Error())
 	}
 	doc, ok := data.(map[string]any)
 	if !ok || doc == nil {
-		return RawWorkflow{}, bail(file, 0, "", "workflow document must be a mapping")
+		return Document{}, bail(file, 0, "", "workflow document must be a mapping")
 	}
 	if _, ok := doc["version"]; !ok {
-		return RawWorkflow{}, bail(file, 0, "version", "version is required — supported format is "+Format)
+		return Document{}, bail(file, 0, "version", "version is required — supported format is "+Format)
 	}
 	if _, ok := doc["steps"]; !ok {
-		return RawWorkflow{}, bail(file, 0, "steps", "steps is required")
+		return Document{}, bail(file, 0, "steps", "steps is required")
 	}
 
 	checker := &checker{}
@@ -1637,10 +1637,10 @@ func ParseRaw(file, text string) (RawWorkflow, error) {
 		for i, iss := range checker.issues.list {
 			messages[i] = positioned(file, iss.step, iss.key, iss.msg)
 		}
-		return RawWorkflow{}, &LoadError{strings.Join(messages, "; ")}
+		return Document{}, &LoadError{strings.Join(messages, "; ")}
 	}
 
-	raw := RawWorkflow{
+	raw := Document{
 		Version:     Format,
 		Title:       stringValue(doc, "title"),
 		Description: stringValue(doc, "description"),
@@ -1651,7 +1651,7 @@ func ParseRaw(file, text string) (RawWorkflow, error) {
 		for _, name := range orderedKeysOrSorted(inputs, order) {
 			value, err := parseRawInputValue(inputs[name])
 			if err != nil {
-				return RawWorkflow{}, bail(file, 0, "inputs."+name, err.Error())
+				return Document{}, bail(file, 0, "inputs."+name, err.Error())
 			}
 			raw.Inputs = append(raw.Inputs, NamedInput{Name: name, Value: value})
 		}
@@ -1659,14 +1659,14 @@ func ParseRaw(file, text string) (RawWorkflow, error) {
 	if returns, ok := doc["returns"]; ok {
 		parsed, err := parseReturns(file, returns, orderedMappingKeys(text, "returns"))
 		if err != nil {
-			return RawWorkflow{}, err
+			return Document{}, err
 		}
 		raw.Returns = parsed
 	}
 	if recovery, ok := doc["on_failure"].(map[string]any); ok {
 		parsed, err := toRecovery(file, recovery)
 		if err != nil {
-			return RawWorkflow{}, err
+			return Document{}, err
 		}
 		raw.OnFailure = parsed
 	}
@@ -1675,7 +1675,7 @@ func ParseRaw(file, text string) (RawWorkflow, error) {
 	for i, value := range steps {
 		parsed, err := toStep(file, i+1, value)
 		if err != nil {
-			return RawWorkflow{}, err
+			return Document{}, err
 		}
 		raw.Steps = append(raw.Steps, parsed)
 	}

@@ -11,8 +11,8 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-func demoWorkflow() workflow.LoadedWorkflow {
-	return workflow.LoadedWorkflow{
+func demoWorkflow() workflow.Definition {
+	return workflow.Definition{
 		Name:      "m",
 		RepoOwned: true,
 		Steps:     []workflow.Step{{Action: workflow.RunAction{}}},

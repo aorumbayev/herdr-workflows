@@ -17,7 +17,7 @@ const (
 type State struct {
 	Scope          Scope
 	Filter         string
-	Items          []history.ListItem
+	Items          []history.Summary
 	SelectedID     string
 	HasMachineRuns bool
 	Unavailable    bool

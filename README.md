@@ -49,7 +49,7 @@ That workflow reads your diff, then opens Claude in a split pane and asks it to 
 
 ## Install
 
-You need [herdr](https://herdr.dev) 0.8.2 or later and [Go](https://go.dev) 1.25 or later. Linux and macOS. On Windows, install both herdr and this plugin inside WSL2.
+You must have [herdr](https://herdr.dev) 0.8.2 or later on Linux or macOS. On Windows, install herdr and this plugin in WSL2. Go is not necessary on the target host.
 
 ```bash
 herdr plugin install aorumbayev/herdr-workflows

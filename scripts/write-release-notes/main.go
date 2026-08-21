@@ -1,5 +1,5 @@
 // Command write-release-notes writes GitHub release notes from CHANGELOG plus the
-// Go toolchain footer required for remote Herdr installs.
+// verified-archive install footer for remote Herdr installs.
 //
 // Usage: CHANGELOG_JSON=… go run ./scripts/write-release-notes <dest>
 package main
@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-const footer = "### Install requirements\n\nRemote install via Herdr requires **Go 1.25** or newer on the host."
+const footer = "### Install requirements\n\nRemote install via Herdr downloads the verified release archive. The target host does not need Go."
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {

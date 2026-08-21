@@ -129,7 +129,7 @@ func childWorkflowNames(steps []Step, onFailure Action) []string {
 	return names
 }
 
-func analyzeWorkflowSensitivity(raw RawWorkflow) WorkflowSensitivity {
+func analyzeWorkflowSensitivity(raw Document) WorkflowSensitivity {
 	flags := WorkflowSensitivity{}
 	for _, step := range raw.Steps {
 		if _, ok := step.Action.(RunAction); ok {
@@ -155,11 +155,11 @@ func analyzeWorkflowSensitivity(raw RawWorkflow) WorkflowSensitivity {
 
 // AnalyzeResolvedSensitivity includes sensitivity from reachable child
 // workflows and records children that cannot be loaded.
-func AnalyzeResolvedSensitivity(raw RawWorkflow, name, repoRoot string) WorkflowSensitivity {
+func AnalyzeResolvedSensitivity(raw Document, name, repoRoot string) WorkflowSensitivity {
 	return analyzeResolvedSensitivity(raw, name, repoRoot, nil)
 }
 
-func analyzeResolvedSensitivity(raw RawWorkflow, name, repoRoot string, stack []string) WorkflowSensitivity {
+func analyzeResolvedSensitivity(raw Document, name, repoRoot string, stack []string) WorkflowSensitivity {
 	local := analyzeWorkflowSensitivity(raw)
 	if slices.Contains(stack, name) {
 		return local
@@ -214,7 +214,7 @@ func AnalyzeYamlTree(file, body, name, repoRoot string) (WorkflowSensitivity, er
 }
 
 // ReferencedWorkflowChildren returns unique child names in sorted order.
-func ReferencedWorkflowChildren(raw RawWorkflow) []string {
+func ReferencedWorkflowChildren(raw Document) []string {
 	var names []string
 	for _, name := range childWorkflowNames(raw.Steps, raw.OnFailure) {
 		if !slices.Contains(names, name) {

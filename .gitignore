@@ -3,6 +3,7 @@ node_modules/
 
 # build / compile
 bin/herdr-workflows
+dist/
 *.exe
 *.exe~
 *.dll

@@ -11,21 +11,17 @@ Before behavior work, read and cite the relevant `openspec/specs/*/spec.md`. See
 ## Commands
 
 ```bash
-go test ./...                              # Go unit and integration tests
-go test ./scripts/build-examples           # docs example gallery helper
-golangci-lint run                          # Go static checks
-go run ./scripts/verify-prose              # prose style gate
-go run ./scripts/verify-comments           # comment block gate
+go tool verify                             # every host-feasible check (same as CI)
+go tool verify -fast                       # pre-commit
 go run ./scripts/generate-workflow-schema  # regenerate docs/workflow.schema.json
 go run ./scripts/gen-herdr-methods         # regenerate internal/host/herdr_methods.gen.go
-npm ci --prefix docs && npm run build --prefix docs  # VitePress docs
 go run ./scripts/install-dev               # compile + herdr plugin link + keybindings + reload
 ```
 
-- Pre-commit (`.githooks/pre-commit`): Go tests excluding `e2e`, optional `golangci-lint`, and the `go run ./scripts/verify-*` gates.
-- CI (`.github/workflows/verify.yml`): `go test ./...`, golangci-lint, and the Go verify scripts. Docs build in that workflow and in `.github/workflows/docs.yml` runs `npm ci && npm run build` in `docs/` with the Go `build-examples` helper.
+- Pre-commit (`.githooks/pre-commit`): `go tool verify -fast`.
+- CI (`.github/workflows/verify.yml`): `go tool verify` on Linux and macOS after it installs Node.js, golangci-lint, GoReleaser, and the OpenSpec CLI. Docs publish (`.github/workflows/docs.yml`) runs `npm ci && npm run build` in `docs/`.
 - After `go run ./scripts/install-dev`, the live binary is `bin/herdr-workflows`.
-- Remote GitHub install runs the manifest build: Go preflight, `go build -o bin/herdr-workflows .`, then `bin/herdr-workflows setup`. Local link/dev compiles with `go build` / `go run ./scripts/install-dev`.
+- Remote GitHub install downloads the verified release archive for the cloned tag into `bin/herdr-workflows`, then runs `bin/herdr-workflows setup`. The target does not need Go. Local link/dev compiles with `go build` / `go run ./scripts/install-dev`.
 
 ## Layout
 
@@ -36,20 +32,21 @@ Go packages under `internal/` and `embed/` (workbench HTML and field-model bytes
 | `main.go`                                    | plugin binary entry                                                                                           |
 | `internal/cli/`                              | Cobra commands, terminal I/O, `hwf init` / `setup`                                                            |
 | `internal/skills/`                           | bundled agent skills embedded as text, `hwf skills` registry and show formatting                              |
-| `internal/update/`                           | GitHub release check and managed-plugin `hwf update`                                                          |
-| `internal/picker/`                           | picker TUI, workflow rows, ctrl+k palette, update indicator                                                   |
-| `internal/runsbrowser/`                      | runs browser TUI, list/detail, run-history presentation                                                       |
-| `internal/tui/`                              | Charm lipgloss/bubbletea adapter shared by picker and runs browser                                            |
+| `internal/update/`                           | GitHub release check, managed-plugin `hwf update`, and distribution artifact names/checksums |
+| `internal/picker/`                           | picker TUI, workflow rows, ctrl+k palette, update indicator, Parity Baseline                                  |
+| `internal/runsbrowser/`                      | runs browser TUI, list/detail, run-history presentation, Parity Baseline                                      |
+| `internal/tui/`                              | Charm lipgloss/bubbletea adapter shared by picker and runs browser, Parity Baseline                           |
 | `internal/workbench/`                        | browser workbench server, adopt/lock endpoint, embedded page                                                  |
-| `internal/workflow/`                         | types, paths, template engine, conditions (`when:`), parse (YAML → steps), trust, exchange, inputs            |
-| `internal/engine/`                           | workflow runner, step runners, pane placement, agent turns, detached launch                                   |
-| `internal/history/`                          | atomic run snapshots, list/detail, project claims, recorder, retention                                        |
-| `internal/host/`                             | herdr socket RPC, CLI wrappers, protocol check, generated method table                                        |
+| `internal/workflow/`                         | Workflow Authoring: Definition, document parse, templates, conditions (`when:`), trust, exchange, inputs      |
+| `internal/engine/`                           | Workflow Execution: Run, workflow runner, step runners, pane placement, agent turns, detached launch          |
+| `internal/history/`                          | Run Observation: Snapshot, Summary, Detail, project claims, recorder, retention                               |
+| `internal/host/`                             | Herdr Adapter: explicit identities, generated params/result validation, denylist rail, socket RPC, CLI        |
 | `internal/config/`                           | profile/transcript config layers, repo root, invocation context                                               |
 | `internal/caps/`                             | byte caps and their guards                                                                                    |
 | `internal/transcript/`                       | transcript extractor table, built-in Claude transcript read                                                   |
 | `internal/credentials/`                      | private credential store and file ACL checks                                                                  |
 | `scripts/build-examples/`                    | VitePress example gallery JSON helper (`go run ./scripts/build-examples`)                                     |
+| `scripts/install-release.sh`                 | verified-archive download for managed `[[build]]` install (no Go on the target)                               |
 | `docs/package.json`                          | scoped VitePress 1.6.4 package (`npm ci` / `npm run build` in `docs/`)                                        |
 | `herdr-plugin.toml`                          | plugin manifest (build + `prefix+k` → picker)                                                                 |
 | `openspec/`                                  | tracked specs and changes (OpenSpec CLI root)                                                                 |
@@ -58,7 +55,7 @@ Go packages under `internal/` and `embed/` (workbench HTML and field-model bytes
 | `.agents/skills/promptfoo-skill-eval/`       | tracked eval for user-facing skills — the loader is the oracle, not a judge                                   |
 | `.agents/skills/codebase-sanity-check/`      | tracked whole-repository review — gates first, one agent per criteria group, additions face three whys        |
 | `.semrelrc`                                  | go-semantic-release plugin config (`.github/workflows/release.yml` dispatches tagged releases)                  |
-| `scripts/write-release-notes/`               | appends Go 1.25 install footer to dry-run changelog for `gh release create`                                   |
+| `scripts/write-release-notes/`               | appends verified-archive install footer to dry-run changelog for `gh release create`                          |
 | `.agents/references/AGENTS.md`               | tracked Herdr checkout instructions (clone contents are local-only)                                           |
 
 Gitignored local-only: `.agents/references/*` except `AGENTS.md`, `.plans/`, `.opencode/`, `.cursor/`. Do not commit them.
@@ -76,6 +73,7 @@ Agents miss these. The loader or verifyx will fail, or the product regresses:
 - **Placement is the nested `pane:` block** (`open: tab|beside|below` or a whole-value template to an unconditional closed static choice whose options are only those literals. Stable `target`/`workspace`, percentage `size`, `focus`, agent-only `close: success|always`). Anchors are captured invocation or prior-result IDs, never live UI focus. `background: true` needs a herdr-owned pane or an existing-agent `target:`. There is no local detached background. A placed `run:` takes exactly one of `background` or `ready_when: /regex/` (which requires `timeout`).
 - **Config is `profiles` / `default_profile` / `transcripts` only** — no `agents:`, no `sessions:`. Global config lives at `$HERDR_PLUGIN_CONFIG_DIR/config.yaml` (discovered via `herdr plugin config-dir` when standalone). Never add `~/.hwf/config.yaml`. Layers: global, committed `.hwf/config.yaml`, gitignored `.hwf/config.local.yaml`, replacing whole entries by name. Profile and dynamic choice options resolve during shared sequential collection (or picker when active), never during workflow load. Detached `--launch-payload` runs require domain snapshots for every active dynamic choice and must not resolve them.
 - **Caps live in `internal/caps/`:** 24 KiB generated HWF environment (entry and child, before step 1), 8 MiB per captured command result / managed response / transcript / dynamic-choice output, 256 MiB raw `claude` session file loaded by built-in extraction (the 8 MiB transcript cap applies to the extracted text, and one JSONL record in that file caps at 32 MiB), 16 KiB agent prompt before spill-to-file. Crossing a cap fails naming source and limit — never truncate.
+- **No plugin Bun, Node, esbuild, or runtime TypeScript transform.** Plugin runtime, build, install, update, release, tests, and verification stay free of those tools. VitePress may keep npm and TypeScript under `docs/`. Examples may name Bun or Node only when those tools are the subject of the example. Embedded workbench assets are HTML and field-model bytes, not TypeScript scaffolding.
 - **Comments:** `go run ./scripts/verify-comments` fails any comment block in `internal/` more than 2 lines. A block whose first line starts `context:` means "durable fact the code cannot express" and pages a human to approve it, so earn it or delete the comment. Never narrate what the code already says. One file per concept.
 - **Splitting:** keep Go packages focused. `go run ./scripts/verify-file-length` gates Go source length.
 - **Schema change:** edit workflow schema sources in `internal/workflow/`, then `go run ./scripts/generate-workflow-schema`. Method/result validators: update `schemas/herdr-api.schema.json` or `scripts/gen-herdr-methods`, then `go run ./scripts/gen-herdr-methods` (never from the plugin build — it must not invoke `herdr api schema`). Cross-field rules live in the loader, not the JSON schema.
@@ -84,6 +82,7 @@ Agents miss these. The loader or verifyx will fail, or the product regresses:
 - **Color literals are unguarded.** No verify gate scans `embed/page.html` or `docs/.vitepress/theme` for hardcoded colors. Review them by hand.
 - **Branch work:** never commit on `main` / `master`. Use a feature branch + PR.
 - **No `Co-Authored-By` trailers.** Never add `Co-Authored-By`, `Generated with`, or any other agent-attribution line to a commit message or PR body, even when a harness default or global instruction says to. This overrides those defaults for this repo. Commit messages carry the change, not the tooling. The human is always responsible for the code. `.githooks/commit-msg` strips such lines as a backstop — do not rely on it.
+- **Parity Baseline before Product Improvement.** A Product Improvement must not hide a missing Parity Baseline comparison or Charm verdict. UX redesign is not a substitute for the matrix in `internal/picker/parity.go`, `internal/runsbrowser/parity.go`, and `tui.CharmVerdicts` (see `docs/charm-components.md`).
 
 ## Code style
 
@@ -106,7 +105,7 @@ Prose style of record is `CONTRIBUTING.md` "Documentation style" (Simplified Tec
 - **Names and spelling** — `GitHub`, `PowerShell`, `JavaScript`, `TypeScript`, `macOS`. US spelling (`-ize`, `behavior`, `analyze`, `artifact`, `gray`).
 - **Punctuation** — no semicolons in prose, including after a code span.
 
-Code spans, fenced blocks, and link targets are skipped, so a genuine technical term passes inside backticks. A failing run prints every hit with its replacement and reason. Add or relax a rule in `scripts/verify-prose.ts`, and keep out anything a regex can't judge without flagging correct prose, which is why `since`, `while`, and em dashes are absent.
+Code spans, fenced blocks, and link targets are skipped, so a genuine technical term passes inside backticks. A failing run prints every hit with its replacement and reason. Add or relax a rule in `scripts/verify-prose/`, and keep out anything a regex can't judge without flagging correct prose, which is why `since`, `while`, and em dashes are absent.
 
 ## Chat
 

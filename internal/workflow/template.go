@@ -340,16 +340,6 @@ func BuildTemplateNamespace(opts NamespaceOpts) TemplateNamespace {
 	}
 }
 
-// ClausesContain reports whether the proven clauses include every requirement.
-func ClausesContain(proven, required []WhenSpec) bool {
-	for _, need := range required {
-		if !slices.Contains(proven, need) {
-			return false
-		}
-	}
-	return true
-}
-
 func isTruthyScalar(value any) bool {
 	switch v := value.(type) {
 	case nil:

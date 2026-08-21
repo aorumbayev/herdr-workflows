@@ -58,11 +58,6 @@ func ParseWebRoute(raw string) *WebRoute {
 	}
 }
 
-// RunWorkbenchRoute formats a run deep-link hash body.
-func RunWorkbenchRoute(id string) string {
-	return "run=" + strings.ToLower(id)
-}
-
 type openWorkflow struct {
 	Name   string `json:"name"`
 	Source string `json:"source"`
@@ -180,6 +175,10 @@ func (s *Server) handleRunDetail(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusGone, map[string]any{
 			"ok": false, "detail": encodeDetail(detail, nil), "blocks": encodeBlocks(blocks),
 		})
+	case "incompatible":
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"ok": false, "detail": encodeDetail(detail, nil), "blocks": encodeBlocks(blocks),
+		})
 	default:
 		open := resolveOpenWorkflow(s.repoRoot, detail.CheckoutRoot, detail.Workflow, detail.Source)
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -196,6 +195,8 @@ func encodeDetail(d history.Detail, open *openWorkflow) map[string]any {
 		return map[string]any{"kind": "missing", "id": d.ID, "message": d.Message}
 	case "expired":
 		return map[string]any{"kind": "expired", "id": d.ID, "message": d.Message}
+	case "incompatible":
+		return map[string]any{"kind": "incompatible", "id": d.ID, "message": d.Message}
 	case "unavailable":
 		out := map[string]any{"kind": "unavailable", "message": d.Message}
 		if d.ID != "" {

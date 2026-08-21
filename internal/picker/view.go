@@ -14,28 +14,24 @@ func (m Model) View() tea.View {
 }
 
 func (m Model) render() string {
+	var body string
 	switch m.mode {
 	case modeRuns:
-		return m.runs.View().Content
+		body = m.runs.View().Content
 	case modePalette:
-		return m.renderPalette()
+		body = m.renderPalette()
 	case modeDelete:
-		return "Delete " + m.deleteLabel() + "?\n" + tui.DeleteConfirmHint
+		body = "Delete " + m.deleteLabel() + "?\n" + tui.DeleteConfirmHint
 	case modeFail:
-		return m.status + "\n" + tui.FailHint
-	case modeRun:
-		body := m.status
-		if line := m.consentLine(); line != "" {
-			body = line
-		}
-		return body + "\n" + tui.RunHint
+		body = m.status + "\n" + tui.FailHint
 	case modeInputText:
-		return m.renderTextPrompt()
+		body = m.renderTextPrompt()
 	case modeInput:
-		return m.renderChoice()
+		body = m.renderChoice()
 	default:
-		return m.renderList()
+		body = m.renderList()
 	}
+	return tui.PadHeight(body, m.height)
 }
 
 func (m Model) deleteLabel() string {
@@ -112,7 +108,8 @@ func (m Model) renderChoice() string {
 	}
 	prompt := ""
 	if m.prompt != nil {
-		prompt = FormatInputPrompt(m.prompt.Spec)
+		pos, total := m.inputOrdinal()
+		prompt = FormatInputPrompt(m.prompt.Spec, pos, total)
 	}
 	answers := FormatInputAnswers(m.queue, m.values(), w)
 	hint := tui.ChoiceHint
@@ -139,7 +136,8 @@ func (m Model) renderTextPrompt() string {
 	w := m.contentWidth()
 	prompt := tui.PromptPlaceholder
 	if m.prompt != nil {
-		prompt = FormatInputPrompt(m.prompt.Spec)
+		pos, total := m.inputOrdinal()
+		prompt = FormatInputPrompt(m.prompt.Spec, pos, total)
 	}
 	answers := FormatInputAnswers(m.queue, m.values(), w)
 	parts := []string{}
@@ -162,4 +160,19 @@ func (m Model) values() map[string]string {
 		return nil
 	}
 	return m.session.Values()
+}
+
+func (m Model) inputOrdinal() (int, int) {
+	answered := 0
+	if vals := m.values(); vals != nil {
+		answered = len(vals)
+	}
+	total := len(m.queue)
+	if total < answered+1 {
+		total = answered + 1
+	}
+	if total == 0 {
+		return 0, 0
+	}
+	return answered + 1, total
 }

@@ -83,7 +83,7 @@ the pin stay put in that case.
    speak to the old server, so the floor moves with the pin.
 4. Update the protocol pin test in `internal/host/methods_test.go` and the fake-herdr `ping`
    fixture in `e2e/` when examples still run there.
-5. `go test ./...` and the Go verify scripts must pass before the review is done.
+5. `go tool verify` must pass before the review is done.
 6. Refresh what the regenerated table feeds. `skills/herdr-workflow-create/reference/herdr-api.md`
    hand-lists the allowed methods with their counts, version pin, and per-method selectors — a
    regen without this refresh teaches authors a stale API. Take new selectors from

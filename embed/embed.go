@@ -9,9 +9,8 @@ import (
 	"strings"
 )
 
-// herdr-plugin.toml is a copy of the repository-root manifest. go:embed
-// cannot read files outside the package, so a test asserts the copy
-// equals the root manifest.
+// herdr-plugin.toml is a generated copy of the repository-root
+// manifest. Run `go run ./scripts/sync-embed` after editing the root.
 //
 //go:embed herdr-plugin.toml
 var manifest string
@@ -19,8 +18,8 @@ var manifest string
 //go:embed page.html
 var PageHTML string
 
-//go:embed field-model.ts
-var FieldModelTS string
+//go:embed field-model.js
+var FieldModelJS string
 
 //go:embed logo.svg
 var LogoSVG string

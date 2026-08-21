@@ -50,8 +50,8 @@ func WithPinnedSchemaPointer(text string) string {
 	return pointer + "\n" + strings.Join(kept, "\n")
 }
 
-// DumpWorkflow emits a reviewable YAML document from a parsed raw document.
-func DumpWorkflow(doc RawWorkflow) (string, error) {
+// DumpWorkflow emits reviewable YAML from a parsed Document.
+func DumpWorkflow(doc Document) (string, error) {
 	entries := []dumpEntry{{key: "version", value: dumpNode(doc.Version)}}
 	if doc.Title != "" {
 		entries = append(entries, dumpEntry{key: "title", value: dumpNode(doc.Title)})
@@ -918,7 +918,7 @@ func resolveInput(file, name string, raw RawInputValue) (InputSpec, error) {
 	return input, nil
 }
 
-func inputsOf(file string, raw RawWorkflow) ([]InputSpec, error) {
+func inputsOf(file string, raw Document) ([]InputSpec, error) {
 	result := make([]InputSpec, 0, len(raw.Inputs))
 	for _, named := range raw.Inputs {
 		input, err := resolveInput(file, named.Name, named.Value)
@@ -930,7 +930,7 @@ func inputsOf(file string, raw RawWorkflow) ([]InputSpec, error) {
 	return result, nil
 }
 
-func inputIsUsed(name string, workflow LoadedWorkflow) bool {
+func inputIsUsed(name string, workflow Definition) bool {
 	for _, path := range WorkflowTemplateRefs(workflow.Steps, workflow.Returns, workflow.OnFailure) {
 		if path.Root == "inputs" && len(path.Segments) > 0 && path.Segments[0] == name {
 			return true
@@ -958,7 +958,7 @@ func inputIsUsed(name string, workflow LoadedWorkflow) bool {
 	return false
 }
 
-func assertInputsUsed(file string, workflow LoadedWorkflow) error {
+func assertInputsUsed(file string, workflow Definition) error {
 	for _, input := range workflow.Inputs {
 		if !inputIsUsed(input.Name, workflow) {
 			return bail(file, 0, "inputs."+input.Name, "unused input")
@@ -982,15 +982,15 @@ func finalizeInputs(file string, inputs []InputSpec) error {
 	return nil
 }
 
-func loadFromRaw(name, file, source string, raw RawWorkflow) (*LoadedWorkflow, error) {
+func loadFromRaw(name, file, source string, raw Document) (*Definition, error) {
 	inputs, err := inputsOf(file, raw)
 	if err != nil {
 		return nil, err
 	}
-	workflow := &LoadedWorkflow{
+	workflow := &Definition{
 		Name: name, File: file, Version: raw.Version, Title: raw.Title, Description: raw.Description,
 		Hidden: raw.Hidden, Steps: raw.Steps, Inputs: inputs, Returns: raw.Returns, OnFailure: raw.OnFailure,
-		RepoOwned: source == "repo", NeedsTranscript: WorkflowNeedsTranscript(raw.Steps, raw.Returns), Children: map[string]*LoadedWorkflow{},
+		RepoOwned: source == "repo", NeedsTranscript: WorkflowNeedsTranscript(raw.Steps, raw.Returns), Children: map[string]*Definition{},
 	}
 	return workflow, nil
 }
@@ -999,10 +999,10 @@ type loadScope struct {
 	RepoRoot string
 	Config   config.Config
 	Stack    []string
-	Cache    map[string]*LoadedWorkflow
+	Cache    map[string]*Definition
 }
 
-func loadChild(name string, scope loadScope) (*LoadedWorkflow, error) {
+func loadChild(name string, scope loadScope) (*Definition, error) {
 	if slices.Contains(scope.Stack, name) {
 		return nil, &LoadError{fmt.Sprintf("workflow cycle: %s", strings.Join(append(slices.Clone(scope.Stack), name), " → "))}
 	}
@@ -1035,7 +1035,7 @@ func loadChild(name string, scope loadScope) (*LoadedWorkflow, error) {
 	return loaded, err
 }
 
-func finalizeWorkflow(workflow *LoadedWorkflow, scope loadScope) (*LoadedWorkflow, error) {
+func finalizeWorkflow(workflow *Definition, scope loadScope) (*Definition, error) {
 	if err := assertInputsUsed(workflow.File, *workflow); err != nil {
 		return nil, err
 	}
@@ -1043,7 +1043,7 @@ func finalizeWorkflow(workflow *LoadedWorkflow, scope loadScope) (*LoadedWorkflo
 		return nil, err
 	}
 	childReturns := map[string]*ReturnsSpec{}
-	for _, childName := range WorkflowChildNames(*workflow) {
+	for _, childName := range workflowChildNames(*workflow) {
 		if workflow.Children[childName] != nil {
 			continue
 		}
@@ -1065,19 +1065,19 @@ func finalizeWorkflow(workflow *LoadedWorkflow, scope loadScope) (*LoadedWorkflo
 	for _, name := range config.ProfileNames(scope.Config) {
 		profiles[name] = true
 	}
-	producers, err := AssertWorkflowReferences(workflow.File, *workflow, childReturns, profiles)
+	producers, err := assertWorkflowReferences(workflow.File, *workflow, childReturns, profiles)
 	if err != nil {
 		return nil, err
 	}
 	for i, step := range workflow.Steps {
 		if action, ok := step.Action.(WorkflowAction); ok {
-			if err := AssertChildInputContract(workflow.File, i+1, action.Inputs, *workflow.Children[action.Name], producers, workflow.Inputs, profiles, step.When); err != nil {
+			if err := assertChildInputContract(workflow.File, i+1, action.Inputs, *workflow.Children[action.Name], producers, workflow.Inputs, profiles, step.When); err != nil {
 				return nil, err
 			}
 		}
 	}
 	if action, ok := workflow.OnFailure.(WorkflowAction); ok {
-		if err := AssertChildInputContract(workflow.File, 0, action.Inputs, *workflow.Children[action.Name], producers, workflow.Inputs, profiles, nil); err != nil {
+		if err := assertChildInputContract(workflow.File, 0, action.Inputs, *workflow.Children[action.Name], producers, workflow.Inputs, profiles, nil); err != nil {
 			return nil, err
 		}
 	}
@@ -1092,7 +1092,7 @@ func configFor(repoRoot string, supplied []config.Config) (config.Config, error)
 }
 
 // ParseWorkflowText parses and validates a workflow body without filesystem resolution for the entry.
-func ParseWorkflowText(name, text string, cfg config.Config, repoRoot string, file ...string) (*LoadedWorkflow, error) {
+func ParseWorkflowText(name, text string, cfg config.Config, repoRoot string, file ...string) (*Definition, error) {
 	entryFile := name + ".yaml"
 	if len(file) > 0 && file[0] != "" {
 		entryFile = file[0]
@@ -1105,11 +1105,11 @@ func ParseWorkflowText(name, text string, cfg config.Config, repoRoot string, fi
 	if err != nil {
 		return nil, err
 	}
-	return finalizeWorkflow(workflow, loadScope{RepoRoot: repoRoot, Config: cfg, Stack: []string{name}, Cache: map[string]*LoadedWorkflow{}})
+	return finalizeWorkflow(workflow, loadScope{RepoRoot: repoRoot, Config: cfg, Stack: []string{name}, Cache: map[string]*Definition{}})
 }
 
 // LoadWorkflow loads the repository-first workflow by name.
-func LoadWorkflow(name, repoRoot string, supplied ...config.Config) (*LoadedWorkflow, error) {
+func LoadWorkflow(name, repoRoot string, supplied ...config.Config) (*Definition, error) {
 	resolved, err := ResolveWorkflowFile(name, repoRoot)
 	if errors.Is(err, ErrWorkflowNotFound) {
 		return nil, &LoadError{fmt.Sprintf("workflow '%s' not found", name)}
@@ -1121,7 +1121,7 @@ func LoadWorkflow(name, repoRoot string, supplied ...config.Config) (*LoadedWork
 }
 
 // LoadWorkflowEntry loads an explicitly selected source file.
-func LoadWorkflowEntry(entry WorkflowListEntry, repoRoot string, supplied ...config.Config) (*LoadedWorkflow, error) {
+func LoadWorkflowEntry(entry WorkflowListEntry, repoRoot string, supplied ...config.Config) (*Definition, error) {
 	if _, err := os.Stat(entry.File); err != nil {
 		return nil, bail(entry.File, 0, "", "file not found")
 	}
@@ -1141,7 +1141,7 @@ func LoadWorkflowEntry(entry WorkflowListEntry, repoRoot string, supplied ...con
 	if err != nil {
 		return nil, err
 	}
-	return finalizeWorkflow(workflow, loadScope{RepoRoot: repoRoot, Config: cfg, Stack: []string{entry.Name}, Cache: map[string]*LoadedWorkflow{}})
+	return finalizeWorkflow(workflow, loadScope{RepoRoot: repoRoot, Config: cfg, Stack: []string{entry.Name}, Cache: map[string]*Definition{}})
 }
 
 func yamlWorkflowNames(dir string) []string {
@@ -1197,7 +1197,7 @@ func ListWorkflows(repoRoot string, supplied ...config.Config) ([]WorkflowListEn
 		entry.Hidden, entry.Title, entry.Description = workflow.Hidden, workflow.Title, workflow.Description
 		entry.Inputs, entry.RepoOwned = workflow.Inputs, workflow.RepoOwned
 		entry.DynamicOptions = slices.ContainsFunc(workflow.Inputs, func(input InputSpec) bool { return input.DynamicOptions != nil })
-		flags := AnalyzeResolvedSensitivity(RawWorkflow{
+		flags := AnalyzeResolvedSensitivity(Document{
 			Steps: workflow.Steps, Returns: workflow.Returns, OnFailure: workflow.OnFailure,
 		}, workflow.Name, repoRoot)
 		entry.HasCommands, entry.NeedsTranscript = flags.HasCommands, flags.HasTranscript || workflow.NeedsTranscript
@@ -1208,7 +1208,7 @@ func ListWorkflows(repoRoot string, supplied ...config.Config) ([]WorkflowListEn
 }
 
 // CompleteWorkflowInputs drives entry or child input collection.
-func CompleteWorkflowInputs(ctx context.Context, workflow *LoadedWorkflow, opts InputSessionOptions, provided map[string]string) (CollectedInputs, error) {
+func CompleteWorkflowInputs(ctx context.Context, workflow *Definition, opts InputSessionOptions, provided map[string]string) (CollectedInputs, error) {
 	opts.Specs, opts.File = workflow.Inputs, workflow.File
 	return NewInputSession(opts).CompleteFromProvided(ctx, provided)
 }

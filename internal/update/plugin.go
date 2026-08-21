@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	assets "github.com/aorumbayev/herdr-workflows/embed"
@@ -21,12 +22,14 @@ type Result struct {
 }
 
 type Deps struct {
-	FetchLatest func() (LatestRelease, error)
-	RunInstall  func(args []string, cwd string) (int, error)
-	PluginRoot  string
-	Version     string
-	ListSource  func() (PluginSourceInfo, error)
-	Getenv      func(string) string
+	FetchLatest    func() (LatestRelease, error)
+	RunInstall     func(args []string, cwd string) (int, error)
+	PluginRoot     string
+	Version        string
+	ListSource     func() (PluginSourceInfo, error)
+	Getenv         func(string) string
+	Executable     func() (string, error)
+	InstallRelease func(InstallOpts) error
 }
 
 func UpdatePlugin(deps Deps) (Result, error) {
@@ -61,7 +64,7 @@ func UpdatePlugin(deps Deps) (Result, error) {
 		return Result{Kind: "refused_local"}, nil
 	}
 	if source.Kind == "unregistered" {
-		return Result{Kind: "refused_unregistered", Repo: ReleaseRepo}, nil
+		return updateStandalone(deps, current, latest)
 	}
 	root := deps.PluginRoot
 	if root == "" {
@@ -81,6 +84,30 @@ func UpdatePlugin(deps Deps) (Result, error) {
 	}
 	if code != 0 {
 		return Result{Kind: "install_failed", From: current, To: latest.Version, Repo: ReleaseRepo, Code: code}, nil
+	}
+	return Result{Kind: "updated", From: current, To: latest.Version, Repo: ReleaseRepo}, nil
+}
+
+func updateStandalone(deps Deps, current string, latest LatestRelease) (Result, error) {
+	execPath := deps.Executable
+	if execPath == nil {
+		execPath = os.Executable
+	}
+	dest, err := execPath()
+	if err != nil {
+		return Result{}, err
+	}
+	install := deps.InstallRelease
+	if install == nil {
+		install = InstallRelease
+	}
+	if err := install(InstallOpts{
+		Version:  latest.Version,
+		GOOS:     runtime.GOOS,
+		GOARCH:   runtime.GOARCH,
+		DestPath: dest,
+	}); err != nil {
+		return Result{}, err
 	}
 	return Result{Kind: "updated", From: current, To: latest.Version, Repo: ReleaseRepo}, nil
 }

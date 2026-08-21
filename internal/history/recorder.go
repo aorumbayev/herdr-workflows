@@ -6,7 +6,7 @@ import (
 )
 
 type CreateRecorderOpts struct {
-	Workflow     workflow.LoadedWorkflow
+	Workflow     workflow.Definition
 	RunID        string
 	CheckoutRoot string
 	OnAck        func(string)
@@ -54,11 +54,8 @@ func (e claimError) Error() string { return string(e) }
 
 func errClaim(msg string) error { return claimError(msg) }
 
-func sourceOf(wf workflow.LoadedWorkflow) string {
-	if wf.RepoOwned {
-		return "repo"
-	}
-	return "global"
+func sourceOf(wf workflow.Definition) string {
+	return wf.SourceKind()
 }
 
 func emitAck(fn func(string), line string) {

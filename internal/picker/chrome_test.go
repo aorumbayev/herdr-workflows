@@ -130,10 +130,20 @@ func TestChromeStringsAreSingleColumnASCII(t *testing.T) {
 		if tui.Columns(chrome) != utf8.RuneCountInString(chrome) {
 			t.Fatalf("%q is not single-column", chrome)
 		}
+		if tui.Columns(chrome) != len(chrome) {
+			t.Fatalf("%q multi-byte under ASCII claim", chrome)
+		}
 		for _, r := range chrome {
 			if r < 0x20 || r > 0x7e {
 				t.Fatalf("%q contains non-ASCII %q", chrome, r)
 			}
+		}
+	}
+	forbidden := "─│┌┐└┘═║→←↑↓▶◀▲▼►◄…"
+	joined := strings.Join(tui.ChromeStrings, "")
+	for _, r := range forbidden {
+		if strings.ContainsRune(joined, r) {
+			t.Fatalf("chrome contains box/arrow/heavy glyph %q", r)
 		}
 	}
 }
@@ -151,6 +161,23 @@ func TestWideTitlesStayAligned(t *testing.T) {
 	}
 	if tui.Columns(cjk) > width {
 		t.Fatalf("cjk wider than row: %d", tui.Columns(cjk))
+	}
+	if !utf8.ValidString(cjk) || !utf8.ValidString(emoji) {
+		t.Fatal("wide title rows must stay valid UTF-8")
+	}
+
+	narrowWidth := 28
+	narrowCJK := FormatPickerRowName(strings.Repeat("中", 40), "repo", true, narrowWidth, false)
+	narrowASCII := FormatPickerRowName("Short", "repo", true, narrowWidth, false)
+	if tui.Columns(narrowCJK) != tui.Columns(narrowASCII) {
+		t.Fatalf("narrow misaligned cjk=%d ascii=%d (%q vs %q)", tui.Columns(narrowCJK), tui.Columns(narrowASCII), narrowCJK, narrowASCII)
+	}
+	if tui.Columns(narrowCJK) > narrowWidth {
+		t.Fatalf("narrow overflow %d > %d (%q)", tui.Columns(narrowCJK), narrowWidth, narrowCJK)
+	}
+	locTail := narrowCJK[len(narrowCJK)-7:]
+	if locTail != narrowASCII[len(narrowASCII)-7:] {
+		t.Fatalf("narrow location tails cjk=%q ascii=%q", locTail, narrowASCII[len(narrowASCII)-7:])
 	}
 }
 
@@ -216,12 +243,6 @@ func TestStdinLeakFilter(t *testing.T) {
 }
 
 func TestCustomChoiceHelpers(t *testing.T) {
-	if !IsCustomChoiceValue(CustomChoiceValue{Kind: "custom"}) {
-		t.Fatal("tagged custom")
-	}
-	if IsCustomChoiceValue("__hwf_custom__") || IsCustomChoiceValue("custom...") {
-		t.Fatal("string sentinels")
-	}
 	if !ShouldRestoreCustomChoiceText(true, "", []string{"main"}, true) {
 		t.Fatal("empty custom")
 	}

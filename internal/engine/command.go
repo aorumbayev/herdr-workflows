@@ -39,6 +39,10 @@ func ShellArgv(command, shell string) []string {
 	}
 }
 
+func NativeProcessTree(goos string) bool {
+	return goos == "linux" || goos == "darwin"
+}
+
 func KillSpawn(cmd *exec.Cmd) {
 	if cmd.Process == nil || cmd.Process.Pid == 0 {
 		return

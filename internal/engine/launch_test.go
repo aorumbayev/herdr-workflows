@@ -64,7 +64,6 @@ func exitingSpawn(seen *spawnSeen, code int, stdout, stderr string, stdin *captu
 	}
 }
 
-// TypeScript: run-steps.test.ts "every step outcome shape maps to one recorded kind"
 func TestRecordedOutcomeKind(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -112,7 +111,6 @@ func TestRecordedOutcomeKind(t *testing.T) {
 	}
 }
 
-// TypeScript: run-launch.test.ts "parseLaunchPayload round-trips inputs"
 // and "launch payload forwards domains and round-trips snapshots"
 func TestParseLaunchPayloadRoundTrip(t *testing.T) {
 	t.Run("inputs", func(t *testing.T) {
@@ -160,7 +158,6 @@ func TestParseLaunchPayloadRoundTrip(t *testing.T) {
 	})
 }
 
-// TypeScript: run-launch.test.ts "parseLaunchPayload rejects invalid shapes with stable messages"
 func TestParseLaunchPayloadErrors(t *testing.T) {
 	cases := []struct {
 		raw     string
@@ -188,7 +185,6 @@ func TestParseLaunchPayloadErrors(t *testing.T) {
 	}
 }
 
-// TypeScript: run-launch.test.ts "a compiled entry relies on build identity, not a script watch"
 // and "a script entry claims no build identity"
 func TestBuildIdentityCompiledVsScript(t *testing.T) {
 	dir := t.TempDir()
@@ -224,7 +220,6 @@ func TestBuildIdentityCompiledVsScript(t *testing.T) {
 	})
 }
 
-// TypeScript: run-launch.test.ts "build identity changes however the new build is installed"
 func TestBuildIdentityChangesWithInstall(t *testing.T) {
 	base := t.TempDir()
 	checkout := filepath.Join(base, "checkout")
@@ -277,7 +272,6 @@ func TestBuildIdentityChangesWithInstall(t *testing.T) {
 	}
 }
 
-// TypeScript: run-launch.test.ts "no watch target is a no-op disposer, not a failure"
 func TestRetireOnCodeChangeNoop(t *testing.T) {
 	retired := 0
 	stop := RetireOnCodeChange(func() { retired++ }, nil)
@@ -290,28 +284,6 @@ func TestRetireOnCodeChangeNoop(t *testing.T) {
 	}
 }
 
-// TypeScript: run-launch.test.ts filter behind "a watched source tree retires on served sources only"
-func TestShouldRetireOnFile(t *testing.T) {
-	cases := []struct {
-		name string
-		want bool
-	}{
-		{name: "cli.ts", want: true},
-		{name: "workflow/parse.ts", want: true},
-		{name: "page.html", want: true},
-		{name: "notes.md", want: false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := ShouldRetireOnFile(tc.name)
-			if got != tc.want {
-				t.Fatalf("ShouldRetireOnFile(%q) = %v, want %v", tc.name, got, tc.want)
-			}
-		})
-	}
-}
-
-// TypeScript: run-launch.test.ts "detached run pins caller pane/tab/workspace in child env"
 func TestLaunchDetachedRunPinsCallerEnv(t *testing.T) {
 	seen := &spawnSeen{}
 	_ = LaunchDetachedRun(LaunchRunRequest{
@@ -368,7 +340,6 @@ func TestLaunchDetachedRunPinsCallerEnv(t *testing.T) {
 	}
 }
 
-// TypeScript: run-launch.test.ts "detached run argv is self-exec plus name and launch-payload flag"
 // Go deviation: compiled SelfArgv is [executable, command, ...args] — no script path at argv[1].
 func TestLaunchDetachedRunArgv(t *testing.T) {
 	seen := &spawnSeen{}
@@ -399,7 +370,6 @@ func TestLaunchDetachedRunArgv(t *testing.T) {
 	}
 }
 
-// TypeScript: run-launch.test.ts "detached web argv reuses the same self-exec rules"
 // Go deviation: last two elements only — no script path requirement at argv[1].
 func TestLaunchDetachedWebArgv(t *testing.T) {
 	seen := &spawnSeen{}
@@ -433,7 +403,6 @@ func TestLaunchDetachedWebArgv(t *testing.T) {
 	}
 }
 
-// TypeScript: run-launch.test.ts "detached spawn argv never contains input values"
 func TestLaunchDetachedRunPayloadOnStdin(t *testing.T) {
 	seen := &spawnSeen{}
 	stdin := &capturingStdin{}
@@ -474,7 +443,6 @@ func TestLaunchDetachedRunPayloadOnStdin(t *testing.T) {
 	}
 }
 
-// TypeScript: run-launch.test.ts "observed failure keeps only the final diagnostic line"
 func TestLaunchDetachedRunFailedDiagnostic(t *testing.T) {
 	seen := &spawnSeen{}
 	var progress []string
@@ -506,7 +474,6 @@ func TestLaunchDetachedRunFailedDiagnostic(t *testing.T) {
 	}
 }
 
-// TypeScript: run-launch.test.ts "multi-megabyte stderr without newlines keeps a bounded diagnostic tail"
 func TestLaunchDetachedRunStderrTail(t *testing.T) {
 	seen := &spawnSeen{}
 	flood := strings.Repeat("a", 80*1024) + "TAIL-END"
@@ -541,7 +508,6 @@ func trimForLog(s string) string {
 	return "…" + s[len(s)-63:]
 }
 
-// TypeScript: run-launch.test.ts "pins repo root, ignores stdout, and appends stderr to plugin state"
 func TestLaunchDetachedWebPinsRepoAndStderr(t *testing.T) {
 	root := t.TempDir()
 	stateDir := filepath.Join(root, "state")
@@ -587,7 +553,6 @@ func TestLaunchDetachedWebPinsRepoAndStderr(t *testing.T) {
 	}
 }
 
-// TypeScript: run-launch.test.ts "unusable plugin state still launches with stderr ignored"
 func TestLaunchDetachedWebUnusableState(t *testing.T) {
 	root := t.TempDir()
 	blocker := filepath.Join(root, "not-a-dir")

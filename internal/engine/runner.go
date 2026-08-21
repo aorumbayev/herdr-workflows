@@ -26,14 +26,14 @@ type RunOptions struct {
 	Domains        map[string][]string
 	ResolveDynamic *bool
 	Recorder       Recorder
-	Workflow       *workflow.LoadedWorkflow
+	Workflow       *workflow.Definition
 	OnProgress     func(step, total int, label string, outcome *ProgressOutcome)
 	OnStderr       func(text string)
 }
 
 var identityKeys = []string{"workspace", "tab", "pane", "worktree"}
 
-func referencedContextKeys(wf *workflow.LoadedWorkflow, stack []string) map[string]struct{} {
+func referencedContextKeys(wf *workflow.Definition, stack []string) map[string]struct{} {
 	keys := map[string]struct{}{}
 	if wf == nil {
 		return keys
@@ -148,7 +148,7 @@ func loadTranscriptContext(
 }
 
 func preflightContext(
-	wf *workflow.LoadedWorkflow,
+	wf *workflow.Definition,
 	ctx config.InvocationContext,
 	cfg config.Config,
 	deps RunnerDeps,
@@ -482,6 +482,31 @@ func executeWithRetry(step workflow.Step, stepIndex int, values workflow.Templat
 	return last, nil
 }
 
+func applyFailedStep(
+	opts StepRunOpts,
+	step workflow.Step,
+	stepIndex, total int,
+	label string,
+	outcome StepOutcome,
+	kind StepOutcomeKind,
+	tolerated []string,
+) (StepsResult, string, error) {
+	emitProgress(opts, stepIndex, total, label, progressOutcomeOf(kind))
+	if outcome.CoordinationLost {
+		result, err := hardStepFailure(opts, step, stepIndex, total, label, outcome, tolerated, true)
+		return result, "", err
+	}
+	if step.ContinueOnError && !outcome.HardFailure {
+		if err := opts.Run.FinishStep(OutcomeFailedContinued); err != nil {
+			return StepsResult{}, "", err
+		}
+		_ = opts.Recorder.StepFinished(step, stepIndex, total, label, OutcomeFailedContinued, toRecorderOutcome(outcome), PhaseMain)
+		return StepsResult{}, outcome.Error, nil
+	}
+	result, err := hardStepFailure(opts, step, stepIndex, total, label, outcome, tolerated, false)
+	return result, "", err
+}
+
 func hardStepFailure(
 	opts StepRunOpts,
 	step workflow.Step,
@@ -490,13 +515,13 @@ func hardStepFailure(
 	outcome StepOutcome,
 	tolerated []string,
 	interrupted bool,
-) StepsResult {
+) (StepsResult, error) {
 	errText := fail(opts.Deps, opts.Name, stepIndex, outcome.Error)
 	recorded := toRecorderOutcome(outcome)
 	recorded.Error = errText
-	kind := OutcomeFailed
-	if interrupted {
-		kind = OutcomeInterrupted
+	kind := RecordedOutcomeKind(outcome)
+	if err := opts.Run.FinishStep(kind); err != nil {
+		return StepsResult{}, err
 	}
 	_ = opts.Recorder.StepFinished(step, stepIndex, total, label, kind, recorded, PhaseMain)
 	result := StepsResult{
@@ -511,7 +536,7 @@ func hardStepFailure(
 	if len(tolerated) > 0 {
 		result.Failures = tolerated
 	}
-	return result
+	return result, nil
 }
 
 func runSteps(steps []workflow.Step, opts StepRunOpts, values workflow.TemplateNamespace) (StepsResult, error) {
@@ -522,10 +547,16 @@ func runSteps(steps []workflow.Step, opts StepRunOpts, values workflow.TemplateN
 		label := stepLabel(step)
 		if len(step.When) > 0 && !workflow.EvaluateWhen(step.When, values) {
 			emitProgress(opts, n, total, label, ProgressSkip)
+			if err := opts.Run.FinishStep(OutcomeSkipped); err != nil {
+				return StepsResult{}, err
+			}
 			_ = opts.Recorder.StepFinished(step, n, total, label, OutcomeSkipped, nil, PhaseMain)
 			continue
 		}
 		emitProgress(opts, n, total, label, ProgressStart)
+		if err := opts.Run.StartStep(StepRef{Ordinal: n, Total: total, Label: label, Phase: PhaseMain}); err != nil {
+			return StepsResult{}, err
+		}
 		_ = opts.Recorder.StepStarted(step, n, total, label, PhaseMain)
 		outcome, err := executeWithRetry(step, n, values, opts)
 		if err != nil {
@@ -533,19 +564,21 @@ func runSteps(steps []workflow.Step, opts StepRunOpts, values workflow.TemplateN
 		}
 		kind := RecordedOutcomeKind(outcome)
 		if !outcome.OK {
-			emitProgress(opts, n, total, label, progressOutcomeOf(kind))
-			if outcome.CoordinationLost {
-				return hardStepFailure(opts, step, n, total, label, outcome, tolerated, true), nil
+			failed, contErr, err := applyFailedStep(opts, step, n, total, label, outcome, kind, tolerated)
+			if err != nil {
+				return StepsResult{}, err
 			}
-			if step.ContinueOnError && !outcome.HardFailure {
-				tolerated = append(tolerated, outcome.Error)
-				_ = opts.Recorder.StepFinished(step, n, total, label, OutcomeFailedContinued, toRecorderOutcome(outcome), PhaseMain)
+			if contErr != "" {
+				tolerated = append(tolerated, contErr)
 				continue
 			}
-			return hardStepFailure(opts, step, n, total, label, outcome, tolerated, false), nil
+			return failed, nil
 		}
 		bindResult(step, values, outcome)
 		emitProgress(opts, n, total, label, progressOutcomeOf(kind))
+		if err := opts.Run.FinishStep(kind); err != nil {
+			return StepsResult{}, err
+		}
 		_ = opts.Recorder.StepFinished(step, n, total, label, kind, toRecorderOutcome(outcome), PhaseMain)
 	}
 	if len(tolerated) > 0 {
@@ -581,18 +614,25 @@ func runRecovery(
 		WorkflowPath:  recoveryPath,
 		ParentOrdinal: &parentOrdinal,
 	})
+	if err := opts.Run.StartStep(StepRef{Ordinal: 1, Total: 1, Label: label, Phase: PhaseRecovery}); err != nil {
+		return StepOutcome{}, err
+	}
 	_ = recoveryOpts.Recorder.StepStarted(step, 1, 1, label, PhaseRecovery)
 	outcome, err := executeOnce(step, 0, recoveryValues, recoveryOpts)
 	if err != nil {
 		return StepOutcome{}, err
 	}
+	kind := RecordedOutcomeKind(outcome)
+	if err := opts.Run.FinishStep(kind); err != nil {
+		return StepOutcome{}, err
+	}
 	_ = recoveryOpts.Recorder.StepFinished(
-		step, 1, 1, label, RecordedOutcomeKind(outcome), toRecorderOutcome(outcome), PhaseRecovery,
+		step, 1, 1, label, kind, toRecorderOutcome(outcome), PhaseRecovery,
 	)
 	return outcome, nil
 }
 
-func shouldRunRecovery(primary StepsResult, loaded *workflow.LoadedWorkflow) bool {
+func shouldRunRecovery(primary StepsResult, loaded *workflow.Definition) bool {
 	return !primary.OK && primary.Aborted && !primary.CoordinationLost && loaded.OnFailure != nil && primary.Failure != nil
 }
 
@@ -601,6 +641,9 @@ func finalizeFailedRecovery(primary StepsResult, recovery StepOutcome, opts Step
 	status := StatusFailed
 	if recovery.CoordinationLost {
 		status = StatusInterrupted
+	}
+	if err := opts.Run.Finish(status); err != nil {
+		return StepsResult{}, err
 	}
 	_ = opts.Recorder.Finished(status, &RecorderFinishExtras{Error: errText})
 	result := StepsResult{
@@ -620,7 +663,7 @@ func finalizeFailedRecovery(primary StepsResult, recovery StepOutcome, opts Step
 
 func finalizeEntryRun(
 	primary StepsResult,
-	loaded *workflow.LoadedWorkflow,
+	loaded *workflow.Definition,
 	opts StepRunOpts,
 	values workflow.TemplateNamespace,
 ) (StepsResult, error) {
@@ -647,6 +690,9 @@ func finalizeEntryRun(
 	} else if !primary.OK {
 		extras = &RecorderFinishExtras{Error: primary.Error}
 	}
+	if err := opts.Run.Finish(status); err != nil {
+		return StepsResult{}, err
+	}
 	_ = opts.Recorder.Finished(status, extras)
 	return primary, nil
 }
@@ -665,6 +711,10 @@ func RunWorkflow(opts RunOptions) (StepsResult, error) {
 		return StepsResult{}, fmt.Errorf("recorder is required")
 	}
 	recorder := opts.Recorder
+	execRun, err := NewRun(recorder.RunID())
+	if err != nil {
+		return StepsResult{}, err
+	}
 
 	deps := opts.Deps
 	if deps.Sleep == nil {
@@ -695,6 +745,7 @@ func RunWorkflow(opts RunOptions) (StepsResult, error) {
 		Children:             loaded.Children,
 		ManagedResponseFiles: &managedResponseFiles,
 		Recorder:             recorder,
+		Run:                  execRun,
 		OnProgress:           opts.OnProgress,
 		OnStderr:             opts.OnStderr,
 	}
@@ -717,10 +768,13 @@ func RunWorkflow(opts RunOptions) (StepsResult, error) {
 		}
 	}()
 
-	failPrecondition := func(detail string) StepsResult {
+	failPrecondition := func(detail string) (StepsResult, error) {
 		errText := fail(deps, loaded.Name, 0, detail)
+		if err := execRun.Finish(StatusFailed); err != nil {
+			return StepsResult{}, err
+		}
 		_ = recorder.Finished(StatusFailed, &RecorderFinishExtras{Error: errText})
-		return StepsResult{OK: false, Error: errText}
+		return StepsResult{OK: false, Error: errText}, nil
 	}
 
 	collected, err := workflow.CompleteWorkflowInputs(context.Background(), loaded, workflow.InputSessionOptions{
@@ -730,16 +784,16 @@ func RunWorkflow(opts RunOptions) (StepsResult, error) {
 		ResolveDynamic: opts.ResolveDynamic,
 	}, opts.Inputs)
 	if err != nil {
-		return failPrecondition(err.Error()), nil
+		return failPrecondition(err.Error())
 	}
 
 	if err := caps.AssertHwfEnvValues("HWF environment", collected.Values); err != nil {
-		return failPrecondition(err.Error()), nil
+		return failPrecondition(err.Error())
 	}
 
 	preflight := preflightContext(loaded, opts.Ctx, opts.Config, deps, recorder.RunID(), opts.RepoRoot, collected.Values)
 	if !preflight.ok {
-		return failPrecondition(preflight.err), nil
+		return failPrecondition(preflight.err)
 	}
 	transcriptFile = preflight.transcriptFile
 

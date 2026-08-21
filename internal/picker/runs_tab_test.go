@@ -7,6 +7,7 @@ import (
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/history"
+	"github.com/aorumbayev/herdr-workflows/internal/runsbrowser"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
@@ -58,6 +59,46 @@ func TestTabLoadsCurrentCheckoutRuns(t *testing.T) {
 	}
 }
 
+func TestTabWorkbenchHandoffUsesScreenOptsHook(t *testing.T) {
+	stateDir := t.TempDir()
+	checkout := t.TempDir()
+	getenv := func(key string) string {
+		if key == "HERDR_PLUGIN_STATE_DIR" {
+			return stateDir
+		}
+		return os.Getenv(key)
+	}
+	w := history.NewWriter(getenv)
+	t.Cleanup(w.Dispose)
+	claimed := w.Claim(history.ClaimMeta{Workflow: "cycle8-tab", Source: "repo", CheckoutRoot: checkout})
+	if !claimed.OK || claimed.State != "claimed" {
+		t.Fatalf("claim = %+v", claimed)
+	}
+	runID := w.ID()
+	w.Finalize("succeeded", history.FinalizeOpts{})
+
+	var route string
+	m, err := PrepareScreen(ScreenOpts{
+		Entries:         catalogEntries(),
+		RepoRoot:        checkout,
+		Env:             getenv,
+		Chdir:           func(string) error { return nil },
+		LaunchWorkbench: func(r string) { route = r },
+	})
+	if err != nil {
+		t.Fatalf("PrepareScreen: %v", err)
+	}
+
+	m = apply(m, "tab")
+	m = apply(m, "enter")
+	_ = apply(m, "w")
+
+	want := runsbrowser.WorkbenchRoute(runID)
+	if route != want {
+		t.Fatalf("route = %q want %q", route, want)
+	}
+}
+
 func TestTabDoesNotSwitchDuringInputCollection(t *testing.T) {
 	entry := workflow.WorkflowListEntry{Name: "place", Source: "global", File: "/global/place.yaml"}
 	m := New(Options{
@@ -65,8 +106,8 @@ func TestTabDoesNotSwitchDuringInputCollection(t *testing.T) {
 		Width:    80,
 		RepoRoot: t.TempDir(),
 		Config:   config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.LoadedWorkflow, error) {
-			return &workflow.LoadedWorkflow{
+		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format,
 				Inputs: []workflow.InputSpec{
 					{Name: "unit", Type: "choice", Options: []string{"new", "existing"}},

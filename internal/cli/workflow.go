@@ -202,7 +202,7 @@ func importPrompts(in io.Reader, out io.Writer, repoRoot string) *workflow.Impor
 }
 
 func resolveInspectDomains(
-	wf *workflow.LoadedWorkflow,
+	wf *workflow.Definition,
 	repoRoot string,
 	provided map[string]string,
 	values map[string]string,

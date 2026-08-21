@@ -1,4 +1,4 @@
-// Package history stores private per-run snapshots and their list/detail projections.
+// Package history is Run Observation: it stores and presents Run Snapshot, Summary, and Detail without inventing state or exposing private execution data.
 package history
 
 import (
@@ -6,17 +6,15 @@ import (
 	"errors"
 	"math"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/credentials"
+	"github.com/aorumbayev/herdr-workflows/internal/engine"
 )
 
-const runHistoryVersion = 1
-
-var runUUIDRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+const SnapshotVersion = 1
 
 var isoLayouts = []string{time.RFC3339Nano, time.RFC3339}
 
@@ -83,11 +81,11 @@ func parseSnapshotValue(v any) (Snapshot, bool) {
 		return Snapshot{}, false
 	}
 	version, ok := jsonInt(m["version"])
-	if !ok || version != runHistoryVersion {
+	if !ok || version != SnapshotVersion {
 		return Snapshot{}, false
 	}
 	id, ok := asString(m["id"])
-	if !ok || !runUUIDRe.MatchString(strings.ToLower(strings.TrimSpace(id))) {
+	if !ok || !engine.ValidRunID(id) {
 		return Snapshot{}, false
 	}
 	workflow, ok := nonemptyString(m["workflow"])
@@ -176,7 +174,7 @@ func applyTerminalFields(snap *Snapshot, m map[string]any, hasStatus, hasFinishe
 	}
 	if hasStatus {
 		status, ok := asString(m["status"])
-		if !ok || !isTerminalStatus(status) {
+		if !ok || !engine.ValidTerminalStatus(status) {
 			return false
 		}
 		snap.Status = status
@@ -279,7 +277,7 @@ func parseStepRecord(v any) (StepRecord, bool) {
 		return StepRecord{}, false
 	}
 	outcome, ok := asString(m["outcome"])
-	if !ok || !isOutcomeKind(outcome) {
+	if !ok || !engine.ValidOutcomeKind(outcome) {
 		return StepRecord{}, false
 	}
 	rec := StepRecord{StepIdentity: ident, FinishedAt: finished, Outcome: outcome}
@@ -371,21 +369,8 @@ func parseFailureFact(v any) (FailureFact, bool) {
 	return fact, true
 }
 
-func isTerminalStatus(s string) bool {
-	return s == "succeeded" || s == "failed" || s == "interrupted"
-}
-
 func isActionKind(s string) bool {
 	return s == "agent" || s == "run" || s == "herdr" || s == "workflow"
-}
-
-func isOutcomeKind(s string) bool {
-	switch s {
-	case "succeeded", "skipped", "launched", "failed_continued", "failed", "interrupted":
-		return true
-	default:
-		return false
-	}
 }
 
 func asString(v any) (string, bool) {
@@ -434,32 +419,56 @@ func jsonInt(v any) (int, bool) {
 	}
 }
 
+type snapshotLoad struct {
+	Snap         *Snapshot
+	Incompatible *IncompatibleSnapshot
+}
+
 func ReadSnapshot(id string, getenv config.Env) (*Snapshot, error) {
+	loaded, err := loadSnapshot(id, getenv)
+	if err != nil {
+		return nil, err
+	}
+	return loaded.Snap, nil
+}
+
+func loadSnapshot(id string, getenv config.Env) (snapshotLoad, error) {
 	normalized, ok := NormalizeRunUUID(id)
 	if !ok {
-		return nil, nil
+		return snapshotLoad{}, nil
 	}
 	if _, err := ensureRunsDir(getenv); err != nil {
-		return nil, err
+		return snapshotLoad{}, err
 	}
 	if err := credentials.AssertPrivateCredentialFile(SnapshotPath(normalized, getenv), historyACLOpts()); err != nil {
 		var store *credentials.StoreError
 		if errors.As(err, &store) {
-			return nil, err
+			return snapshotLoad{}, err
 		}
-		return nil, nil
+		return snapshotLoad{}, nil
 	}
 	raw, err := os.ReadFile(SnapshotPath(normalized, getenv))
 	if err != nil {
-		return nil, nil
+		return snapshotLoad{}, nil
 	}
 	var v any
 	if err := json.Unmarshal(raw, &v); err != nil {
-		return nil, nil
+		return snapshotLoad{}, nil
+	}
+	if version, ok := peekSnapshotVersion(v); ok && version != SnapshotVersion {
+		return snapshotLoad{Incompatible: &IncompatibleSnapshot{ID: normalized, Version: version}}, nil
 	}
 	snap, ok := parseSnapshotValue(v)
 	if !ok || snap.ID != normalized {
-		return nil, nil
+		return snapshotLoad{}, nil
 	}
-	return &snap, nil
+	return snapshotLoad{Snap: &snap}, nil
+}
+
+func peekSnapshotVersion(v any) (int, bool) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return 0, false
+	}
+	return jsonInt(m["version"])
 }
