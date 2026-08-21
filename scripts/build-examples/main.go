@@ -25,7 +25,7 @@ type ExampleCard struct {
 
 type exampleSource struct {
 	body string
-	raw  workflow.RawWorkflow
+	raw  workflow.Document
 }
 
 func defaultExamplesDir() (string, error) {

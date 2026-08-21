@@ -37,7 +37,7 @@ Go packages under `internal/` and `embed/` (workbench HTML and field-model bytes
 | `internal/runsbrowser/`                      | runs browser TUI, list/detail, run-history presentation                                                       |
 | `internal/tui/`                              | Charm lipgloss/bubbletea adapter shared by picker and runs browser                                            |
 | `internal/workbench/`                        | browser workbench server, adopt/lock endpoint, embedded page                                                  |
-| `internal/workflow/`                         | types, paths, template engine, conditions (`when:`), parse (YAML → steps), trust, exchange, inputs            |
+| `internal/workflow/`                         | Workflow Authoring: Definition, document parse, templates, conditions (`when:`), trust, exchange, inputs      |
 | `internal/engine/`                           | workflow runner, step runners, pane placement, agent turns, detached launch                                   |
 | `internal/history/`                          | atomic run snapshots, list/detail, project claims, recorder, retention                                        |
 | `internal/host/`                             | herdr socket RPC, CLI wrappers, protocol check, generated method table                                        |

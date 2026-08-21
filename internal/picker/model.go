@@ -35,7 +35,7 @@ type Options struct {
 	Width              int
 	Env                config.Env
 	Chdir              func(string) error
-	LoadWorkflow       func(workflow.WorkflowListEntry) (*workflow.LoadedWorkflow, error)
+	LoadWorkflow       func(workflow.WorkflowListEntry) (*workflow.Definition, error)
 	ReportPaneMetadata func()
 	CopyClipboard      func(string) error
 }
@@ -46,7 +46,7 @@ type Model struct {
 	repoRoot     string
 	config       config.Config
 	width        int
-	load         func(workflow.WorkflowListEntry) (*workflow.LoadedWorkflow, error)
+	load         func(workflow.WorkflowListEntry) (*workflow.Definition, error)
 	copyText     func(string) error
 	env          config.Env
 	mode         mode

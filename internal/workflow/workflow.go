@@ -1,5 +1,5 @@
-// Package workflow defines the v1alpha1 document grammar, templates,
-// conditions, parsing, and trust analysis.
+// Package workflow is the Workflow Authoring boundary: it parses and
+// validates YAML and produces an immutable executable Definition.
 package workflow
 
 import (
@@ -193,16 +193,6 @@ type NamedInput struct {
 	Value RawInputValue
 }
 
-// Input returns the declaration for name, if declared.
-func (w *RawWorkflow) Input(name string) (RawInputValue, bool) {
-	for _, in := range w.Inputs {
-		if in.Name == name {
-			return in.Value, true
-		}
-	}
-	return nil, false
-}
-
 // NamedTemplate keeps one `returns:` map entry in document order.
 type NamedTemplate struct {
 	Name     string
@@ -216,8 +206,8 @@ type ReturnsSpec struct {
 	Fields   []NamedTemplate
 }
 
-// RawWorkflow is a validated v1alpha1 document before input resolution.
-type RawWorkflow struct {
+// Document is the validated v1alpha1 YAML authoring value before child-graph Definition.
+type Document struct {
 	Version     string
 	Title       string
 	Description string
@@ -228,9 +218,9 @@ type RawWorkflow struct {
 	Steps       []Step
 }
 
-// LoadedWorkflow is a validated workflow with its child graph retained for
-// the duration of one execution process.
-type LoadedWorkflow struct {
+// Definition is the immutable executable workflow produced by authoring.
+// Children are the frozen child graph for one load/process.
+type Definition struct {
 	Name            string
 	File            string
 	Version         string
@@ -243,7 +233,15 @@ type LoadedWorkflow struct {
 	OnFailure       Action
 	RepoOwned       bool
 	NeedsTranscript bool
-	Children        map[string]*LoadedWorkflow
+	Children        map[string]*Definition
+}
+
+// SourceKind reports whether this definition loaded from the repo or global store.
+func (d Definition) SourceKind() string {
+	if d.RepoOwned {
+		return "repo"
+	}
+	return "global"
 }
 
 // WorkflowListEntry is the picker-facing metadata for one workflow file.

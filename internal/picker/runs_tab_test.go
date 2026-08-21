@@ -65,8 +65,8 @@ func TestTabDoesNotSwitchDuringInputCollection(t *testing.T) {
 		Width:    80,
 		RepoRoot: t.TempDir(),
 		Config:   config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.LoadedWorkflow, error) {
-			return &workflow.LoadedWorkflow{
+		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format,
 				Inputs: []workflow.InputSpec{
 					{Name: "unit", Type: "choice", Options: []string{"new", "existing"}},

@@ -60,7 +60,7 @@ func runPicker(cmd *cobra.Command, _ []string) error {
 		Entries:  entries,
 		RepoRoot: app.RepoRoot,
 		Config:   app.Config,
-		LoadWorkflow: func(entry workflow.WorkflowListEntry) (*workflow.LoadedWorkflow, error) {
+		LoadWorkflow: func(entry workflow.WorkflowListEntry) (*workflow.Definition, error) {
 			return workflow.LoadWorkflowEntry(entry, app.RepoRoot, app.Config)
 		},
 	})

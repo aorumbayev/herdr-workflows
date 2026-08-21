@@ -16,7 +16,7 @@ type ScreenOpts struct {
 	RepoRoot           string
 	Config             config.Config
 	CheckLatestRelease func() (*update.LatestRelease, error)
-	LoadWorkflow       func(workflow.WorkflowListEntry) (*workflow.LoadedWorkflow, error)
+	LoadWorkflow       func(workflow.WorkflowListEntry) (*workflow.Definition, error)
 	Chdir              func(string) error
 	CopyClipboard      func(string) error
 }

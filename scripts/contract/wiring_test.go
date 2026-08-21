@@ -107,6 +107,18 @@ func TestReleaseAndDocsWorkflowsUseGo127(t *testing.T) {
 	}
 }
 
+func TestAgentsDocumentsWorkflowAuthoringBoundary(t *testing.T) {
+	for _, rel := range []string{"AGENTS.md", "CLAUDE.md"} {
+		text := readRepoFile(t, rel)
+		if !strings.Contains(text, "Workflow Authoring") {
+			t.Fatalf("%s missing Workflow Authoring", rel)
+		}
+		if !strings.Contains(text, "Definition") {
+			t.Fatalf("%s missing Definition", rel)
+		}
+	}
+}
+
 func TestContributingDocumentsUnifiedVerify(t *testing.T) {
 	text := readRepoFile(t, "CONTRIBUTING.md")
 	if !strings.Contains(text, "**1.27**") {

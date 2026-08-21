@@ -26,14 +26,14 @@ type RunOptions struct {
 	Domains        map[string][]string
 	ResolveDynamic *bool
 	Recorder       Recorder
-	Workflow       *workflow.LoadedWorkflow
+	Workflow       *workflow.Definition
 	OnProgress     func(step, total int, label string, outcome *ProgressOutcome)
 	OnStderr       func(text string)
 }
 
 var identityKeys = []string{"workspace", "tab", "pane", "worktree"}
 
-func referencedContextKeys(wf *workflow.LoadedWorkflow, stack []string) map[string]struct{} {
+func referencedContextKeys(wf *workflow.Definition, stack []string) map[string]struct{} {
 	keys := map[string]struct{}{}
 	if wf == nil {
 		return keys
@@ -148,7 +148,7 @@ func loadTranscriptContext(
 }
 
 func preflightContext(
-	wf *workflow.LoadedWorkflow,
+	wf *workflow.Definition,
 	ctx config.InvocationContext,
 	cfg config.Config,
 	deps RunnerDeps,
@@ -592,7 +592,7 @@ func runRecovery(
 	return outcome, nil
 }
 
-func shouldRunRecovery(primary StepsResult, loaded *workflow.LoadedWorkflow) bool {
+func shouldRunRecovery(primary StepsResult, loaded *workflow.Definition) bool {
 	return !primary.OK && primary.Aborted && !primary.CoordinationLost && loaded.OnFailure != nil && primary.Failure != nil
 }
 
@@ -620,7 +620,7 @@ func finalizeFailedRecovery(primary StepsResult, recovery StepOutcome, opts Step
 
 func finalizeEntryRun(
 	primary StepsResult,
-	loaded *workflow.LoadedWorkflow,
+	loaded *workflow.Definition,
 	opts StepRunOpts,
 	values workflow.TemplateNamespace,
 ) (StepsResult, error) {

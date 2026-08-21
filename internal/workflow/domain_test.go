@@ -22,7 +22,7 @@ func writeDomainWorkflow(t *testing.T, root, name, body string) {
 	}
 }
 
-func TestLoadedWorkflowValidatesReferencesAndChildren(t *testing.T) {
+func TestDefinitionValidatesReferencesAndChildren(t *testing.T) {
 	root := t.TempDir()
 	writeDomainWorkflow(t, root, "child", `version: v1alpha1
 inputs:
@@ -61,7 +61,7 @@ steps:
 	}
 }
 
-func TestLoadedWorkflowRejectsCyclesAndUnprovenResults(t *testing.T) {
+func TestDefinitionRejectsCyclesAndUnprovenResults(t *testing.T) {
 	root := t.TempDir()
 	writeDomainWorkflow(t, root, "a", "version: v1alpha1\nsteps:\n  - workflow: b\n")
 	writeDomainWorkflow(t, root, "b", "version: v1alpha1\nsteps:\n  - workflow: a\n")

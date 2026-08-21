@@ -149,7 +149,7 @@ type StepRunOpts struct {
 	Deps                 RunnerDeps
 	RunID                string
 	WorkflowPath         []string
-	Children             map[string]*workflow.LoadedWorkflow
+	Children             map[string]*workflow.Definition
 	ManagedResponseFiles *[]string
 	Recorder             Recorder
 	OnProgress           func(step, total int, label string, outcome *ProgressOutcome)
