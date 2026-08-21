@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -143,13 +144,30 @@ func TestUpdatePluginOutcomes(t *testing.T) {
 	if err != nil || local.Kind != "refused_local" {
 		t.Fatalf("%+v %v", local, err)
 	}
+	standaloneDir := t.TempDir()
+	standaloneDest := filepath.Join(standaloneDir, "herdr-workflows")
+	if err := os.WriteFile(standaloneDest, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var standaloneCalls int
 	unreg, err := UpdatePlugin(Deps{
 		Version:     current,
 		FetchLatest: func() (LatestRelease, error) { return LatestRelease{Tag: "v" + newer, Version: newer}, nil },
 		ListSource:  func() (PluginSourceInfo, error) { src, _ := ParsePluginListSource(emptyListJSON()); return src, nil },
+		Executable:  func() (string, error) { return standaloneDest, nil },
+		InstallRelease: func(opts InstallOpts) error {
+			standaloneCalls++
+			if opts.Version != newer || opts.DestPath != standaloneDest {
+				t.Fatalf("opts %+v", opts)
+			}
+			return os.WriteFile(opts.DestPath, []byte("new"), 0o755)
+		},
 	})
-	if err != nil || unreg.Kind != "refused_unregistered" {
+	if err != nil || unreg.Kind != "updated" || unreg.To != newer {
 		t.Fatalf("%+v %v", unreg, err)
+	}
+	if standaloneCalls != 1 {
+		t.Fatalf("standaloneCalls = %d", standaloneCalls)
 	}
 	pluginRoot := t.TempDir()
 	var installs []struct {

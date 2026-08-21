@@ -23,12 +23,14 @@ func (e *exitCodeError) Error() string { return e.msg }
 func (e *exitCodeError) ExitCode() int { return e.code }
 
 type updateDeps struct {
-	FetchLatest func() (update.LatestRelease, error)
-	RunInstall  func(args []string, cwd string) (int, error)
-	ListSource  func() (update.PluginSourceInfo, error)
-	PluginRoot  string
-	Version     string
-	Getenv      func(string) string
+	FetchLatest    func() (update.LatestRelease, error)
+	RunInstall     func(args []string, cwd string) (int, error)
+	ListSource     func() (update.PluginSourceInfo, error)
+	PluginRoot     string
+	Version        string
+	Getenv         func(string) string
+	Executable     func() (string, error)
+	InstallRelease func(update.InstallOpts) error
 }
 
 var pluginListMissingRE = regexp.MustCompile(`(?i)not found|no such|unknown plugin`)
@@ -95,12 +97,14 @@ func pluginRootFor(getenv func(string) string) string {
 func defaultUpdateDeps() updateDeps {
 	getenv := os.Getenv
 	return updateDeps{
-		FetchLatest: func() (update.LatestRelease, error) { return update.CheckForUpdate(update.CheckOpts{}) },
-		RunInstall:  defaultHerdrInstall(getenv),
-		ListSource:  func() (update.PluginSourceInfo, error) { return resolvePluginSource(getenv) },
-		PluginRoot:  pluginRootFor(getenv),
-		Version:     assets.ManifestVersion(),
-		Getenv:      getenv,
+		FetchLatest:    func() (update.LatestRelease, error) { return update.CheckForUpdate(update.CheckOpts{}) },
+		RunInstall:     defaultHerdrInstall(getenv),
+		ListSource:     func() (update.PluginSourceInfo, error) { return resolvePluginSource(getenv) },
+		PluginRoot:     pluginRootFor(getenv),
+		Version:        assets.ManifestVersion(),
+		Getenv:         getenv,
+		Executable:     os.Executable,
+		InstallRelease: update.InstallRelease,
 	}
 }
 
@@ -127,6 +131,12 @@ func executeUpdate(deps updateDeps, stdout, stderr io.Writer) error {
 	if deps.RunInstall == nil {
 		deps.RunInstall = defaultHerdrInstall(deps.Getenv)
 	}
+	if deps.Executable == nil {
+		deps.Executable = os.Executable
+	}
+	if deps.InstallRelease == nil {
+		deps.InstallRelease = update.InstallRelease
+	}
 	if deps.PluginRoot == "" {
 		deps.PluginRoot = pluginRootFor(deps.Getenv)
 	}
@@ -145,13 +155,22 @@ func executeUpdate(deps updateDeps, stdout, stderr io.Writer) error {
 		}
 		return origInstall(args, cwd)
 	}
+	origStandalone := deps.InstallRelease
+	deps.InstallRelease = func(opts update.InstallOpts) error {
+		if _, err := fmt.Fprintf(stdout, "updating %s → %s via standalone binary replace\n", current, opts.Version); err != nil {
+			return err
+		}
+		return origStandalone(opts)
+	}
 	result, err := update.UpdatePlugin(update.Deps{
-		FetchLatest: deps.FetchLatest,
-		RunInstall:  deps.RunInstall,
-		ListSource:  deps.ListSource,
-		PluginRoot:  deps.PluginRoot,
-		Version:     current,
-		Getenv:      deps.Getenv,
+		FetchLatest:    deps.FetchLatest,
+		RunInstall:     deps.RunInstall,
+		ListSource:     deps.ListSource,
+		PluginRoot:     deps.PluginRoot,
+		Version:        current,
+		Getenv:         deps.Getenv,
+		Executable:     deps.Executable,
+		InstallRelease: deps.InstallRelease,
 	})
 	if err != nil {
 		msg := err.Error()
@@ -174,7 +193,7 @@ func presentUpdateResult(result update.Result, stdout, stderr io.Writer) error {
 	case "refused_local":
 		return fmt.Errorf("refusing to update a linked development checkout — run go run ./scripts/install-dev from the working tree instead")
 	case "refused_unregistered":
-		return fmt.Errorf("this binary is not a Herdr-managed herdr-workflows install — run: herdr plugin install %s", result.Repo)
+		return fmt.Errorf("standalone update refused")
 	case "updated":
 		if _, err := fmt.Fprintf(stdout, "updated to %s\n", result.To); err != nil {
 			return err

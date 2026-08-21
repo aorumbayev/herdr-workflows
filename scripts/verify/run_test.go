@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -123,15 +125,21 @@ func TestFastOmitsDocsOpenSpecAndE2E(t *testing.T) {
 }
 
 func TestFullIncludesDocsOpenSpecAndAllRaceTests(t *testing.T) {
+	dir := t.TempDir()
 	var cmds []string
 	cfg := Config{
 		Fast: false,
-		Dir:  "/repo",
+		Dir:  dir,
 		LookPath: func(file string) (string, error) {
 			return "/bin/" + file, nil
 		},
 		Command: func(name string, args []string) (string, error) {
 			cmds = append(cmds, name+" "+strings.Join(args, " "))
+			if name == "goreleaser" && len(args) > 0 && args[0] == "release" {
+				if err := writeSnapshotArtifacts(dir); err != nil {
+					return "", err
+				}
+			}
 			return "", nil
 		},
 	}
@@ -153,11 +161,151 @@ func TestFullIncludesDocsOpenSpecAndAllRaceTests(t *testing.T) {
 		"npm run build --prefix docs",
 		"openspec validate --strict --all --no-interactive",
 		"go tool govulncheck ./...",
+		"goreleaser check",
+		"goreleaser release --snapshot --clean --skip=publish",
 	}
 	for _, w := range want {
 		if !strings.Contains(joined, w) {
 			t.Fatalf("full mode missing %q; cmds:\n%s", w, joined)
 		}
+	}
+}
+
+func writeSnapshotArtifacts(dir string) error {
+	dist := filepath.Join(dir, "dist")
+	if err := os.MkdirAll(dist, 0o755); err != nil {
+		return err
+	}
+	version := "0.0.0-SNAPSHOT"
+	for _, osName := range []string{"linux", "darwin"} {
+		for _, arch := range []string{"amd64", "arm64"} {
+			name := "herdr-workflows_" + version + "_" + osName + "_" + arch + ".tar.gz"
+			if err := os.WriteFile(filepath.Join(dist, name), []byte("x"), 0o644); err != nil {
+				return err
+			}
+		}
+	}
+	return os.WriteFile(filepath.Join(dist, "checksums.txt"), []byte("ok"), 0o644)
+}
+
+func TestFastOmitsGoreleaser(t *testing.T) {
+	var cmds []string
+	cfg := Config{
+		Fast: true,
+		Dir:  "/repo",
+		LookPath: func(file string) (string, error) {
+			return "/bin/" + file, nil
+		},
+		Command: func(name string, args []string) (string, error) {
+			cmds = append(cmds, name+" "+strings.Join(args, " "))
+			if name == "go" && len(args) > 0 && args[0] == "list" {
+				return "example.com/mod/pkg\n", nil
+			}
+			return "", nil
+		},
+	}
+	var stdout, stderr bytes.Buffer
+	if code := Run(cfg, &stdout, &stderr); code != 0 {
+		t.Fatalf("expected success, got %d stderr=%q", code, stderr.String())
+	}
+	joined := strings.Join(cmds, "\n")
+	if strings.Contains(joined, "goreleaser") {
+		t.Fatalf("fast mode must not run goreleaser; cmds:\n%s", joined)
+	}
+}
+
+func TestFullRequiresGoreleaser(t *testing.T) {
+	cfg := Config{
+		Fast: false,
+		Dir:  t.TempDir(),
+		LookPath: func(file string) (string, error) {
+			if file == "goreleaser" {
+				return "", errors.New("not found")
+			}
+			return "/bin/" + file, nil
+		},
+		Command: func(name string, args []string) (string, error) {
+			return "", nil
+		},
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run(cfg, &stdout, &stderr)
+	if code == 0 {
+		t.Fatal("full mode must fail when goreleaser is absent")
+	}
+	if !strings.Contains(stderr.String(), "goreleaser") {
+		t.Fatalf("expected goreleaser failure, got %q", stderr.String())
+	}
+}
+
+func TestFullGoreleaserRequiresSupportedArchives(t *testing.T) {
+	dir := t.TempDir()
+	var cmds []string
+	cfg := Config{
+		Fast: false,
+		Dir:  dir,
+		LookPath: func(file string) (string, error) {
+			return "/bin/" + file, nil
+		},
+		Command: func(name string, args []string) (string, error) {
+			cmds = append(cmds, name+" "+strings.Join(args, " "))
+			if name == "goreleaser" && len(args) > 0 && args[0] == "release" {
+				if err := writeSnapshotArtifacts(dir); err != nil {
+					return "", err
+				}
+			}
+			return "", nil
+		},
+	}
+	var stdout, stderr bytes.Buffer
+	if code := Run(cfg, &stdout, &stderr); code != 0 {
+		t.Fatalf("expected success, got %d stderr=%q", code, stderr.String())
+	}
+	joined := strings.Join(cmds, "\n")
+	if !strings.Contains(joined, "goreleaser check") {
+		t.Fatalf("missing goreleaser check; cmds:\n%s", joined)
+	}
+	if !strings.Contains(joined, "goreleaser release --snapshot --clean --skip=publish") {
+		t.Fatalf("missing goreleaser release snapshot; cmds:\n%s", joined)
+	}
+}
+
+func TestFullGoreleaserFailsWithoutChecksums(t *testing.T) {
+	dir := t.TempDir()
+	dist := filepath.Join(dir, "dist")
+	if err := os.MkdirAll(dist, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := Config{
+		Fast: false,
+		Dir:  dir,
+		LookPath: func(file string) (string, error) {
+			return "/bin/" + file, nil
+		},
+		Command: func(name string, args []string) (string, error) {
+			if name == "goreleaser" && len(args) > 0 && args[0] == "release" {
+				for _, pair := range [][2]string{
+					{"linux", "amd64"},
+					{"linux", "arm64"},
+					{"darwin", "amd64"},
+					{"darwin", "arm64"},
+				} {
+					name := "herdr-workflows_0.0.0_" + pair[0] + "_" + pair[1] + ".tar.gz"
+					if err := os.WriteFile(filepath.Join(dist, name), []byte("x"), 0o644); err != nil {
+						return "", err
+					}
+				}
+			}
+			return "", nil
+		},
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run(cfg, &stdout, &stderr)
+	if code == 0 {
+		t.Fatal("expected failure when checksums.txt is missing")
+	}
+	if !strings.Contains(stderr.String(), "checksums.txt") {
+		t.Fatalf("expected checksums.txt failure, got %q", stderr.String())
 	}
 }
 

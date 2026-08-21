@@ -232,9 +232,64 @@ func TestReleaseWorkflowRunsSemanticReleaseByDispatch(t *testing.T) {
 	if strings.Contains(text, "--draft") {
 		t.Fatal("must not draft releases")
 	}
-	if strings.Contains(text, "goreleaser") {
-		t.Fatal("must not use goreleaser")
+	if !strings.Contains(text, "goreleaser") {
+		t.Fatal("expected goreleaser after notes/tag")
 	}
+	if !strings.Contains(text, "checksums.txt") {
+		t.Fatal("expected checksums.txt attached to the release")
+	}
+	if !strings.Contains(text, ".tar.gz") {
+		t.Fatal("expected tar.gz archives attached to the release")
+	}
+	assertGoreleaserArtifactContract(t)
+}
+
+func TestGoreleaserDefinesSupportedArtifactSet(t *testing.T) {
+	assertGoreleaserArtifactContract(t)
+}
+
+func assertGoreleaserArtifactContract(t *testing.T) {
+	t.Helper()
+	cfg := readRepoFile(t, ".goreleaser.yaml")
+	if !strings.Contains(cfg, "CGO_ENABLED=0") {
+		t.Fatal(".goreleaser.yaml must set CGO_ENABLED=0")
+	}
+	if !strings.Contains(cfg, "checksums.txt") {
+		t.Fatal(".goreleaser.yaml must name checksums.txt")
+	}
+	for _, want := range []string{"linux", "darwin", "amd64", "arm64", "tar.gz"} {
+		if !strings.Contains(cfg, want) {
+			t.Fatalf(".goreleaser.yaml missing %q", want)
+		}
+	}
+	if goreleaserPublishesWindows(cfg) {
+		t.Fatal(".goreleaser.yaml must not publish a windows archive")
+	}
+}
+
+func goreleaserPublishesWindows(cfg string) bool {
+	inIgnore := false
+	for _, line := range strings.Split(cfg, "\n") {
+		trim := strings.TrimSpace(line)
+		if trim == "" || strings.HasPrefix(trim, "#") {
+			continue
+		}
+		indent := len(line) - len(strings.TrimLeft(line, " \t"))
+		if strings.HasPrefix(trim, "ignore:") {
+			inIgnore = true
+			continue
+		}
+		if inIgnore && indent == 0 {
+			inIgnore = false
+		}
+		if inIgnore {
+			continue
+		}
+		if trim == "- windows" || trim == "goos: windows" || strings.Contains(trim, "windows_") {
+			return true
+		}
+	}
+	return false
 }
 
 func TestSemrelrcUsesGitHubProvider(t *testing.T) {
@@ -293,9 +348,9 @@ func TestSemrelrcUsesGitHubProvider(t *testing.T) {
 	}
 }
 
-const releaseNotesFooter = "### Install requirements\n\nRemote install via Herdr requires **Go 1.27** or newer on the host."
+const releaseNotesFooter = "### Install requirements\n\nRemote install via Herdr downloads the verified release archive. The target host does not need Go."
 
-func TestWriteReleaseNotesAppendsGoToolchainFooter(t *testing.T) {
+func TestWriteReleaseNotesAppendsVerifiedArchiveFooter(t *testing.T) {
 	root := repoRoot(t)
 	dest := filepath.Join(t.TempDir(), "notes.md")
 	changelog := "## Features\n\n- add release notes\n"

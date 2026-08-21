@@ -1,30 +1,38 @@
 # plugin-installation Specification
 
 ## Purpose
-Versioned releases, Go-compiled remote installation, native setup, CLI/keybinding installation, repeat installation, and Herdr-owned update contract for the plugin.
+Versioned releases, verified archive remote installation, native setup, CLI/keybinding installation, repeat installation, and Herdr-owned update contract for the plugin.
 
 ## Requirements
 ### Requirement: Releases publish versioned tags and notes
-Every automated plugin release MUST derive its version and notes from conventional commits, remain within `0.x` until the project explicitly leaves alpha, update `herdr-plugin.toml` as the product-version source, and publish no npm package and no binary assets. Breaking commits MUST increment the minor version while the product major is zero. The first automated release MUST use an established `v0.1.0` baseline so earlier repository history cannot force a `1.0.0` release. The published tag MUST equal the manifest version it releases.
+Every automated plugin release MUST derive its version and notes from conventional commits, remain within `0.x` until the project explicitly leaves alpha, update `herdr-plugin.toml` as the product-version source, and publish no npm package. The release MUST publish the Supported Artifact Set: four CGO-free archives named `herdr-workflows_{version}_{os}_{arch}.tar.gz` for `linux`/`darwin` and `amd64`/`arm64`, plus one `checksums.txt` SHA-256 file covering those archives. Breaking commits MUST increment the minor version while the product major is zero. The first automated release MUST use an established `v0.1.0` baseline so earlier repository history cannot force a `1.0.0` release. The published tag MUST equal the manifest version it releases.
 
 #### Scenario: Release publishes tag and notes
 - **WHEN** semantic release selects a new version from conventional commits
-- **THEN** it updates `herdr-plugin.toml`, commits with a release-loop skip marker, tags `v<version>`, and publishes a GitHub Release containing generated notes and no binary assets
+- **THEN** it updates `herdr-plugin.toml`, commits with a release-loop skip marker, tags `v<version>`, and publishes a GitHub Release containing generated notes and the Supported Artifact Set
+
+#### Scenario: Supported Artifact Set
+- **WHEN** a release publishes binary assets
+- **THEN** the release includes exactly the four CGO-free `linux`/`darwin` `amd64`/`arm64` archives and `checksums.txt`
+
+#### Scenario: No native Windows archive
+- **WHEN** a release builds archives
+- **THEN** it refuses a native Windows archive and keeps WSL2 on the Linux artifact path
 
 #### Scenario: Breaking alpha change
 - **WHEN** a conventional commit marks a breaking change while the current product major is zero
 - **THEN** release analysis increments the minor version rather than publishing `1.0.0`
 
-### Requirement: Remote installation compiles the checkout with Go
-The plugin manifest MUST declare `linux` and `macos` as its only platforms, so Herdr refuses native Windows installation at install time with its platform error. Windows users are supported through WSL2, where Linux behavior applies unchanged. Remote installation MUST run entirely through Herdr's managed build: a preflight that names the required minimum Go version and fails with it when the host Go toolchain is absent or older, `go build -o bin/herdr-workflows .` producing the manifest command binary from the checkout, and `bin/herdr-workflows setup` installing the host commands. Herdr MUST remain responsible for registering, replacing, and rolling back the managed checkout. Linked development checkouts MUST keep compiling the working tree through `go run ./scripts/install-dev` without manifest build commands.
+### Requirement: Remote installation downloads a verified release archive
+The plugin manifest MUST declare `linux` and `macos` as its only platforms, so Herdr refuses native Windows installation at install time with its platform error. Windows users are supported through WSL2, where the Linux archive applies. Remote installation MUST run entirely through Herdr's managed build without a Go toolchain on the target: download and verify the exact release archive for the cloned manifest version (`herdr-workflows_{version}_{os}_{arch}.tar.gz` with `checksums.txt`), extract `bin/herdr-workflows`, and run `bin/herdr-workflows setup`. The build MUST fail closed on an unsupported platform, a missing checksum entry, a checksum mismatch, or a download failure, and MUST NOT fall back to compiling from source. Herdr MUST remain responsible for registering, replacing, and rolling back the managed checkout. Linked development checkouts MUST keep compiling the working tree through `go run ./scripts/install-dev` without manifest build commands.
 
-#### Scenario: Fresh install with Go present
-- **WHEN** a user with Herdr and a supported Go toolchain runs `herdr plugin install aorumbayev/herdr-workflows`
-- **THEN** the build compiles the checkout binary from the pinned module dependencies, runs native setup, and Herdr registers the plugin
+#### Scenario: Fresh install without Go
+- **WHEN** a user with Herdr on Linux or macOS runs `herdr plugin install aorumbayev/herdr-workflows`
+- **THEN** the build downloads the verified archive for the cloned tag, extracts the binary, runs native setup, and Herdr registers the plugin
 
-#### Scenario: Go missing or too old
-- **WHEN** the host has no Go toolchain or a Go older than the required minimum
-- **THEN** the build fails naming the required minimum Go version before compilation, and Herdr leaves the prior installation in place
+#### Scenario: Checksum or download failure
+- **WHEN** the archive download fails or its checksum does not match `checksums.txt`
+- **THEN** the build fails before replacing `bin/herdr-workflows`, and Herdr leaves the prior installation in place
 
 #### Scenario: Native Windows install refused
 - **WHEN** Herdr on native Windows previews the manifest

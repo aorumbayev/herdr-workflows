@@ -217,7 +217,7 @@ While a caller observes a detached `hwf run`, the parent MUST retain only progre
 - **THEN** the awaited failure detail is the final non-empty diagnostic line (or a small bounded tail), not the complete aggregate child output
 
 ### Requirement: Managed plugin update
-`hwf update` MUST check the latest published GitHub Release without considering drafts, validate its tag as a plugin semver, and compare it with the version embedded from `herdr-plugin.toml`. It MUST report success without reinstalling when the installed version is current or newer. For a newer release installed from a Herdr-managed GitHub checkout, it MUST change its working directory outside `HERDR_PLUGIN_ROOT` and synchronously invoke `herdr plugin install aorumbayev/herdr-workflows --ref <tag> --yes` with the validated release tag, forwarding output and failure status. It MUST refuse to overwrite a linked development checkout and direct the developer to `go run ./scripts/install-dev`. It MUST explain that an unregistered or directly copied binary must first be installed through Herdr.
+`hwf update` MUST check the latest published GitHub Release without considering drafts, validate its tag as a plugin semver, and compare it with the version embedded from `herdr-plugin.toml`. It MUST report success without reinstalling when the installed version is current or newer. For a newer release installed from a Herdr-managed GitHub checkout, it MUST change its working directory outside `HERDR_PLUGIN_ROOT` and synchronously invoke `herdr plugin install aorumbayev/herdr-workflows --ref <tag> --yes` with the validated release tag, forwarding output and failure status. It MUST refuse to overwrite a linked development checkout and direct the developer to `go run ./scripts/install-dev`. For an unregistered or directly copied binary, it MUST download the matching release archive, verify its checksum, and atomically replace the running executable. A failed download, checksum mismatch, or replace MUST leave the prior executable unchanged.
 
 #### Scenario: Already current
 - **WHEN** `hwf update` finds no published version newer than its embedded version
@@ -230,6 +230,10 @@ While a caller observes a detached `hwf run`, the parent MUST retain only progre
 #### Scenario: Linked development checkout
 - **WHEN** `hwf update` discovers that `herdr-workflows` is locally linked
 - **THEN** it makes no replacement and directs the user to `go run ./scripts/install-dev`
+
+#### Scenario: Standalone binary update
+- **WHEN** a newer published version exists and the binary is unregistered or copied outside Herdr management
+- **THEN** `hwf update` verifies the matching archive checksum and atomically replaces the executable without invoking `herdr plugin install`
 
 #### Scenario: Update check fails
 - **WHEN** the latest published release cannot be fetched or validated

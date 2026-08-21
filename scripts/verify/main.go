@@ -95,6 +95,7 @@ func checks(cfg Config) []check {
 			check{name: "docs", run: runDocs},
 			check{name: "openspec", run: runOpenSpec},
 			check{name: "govulncheck", run: runGovulncheck},
+			check{name: "goreleaser", run: runGoreleaser},
 		)
 	}
 	return out
@@ -183,6 +184,57 @@ func runOpenSpec(cfg Config) error {
 func runGovulncheck(cfg Config) error {
 	_, err := cfg.Command("go", []string{"tool", "govulncheck", "./..."})
 	return err
+}
+
+func runGoreleaser(cfg Config) error {
+	if _, err := cfg.LookPath("goreleaser"); err != nil {
+		return fmt.Errorf("goreleaser not found")
+	}
+	if _, err := cfg.Command("goreleaser", []string{"check"}); err != nil {
+		return err
+	}
+	if _, err := cfg.Command("goreleaser", []string{"release", "--snapshot", "--clean", "--skip=publish"}); err != nil {
+		return err
+	}
+	return assertSupportedArtifacts(filepath.Join(cfg.Dir, "dist"))
+}
+
+func assertSupportedArtifacts(dist string) error {
+	entries, err := os.ReadDir(dist)
+	if err != nil {
+		return fmt.Errorf("dist: %w", err)
+	}
+	names := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		names[e.Name()] = true
+	}
+	if !names["checksums.txt"] {
+		return fmt.Errorf("missing checksums.txt")
+	}
+	wantSuffixes := []string{
+		"_linux_amd64.tar.gz",
+		"_linux_arm64.tar.gz",
+		"_darwin_amd64.tar.gz",
+		"_darwin_arm64.tar.gz",
+	}
+	for _, suffix := range wantSuffixes {
+		found := false
+		for name := range names {
+			if strings.HasPrefix(name, "herdr-workflows_") && strings.HasSuffix(name, suffix) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("missing herdr-workflows_* %s archive", suffix)
+		}
+	}
+	for name := range names {
+		if strings.Contains(name, "windows") {
+			return fmt.Errorf("unexpected windows archive %s", name)
+		}
+	}
+	return nil
 }
 
 func findRepoRoot() (string, error) {

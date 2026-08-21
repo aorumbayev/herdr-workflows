@@ -90,7 +90,7 @@ Test the Go package whose interface you changed.
 
 `go tool verify` fails while `openspec/changes/archive/` holds anything.
 
-Pre-commit runs `go tool verify -fast`. CI runs `go tool verify` on Linux and macOS after it installs Node.js, golangci-lint, and the OpenSpec CLI. Docs publish uses `npm ci && npm run build` in `docs/`.
+Pre-commit runs `go tool verify -fast`. CI runs `go tool verify` on Linux and macOS after it installs Node.js, golangci-lint, GoReleaser, and the OpenSpec CLI. Docs publish uses `npm ci && npm run build` in `docs/`.
 
 ## Documentation style
 

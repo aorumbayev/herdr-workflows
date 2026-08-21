@@ -19,9 +19,9 @@ go run ./scripts/install-dev               # compile + herdr plugin link + keybi
 ```
 
 - Pre-commit (`.githooks/pre-commit`): `go tool verify -fast`.
-- CI (`.github/workflows/verify.yml`): `go tool verify` on Linux and macOS after it installs Node.js, golangci-lint, and the OpenSpec CLI. Docs publish (`.github/workflows/docs.yml`) runs `npm ci && npm run build` in `docs/`.
+- CI (`.github/workflows/verify.yml`): `go tool verify` on Linux and macOS after it installs Node.js, golangci-lint, GoReleaser, and the OpenSpec CLI. Docs publish (`.github/workflows/docs.yml`) runs `npm ci && npm run build` in `docs/`.
 - After `go run ./scripts/install-dev`, the live binary is `bin/herdr-workflows`.
-- Remote GitHub install runs the manifest build: Go preflight, `go build -o bin/herdr-workflows .`, then `bin/herdr-workflows setup`. Local link/dev compiles with `go build` / `go run ./scripts/install-dev`.
+- Remote GitHub install downloads the verified release archive for the cloned tag into `bin/herdr-workflows`, then runs `bin/herdr-workflows setup`. The target does not need Go. Local link/dev compiles with `go build` / `go run ./scripts/install-dev`.
 
 ## Layout
 
@@ -32,7 +32,7 @@ Go packages under `internal/` and `embed/` (workbench HTML and field-model bytes
 | `main.go`                                    | plugin binary entry                                                                                           |
 | `internal/cli/`                              | Cobra commands, terminal I/O, `hwf init` / `setup`                                                            |
 | `internal/skills/`                           | bundled agent skills embedded as text, `hwf skills` registry and show formatting                              |
-| `internal/update/`                           | GitHub release check and managed-plugin `hwf update`                                                          |
+| `internal/update/`                           | GitHub release check, managed-plugin `hwf update`, and distribution artifact names/checksums |
 | `internal/picker/`                           | picker TUI, workflow rows, ctrl+k palette, update indicator, Parity Baseline                                  |
 | `internal/runsbrowser/`                      | runs browser TUI, list/detail, run-history presentation, Parity Baseline                                      |
 | `internal/tui/`                              | Charm lipgloss/bubbletea adapter shared by picker and runs browser, Parity Baseline                           |
@@ -54,7 +54,7 @@ Go packages under `internal/` and `embed/` (workbench HTML and field-model bytes
 | `.agents/skills/promptfoo-skill-eval/`       | tracked eval for user-facing skills — the loader is the oracle, not a judge                                   |
 | `.agents/skills/codebase-sanity-check/`      | tracked whole-repository review — gates first, one agent per criteria group, additions face three whys        |
 | `.semrelrc`                                  | go-semantic-release plugin config (`.github/workflows/release.yml` dispatches tagged releases)                  |
-| `scripts/write-release-notes/`               | appends Go 1.27 install footer to dry-run changelog for `gh release create`                                   |
+| `scripts/write-release-notes/`               | appends verified-archive install footer to dry-run changelog for `gh release create`                          |
 | `.agents/references/AGENTS.md`               | tracked Herdr checkout instructions (clone contents are local-only)                                           |
 
 Gitignored local-only: `.agents/references/*` except `AGENTS.md`, `.plans/`, `.opencode/`, `.cursor/`. Do not commit them.

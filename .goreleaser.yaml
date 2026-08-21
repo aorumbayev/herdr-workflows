@@ -1,0 +1,36 @@
+version: 2
+
+project_name: herdr-workflows
+
+builds:
+  - id: herdr-workflows
+    main: .
+    binary: herdr-workflows
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    name_template: "herdr-workflows_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - none*
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+release:
+  disable: true
+
+snapshot:
+  version_template: "{{ .Version }}"

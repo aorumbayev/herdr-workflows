@@ -94,9 +94,25 @@ jobs:
             git push origin "refs/tags/$tag"
           fi
 
+      - name: Build release archives
+        if: steps.dry.outputs.version != ''
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean --skip=publish
+
       - name: Publish GitHub release
         if: steps.dry.outputs.version != ''
         env:
           VERSION: ${{ steps.dry.outputs.version }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: gh release create "v$VERSION" --notes-file "${RUNNER_TEMP}/release-notes.md"
+        run: |
+          set -eu
+          gh release create "v$VERSION" \
+            --notes-file "${RUNNER_TEMP}/release-notes.md" \
+            "dist/herdr-workflows_${VERSION}_linux_amd64.tar.gz" \
+            "dist/herdr-workflows_${VERSION}_linux_arm64.tar.gz" \
+            "dist/herdr-workflows_${VERSION}_darwin_amd64.tar.gz" \
+            "dist/herdr-workflows_${VERSION}_darwin_arm64.tar.gz" \
+            dist/checksums.txt
