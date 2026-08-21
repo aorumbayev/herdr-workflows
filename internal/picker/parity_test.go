@@ -4,10 +4,12 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
+	"github.com/aorumbayev/herdr-workflows/internal/history"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
@@ -623,9 +625,40 @@ func TestParityLaunchOpensStartingRunningLifecycle(t *testing.T) {
 		t.Fatalf("child fail before claim:\n%s", m3.View().Content)
 	}
 
+	stateDir := t.TempDir()
+	checkout := t.TempDir()
+	getenv := func(key string) string {
+		if key == "HERDR_PLUGIN_STATE_DIR" {
+			return stateDir
+		}
+		return os.Getenv(key)
+	}
+	successID := "550e8400-e29b-41d4-a716-446655440003"
+	startedAt := time.Now().UTC().Add(-5 * time.Second).Format("2006-01-02T15:04:05.000Z")
+	w := history.NewWriter(getenv)
+	t.Cleanup(w.Dispose)
+	claimed := w.Claim(history.ClaimMeta{
+		ID: successID, Workflow: "plain", Title: "Plain", Source: "repo",
+		CheckoutRoot: checkout, StartedAt: startedAt,
+	})
+	if !claimed.OK || claimed.State != "claimed" {
+		t.Fatalf("success claim = %+v", claimed)
+	}
+	w.RecordStep(history.StepRecord{
+		StepIdentity: history.StepIdentity{
+			Phase: "main", Workflow: "plain", WorkflowPath: []string{"plain"},
+			Ordinal: 1, Total: 1, Action: "run", Label: "echo-ok",
+		},
+		FinishedAt: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+		Outcome:    "succeeded",
+	})
+	w.Finalize("succeeded", history.FinalizeOpts{})
+
 	m4 := New(Options{
-		Entries: []workflow.WorkflowListEntry{entry},
-		Width:   80,
+		Entries:  []workflow.WorkflowListEntry{entry},
+		Width:    80,
+		RepoRoot: checkout,
+		Env:      getenv,
 		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
@@ -635,13 +668,82 @@ func TestParityLaunchOpensStartingRunningLifecycle(t *testing.T) {
 		LaunchRun: func(opts LaunchRunOpts) LaunchRunHandle {
 			return LaunchRunHandle{Detach: func() { detached = true }}
 		},
-		AllocateRunID: func() string { return "550e8400-e29b-41d4-a716-446655440003" },
+		AllocateRunID: func() string { return successID },
 	})
 	m4 = apply(m4, "enter")
-	m4 = applyMsg(m4, launchAckMsg{Line: "@hwf-history:claimed 550e8400-e29b-41d4-a716-446655440003"})
-	m4 = applyMsg(m4, launchSettledMsg{OK: true, Detail: "", RunID: "550e8400-e29b-41d4-a716-446655440003"})
+	m4 = applyMsg(m4, launchAckMsg{Line: "@hwf-history:claimed " + successID})
+	m4 = applyMsg(m4, launchSettledMsg{OK: true, Detail: "", RunID: successID})
 	if m4.quit || m4.mode != modeRuns {
 		t.Fatalf("fast success must stay open on Runs detail, mode=%v quit=%v", m4.mode, m4.quit)
+	}
+	presented := history.RunDetail(successID, getenv, time.Time{})
+	if presented.Detail.ElapsedMs <= 0 {
+		t.Fatalf("expected elapsed > 0, got %d", presented.Detail.ElapsedMs)
+	}
+	elapsed := history.FormatElapsed(presented.Detail.ElapsedMs)
+	body = m4.View().Content
+	if !strings.Contains(body, "SUCCEEDED") {
+		t.Fatalf("fast success detail must show SUCCEEDED:\n%s", body)
+	}
+	if !strings.Contains(body, "echo-ok") || !strings.Contains(body, "succeeded") {
+		t.Fatalf("fast success detail must show recorded step outcomes:\n%s", body)
+	}
+	if !strings.Contains(body, elapsed) {
+		t.Fatalf("fast success detail must show elapsed %q:\n%s", elapsed, body)
+	}
+
+	failID := "550e8400-e29b-41d4-a716-446655440005"
+	failStarted := time.Now().UTC().Add(-3 * time.Second).Format("2006-01-02T15:04:05.000Z")
+	fw := history.NewWriter(getenv)
+	t.Cleanup(fw.Dispose)
+	failClaimed := fw.Claim(history.ClaimMeta{
+		ID: failID, Workflow: "plain", Title: "Plain", Source: "repo",
+		CheckoutRoot: checkout, StartedAt: failStarted,
+	})
+	if !failClaimed.OK || failClaimed.State != "claimed" {
+		t.Fatalf("fail claim = %+v", failClaimed)
+	}
+	fw.RecordStep(history.StepRecord{
+		StepIdentity: history.StepIdentity{
+			Phase: "main", Workflow: "plain", WorkflowPath: []string{"plain"},
+			Ordinal: 1, Total: 1, Action: "run", Label: "boom-step",
+		},
+		FinishedAt: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+		Outcome:    "failed",
+	})
+	fw.Finalize("failed", history.FinalizeOpts{})
+
+	mFail := New(Options{
+		Entries:  []workflow.WorkflowListEntry{entry},
+		Width:    80,
+		RepoRoot: checkout,
+		Env:      getenv,
+		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+			return &workflow.Definition{
+				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
+				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
+			}, nil
+		},
+		LaunchRun: func(opts LaunchRunOpts) LaunchRunHandle {
+			return LaunchRunHandle{Detach: func() { detached = true }}
+		},
+		AllocateRunID: func() string { return failID },
+	})
+	mFail = apply(mFail, "enter")
+	mFail = applyMsg(mFail, launchAckMsg{Line: "@hwf-history:claimed " + failID})
+	mFail = applyMsg(mFail, launchSettledMsg{OK: false, Detail: "child exited", RunID: failID})
+	failBody := mFail.View().Content
+	if strings.Contains(failBody, "RUNNING") {
+		t.Fatalf("claim-then-fail must not leave synthetic RUNNING:\n%s", failBody)
+	}
+	if strings.Contains(failBody, "LAUNCH FAILED") {
+		t.Fatalf("claim-then-fail must use persisted detail, not local-failure:\n%s", failBody)
+	}
+	if !strings.Contains(failBody, "FAILED") && !strings.Contains(failBody, "INTERRUPTED") {
+		t.Fatalf("claim-then-fail must show FAILED or INTERRUPTED persisted detail:\n%s", failBody)
+	}
+	if !strings.Contains(failBody, "boom-step") {
+		t.Fatalf("claim-then-fail must show recorded step outcomes:\n%s", failBody)
 	}
 
 	detached = false

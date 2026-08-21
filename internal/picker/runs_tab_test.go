@@ -7,6 +7,7 @@ import (
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/history"
+	"github.com/aorumbayev/herdr-workflows/internal/runsbrowser"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
@@ -55,6 +56,46 @@ func TestTabLoadsCurrentCheckoutRuns(t *testing.T) {
 	body := m.View().Content
 	if !strings.Contains(body, "cycle8-tab") {
 		t.Fatalf("runs list missing workflow:\n%s", body)
+	}
+}
+
+func TestTabWorkbenchHandoffUsesScreenOptsHook(t *testing.T) {
+	stateDir := t.TempDir()
+	checkout := t.TempDir()
+	getenv := func(key string) string {
+		if key == "HERDR_PLUGIN_STATE_DIR" {
+			return stateDir
+		}
+		return os.Getenv(key)
+	}
+	w := history.NewWriter(getenv)
+	t.Cleanup(w.Dispose)
+	claimed := w.Claim(history.ClaimMeta{Workflow: "cycle8-tab", Source: "repo", CheckoutRoot: checkout})
+	if !claimed.OK || claimed.State != "claimed" {
+		t.Fatalf("claim = %+v", claimed)
+	}
+	runID := w.ID()
+	w.Finalize("succeeded", history.FinalizeOpts{})
+
+	var route string
+	m, err := PrepareScreen(ScreenOpts{
+		Entries:         catalogEntries(),
+		RepoRoot:        checkout,
+		Env:             getenv,
+		Chdir:           func(string) error { return nil },
+		LaunchWorkbench: func(r string) { route = r },
+	})
+	if err != nil {
+		t.Fatalf("PrepareScreen: %v", err)
+	}
+
+	m = apply(m, "tab")
+	m = apply(m, "enter")
+	_ = apply(m, "w")
+
+	want := runsbrowser.WorkbenchRoute(runID)
+	if route != want {
+		t.Fatalf("route = %q want %q", route, want)
 	}
 }
 

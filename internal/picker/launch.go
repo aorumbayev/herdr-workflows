@@ -2,6 +2,7 @@ package picker
 
 import (
 	"os"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -209,14 +210,7 @@ func (m Model) applyLaunchSettled(msg launchSettledMsg) (tea.Model, tea.Cmd) {
 		kind := m.runs.DetailKind()
 		switch kind {
 		case "starting", "", "detail":
-			m.runs = m.runs.ApplyLocalDetail(runsbrowser.DetailView{
-				Kind:     "detail",
-				ID:       id,
-				Workflow: title,
-				Blocks: []history.Block{{
-					Kind: "head", Status: "SUCCEEDED", Title: title, DisplayID: shortRunID(id),
-				}},
-			})
+			m = m.reloadPersistedDetail(id, title)
 		case "history-unavailable":
 			m.runs = m.runs.ApplyLocalDetail(runsbrowser.DetailView{
 				Kind:     "history-unavailable",
@@ -228,16 +222,39 @@ func (m Model) applyLaunchSettled(msg launchSettledMsg) (tea.Model, tea.Cmd) {
 		m.clearLaunchDetach()
 		return m, nil
 	}
-	if m.runs.DetailKind() == "starting" || m.runs.DetailKind() == "" {
+	kind := m.runs.DetailKind()
+	if kind == "starting" || kind == "" {
 		m.runs = m.runs.ApplyLocalDetail(runsbrowser.DetailView{
 			Kind:     "local-failure",
 			ID:       id,
 			Workflow: title,
 			Message:  msg.Detail,
 		})
+	} else {
+		m = m.reloadPersistedDetail(id, title)
 	}
 	m.clearLaunchDetach()
 	return m, nil
+}
+
+func (m Model) reloadPersistedDetail(id, title string) Model {
+	getenv := m.env
+	if getenv == nil {
+		getenv = os.Getenv
+	}
+	presented := history.RunDetail(id, getenv, time.Time{})
+	workflow := presented.Detail.Workflow
+	if workflow == "" {
+		workflow = title
+	}
+	m.runs = m.runs.ApplyLocalDetail(runsbrowser.DetailView{
+		Kind:     "detail",
+		ID:       presented.Detail.ID,
+		Workflow: workflow,
+		Detail:   presented.Detail,
+		Blocks:   presented.Blocks,
+	})
+	return m
 }
 
 func (m *Model) clearLaunchDetach() {

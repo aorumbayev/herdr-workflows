@@ -269,10 +269,11 @@ func (m Model) handleList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			getenv = os.Getenv
 		}
 		m.runs = runsbrowser.New(runsbrowser.Options{
-			RepoRoot: m.repoRoot,
-			Width:    m.width,
-			Height:   m.height,
-			Env:      getenv,
+			RepoRoot:        m.repoRoot,
+			Width:           m.width,
+			Height:          m.height,
+			Env:             getenv,
+			LaunchWorkbench: m.launchWorkbench,
 		})
 		m.mode = modeRuns
 		return m, m.runs.Init()
