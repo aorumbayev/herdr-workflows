@@ -70,6 +70,79 @@ func TestGoModDeclaresVerifyTool(t *testing.T) {
 	}
 }
 
+func TestGoModHasNoEsbuild(t *testing.T) {
+	text := readRepoFile(t, "go.mod")
+	needle := "github.com/evanw/" + "esbuild"
+	if strings.Contains(text, needle) {
+		t.Fatalf("go.mod must not require %s", needle)
+	}
+}
+
+func TestPluginSourceHasNoRuntimeTypeScriptTransform(t *testing.T) {
+	root := repoRoot(t)
+	// Concatenate so this test file does not contain the forbidden literals.
+	forbidden := []string{
+		"api." + "Transform",
+		"Loader" + "TS",
+		"github.com/evanw/" + "esbuild",
+		"oven-sh/" + "setup-bun",
+	}
+	var violations []string
+	for _, dir := range []string{"internal", "scripts"} {
+		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				if shouldSkipDir(d.Name()) {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+				return nil
+			}
+			data, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return readErr
+			}
+			text := string(data)
+			rel, relErr := filepath.Rel(root, path)
+			if relErr != nil {
+				rel = path
+			} else {
+				rel = filepath.ToSlash(rel)
+			}
+			for _, phrase := range forbidden {
+				if strings.Contains(text, phrase) {
+					violations = append(violations, rel+": "+phrase)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(violations) > 0 {
+		t.Fatalf("plugin source must not use runtime TypeScript transform or Bun setup:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+func TestAgentsDocumentsPluginRuntimeTypeScriptBoundary(t *testing.T) {
+	for _, rel := range []string{"AGENTS.md", "CLAUDE.md"} {
+		text := readRepoFile(t, rel)
+		for _, want := range []string{
+			"runtime TypeScript transform",
+			"VitePress may keep npm and TypeScript under `docs/`",
+		} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("%s missing %q", rel, want)
+			}
+		}
+	}
+}
+
 func TestPreCommitUsesGoToolVerifyFast(t *testing.T) {
 	text := readRepoFile(t, filepath.Join(".githooks", "pre-commit"))
 	if strings.Contains(text, "npm run verify") {

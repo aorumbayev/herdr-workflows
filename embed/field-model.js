@@ -1,4 +1,3 @@
-// @ts-nocheck
 const SECTIONS = [
   { id: "does", title: "what it does" },
   { id: "where", title: "where it runs" },
@@ -124,7 +123,7 @@ const ANY_PAYLOAD_KEY = [
 ];
 const MODE_SUFFIX = "::mode";
 
-export function widgetFor(node): { kind: string; [key: string]: unknown } {
+function widgetFor(node) {
   if (!node || typeof node !== "object") return { kind: "json" };
   if (Array.isArray(node.enum)) return { kind: "enum", options: node.enum.map(String) };
   if (Array.isArray(node.anyOf)) return anyOfWidget(node.anyOf);
@@ -186,17 +185,10 @@ function pushFields(out, key, node) {
 
 // Every schema key renders for every verb except another action's payload keys.
 // The loader judges the combination; this form never anticipates a rule.
-export function stepFields(
+function stepFields(
   props,
   verb,
-): Array<{
-  key: string;
-  widget: { kind: string; [key: string]: unknown };
-  label: string;
-  group: string;
-  help?: string;
-  placeholder?: string;
-}> {
+) {
   const mine = PAYLOAD_KEYS[verb] || [];
   const out = [];
   for (const key of Object.keys(props || {})) {
@@ -364,7 +356,7 @@ function paramsFromForm(form, methods) {
   return Object.keys(out).length ? out : undefined;
 }
 
-export function formFromStep(props, verb, step, methods): Record<string, unknown> {
+function formFromStep(props, verb, step, methods) {
   const form = { id: typeof step.id === "string" ? step.id : "" };
   for (const f of stepFields(props, verb)) {
     if (f.widget.kind === "params") {
@@ -382,13 +374,13 @@ export function formFromStep(props, verb, step, methods): Record<string, unknown
 
 // Live form values → a raw step the /api/format endpoint judges. Nothing entered is
 // dropped: a group with an unset required key is still submitted, and the loader answers.
-export function stepFromForm(
+function stepFromForm(
   props,
   verb,
   form,
   extra,
   methods,
-): { step?: Record<string, unknown>; error?: string } {
+) {
   const step = Object.assign({}, extra);
   try {
     for (const f of stepFields(props, verb)) {
@@ -412,7 +404,7 @@ export function stepFromForm(
 }
 
 // Keys this form does not render: carried through untouched and reported as from YAML.
-export function extraOf(props, verb, step): Record<string, unknown> {
+function extraOf(props, verb, step) {
   const shown = new Set(["id"]);
   for (const f of stepFields(props, verb)) {
     if (!rendersValue(f.widget, valueAt(step, f.key))) continue;
@@ -439,7 +431,7 @@ function isFieldSet(widget, form, key) {
   return String(form[key] ?? "").trim() !== "";
 }
 
-export function sectionSummary(fields, form): string[] {
+function sectionSummary(fields, form) {
   const bits = [];
   for (const f of fields) {
     if (!isFieldSet(f.widget, form, f.key)) continue;
@@ -462,7 +454,7 @@ export function sectionSummary(fields, form): string[] {
 
 // ["steps", 2, "retry", "attempts"] → step 2, field "retry.attempts". A path that names
 // no step, or an item inside a field's value, addresses the step alone.
-export function issueField(path): { index: number; key: string } | null {
+function issueField(path) {
   if (!Array.isArray(path) || path[0] !== "steps" || typeof path[1] !== "number") return null;
   const keys = [];
   for (const part of path.slice(2)) {
@@ -474,7 +466,7 @@ export function issueField(path): { index: number; key: string } | null {
 
 // A loader path and a form key need not agree on depth: "retry" addresses the fields the
 // group renders, and "env.LANG" addresses the field that holds the whole mapping.
-export function addressesField(issueKey, fieldKey): boolean {
+function addressesField(issueKey, fieldKey) {
   if (!issueKey || !fieldKey) return false;
   return (
     issueKey === fieldKey ||

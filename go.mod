@@ -11,7 +11,6 @@ require (
 	charm.land/bubbletea/v2 v2.0.9
 	charm.land/lipgloss/v2 v2.0.6
 	github.com/charmbracelet/x/ansi v0.11.8
-	github.com/evanw/esbuild v0.28.2
 	github.com/invopop/jsonschema v0.14.0
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/term v0.45.0

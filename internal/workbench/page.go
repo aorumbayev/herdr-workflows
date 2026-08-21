@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	assets "github.com/aorumbayev/herdr-workflows/embed"
-	"github.com/evanw/esbuild/pkg/api"
 )
 
 var (
@@ -19,14 +18,7 @@ var (
 )
 
 func initPageTemplate() {
-	result := api.Transform(assets.FieldModelTS, api.TransformOptions{
-		Loader: api.LoaderTS,
-	})
-	if len(result.Errors) > 0 {
-		pageInitErr = fmt.Errorf("field model transform: %s", result.Errors[0].Text)
-		return
-	}
-	js := exportPrefix.ReplaceAllString(string(result.Code), "")
+	js := exportPrefix.ReplaceAllString(assets.FieldModelJS, "")
 	page := strings.Replace(assets.PageHTML, "/* __HWF_FIELD_MODEL__ */", js, 1)
 	if !strings.Contains(page, "function addressesField") {
 		pageInitErr = fmt.Errorf("field model failed to inline into the workbench page")

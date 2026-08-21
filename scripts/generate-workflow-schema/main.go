@@ -1,5 +1,6 @@
-// Command generate-workflow-schema writes docs/workflow.schema.json from the
-// Go schema model. Run it from the repository root with:
+// Command generate-workflow-schema writes docs/workflow.schema.json and the
+// embed/workflow.schema.json copy from the Go schema model. Run it from the
+// repository root with:
 //
 //	go run ./scripts/generate-workflow-schema
 //
@@ -425,10 +426,16 @@ func writeSchema(path string) error {
 }
 
 func main() {
-	path := filepath.Join("docs", "workflow.schema.json")
-	if err := writeSchema(path); err != nil {
+	docsPath := filepath.Join("docs", "workflow.schema.json")
+	if err := writeSchema(docsPath); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	fmt.Printf("wrote %s\n", path)
+	fmt.Printf("wrote %s\n", docsPath)
+	embedPath := filepath.Join("embed", "workflow.schema.json")
+	if err := writeSchema(embedPath); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Printf("wrote %s\n", embedPath)
 }
