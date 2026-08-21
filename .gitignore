@@ -1,16 +1,16 @@
-# dependencies
+# dependencies (docs/ still builds VitePress with npm)
 node_modules/
 
-# bun
-.bun/
-*.bun
-bun-debug.log*
-
 # build / compile
-dist/
-target/
 bin/herdr-workflows
-*.tsbuildinfo
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
 
 # env / secrets
 .env
@@ -24,15 +24,20 @@ Thumbs.db
 
 # test / coverage / caches
 coverage/
+coverage.out
 *.lcov
 .cache/
-.eslintcache
-.oxlintcache
-.oxfmtcache
+
+# go workspaces
+go.work
+go.work.sum
 
 # docs (vitepress)
 docs/.vitepress/cache/
 docs/.vitepress/dist/
+
+# go-semantic-release downloaded plugins and local cache
+.semrel/
 
 # local scratch / agent harness
 .plans/

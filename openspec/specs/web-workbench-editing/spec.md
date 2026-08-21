@@ -119,8 +119,8 @@ Switching from canvas to YAML MUST serialize supported workflow metadata and ste
 
 ### Requirement: Node form fields derive from the workflow schema
 
-The node parameters form MUST build its fields from the workflow JSON Schema the server derives from
-the loader's Zod schema, not from a field list maintained inside the page. A field's widget and its
+The node parameters form MUST build its fields from the workflow JSON Schema the server serves,
+generated from the loader's Go schema model, not from a field list maintained inside the page. A field's widget and its
 accepted values MUST come from that schema: an enumerated string as a closed selection, a boolean as
 a checkbox, a bounded integer as a numeric entry carrying the schema's bounds, a mapping of strings as
 key/value entries, and a nested object as its own group of fields. The page MUST NOT restate any
@@ -285,7 +285,7 @@ When the workbench opens with hash `#new` (route `new`), it MUST present the sam
 - **THEN** the editor shows an unsaved new workflow with the starter YAML and no existing file path
 
 ### Requirement: YAML key autocomplete derives from the served schema
-YAML key autocomplete in the workbench editor MUST offer top-level and step keys from the workflow JSON Schema the server derives from the loader's Zod schema. It MUST NOT maintain a separate key list that can omit a key the served schema describes. A key such as `success_codes` that the schema accepts on a step MUST appear among step-key suggestions once the schema is loaded.
+YAML key autocomplete in the workbench editor MUST offer top-level and step keys from the workflow JSON Schema the server serves, generated from the loader's Go schema model. It MUST NOT maintain a separate key list that can omit a key the served schema describes. A key such as `success_codes` that the schema accepts on a step MUST appear among step-key suggestions once the schema is loaded.
 
 #### Scenario: Step key present in the served schema
 - **WHEN** the served schema describes `success_codes` on a step

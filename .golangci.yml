@@ -1,0 +1,71 @@
+version: "2"
+
+formatters:
+  enable:
+    - gofumpt
+
+linters:
+  enable:
+    - cyclop
+    - depguard
+    - nestif
+    - unused
+  settings:
+    cyclop:
+      max-complexity: 35
+    nestif:
+      min-complexity: 4
+    depguard:
+      rules:
+        platform-down-only:
+          files:
+            - "**/internal/caps/**"
+            - "**/internal/config/**"
+            - "**/internal/credentials/**"
+            - "**/internal/host/**"
+            - "**/internal/transcript/**"
+          deny:
+            - pkg: github.com/aorumbayev/herdr-workflows/internal/workflow
+              desc: platform must not import domain
+            - pkg: github.com/aorumbayev/herdr-workflows/internal/engine
+              desc: platform must not import domain
+            - pkg: github.com/aorumbayev/herdr-workflows/internal/history
+              desc: platform must not import domain
+            - pkg: github.com/aorumbayev/herdr-workflows/internal/update
+              desc: platform must not import domain
+            - pkg: github.com/aorumbayev/herdr-workflows/internal/cli
+              desc: platform must not import surfaces
+            - pkg: github.com/aorumbayev/herdr-workflows/internal/picker
+              desc: platform must not import surfaces
+            - pkg: github.com/aorumbayev/herdr-workflows/internal/runsbrowser
+              desc: platform must not import surfaces
+            - pkg: github.com/aorumbayev/herdr-workflows/internal/workbench
+              desc: platform must not import surfaces
+            - pkg: github.com/aorumbayev/herdr-workflows/internal/tui
+              desc: tui is importable only by picker/runsbrowser
+        domain-below-surfaces:
+          files:
+            - "**/internal/workflow/**"
+            - "**/internal/engine/**"
+            - "**/internal/history/**"
+            - "**/internal/update/**"
+          deny:
+            - pkg: github.com/aorumbayev/herdr-workflows/internal/cli
+              desc: domain must not import surfaces
+            - pkg: github.com/aorumbayev/herdr-workflows/internal/picker
+              desc: domain must not import surfaces
+            - pkg: github.com/aorumbayev/herdr-workflows/internal/runsbrowser
+              desc: domain must not import surfaces
+            - pkg: github.com/aorumbayev/herdr-workflows/internal/workbench
+              desc: domain must not import surfaces
+            - pkg: github.com/aorumbayev/herdr-workflows/internal/tui
+              desc: tui is importable only by picker/runsbrowser
+        tui-only-picker-runsbrowser:
+          files:
+            - $all
+            - "!**/internal/picker/**"
+            - "!**/internal/runsbrowser/**"
+            - "!**/internal/tui/**"
+          deny:
+            - pkg: github.com/aorumbayev/herdr-workflows/internal/tui
+              desc: tui is importable only by picker/runsbrowser

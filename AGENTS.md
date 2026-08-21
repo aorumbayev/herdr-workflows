@@ -1,6 +1,6 @@
 # herdr-workflows
 
-herdr ≥ 0.8.2 plugin. It sequences short linear YAML workflows (`agent` / `run` / `herdr` / `workflow`). herdr owns host panes and lifecycle. This repository owns the picker and browser workbench, and loads and runs workflow steps. Runtime is Bun + TypeScript ESM.
+herdr ≥ 0.8.2 plugin. It sequences short linear YAML workflows (`agent` / `run` / `herdr` / `workflow`). herdr owns host panes and lifecycle. This repository owns the picker and browser workbench, and loads and runs workflow steps. Runtime is Go with Charm TUI adapters.
 
 Workflow format is `version: v1alpha1`. The package stays semver `0.x`. A later incompatible alpha increments `v1alphaN`. Workflow YAML never declares a herdr version. The plugin manifest and CLI own minimum version and protocol enforcement.
 
@@ -11,66 +11,52 @@ Before behavior work, read and cite the relevant `openspec/specs/*/spec.md`. See
 ## Commands
 
 ```bash
-bun install --frozen-lockfile
-bun test ./test                          # unit suite (preload test/setup.ts quarantines real herdr/hwf)
-bun test test/engine                     # one module folder
-bun test ./test -t 'pattern'             # name filter
-npm run verify                           # all verify:* in parallel (pre-commit gate)
-bun run schema                           # regenerate docs/workflow.schema.json from Zod
-bun run schema:herdr                     # release-time: src/herdr-methods.generated.ts from schemas/herdr-api.schema.json (not from plugin build)
-bun run docs:build                        # build VitePress docs
-bun run install:dev                      # compile + herdr plugin link + keybindings + reload
+go tool verify                             # every host-feasible check (same as CI)
+go tool verify -fast                       # pre-commit
+go run ./scripts/generate-workflow-schema  # regenerate docs/workflow.schema.json
+go run ./scripts/gen-herdr-methods         # regenerate internal/host/herdr_methods.gen.go
+go run ./scripts/install-dev               # compile + herdr plugin link + keybindings + reload
 ```
 
-- Pre-commit (`.githooks/pre-commit`): `CI=1 npm run verify` — check-only, **no tests**.
-- CI (`.github/workflows/verify.yml`): three jobs — `bun test ./test` on Ubuntu and macOS (`fail-fast: false`), `npm run verify` on Linux only, `bun run docs:build` on Linux only. Nothing runs `openspec validate`.
-- Local `npm run verify` auto-fixes lint/format. Under `CI=1` it only checks.
-- After `install:dev`, the live binary is `bin/herdr-workflows`.
-- Remote GitHub install runs the manifest build: Bun preflight, `bun install --production --frozen-lockfile`, `bun build --compile`, then `bin/herdr-workflows setup`. Local link/dev still compiles with `bun run build` / `bun run install:dev`. `build` runs `bun install --frozen-lockfile` first, so a drifted `node_modules` never reaches the compiler.
+- Pre-commit (`.githooks/pre-commit`): `go tool verify -fast`.
+- CI (`.github/workflows/verify.yml`): `go tool verify` on Linux and macOS after it installs Node.js, golangci-lint, GoReleaser, and the OpenSpec CLI. Docs publish (`.github/workflows/docs.yml`) runs `npm ci && npm run build` in `docs/`.
+- After `go run ./scripts/install-dev`, the live binary is `bin/herdr-workflows`.
+- Remote GitHub install downloads the verified release archive for the cloned tag into `bin/herdr-workflows`, then runs `bin/herdr-workflows setup`. The target does not need Go. Local link/dev compiles with `go build` / `go run ./scripts/install-dev`.
 
 ## Layout
 
-`.ts` files under `src/` (+ `src/web/page.html`, `src/web/field-model.ts`). Test the module whose interface you changed, in that module's folder under `test/`. Real compiled-binary coverage lives in `test/e2e/`.
+Go packages under `internal/` and `embed/` (workbench HTML and field-model bytes). Test the Go package whose interface you changed.
 
-| Path                                         | Role                                                                                                                                           |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/cli.ts`                                 | entry, args, subcommands, terminal I/O, and `hwf init` / `setup`                                                                               |
-| `src/skills.ts`                              | bundled agent skills embedded as text, `hwf skills` registry and show formatting                                                               |
-| `src/skill-text.d.ts`                        | ambient `*.md` / `*.sh` text imports used by `src/skills.ts`                                                                                   |
-| `src/update.ts`                              | GitHub release check and managed-plugin `hwf update`                                                                                           |
-| `src/picker.ts`                              | picker TUI, workflow rows, ctrl+k palette, update indicator                                                                                    |
-| `src/runs-browser.ts`                        | runs browser TUI, list/detail, run-history presentation                                                                                        |
-| `src/chrome.ts`                              | sole `@opentui/core` importer (picker and runs-browser chrome adapter)                                                                         |
-| `src/workbench.ts`                           | browser workbench server, adopt/lock endpoint                                                                                                  |
-| `src/web/field-model.ts`                     | canvas field metadata (browser text asset)                                                                                                     |
-| `src/web/page.html`                          | workbench UI served by the web server                                                                                                          |
-| `src/workflow/grammar.ts`                    | types, paths, template engine, conditions (`when:`), parse (YAML → WorkflowStep[]), trust                                                      |
-| `src/workflow/validate.ts`                   | cross-field workflow validation                                                                                                                |
-| `src/workflow/inputs.ts`                     | load, list, input session, dump                                                                                                                |
-| `src/workflow/exchange.ts`                   | share, import, bundle encode/decode                                                                                                            |
-| `src/workflow/results.ts`                    | step-result contract: typed result shapes, field-name sets, verdict parse shared by the runner and `hwf response check`                        |
-| `src/engine/contract.ts`                     | step contract kernel: frame/outcome/deps types, coordination-loss errors, run scratch dir                                                      |
-| `src/engine/pane.ts`                         | pane placement for `run` and `agent` steps, layout readers, shell-quoted command lines                                                         |
-| `src/engine/command.ts`                      | local and placed command execution, capture budget, step env, `run` and `herdr` steps                                                          |
-| `src/engine/agent-turn.ts`                   | agent turn mechanism: boot, prompt submit and pickup, settle loop, verdict gate, `agent` step                                                  |
-| `src/engine/index.ts`                        | engine entry: workflow runner, step-runner table, launch identity/payload/retire-on-code-change, detached run and web launchers, preflight     |
-| `src/history.ts`                             | atomic run snapshots, list/detail, project claims, recorder, history ack codec, retention                                                      |
-| `src/host.ts`                                | herdr socket RPC, CLI wrappers, protocol check, pane placement, method param validation, explicit-target focus policy                          |
-| `src/herdr-methods.generated.ts`             | generated — do not hand-edit                                                                                                                   |
-| `src/context.ts`                             | profile/transcript config layers, repo root, invocation context, `loadContext`, display sanitization, version, latest-wins token, browser open |
-| `src/caps.ts`                                | byte caps and their guards, `CaptureLimitError`                                                                                                |
-| `src/transcript.ts`                          | transcript extractor table, built-in Claude transcript read, `transcriptText`                                                                  |
-| `src/credentials.ts`                         | private credential store and file ACL checks                                                                                                   |
-| `src/svg-text.d.ts`                          | ambient `*.svg` text import used by `src/workbench.ts`                                                                                         |
-| `test/setup.ts`                              | Bun preload quarantine — denies real `herdr`/`hwf`, isolates HOME/config/socket env                                                            |
-| `herdr-plugin.toml`                          | plugin manifest (build + `prefix+k` → picker)                                                                                                  |
-| `knip.json`                                  | unused-code (package.bin → `src/cli.ts`)                                                                                                       |
-| `openspec/`                                  | tracked specs and changes (OpenSpec CLI root)                                                                                                  |
-| `skills/`                                    | tracked user-facing agent skills (`herdr-workflow-create`, `herdr-workflow-upgrade`) embedded into the binary through `src/skills.ts`          |
-| `.agents/skills/herdr-workflows-smoke-test/` | tracked second-Herdr smoke sandbox skill                                                                                                       |
-| `.agents/skills/promptfoo-skill-eval/`       | tracked eval for user-facing skills — the loader is the oracle, not a judge                                                                    |
-| `.agents/skills/codebase-sanity-check/`      | tracked whole-repository review — gates first, one agent per criteria group, additions face three whys                                         |
-| `.agents/references/AGENTS.md`               | tracked Herdr checkout instructions (clone contents are local-only)                                                                            |
+| Path                                         | Role                                                                                                          |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `main.go`                                    | plugin binary entry                                                                                           |
+| `internal/cli/`                              | Cobra commands, terminal I/O, `hwf init` / `setup`                                                            |
+| `internal/skills/`                           | bundled agent skills embedded as text, `hwf skills` registry and show formatting                              |
+| `internal/update/`                           | GitHub release check, managed-plugin `hwf update`, and distribution artifact names/checksums |
+| `internal/picker/`                           | picker TUI, workflow rows, ctrl+k palette, update indicator, Parity Baseline                                  |
+| `internal/runsbrowser/`                      | runs browser TUI, list/detail, run-history presentation, Parity Baseline                                      |
+| `internal/tui/`                              | Charm lipgloss/bubbletea adapter shared by picker and runs browser, Parity Baseline                           |
+| `internal/workbench/`                        | browser workbench server, adopt/lock endpoint, embedded page                                                  |
+| `internal/workflow/`                         | Workflow Authoring: Definition, document parse, templates, conditions (`when:`), trust, exchange, inputs      |
+| `internal/engine/`                           | Workflow Execution: Run, workflow runner, step runners, pane placement, agent turns, detached launch          |
+| `internal/history/`                          | Run Observation: Snapshot, Summary, Detail, project claims, recorder, retention                               |
+| `internal/host/`                             | Herdr Adapter: explicit identities, generated params/result validation, denylist rail, socket RPC, CLI        |
+| `internal/config/`                           | profile/transcript config layers, repo root, invocation context                                               |
+| `internal/caps/`                             | byte caps and their guards                                                                                    |
+| `internal/transcript/`                       | transcript extractor table, built-in Claude transcript read                                                   |
+| `internal/credentials/`                      | private credential store and file ACL checks                                                                  |
+| `scripts/build-examples/`                    | VitePress example gallery JSON helper (`go run ./scripts/build-examples`)                                     |
+| `scripts/install-release.sh`                 | verified-archive download for managed `[[build]]` install (no Go on the target)                               |
+| `docs/package.json`                          | scoped VitePress 1.6.4 package (`npm ci` / `npm run build` in `docs/`)                                        |
+| `herdr-plugin.toml`                          | plugin manifest (build + `prefix+k` → picker)                                                                 |
+| `openspec/`                                  | tracked specs and changes (OpenSpec CLI root)                                                                 |
+| `skills/`                                    | tracked user-facing agent skills (`herdr-workflow-create`, `herdr-workflow-upgrade`) embedded into the binary |
+| `.agents/skills/herdr-workflows-smoke-test/` | tracked second-Herdr smoke sandbox skill                                                                      |
+| `.agents/skills/promptfoo-skill-eval/`       | tracked eval for user-facing skills — the loader is the oracle, not a judge                                   |
+| `.agents/skills/codebase-sanity-check/`      | tracked whole-repository review — gates first, one agent per criteria group, additions face three whys        |
+| `.semrelrc`                                  | go-semantic-release plugin config (`.github/workflows/release.yml` dispatches tagged releases)                  |
+| `scripts/write-release-notes/`               | appends verified-archive install footer to dry-run changelog for `gh release create`                          |
+| `.agents/references/AGENTS.md`               | tracked Herdr checkout instructions (clone contents are local-only)                                           |
 
 Gitignored local-only: `.agents/references/*` except `AGENTS.md`, `.plans/`, `.opencode/`, `.cursor/`. Do not commit them.
 
@@ -78,7 +64,7 @@ Gitignored local-only: `.agents/references/*` except `AGENTS.md`, `.plans/`, `.o
 
 Agents miss these. The loader or verifyx will fail, or the product regresses:
 
-- **Module layers.** Surfaces (`cli`, `picker`, `runs-browser`, `workbench`) → domain (`workflows`, `engine`, `history`, `update`) → platform (`host`, `context`, `caps`, `transcript`, `credentials`). Adapters: `chrome` (OpenTUI), `web/` (browser page). Imports only point down, except allowlisted dynamic `transcript` → `engine` (transcript reads) and `workflows` → `engine` (dynamic-choice capture). Sanctioned sideways edges include `engine` → `history`, `engine` → `workflows`, `picker` → `chrome` / `runs-browser` / `workbench`, `runs-browser` → `chrome` / `workbench`, `host` ↔ `context`, `host` → `caps`, and `transcript` → `context` / `caps` / `host`. Cross-module imports go through each module's entry files. `verify:layers` enforces this.
+- **Module layers.** Surfaces (`internal/cli`, `internal/picker`, `internal/runsbrowser`, `internal/workbench`) → domain (`internal/workflow`, `internal/engine`, `internal/history`, `internal/update`) → platform (`internal/host`, `internal/config`, `internal/caps`, `internal/transcript`, `internal/credentials`). Adapters: `internal/tui` (Charm), workbench embedded HTML. Imports only point down through each package's exported API.
 - **No external workflow engine.** Linear herdr-native YAML only. Do not add Dagu, Taskfile/go-task, Cockpit, or similar sidecars. Agent-steering rule — no gate enforces it.
 - **Templates are `{{inputs.*}}` / `{{steps.*}}` / `{{context.*}}` only.** Any other `{{…}}` is a load error. No flat `{name}`, no `out:` bindings, no `{session}` / `{session_file}` (use `{{context.transcript}}` / `{{context.transcript_file}}`). `{{prompt}}` is config-only and is not a workflow template.
 - **No templates in string `run:` command text** — load error. Use list-form `run:` (argv, templates allowed per element) or explicit `env:` / `HWF_<name>` values. `herdr:` `params:` take templates recursively. A whole-value template keeps its type. Embedded ones render text.
@@ -86,15 +72,17 @@ Agents miss these. The loader or verifyx will fail, or the product regresses:
 - **`herdr: <method>` + `params:`** is the only way to call the socket API. Dotted YAML action keys are not actions. Raw calls never autofill targets — authors pass exact selectors. Denied methods fail at load with the invariant they protect. The denylist is an accidental-misuse rail, not a sandbox (trusted `run:` can call the whole herdr CLI).
 - **Placement is the nested `pane:` block** (`open: tab|beside|below` or a whole-value template to an unconditional closed static choice whose options are only those literals. Stable `target`/`workspace`, percentage `size`, `focus`, agent-only `close: success|always`). Anchors are captured invocation or prior-result IDs, never live UI focus. `background: true` needs a herdr-owned pane or an existing-agent `target:`. There is no local detached background. A placed `run:` takes exactly one of `background` or `ready_when: /regex/` (which requires `timeout`).
 - **Config is `profiles` / `default_profile` / `transcripts` only** — no `agents:`, no `sessions:`. Global config lives at `$HERDR_PLUGIN_CONFIG_DIR/config.yaml` (discovered via `herdr plugin config-dir` when standalone). Never add `~/.hwf/config.yaml`. Layers: global, committed `.hwf/config.yaml`, gitignored `.hwf/config.local.yaml`, replacing whole entries by name. Profile and dynamic choice options resolve during shared sequential collection (or picker when active), never during workflow load. Detached `--launch-payload` runs require domain snapshots for every active dynamic choice and must not resolve them.
-- **Caps live in `src/caps.ts`:** 24 KiB generated HWF environment (entry and child, before step 1), 8 MiB per captured command result / managed response / transcript / dynamic-choice output, 256 MiB raw `claude` session file loaded by built-in extraction (the 8 MiB transcript cap applies to the extracted text, and one JSONL record in that file caps at 32 MiB), 16 KiB agent prompt before spill-to-file. Crossing a cap fails naming source and limit — never truncate.
-- **Comments:** `verify:comments` fails any comment block in `src/` more than 2 lines. JSDoc (`/** … */`) is exempt, and so is a block whose first line starts `context:` — that prefix means "durable fact the code cannot express" and pages a human to approve it, so earn it or delete the comment. Never narrate what the code already says. One file per concept. New modules must be reachable from the CLI graph or knip fails unused-code.
-- **Splitting:** `verify:file-length` fails any `src/**/*.ts` more than 2,500 lines (`*.generated.ts` exempt). oxlint caps per-function cyclomatic complexity at 35 (`eslint/complexity`), nesting at `max-depth` 4, and `max-nested-callbacks` 3. Function length is deliberately ungated. Never split to satisfy a line budget.
-- **Schema change:** edit Zod in `src/workflow/grammar.ts` (and refine rules), then `bun run schema`. Method/result validators: update `schemas/herdr-api.schema.json` or `scripts/generate-herdr-methods.ts`, then `bun run schema:herdr` (never from the plugin build — it must not invoke `herdr api schema`). Cross-field rules live in the loader, not the JSON schema.
+- **Caps live in `internal/caps/`:** 24 KiB generated HWF environment (entry and child, before step 1), 8 MiB per captured command result / managed response / transcript / dynamic-choice output, 256 MiB raw `claude` session file loaded by built-in extraction (the 8 MiB transcript cap applies to the extracted text, and one JSONL record in that file caps at 32 MiB), 16 KiB agent prompt before spill-to-file. Crossing a cap fails naming source and limit — never truncate.
+- **No plugin Bun, Node, esbuild, or runtime TypeScript transform.** Plugin runtime, build, install, update, release, tests, and verification stay free of those tools. VitePress may keep npm and TypeScript under `docs/`. Examples may name Bun or Node only when those tools are the subject of the example. Embedded workbench assets are HTML and field-model bytes, not TypeScript scaffolding.
+- **Comments:** `go run ./scripts/verify-comments` fails any comment block in `internal/` more than 2 lines. A block whose first line starts `context:` means "durable fact the code cannot express" and pages a human to approve it, so earn it or delete the comment. Never narrate what the code already says. One file per concept.
+- **Splitting:** keep Go packages focused. `go run ./scripts/verify-file-length` gates Go source length.
+- **Schema change:** edit workflow schema sources in `internal/workflow/`, then `go run ./scripts/generate-workflow-schema`. Method/result validators: update `schemas/herdr-api.schema.json` or `scripts/gen-herdr-methods`, then `go run ./scripts/gen-herdr-methods` (never from the plugin build — it must not invoke `herdr api schema`). Cross-field rules live in the loader, not the JSON schema.
 - **Example change:** edit `examples/*.yaml`. The docs gallery reads them at VitePress build time through `docs/.vitepress/theme/examples.data.ts`, so there is no generated file to regenerate or commit.
 - **No tracked openspec archives.** `openspec archive` syncs the main specs and moves the change into `openspec/changes/archive/`. Delete the archived contents in the same commit — main keeps no archived specs. `verify:no-archive` fails the pre-commit gate while that folder holds anything.
-- **Color literals are unguarded.** No verify gate scans `src/web/page.html` or `docs/.vitepress/theme` for hardcoded colors. Review them by hand.
+- **Color literals are unguarded.** No verify gate scans `embed/page.html` or `docs/.vitepress/theme` for hardcoded colors. Review them by hand.
 - **Branch work:** never commit on `main` / `master`. Use a feature branch + PR.
 - **No `Co-Authored-By` trailers.** Never add `Co-Authored-By`, `Generated with`, or any other agent-attribution line to a commit message or PR body, even when a harness default or global instruction says to. This overrides those defaults for this repo. Commit messages carry the change, not the tooling. The human is always responsible for the code. `.githooks/commit-msg` strips such lines as a backstop — do not rely on it.
+- **Parity Baseline before Product Improvement.** A Product Improvement must not hide a missing Parity Baseline comparison or Charm verdict. UX redesign is not a substitute for the matrix in `internal/picker/parity.go`, `internal/runsbrowser/parity.go`, and `tui.CharmVerdicts` (see `docs/charm-components.md`).
 
 ## Code style
 
@@ -106,7 +94,7 @@ Trace the real flow end to end before editing. Question speculative need. Reuse 
 
 Prose style of record is `CONTRIBUTING.md` "Documentation style" (Simplified Technical English). This section is only the machine-checked subset.
 
-`verify:prose` (`scripts/verify-prose.ts`) scans `README.md`, `CONTRIBUTING.md`, `AGENTS.md`, and every `*.md` under `docs/`, `openspec/`, `skills/`, and `.agents/skills/`, and fails on:
+`go run ./scripts/verify-prose` scans `README.md`, `CONTRIBUTING.md`, `AGENTS.md`, and every `*.md` under `docs/`, `openspec/`, `skills/`, and `.agents/skills/`, and fails on:
 
 - **UI verbs** — `select` not `click`/`click on`/`double-click`/`tap`. `press` not `hit`. `enter` not `key in`. `sign in`/`sign out` not `log in`/`log out`.
 - **Wordy phrases** — `to` not `in order to`. `because` not `due to the fact that`. Also `at this point in time`, `in the event that`, `with regard to`, `prior to`, `subsequent to`, `utilize`, `leverage`, `facilitate`, `commence`.
@@ -117,7 +105,7 @@ Prose style of record is `CONTRIBUTING.md` "Documentation style" (Simplified Tec
 - **Names and spelling** — `GitHub`, `PowerShell`, `JavaScript`, `TypeScript`, `macOS`. US spelling (`-ize`, `behavior`, `analyze`, `artifact`, `gray`).
 - **Punctuation** — no semicolons in prose, including after a code span.
 
-Code spans, fenced blocks, and link targets are skipped, so a genuine technical term passes inside backticks. A failing run prints every hit with its replacement and reason. Add or relax a rule in `scripts/verify-prose.ts`, and keep out anything a regex can't judge without flagging correct prose, which is why `since`, `while`, and em dashes are absent.
+Code spans, fenced blocks, and link targets are skipped, so a genuine technical term passes inside backticks. A failing run prints every hit with its replacement and reason. Add or relax a rule in `scripts/verify-prose/`, and keep out anything a regex can't judge without flagging correct prose, which is why `since`, `while`, and em dashes are absent.
 
 ## Chat
 

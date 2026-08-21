@@ -146,6 +146,14 @@ Every glyph the picker renders MUST have unambiguous single-column width in ever
 - **WHEN** the terminal font lacks arrow, triangle, or heavy-line glyphs
 - **THEN** all picker chrome still renders
 
+#### Scenario: Charm flush-left filter without slash prefix
+- **WHEN** the Workflow browser shows an empty or typed filter row
+- **THEN** the filter text is flush-left ASCII with the `filter workflows...` placeholder (or the typed text) and MUST NOT use an OpenTUI `/ ` prefix or row indent for that field
+
+#### Scenario: ASCII greater-than cursor on choice option rows
+- **WHEN** a choice input shows its option list
+- **THEN** the selected option uses an ASCII `>` cursor prefix, idle options use a two-space prefix, each option row keeps a right-aligned location column, and the list MUST NOT use an OpenTUI `/ ` prefix or box or arrow glyphs
+
 ### Requirement: Input navigation preserves valid answers
 Escape from an input prompt MUST move to the previous active input and restore its collected value. Escape from the first active input MUST return to the workflow list. Changing an earlier value MUST discard all later answers and resolved dynamic-choice domains before active inputs are recalculated. Returning to the list MUST clear the collection. A terminal run result MUST remain in run detail until the user presses Escape, which MUST return to the Runs root without dismissing the picker.
 
@@ -168,7 +176,8 @@ answered in the current collection. For a resolved closed domain it MUST report 
 available options. For a domain that is not yet resolved it MUST NOT state a count. It MUST report
 when a value outside the listed options is accepted, and MUST report a text input's default and its
 minimum length when either is declared. The prompt MUST NOT change the workflow title row, the list
-viewport, or the footer key hints.
+viewport, or the footer key hints. During input collection the workflow title row MUST keep the
+named sensitivity flags and MUST NOT replace them with an `input N` ordinal.
 
 #### Scenario: Dropdown of many options
 - **WHEN** a choice input resolves to sixty-seven options
@@ -190,6 +199,11 @@ viewport, or the footer key hints.
 #### Scenario: Unresolved dynamic domain
 - **WHEN** a dynamic choice has not resolved its options
 - **THEN** the prompt asks for a selection without claiming a count
+
+#### Scenario: Title row keeps named sensitivity flags
+- **WHEN** a sensitive workflow reaches its first input prompt
+- **THEN** the workflow title row keeps the named sensitivity flags and MUST NOT replace them with
+  `input N`, while the prompt line carries the collection ordinal
 
 ### Requirement: Collected answers stay visible during collection
 While collecting inputs, the picker MUST render the answers already collected, in declaration order,

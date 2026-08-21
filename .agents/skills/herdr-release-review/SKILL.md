@@ -47,7 +47,7 @@ git -C .agents/references/herdr diff v<floor> vX.Y.Z -- src/protocol/wire.rs
 
 Run the diff — reading a file at whatever commit the checkout sits on is not evidence of what
 changed between the tags. Compare `PROTOCOL_VERSION` between the tags. The plugin pins `HERDR_PROTOCOL` in
-`src/herdr-methods.generated.ts` and `src/host.ts` compares it with strict equality against the
+`internal/host/herdr_methods.gen.go` and `internal/host` compares it with strict equality against the
 `ping` response. Any protocol bump therefore means the plugin refuses every socket call
 (`herdr protocol mismatch: connected=…, pinned=…`) while CLI-mediated paths keep working. A bump is
 an automatic break verdict. State it as such.
@@ -64,7 +64,7 @@ Two independent reads, both required:
    shapes.
 
 Additive versus breaking is the key verdict per item. An added method or enum value is an
-opportunity. A removed or reshaped one is a break for whatever in `src/host.ts`, `src/engine/`,
+opportunity. A removed or reshaped one is a break for whatever in `internal/host/`, `internal/engine/`,
 or the workflow grammar names it — grep before claiming impact.
 
 ## Phase 4: Upgrade path
@@ -74,16 +74,16 @@ methods or enum values without a protocol bump and the plugin should adopt them 
 the pin stay put in that case.
 
 1. Copy the captured schema into `schemas/herdr-api.schema.json`.
-2. `bun run schema:herdr`. The generator fails naming any unmapped method
+2. `go run ./scripts/gen-herdr-methods`. The generator fails naming any unmapped method
    (`no success result type mapped for method '…'`). Add the mapping in
-   `METHOD_RESULT_TYPE_OVERRIDES` in `scripts/generate-herdr-methods.ts`, taking the real result
+   `METHOD_RESULT_TYPE_OVERRIDES` in `scripts/gen-herdr-methods/main.go`, taking the real result
    variant from the herdr handler source (for example `workspace.move_block` returns
    `workspace_list`), then rerun.
 3. Raise `min_herdr_version` in `herdr-plugin.toml` — a plugin pinned to the new protocol cannot
    speak to the old server, so the floor moves with the pin.
-4. Update the protocol pin test in `test/host/herdr-methods.test.ts` and the fake-herdr `ping`
-   fixture in `test/e2e/examples-harness.ts`.
-5. `bun test ./test` and `CI=1 npm run verify` must pass before the review is done.
+4. Update the protocol pin test in `internal/host/methods_test.go` and the fake-herdr `ping`
+   fixture in `e2e/` when examples still run there.
+5. `go tool verify` must pass before the review is done.
 6. Refresh what the regenerated table feeds. `skills/herdr-workflow-create/reference/herdr-api.md`
    hand-lists the allowed methods with their counts, version pin, and per-method selectors — a
    regen without this refresh teaches authors a stale API. Take new selectors from
@@ -115,7 +115,7 @@ The procedure itself creates windows where things look broken. Warn the user bef
 - The herdr installer replaces the live binary while the old server keeps running. Every CLI call
   reports `protocol_mismatch` until the server restarts, and stopping the server exits its pane
   processes — the user restarts on their own schedule.
-- `bun run install:dev` rebuilds the shared `bin/herdr-workflows`, breaking the user's live picker
+- `go run ./scripts/install-dev` rebuilds the shared `bin/herdr-workflows`, breaking the user's live picker
   until they restart herdr. Its plugin-link step fails against the still-running old server —
   rerun it after the restart.
 
@@ -134,7 +134,7 @@ Lead with the break verdict, then five sections:
 5. **Housekeeping** — org, license, docs churn. One line each.
 
 Every claim carries its evidence: the tag diff hunk, the schema diff entry, or the sandbox output
-line. Cite files repo-relative with a line number (`src/host.ts:220`, not `host.ts:220`), and cite
+line. Cite files repo-relative with a line number (`internal/host/rpc.go:220`, not `rpc.go:220`), and cite
 files inside the reference checkout with their full prefix
 (`.agents/references/herdr/CHANGELOG.md:5`), so every citation resolves from the repository root.
 A claim with no diff and no run does not go in the report.

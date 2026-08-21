@@ -15,7 +15,7 @@ This skill belongs to the herdr-workflows repository. From any cwd inside it, de
 ## What makes this eval trustworthy
 
 **The oracle is the loader, not a rubric.** Every ```yaml fence the agent emits is loaded through
-`src/workflow/inputs.ts` with the fixture's own `.hwf/workflows/` seeded so `workflow:` children
+`internal/workflow` with the fixture's own `.hwf/workflows/` seeded so `workflow:` children
 resolve. A workflow either loads or it does not. Do not replace this with an LLM judge — the whole
 point is that this repository can answer the question objectively.
 
@@ -104,16 +104,12 @@ The documented path is `anthropic:claude-agent-sdk` with `setting_sources: ['pro
 `skills:` filter, which gives promptfoo's built-in `skill-used` / `not-skill-used` assertions.
 It needs `ANTHROPIC_API_KEY`.
 
-Without a key, `scripts/provider.js` shells out to the locally authenticated `claude -p
---output-format stream-json`, one provider instance per fixture differing only in `working_dir`.
-Two consequences to state in any report that uses it:
-
-- built-in `skill-used` is unavailable, so `scripts/assert-skill.js` reads `Skill` tool calls out
-  of the stream instead;
-- fixture isolation is weaker, because the user's own installed skills stay visible to the agent.
+Without a key, shell out to the locally authenticated `claude -p --output-format stream-json` from
+your promptfoo config. Fixture isolation is weaker because the user's own installed skills stay
+visible to the agent.
 
 `max-score` is a _comparative_ selector — it fails the loser of each test rather than grading
-against a threshold. For absolute weighted scores use `scripts/regrade.js`.
+against a threshold. Re-score saved promptfoo output offline when you adjust weights.
 
 ## Tasks
 
@@ -143,8 +139,10 @@ root=$(git rev-parse --show-toplevel)
 cd <scratchpad>/skill-eval
 sh "$root/.agents/skills/promptfoo-skill-eval/scripts/reset-fixtures.sh"
 promptfoo eval -c promptfooconfig.yaml --no-cache -o iter.json --max-concurrency 1
-node "$root/.agents/skills/promptfoo-skill-eval/scripts/regrade.js" iter.json
 ```
+
+After each run, load every ```yaml fence through `go test` against the Go loader (or a small helper
+that calls `internal/workflow`) before trusting the score.
 
 `reset-fixtures.sh` defaults to the current working directory as the eval root. Pass an absolute
 path as the first argument when the shell is elsewhere. Seed `.promptfoo-skill-eval-owned` before
@@ -163,5 +161,4 @@ noise-floor iteration, the score trajectory across iterations rather than only t
 any grading bug you found and fixed, and any regression the winning version introduced. An honest
 "could not execute, here is what I ran instead" is worth more than an invented figure.
 
-Adopt a candidate only after `bun test ./test/skill-snippets.test.ts` passes against it — that gate
-loads every fence in the skill through the loader — followed by `CI=1 bun run verify`.
+Adopt a candidate only after `go tool verify` passes. That run covers loader tests against the skill's YAML fences and the prose, archive, file-length, and comments gates.

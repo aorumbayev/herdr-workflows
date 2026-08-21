@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Isolated herdr instance + throwaway git repo for e2e smoke testing herdr-workflows.
-# Limitation: `up` still runs `bun run install:dev` against this checkout, so
-# `bin/herdr-workflows` is shared with the user's live plugin link — not a private binary.
+# Limitation: `up` still runs `go build -o bin/herdr-workflows .` and `bin/herdr-workflows setup`
+# against this checkout, so `bin/herdr-workflows` is shared with the user's live plugin link — not a private binary.
 set -euo pipefail
 
 CANONICAL_SANDBOX="/tmp/hwf-sandbox"
@@ -149,7 +149,7 @@ EOF
 seed_config() {
   mkdir -p "$CFG/herdr"
   # allow_nested: the sandbox herdr runs inside a herdr-managed pane, which herdr
-  # refuses by default. Only written on first `up` so install:dev's appended
+  # refuses by default. Only written on first `up` so setup's appended
   # keybindings survive later runs.
   # ui.toast delivery: without it notification.show answers {"shown":false,"reason":"disabled"}
   # and every notification step passes while showing nothing.
@@ -217,7 +217,8 @@ up() {
   # Always reinstall: the point of the sandbox is testing the current working tree.
   # Limitation: this rebuilds the shared checkout bin/herdr-workflows; the user's live
   # herdr picks up the same binary on its next plugin action. Not sandbox-private.
-  (cd "$PLUGIN_ROOT" && isolated bun run install:dev)
+  (cd "$PLUGIN_ROOT" && go build -o bin/herdr-workflows .)
+  (cd "$PLUGIN_ROOT" && isolated bin/herdr-workflows setup)
   [ -f "$REPO/.hwf/config.yaml" ] || (cd "$REPO" && isolated hwf init)
   verify
   status
@@ -237,7 +238,7 @@ status() {
   echo "repo:        $REPO"
   echo "wrapper:     $HSB <any command>"
   echo "tmux:        tmux attach -t $FIXED_SESSION"
-  echo "limitation:  shared checkout binary (install:dev mutates bin/herdr-workflows)"
+  echo "limitation:  shared checkout binary (go build + setup mutates bin/herdr-workflows)"
   printf 'tmux alive:  '; tmux has-session -t "$FIXED_SESSION" 2>/dev/null && echo yes || echo no
   printf 'server:      '; server_running && echo running || echo "not running"
   echo "plugins:"; isolated herdr plugin list 2>&1 | sed 's/^/  /'
