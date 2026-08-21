@@ -9,7 +9,7 @@ import (
 )
 
 // FormatInputPrompt names the field and how to answer it.
-// Optional position,total (1-based) append the collection ordinal when both are > 0.
+// When position and total are both greater than 0, the prompt adds a 1-based collection ordinal.
 func FormatInputPrompt(spec workflow.InputSpec, ordinal ...int) string {
 	label := spec.Name
 	if desc := strings.TrimSpace(spec.Description); desc != "" {

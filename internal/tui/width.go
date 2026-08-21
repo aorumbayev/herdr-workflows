@@ -42,8 +42,8 @@ func PadColumns(s string, width int) string {
 	return s + strings.Repeat(" ", width-used)
 }
 
-// PadHeight appends blank lines so a naive line-split of s has at least height lines.
-// Bubble Tea does not clear unused TTY rows; padding prevents prior-frame ghosting.
+// PadHeight adds blank lines until a naive line split of s has at least height lines.
+// Bubble Tea does not clear unused TTY rows. The pad stops prior-frame ghost rows.
 func PadHeight(s string, height int) string {
 	if height <= 0 {
 		return s

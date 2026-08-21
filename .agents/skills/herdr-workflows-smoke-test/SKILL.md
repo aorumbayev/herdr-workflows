@@ -86,7 +86,7 @@ For YAML syntax, load errors, and the Herdr method allowlist, use the `herdr-wor
 
 ## Picker visual compare (Go vs last pre-Go TypeScript)
 
-Comparison-only harness. It does **not** use `/tmp/hwf-sandbox` or session `hwf-sandbox`. TypeScript is never added to this branch's production runtime — it runs only from a throwaway git worktree of the last pre-Go commit (`5fcf263df2329901f16cc4bc2088df26d318dd04`, parent of `e688caff` "rewrite the plugin in Go").
+This harness is for comparison only. It does not use `/tmp/hwf-sandbox` or session `hwf-sandbox`. TypeScript is not part of this branch production runtime. The TypeScript picker runs only from a throwaway git worktree of the last pre-Go commit (`5fcf263df2329901f16cc4bc2088df26d318dd04`, parent of `e688caff` "rewrite the plugin in Go").
 
 ```bash
 repo_root=$(git rev-parse --show-toplevel)
@@ -98,4 +98,4 @@ bash "$repo_root/.agents/skills/herdr-workflows-smoke-test/scripts/picker-visual
 | Go (this branch) | `/tmp/hwf-picker-compare-go` | `hwf-pc-go` | `hwf-pc-go-ui` | Private `$GO_ROOT/bin/herdr-workflows` (checkout `bin/` untouched) |
 | TS (retired) | `/tmp/hwf-picker-compare-ts` | `hwf-pc-ts` | `hwf-pc-ts-ui` | Built from `/tmp/hwf-picker-compare-ts-src` via Bun |
 
-Herdr owns its host tmux session UI, so the picker TUI always runs in the sibling `*-ui` session against the throwaway socket. Both sides seed the same fixture workflows and run-history snapshots, drive the picker to workflow list / filter / palette / inputs / runs list / runs detail, and write `tmux capture-pane -p` text under `/tmp/hwf-picker-compare-captures/{go,ts}/` plus `DIFF_SUMMARY.md`. Tear down with `picker-visual-compare.sh down` (leaves the TS worktree and captures unless you remove them). Never attach these sessions to the live Herdr socket.
+Herdr owns the host tmux session UI. The picker TUI always runs in the sibling `*-ui` session against the throwaway socket. Both sides load the same fixture workflows and run-history snapshots. They move the picker to workflow list, filter, palette, inputs, runs list, and runs detail. They write `tmux capture-pane -p` text under `/tmp/hwf-picker-compare-captures/{go,ts}/` and `DIFF_SUMMARY.md`. Run `picker-visual-compare.sh down` to stop. That command leaves the TypeScript worktree and the captures unless you remove them. Never attach these sessions to the live Herdr socket.

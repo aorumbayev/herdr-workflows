@@ -113,7 +113,6 @@ func TestRunsFooterASCII(t *testing.T) {
 	if !strings.Contains(RunsFooter(ScopeAll, 0, 0), "All") {
 		t.Fatal("all scope label")
 	}
-	// Position counter is owned by tui.FormatListFooter (single counter).
 	if strings.Contains(RunsFooter(ScopeCurrent, 0, 0), "0/0") {
 		t.Fatal("RunsFooter must not embed 0/0")
 	}
@@ -315,7 +314,6 @@ func TestRunsFooterJoinsWithChromeSep(t *testing.T) {
 	}
 	for _, part := range parts {
 		if strings.Contains(part, "/") && part != "up/down scroll" {
-			// position counter belongs to FormatListFooter only
 			if part == "1/3" || part == "0/0" {
 				t.Fatalf("RunsFooter must not embed position: %v", parts)
 			}

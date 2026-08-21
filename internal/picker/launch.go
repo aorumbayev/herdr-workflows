@@ -11,7 +11,7 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-// LaunchRunOpts is the injectable detached-run request from the picker.
+// LaunchRunOpts is the detached-run request that the picker injects.
 type LaunchRunOpts struct {
 	Name     string
 	RepoRoot string
@@ -20,15 +20,15 @@ type LaunchRunOpts struct {
 	Domains  map[string][]string
 }
 
-// LaunchSettled is the detached-run outcome delivered through LaunchRunHandle.Settled.
+// LaunchSettled is one detached-run outcome on LaunchRunHandle.Settled.
 type LaunchSettled struct {
 	OK     bool
 	Detail string
 	RunID  string
 }
 
-// LaunchRunHandle observes a detached launch; Detach stops attached observation.
-// Non-nil Acks/Settled/Progress require beginLaunch to return a listen tea.Cmd.
+// LaunchRunHandle is the detached-launch observer.
+// Non-nil Acks, Settled, or Progress require beginLaunch to return a listen tea.Cmd.
 type LaunchRunHandle struct {
 	Detach   func()
 	Acks     <-chan string

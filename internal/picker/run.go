@@ -28,7 +28,7 @@ type ScreenOpts struct {
 	ExportShare        func(entry workflow.WorkflowListEntry) (command string, err error)
 }
 
-// PrepareScreen chdirs and builds a picker model from ScreenOpts hooks.
+// PrepareScreen changes the working directory and builds a picker model from ScreenOpts hooks.
 func PrepareScreen(opts ScreenOpts) (Model, error) {
 	copyFn := opts.CopyClipboard
 	if copyFn == nil {

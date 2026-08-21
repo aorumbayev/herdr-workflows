@@ -138,8 +138,8 @@ func FormatRunListEmpty(opts RunListEmptyOpts) string {
 	return "no runs"
 }
 
-// RunsFooter is the list-mode footer hint plus scope label.
-// Position is rendered once by tui.FormatListFooter, not embedded here.
+// RunsFooter is the list-mode footer hint plus the scope label.
+// tui.FormatListFooter renders the position once. Do not embed the position here.
 func RunsFooter(scope Scope, index, total int) string {
 	scopeLabel := "Current"
 	if scope == ScopeAll {

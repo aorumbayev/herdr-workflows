@@ -26,7 +26,7 @@ func TestRunsListSinglePositionCounter(t *testing.T) {
 }
 
 func TestRunsViewPadsToWindowHeight(t *testing.T) {
-	// Same leftover-line problem as picker palette/inputs when embedded as the runs pane.
+	// The runs pane has the same leftover-line problem as the picker palette and input views.
 	const height = 24
 	checkout := t.TempDir()
 	m, _ := modelWithRuns(t, checkout, "alpha", "bravo")

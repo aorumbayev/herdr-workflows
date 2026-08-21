@@ -56,7 +56,7 @@ func TestInputClearsLeftoverListFilter(t *testing.T) {
 }
 
 func TestFilterRowIsFlushLeftASCIIWithoutSlashPrefix(t *testing.T) {
-	// Product Improvement: Charm flush-left ASCII filter (no OpenTUI "/ " prefix/indent).
+	// Product Improvement: Charm flush-left ASCII filter. No OpenTUI "/ " prefix or indent.
 	// openspec/specs/picker-presentation/spec.md "Picker chrome uses width-stable ASCII glyphs"
 	m := New(Options{Entries: catalogEntries(), Width: 80})
 	body := m.View().Content
@@ -80,7 +80,7 @@ func TestFilterRowIsFlushLeftASCIIWithoutSlashPrefix(t *testing.T) {
 }
 
 func TestPaletteViewPadsToWindowHeight(t *testing.T) {
-	// Bubble Tea does not clear unused TTY lines; tmux capture-pane keeps prior-frame rows.
+	// Bubble Tea does not clear unused TTY lines. tmux capture-pane keeps prior-frame rows.
 	const height = 24
 	m := New(Options{Entries: catalogEntries(), Width: 80})
 	m = applyMsg(m, tea.WindowSizeMsg{Width: 80, Height: height})

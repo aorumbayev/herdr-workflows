@@ -349,7 +349,7 @@ func viewAllowsWorkbench(view DetailView) bool {
 	}
 }
 
-// OpenLocalDetail replaces the browser with a local (non-history) detail screen.
+// OpenLocalDetail replaces the browser with a local detail screen that is not from history.
 func (m Model) OpenLocalDetail(view DetailView) Model {
 	m.screen = screenDetail
 	m.activeRunID = view.ID

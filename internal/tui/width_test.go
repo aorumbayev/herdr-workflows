@@ -17,7 +17,6 @@ func TestTruncateEllipsisAtMax(t *testing.T) {
 }
 
 func TestPadHeight(t *testing.T) {
-	// PadHeight fills unused TTY rows so prior-frame ghost lines cannot survive a naive capture.
 	if got := PadHeight("a\nb", 5); got != "a\nb\n\n\n" {
 		t.Fatalf("PadHeight short = %q", got)
 	}
