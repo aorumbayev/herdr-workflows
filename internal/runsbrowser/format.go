@@ -139,21 +139,19 @@ func FormatRunListEmpty(opts RunListEmptyOpts) string {
 }
 
 // RunsFooter is the list-mode footer hint plus scope label.
+// Position is rendered once by tui.FormatListFooter, not embedded here.
 func RunsFooter(scope Scope, index, total int) string {
 	scopeLabel := "Current"
 	if scope == ScopeAll {
 		scopeLabel = "All"
 	}
-	pos := "0/0"
-	if total > 0 {
-		pos = strconv.Itoa(index+1) + "/" + strconv.Itoa(total)
-	}
+	_ = index
+	_ = total
 	return strings.Join([]string{
 		"tab workflows",
 		"ctrl+g " + scopeLabel,
 		"enter detail",
 		"esc quit",
-		pos,
 	}, tui.ChromeSep)
 }
 
@@ -170,7 +168,11 @@ func RunDetailFooter(allowWorkbench bool) string {
 func DetailLines(view DetailView, width int) []string {
 	switch view.Kind {
 	case "starting":
-		return formatStartingDetail(view.Workflow, view.ID, width)
+		lines := formatStartingDetail(view.Workflow, view.ID, width)
+		if view.Message != "" {
+			lines = append(lines, asciiGlyphs(tui.Truncate(view.Message, width)))
+		}
+		return lines
 	case "local-failure":
 		head := strings.Join([]string{"LAUNCH FAILED", view.Workflow, shortID(view.ID)}, tui.ChromeSep)
 		return []string{tui.Truncate(head, width), asciiGlyphs(tui.Truncate(view.Message, width))}

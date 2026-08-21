@@ -44,6 +44,8 @@ var requiredPickerParityScenarios = []string{
 	"Width changes mid-session",
 	"CJK locale",
 	"Font without box or arrow glyphs",
+	"Charm flush-left filter without slash prefix",
+	"ASCII greater-than cursor on choice option rows",
 	"Correct the final answer",
 	"Mode change alters active inputs",
 	"Failed run navigation",
@@ -52,6 +54,7 @@ var requiredPickerParityScenarios = []string{
 	"Custom value accepted",
 	"Constrained text input",
 	"Unresolved dynamic domain",
+	"Title row keeps named sensitivity flags",
 	"A guarded domain is explained by an earlier answer",
 	"First prompt has no answers",
 	"Answers exceed the popup width",
@@ -277,42 +280,140 @@ func whenEq(path, value string) []workflow.WhenSpec {
 	return []workflow.WhenSpec{{Kind: workflow.WhenEqual, Path: path, Value: value}}
 }
 
-func TestParityFailedRunEscapeReturnsToListNotRuns(t *testing.T) {
+func TestParityFailedRunEscapeReturnsToRunsRoot(t *testing.T) {
 	// openspec/specs/picker-presentation/spec.md "Failed run navigation"
-	// Gap: Escape from modeFail/modeRun returns to modeList, not Runs root.
-	entry := workflow.WorkflowListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml"}
+	entry := workflow.WorkflowListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml", Title: "Plain"}
+	var detached bool
 	m := New(Options{
 		Entries: []workflow.WorkflowListEntry{entry},
 		Width:   80,
 		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
-				Name: e.Name, File: e.File, Version: workflow.Format,
+				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
+				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
+			}, nil
+		},
+		LaunchRun: func(opts LaunchRunOpts) LaunchRunHandle {
+			return LaunchRunHandle{Detach: func() { detached = true }}
+		},
+	})
+	m = apply(m, "enter")
+	if m.mode != modeRuns {
+		t.Fatalf("launch must open Runs detail, mode=%v", m.mode)
+	}
+	id := m.runs.ActiveRunID()
+	m = applyMsg(m, launchSettledMsg{OK: false, Detail: "spawn failed", RunID: id})
+	body := m.View().Content
+	if !strings.Contains(body, "LAUNCH FAILED") && !strings.Contains(body, "launch") {
+		t.Fatalf("expected local launch failure detail:\n%s", body)
+	}
+	m = apply(m, "esc")
+	if m.mode != modeRuns {
+		t.Fatalf("Escape from failed launch must stay on Runs root, mode=%v", m.mode)
+	}
+	if m.runs.IsList() != true {
+		t.Fatalf("Escape must return to Runs list, screen detail=%v", !m.runs.IsList())
+	}
+	if m.runs.SelectedID() != id {
+		t.Fatalf("failed run must stay selected: got %q want %q", m.runs.SelectedID(), id)
+	}
+	_ = detached
+}
+
+func TestParityFormatInputPromptReportsOrdinal(t *testing.T) {
+	// openspec/specs/picker-presentation/spec.md "Input prompts state what they collect"
+	got := FormatInputPrompt(workflow.InputSpec{Name: "unit", Type: "choice", Options: []string{"a", "b"}}, 1, 3)
+	if !strings.Contains(got, "1 of 3") {
+		t.Fatalf("missing collection ordinal in %q", got)
+	}
+	if !strings.Contains(got, "unit") || !strings.Contains(got, "pick one of 2") {
+		t.Fatalf("prompt = %q", got)
+	}
+	base := FormatInputPrompt(workflow.InputSpec{Name: "unit", Type: "choice", Options: []string{"a", "b"}})
+	if strings.Contains(base, "1 of") || strings.Contains(base, "2 of") {
+		t.Fatalf("zero-arg FormatInputPrompt must omit ordinal: %q", base)
+	}
+}
+
+func TestParityInputTitleRowKeepsSensitivityFlags(t *testing.T) {
+	// Product Improvement: title row keeps sensitivity names (ordinal lives on the prompt line).
+	// openspec/specs/picker-presentation/spec.md "Title row keeps named sensitivity flags"
+	entry := workflow.WorkflowListEntry{
+		Name: "branchy", Source: "repo", File: "/r/b.yaml", Title: "Branch check", HasCommands: true,
+	}
+	m := New(Options{
+		Entries: []workflow.WorkflowListEntry{entry},
+		Width:   80,
+		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
+		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+			return &workflow.Definition{
+				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Branch check",
+				Inputs: []workflow.InputSpec{
+					{Name: "mode", Type: "choice", Options: []string{"a", "b"}},
+					{Name: "unit", Type: "choice", Options: []string{"x", "y"}},
+				},
 				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
 			}, nil
 		},
 	})
 	m = apply(m, "enter")
-	if m.mode != modeRun {
-		t.Fatalf("mode = %v", m.mode)
+	body := m.View().Content
+	if !strings.Contains(body, "Branch check") || !strings.Contains(body, "commands") {
+		t.Fatalf("title row must keep sensitivity flags:\n%s", body)
 	}
-	m = apply(m, "esc")
-	if m.mode != modeList {
-		t.Fatalf("actual Go: Escape returns mode=%v, want modeList (Gap vs Runs root)", m.mode)
+	if strings.Contains(body, "input 1") || strings.Contains(body, "input 2") {
+		t.Fatalf("title row must not replace flags with input N:\n%s", body)
 	}
-	if m.mode == modeRuns {
-		t.Fatal("unexpected Runs root — clear Gap when product matches spec")
+	if !strings.Contains(body, "1 of 2") {
+		t.Fatalf("prompt line must carry collection ordinal:\n%s", body)
 	}
 }
 
-func TestParityFormatInputPromptOmitsOrdinal(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md input prompt ordinal
-	// Gap: FormatInputPrompt does not render collection ordinal (1 of N).
-	got := FormatInputPrompt(workflow.InputSpec{Name: "unit", Type: "choice", Options: []string{"a", "b"}})
-	if strings.Contains(got, "1 of") || strings.Contains(got, "1/") || strings.Contains(got, "position") {
-		t.Fatalf("unexpected ordinal in %q — clear Gap when added", got)
+func TestParityChoiceRowsUseASCIICursorAndLocation(t *testing.T) {
+	// Product Improvement: ASCII ">" cursor and location column on choice rows (not box/arrow glyphs).
+	// openspec/specs/picker-presentation/spec.md "ASCII greater-than cursor on choice option rows"
+	entry := workflow.WorkflowListEntry{Name: "branchy", Source: "repo", File: "/r/b.yaml", Title: "Branch check"}
+	m := New(Options{
+		Entries: []workflow.WorkflowListEntry{entry},
+		Width:   80,
+		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
+		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+			return &workflow.Definition{
+				Name: e.Name, File: e.File, Version: workflow.Format,
+				Inputs: []workflow.InputSpec{
+					{Name: "unit", Type: "choice", Options: []string{"alpha", "beta"}},
+				},
+				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
+			}, nil
+		},
+	})
+	m = apply(m, "enter")
+	body := m.View().Content
+	var selected, idle string
+	for _, line := range strings.Split(body, "\n") {
+		if strings.HasPrefix(line, "/ ") {
+			t.Fatalf("choice must not use OpenTUI slash prefix: %q", line)
+		}
+		for _, glyph := range []string{"▶", "▸", "►", "▌", "│", "┌", "└"} {
+			if strings.Contains(line, glyph) {
+				t.Fatalf("box/arrow glyph %q on choice row: %q", glyph, line)
+			}
+		}
+		if strings.HasPrefix(line, "> ") && strings.Contains(line, "alpha") {
+			selected = line
+		}
+		if strings.HasPrefix(line, "  ") && strings.Contains(line, "beta") {
+			idle = line
+		}
 	}
-	if !strings.Contains(got, "unit") || !strings.Contains(got, "pick one of 2") {
-		t.Fatalf("prompt = %q", got)
+	if selected == "" {
+		t.Fatalf("missing ASCII > cursor on selected choice row:\n%s", body)
+	}
+	if !strings.HasSuffix(strings.TrimRight(selected, " "), "repo") {
+		t.Fatalf("selected choice row missing right-aligned location:\n%s", selected)
+	}
+	if idle == "" || !strings.HasSuffix(strings.TrimRight(idle, " "), "repo") {
+		t.Fatalf("idle choice row must use two-space prefix and location:\n%s", body)
 	}
 }
 
@@ -436,11 +537,53 @@ func TestParityConsentUsesWarnWithoutDim(t *testing.T) {
 	}
 }
 
-func TestParityLaunchModeRunWithoutClaimLifecycle(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md launch STARTING/RUNNING/history/claim scenarios
-	// Gap: acceptCurrent enters modeRun with name/consent only; no UUID claim or STARTING label.
+func TestParityLaunchOpensStartingRunningLifecycle(t *testing.T) {
+	// openspec/specs/picker-presentation/spec.md "A launched workflow opens matching run detail"
 	entry := workflow.WorkflowListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml", Title: "Plain"}
+	var (
+		launched LaunchRunOpts
+		detached bool
+	)
 	m := New(Options{
+		Entries:  []workflow.WorkflowListEntry{entry},
+		Width:    80,
+		RepoRoot: t.TempDir(),
+		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+			return &workflow.Definition{
+				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
+				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
+			}, nil
+		},
+		LaunchRun: func(opts LaunchRunOpts) LaunchRunHandle {
+			launched = opts
+			return LaunchRunHandle{Detach: func() { detached = true }}
+		},
+		AllocateRunID: func() string {
+			return "550e8400-e29b-41d4-a716-446655440000"
+		},
+	})
+	m = apply(m, "enter")
+	if m.mode != modeRuns {
+		t.Fatalf("mode = %v, want modeRuns", m.mode)
+	}
+	body := m.View().Content
+	if !strings.Contains(body, "STARTING") {
+		t.Fatalf("expected STARTING detail:\n%s", body)
+	}
+	if launched.RunID != "550e8400-e29b-41d4-a716-446655440000" {
+		t.Fatalf("launch RunID = %q", launched.RunID)
+	}
+	if launched.Name != "plain" {
+		t.Fatalf("launch Name = %q", launched.Name)
+	}
+
+	m = applyMsg(m, launchAckMsg{Line: "@hwf-history:claimed 550e8400-e29b-41d4-a716-446655440000"})
+	body = m.View().Content
+	if !strings.Contains(body, "RUNNING") {
+		t.Fatalf("claim must move detail to RUNNING:\n%s", body)
+	}
+
+	m2 := New(Options{
 		Entries: []workflow.WorkflowListEntry{entry},
 		Width:   80,
 		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
@@ -449,23 +592,83 @@ func TestParityLaunchModeRunWithoutClaimLifecycle(t *testing.T) {
 				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
 			}, nil
 		},
+		LaunchRun: func(opts LaunchRunOpts) LaunchRunHandle {
+			return LaunchRunHandle{Detach: func() {}}
+		},
+		AllocateRunID: func() string { return "550e8400-e29b-41d4-a716-446655440001" },
 	})
-	m = apply(m, "enter")
-	if m.mode != modeRun {
-		t.Fatalf("mode = %v", m.mode)
+	m2 = apply(m2, "enter")
+	m2 = applyMsg(m2, launchAckMsg{Line: "@hwf-history:unavailable 550e8400-e29b-41d4-a716-446655440001"})
+	if !strings.Contains(m2.View().Content, "HISTORY UNAVAILABLE") {
+		t.Fatalf("history unavailable:\n%s", m2.View().Content)
 	}
-	body := m.View().Content
-	for _, label := range []string{"STARTING", "RUNNING", "HISTORY UNAVAILABLE", "launch failure"} {
-		if strings.Contains(body, label) {
-			t.Fatalf("unexpected launch label %q — clear Gap when launch lands:\n%s", label, body)
-		}
+
+	m3 := New(Options{
+		Entries: []workflow.WorkflowListEntry{entry},
+		Width:   80,
+		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+			return &workflow.Definition{
+				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
+				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
+			}, nil
+		},
+		LaunchRun: func(opts LaunchRunOpts) LaunchRunHandle {
+			return LaunchRunHandle{Detach: func() { detached = true }}
+		},
+		AllocateRunID: func() string { return "550e8400-e29b-41d4-a716-446655440002" },
+	})
+	m3 = apply(m3, "enter")
+	m3 = applyMsg(m3, launchSettledMsg{OK: false, Detail: "child exited", RunID: "550e8400-e29b-41d4-a716-446655440002"})
+	if !strings.Contains(m3.View().Content, "LAUNCH FAILED") {
+		t.Fatalf("child fail before claim:\n%s", m3.View().Content)
 	}
-	m = apply(m, "esc")
-	if m.quit {
-		t.Fatal("actual Go: Escape from modeRun clears to list without quit (see handleKey order)")
+
+	m4 := New(Options{
+		Entries: []workflow.WorkflowListEntry{entry},
+		Width:   80,
+		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+			return &workflow.Definition{
+				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
+				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
+			}, nil
+		},
+		LaunchRun: func(opts LaunchRunOpts) LaunchRunHandle {
+			return LaunchRunHandle{Detach: func() { detached = true }}
+		},
+		AllocateRunID: func() string { return "550e8400-e29b-41d4-a716-446655440003" },
+	})
+	m4 = apply(m4, "enter")
+	m4 = applyMsg(m4, launchAckMsg{Line: "@hwf-history:claimed 550e8400-e29b-41d4-a716-446655440003"})
+	m4 = applyMsg(m4, launchSettledMsg{OK: true, Detail: "", RunID: "550e8400-e29b-41d4-a716-446655440003"})
+	if m4.quit || m4.mode != modeRuns {
+		t.Fatalf("fast success must stay open on Runs detail, mode=%v quit=%v", m4.mode, m4.quit)
 	}
-	if m.mode != modeList {
-		t.Fatalf("leave launch mode=%v", m.mode)
+
+	detached = false
+	m5 := New(Options{
+		Entries: []workflow.WorkflowListEntry{entry},
+		Width:   80,
+		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+			return &workflow.Definition{
+				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
+				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
+			}, nil
+		},
+		LaunchRun: func(opts LaunchRunOpts) LaunchRunHandle {
+			return LaunchRunHandle{Detach: func() { detached = true }}
+		},
+		AllocateRunID: func() string { return "550e8400-e29b-41d4-a716-446655440004" },
+	})
+	m5 = apply(m5, "enter")
+	m5 = apply(m5, "esc")
+	if !detached {
+		t.Fatal("Escape from active launch must detach child observation")
+	}
+	if m5.mode != modeRuns {
+		t.Fatalf("Escape must return to Runs root, mode=%v", m5.mode)
+	}
+	if !m5.runs.IsList() {
+		t.Fatalf("Escape must land on Runs list")
 	}
 }
 
@@ -478,30 +681,105 @@ func TestParityPrintableKFilters(t *testing.T) {
 	}
 }
 
-func TestParityPaletteLettersResolveWithoutHandoff(t *testing.T) {
+func TestParityPaletteLettersHandoff(t *testing.T) {
 	// openspec/specs/picker-workbench-actions/spec.md n/i/e/o/s actions
-	// Gap: handlePalette resolves letters then returns to list; no workbench/clipboard/browser call.
-	m := New(Options{Entries: catalogEntries(), Width: 80})
+	var (
+		routes   []string
+		opened   []string
+		copied   string
+		notified []string
+	)
+	m := New(Options{
+		Entries:         catalogEntries(),
+		Width:           80,
+		LaunchWorkbench: func(route string) { routes = append(routes, route) },
+		OpenURL:         func(url string) error { opened = append(opened, url); return nil },
+		CopyClipboard:   func(text string) error { copied = text; return nil },
+		Notify: func(title string, body ...string) error {
+			notified = append(notified, title+"|"+strings.Join(body, " "))
+			return nil
+		},
+		ExportShare: func(entry workflow.WorkflowListEntry) (string, error) {
+			return `hwf workflow import "bundle-` + entry.Name + `"`, nil
+		},
+	})
 	m = apply(m, "ctrl+k", "n")
-	if m.mode != modeList {
-		t.Fatalf("after n mode=%v", m.mode)
+	if !m.quit {
+		t.Fatal("new must dismiss after successful handoff")
 	}
-	if m.quit {
-		t.Fatal("Gap: picker must stay open today; clear when dismiss-on-handoff lands")
+	if len(routes) == 0 || routes[0] != "new" {
+		t.Fatalf("new route = %v", routes)
 	}
+
+	m = New(Options{
+		Entries:         catalogEntries(),
+		Width:           80,
+		LaunchWorkbench: func(route string) { routes = append(routes, route) },
+	})
+	routes = nil
+	m = apply(m, "ctrl+k", "i")
+	if !m.quit || len(routes) == 0 || routes[0] != "import" {
+		t.Fatalf("import quit=%v routes=%v", m.quit, routes)
+	}
+
+	m = New(Options{
+		Entries: catalogEntries(),
+		Width:   80,
+		OpenURL: func(url string) error { opened = append(opened, url); return nil },
+	})
+	opened = nil
 	m = apply(m, "ctrl+k", "e")
+	if m.quit {
+		t.Fatal("examples must keep picker open")
+	}
 	if m.mode != modeList {
-		t.Fatalf("after e mode=%v", m.mode)
+		t.Fatalf("examples mode=%v", m.mode)
+	}
+	if len(opened) == 0 || opened[0] != config.ExamplesURL {
+		t.Fatalf("examples url = %v", opened)
+	}
+
+	m = New(Options{
+		Entries:         catalogEntries(),
+		Width:           80,
+		LaunchWorkbench: func(route string) { routes = append(routes, route) },
+	})
+	routes = nil
+	m = apply(m, "down", "ctrl+k", "o") // deploy is second catalog entry
+	if !m.quit {
+		t.Fatal("open must dismiss after handoff")
+	}
+	if len(routes) == 0 || !strings.HasPrefix(routes[0], "w=") {
+		t.Fatalf("open route = %v", routes)
+	}
+
+	m = New(Options{
+		Entries:       catalogEntries(),
+		Width:         80,
+		CopyClipboard: func(text string) error { copied = text; return nil },
+		Notify: func(title string, body ...string) error {
+			notified = append(notified, strings.Join(append([]string{title}, body...), "|"))
+			return nil
+		},
+		ExportShare: func(entry workflow.WorkflowListEntry) (string, error) {
+			return `hwf workflow import "bundle-` + entry.Name + `"`, nil
+		},
+	})
+	copied, notified = "", nil
+	m = apply(m, "down", "ctrl+k", "s")
+	if m.quit || m.mode != modeList {
+		t.Fatalf("share must stay on list, quit=%v mode=%v", m.quit, m.mode)
+	}
+	if !strings.Contains(copied, "hwf workflow import") {
+		t.Fatalf("clipboard = %q", copied)
+	}
+	joined := strings.Join(notified, " ")
+	if !strings.Contains(joined, "deploy") || !strings.Contains(strings.ToLower(joined), "clipboard") {
+		t.Fatalf("notify = %v", notified)
 	}
 	entry := catalogEntries()[1]
 	if ResolvePaletteLetter("s", &entry) == nil || ResolvePaletteLetter("s", &entry).Route != "" {
 		t.Fatal("share must not open a workbench route")
-	}
-	if ResolvePaletteLetter("o", &entry).Route != "w=global:deploy" && ResolvePaletteLetter("o", &entry).Route != "w=repo:deploy" {
-		got := ResolvePaletteLetter("o", &entry)
-		if got == nil || !strings.HasPrefix(got.Route, "w=") {
-			t.Fatalf("open route = %+v", got)
-		}
 	}
 }
 

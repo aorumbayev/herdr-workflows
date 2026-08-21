@@ -27,47 +27,67 @@ const (
 	modeRuns
 )
 
-// Options construct a picker model. CLI wiring of launch/web stays row 10.
+// Options construct a picker model.
 type Options struct {
 	Entries            []workflow.WorkflowListEntry
 	RepoRoot           string
 	Config             config.Config
 	Width              int
+	Height             int
 	Env                config.Env
 	Chdir              func(string) error
 	LoadWorkflow       func(workflow.WorkflowListEntry) (*workflow.Definition, error)
 	ReportPaneMetadata func()
 	CopyClipboard      func(string) error
+	LaunchWorkbench    func(route string)
+	OpenURL            func(url string) error
+	Notify             func(title string, body ...string) error
+	LaunchRun          func(LaunchRunOpts) LaunchRunHandle
+	AllocateRunID      func() string
+	ExportShare        func(entry workflow.WorkflowListEntry) (command string, err error)
 }
 
 // Model is the picker Bubble Tea model.
 type Model struct {
-	entries      []workflow.WorkflowListEntry
-	repoRoot     string
-	config       config.Config
-	width        int
-	load         func(workflow.WorkflowListEntry) (*workflow.Definition, error)
-	copyText     func(string) error
-	env          config.Env
-	mode         mode
-	filter       string
-	cursor       int
-	offset       int
-	savedFilter  string
-	status       string
-	session      *workflow.InputSession
-	prompt       *workflow.InputPrompt
-	promptValue  string
-	choiceOpts   []string
-	custom       bool
-	queue        []workflow.InputSpec
-	delete       DeleteState
-	quit         bool
-	consent      string
-	newerRelease bool
-	stopResolve  context.CancelFunc
-	resolveGen   uint64
-	runs         runsbrowser.Model
+	entries         []workflow.WorkflowListEntry
+	repoRoot        string
+	config          config.Config
+	width           int
+	height          int
+	load            func(workflow.WorkflowListEntry) (*workflow.Definition, error)
+	copyText        func(string) error
+	env             config.Env
+	launchWorkbench func(string)
+	openURL         func(string) error
+	notify          func(title string, body ...string) error
+	launchRun       func(LaunchRunOpts) LaunchRunHandle
+	allocateRunID   func() string
+	exportShare     func(entry workflow.WorkflowListEntry) (command string, err error)
+	mode            mode
+	filter          string
+	cursor          int
+	offset          int
+	savedFilter     string
+	status          string
+	session         *workflow.InputSession
+	prompt          *workflow.InputPrompt
+	promptValue     string
+	choiceOpts      []string
+	custom          bool
+	queue           []workflow.InputSpec
+	delete          DeleteState
+	quit            bool
+	consent         string
+	newerRelease    bool
+	stopResolve     context.CancelFunc
+	resolveGen      uint64
+	runs            runsbrowser.Model
+	launchRunID     string
+	launchDetach    func()
+	launchAcks      <-chan string
+	launchSettled   <-chan LaunchSettled
+	launchProgress  <-chan string
+	pendingDef      *workflow.Definition
 }
 
 type currentResolvedMsg struct {
@@ -99,13 +119,20 @@ func New(opts Options) Model {
 		width = 80
 	}
 	return Model{
-		entries:  opts.Entries,
-		repoRoot: opts.RepoRoot,
-		config:   opts.Config,
-		width:    width,
-		load:     opts.LoadWorkflow,
-		copyText: opts.CopyClipboard,
-		env:      opts.Env,
+		entries:         opts.Entries,
+		repoRoot:        opts.RepoRoot,
+		config:          opts.Config,
+		width:           width,
+		height:          opts.Height,
+		load:            opts.LoadWorkflow,
+		copyText:        opts.CopyClipboard,
+		env:             opts.Env,
+		launchWorkbench: opts.LaunchWorkbench,
+		openURL:         opts.OpenURL,
+		notify:          opts.Notify,
+		launchRun:       opts.LaunchRun,
+		allocateRunID:   opts.AllocateRunID,
+		exportShare:     opts.ExportShare,
 	}
 }
 
@@ -154,6 +181,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
+		m.height = msg.Height
 		if m.mode == modeRuns {
 			return m.forwardRuns(msg)
 		}
@@ -163,6 +191,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case NewerReleaseMsg:
 		m.newerRelease = true
 		return m, nil
+	case launchAckMsg:
+		return m.applyLaunchAck(msg)
+	case launchSettledMsg:
+		return m.applyLaunchSettled(msg)
+	case launchProgressMsg:
+		return m, m.listenLaunch()
 	case runsbrowser.SwitchToWorkflowsMsg:
 		m.mode = modeList
 		return m, nil
@@ -191,7 +225,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	switch m.mode {
 	case modeRuns:
-		return m.forwardRuns(msg)
+		return m.handleRunsKey(msg)
 	case modePalette:
 		return m.handlePalette(msg)
 	case modeDelete:
@@ -237,6 +271,7 @@ func (m Model) handleList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.runs = runsbrowser.New(runsbrowser.Options{
 			RepoRoot: m.repoRoot,
 			Width:    m.width,
+			Height:   m.height,
 			Env:      getenv,
 		})
 		m.mode = modeRuns
@@ -257,6 +292,13 @@ func (m Model) handleList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func (m Model) handleRunsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "esc" && !m.runs.IsList() {
+		m.detachLaunch()
+	}
+	return m.forwardRuns(msg)
 }
 
 func (m Model) forwardRuns(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -295,8 +337,77 @@ func (m Model) handlePalette(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeDelete
 		return m, nil
 	}
+	return m.applyPaletteAction(action)
+}
+
+func (m Model) applyPaletteAction(action *PaletteAction) (tea.Model, tea.Cmd) {
+	switch action.ID {
+	case "new", "import", "open":
+		if m.launchWorkbench == nil {
+			m.mode = modeList
+			m.filter = m.savedFilter
+			m.status = "workbench handoff unavailable"
+			return m, nil
+		}
+		m.launchWorkbench(action.Route)
+		m.quit = true
+		return m, tea.Quit
+	case "examples":
+		if m.openURL != nil {
+			_ = m.openURL(config.ExamplesURL)
+		}
+		m.mode = modeList
+		m.filter = m.savedFilter
+		return m, nil
+	case "share":
+		return m.applyShareAction(action.Entry)
+	default:
+		m.mode = modeList
+		m.filter = m.savedFilter
+		return m, nil
+	}
+}
+
+func (m Model) applyShareAction(entry *workflow.WorkflowListEntry) (tea.Model, tea.Cmd) {
 	m.mode = modeList
 	m.filter = m.savedFilter
+	if entry == nil {
+		return m, nil
+	}
+	var (
+		cmdText string
+		err     error
+	)
+	if m.exportShare != nil {
+		cmdText, err = m.exportShare(*entry)
+	} else {
+		m.status = "share unavailable"
+		return m, nil
+	}
+	if err != nil {
+		m.status = "share failed" + tui.ChromeSep + err.Error()
+		if m.notify != nil {
+			_ = m.notify("herdr-workflows", "Share failed: "+err.Error())
+		}
+		return m, nil
+	}
+	copyFn := m.copyText
+	if copyFn == nil {
+		m.status = "share failed" + tui.ChromeSep + "no clipboard"
+		return m, nil
+	}
+	if err := copyFn(cmdText); err != nil {
+		m.status = "share failed" + tui.ChromeSep + err.Error()
+		if m.notify != nil {
+			_ = m.notify("herdr-workflows", "Share failed: "+err.Error())
+		}
+		return m, nil
+	}
+	body := "Workflow " + entry.Name + " has been copied to the clipboard"
+	if m.notify != nil {
+		_ = m.notify("herdr-workflows", body)
+	}
+	m.status = body
 	return m, nil
 }
 
@@ -463,9 +574,7 @@ func (m Model) acceptCurrent() (tea.Model, tea.Cmd) {
 	}
 	m.consent = FormatConsentLine(*entry)
 	if m.load == nil {
-		m.mode = modeRun
-		m.status = entry.Name
-		return m, nil
+		return m.beginLaunch(&workflow.Definition{Name: entry.Name, Title: entry.Title}, nil, nil)
 	}
 	loaded, err := m.load(*entry)
 	if err != nil {
@@ -474,13 +583,14 @@ func (m Model) acceptCurrent() (tea.Model, tea.Cmd) {
 		m.consent = ""
 		return m, nil
 	}
+	m.pendingDef = loaded
 	m.queue = loaded.Inputs
 	if len(loaded.Inputs) == 0 {
-		m.mode = modeRun
-		m.status = loaded.Name
-		return m, nil
+		return m.beginLaunch(loaded, nil, nil)
 	}
 	m.savedFilter = m.filter
+	m.filter = ""
+	m.cursor, m.offset = 0, 0
 	m.session = workflow.NewInputSession(workflow.InputSessionOptions{
 		Specs:    loaded.Inputs,
 		File:     loaded.File,
@@ -533,11 +643,14 @@ func (m Model) applyCurrent(msg currentResolvedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if cur.Done {
-		m.mode = modeRun
-		if m.consent == "" {
-			m.status = "ready"
+		def := m.pendingDef
+		if def == nil {
+			def = &workflow.Definition{Name: "ready"}
 		}
-		return m, nil
+		values := m.session.Values()
+		domains := m.session.Domains()
+		m.session = nil
+		return m.beginLaunch(def, values, domains)
 	}
 	return m.presentPrompt(cur.Prompt)
 }

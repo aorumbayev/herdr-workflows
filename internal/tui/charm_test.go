@@ -3,7 +3,6 @@ package tui
 import (
 	"strings"
 	"testing"
-	"unicode"
 )
 
 func TestCharmVerdicts(t *testing.T) {
@@ -63,16 +62,39 @@ func TestCharmVerdicts(t *testing.T) {
 func TestChromeStringsAreSingleColumnASCII(t *testing.T) {
 	for _, chrome := range ChromeStrings {
 		for _, r := range chrome {
-			if r > unicode.MaxASCII {
-				t.Fatalf("%q contains non-ASCII %U", chrome, r)
-			}
-			if unicode.IsControl(r) {
-				t.Fatalf("%q contains control %U", chrome, r)
+			if r < 0x20 || r > 0x7e {
+				t.Fatalf("%q contains non-printable-ASCII %U", chrome, r)
 			}
 		}
 		if Columns(chrome) != len([]rune(chrome)) {
 			t.Fatalf("%q columns %d != rune count %d", chrome, Columns(chrome), len([]rune(chrome)))
 		}
+		if Columns(chrome) != len(chrome) {
+			t.Fatalf("%q columns %d != byte length %d (multi-byte ASCII)", chrome, Columns(chrome), len(chrome))
+		}
+	}
+}
+
+func TestChromeStringsHaveNoBoxArrowOrHeavyLineGlyphs(t *testing.T) {
+	forbidden := []rune{
+		'─', '│', '┌', '┐', '└', '┘', '├', '┤', '┬', '┴', '┼',
+		'═', '║', '╔', '╗', '╚', '╝', '╠', '╣', '╦', '╩', '╬',
+		'━', '┃', '┏', '┓', '┗', '┛',
+		'→', '←', '↑', '↓', '⇒', '⇐', '⇑', '⇓',
+		'▶', '◀', '▲', '▼', '►', '◄', '‣', '▸', '▾',
+		'•', '·', '…', '⋯', '‥',
+	}
+	joined := strings.Join(ChromeStrings, "")
+	for _, r := range forbidden {
+		if strings.ContainsRune(joined, r) {
+			t.Fatalf("ChromeStrings contain box/arrow/heavy glyph %U %q", r, string(r))
+		}
+	}
+	if !strings.Contains(joined, Ellipsis) || Ellipsis != "..." {
+		t.Fatalf("Ellipsis must stay ASCII dots, got %q", Ellipsis)
+	}
+	if !strings.Contains(FormatRule(20), "-") || strings.ContainsAny(FormatRule(20), "─━═") {
+		t.Fatalf("FormatRule must use ASCII dashes: %q", FormatRule(20))
 	}
 }
 

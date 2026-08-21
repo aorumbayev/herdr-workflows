@@ -13,10 +13,13 @@ func (m Model) View() tea.View {
 }
 
 func (m Model) render() string {
+	var body string
 	if m.screen == screenDetail {
-		return m.renderDetail()
+		body = m.renderDetail()
+	} else {
+		body = m.renderList()
 	}
-	return m.renderList()
+	return tui.PadHeight(body, m.height)
 }
 
 func (m Model) contentWidth() int {
@@ -70,6 +73,9 @@ func (m Model) listFilterRow(width int) string {
 func (m Model) renderDetail() string {
 	w := m.contentWidth()
 	lines := DetailLines(m.detailView, w)
+	if m.handoffErr != "" {
+		lines = append(lines, tui.Truncate(m.handoffErr, w))
+	}
 	visible, _ := ScrollDetailLines(lines, m.detailScroll, detailViewport)
 	for len(visible) < detailViewport {
 		visible = append(visible, "")

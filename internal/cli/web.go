@@ -10,6 +10,7 @@ import (
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/engine"
+	"github.com/aorumbayev/herdr-workflows/internal/history"
 	"github.com/aorumbayev/herdr-workflows/internal/host"
 	"github.com/aorumbayev/herdr-workflows/internal/picker"
 	"github.com/aorumbayev/herdr-workflows/internal/workbench"
@@ -56,14 +57,7 @@ func runPicker(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	code, err := picker.RunScreen(picker.ScreenOpts{
-		Entries:  entries,
-		RepoRoot: app.RepoRoot,
-		Config:   app.Config,
-		LoadWorkflow: func(entry workflow.WorkflowListEntry) (*workflow.Definition, error) {
-			return workflow.LoadWorkflowEntry(entry, app.RepoRoot, app.Config)
-		},
-	})
+	code, err := picker.RunScreen(buildPickerScreenOpts(app, entries))
 	if err != nil {
 		return err
 	}
@@ -71,6 +65,78 @@ func runPicker(cmd *cobra.Command, _ []string) error {
 		return &exitCodeError{code: code, msg: fmt.Sprintf("picker exited %d", code)}
 	}
 	return nil
+}
+
+func buildPickerScreenOpts(app config.AppContext, entries []workflow.WorkflowListEntry) picker.ScreenOpts {
+	execPath, _ := os.Executable()
+	repoRoot := app.RepoRoot
+	cfg := app.Config
+	ctx := app.Ctx
+	return picker.ScreenOpts{
+		Entries:  entries,
+		RepoRoot: repoRoot,
+		Config:   cfg,
+		Env:      os.Getenv,
+		LoadWorkflow: func(entry workflow.WorkflowListEntry) (*workflow.Definition, error) {
+			return workflow.LoadWorkflowEntry(entry, repoRoot, cfg)
+		},
+		LaunchWorkbench: func(route string) {
+			_ = engine.LaunchDetachedWeb(engine.LaunchWebRequest{
+				Route:      route,
+				RepoRoot:   repoRoot,
+				Executable: execPath,
+			})
+		},
+		OpenURL: func(url string) error {
+			config.OpenInBrowser(url)
+			return nil
+		},
+		Notify:        host.NotificationShow,
+		AllocateRunID: history.AllocateRunID,
+		ExportShare: func(entry workflow.WorkflowListEntry) (string, error) {
+			exported, err := workflow.ExportWorkflowBundle(entry.Name, entry.Source, repoRoot)
+			if err != nil {
+				return "", err
+			}
+			return exported.Command, nil
+		},
+		LaunchRun: func(opts picker.LaunchRunOpts) picker.LaunchRunHandle {
+			acks := make(chan string, 16)
+			settled := make(chan picker.LaunchSettled, 1)
+			progress := make(chan string, 16)
+			handle := engine.LaunchDetachedRun(engine.LaunchRunRequest{
+				Name:       opts.Name,
+				RepoRoot:   opts.RepoRoot,
+				Executable: execPath,
+				Ctx:        ctx,
+				Inputs:     opts.Inputs,
+				Domains:    opts.Domains,
+				RunID:      opts.RunID,
+				OnHistoryAck: func(line string) {
+					acks <- line
+				},
+				OnProgressLine: func(line string) {
+					select {
+					case progress <- line:
+					default:
+					}
+				},
+			})
+			go func() {
+				r := <-handle.Result
+				settled <- picker.LaunchSettled{OK: r.OK, Detail: r.Detail, RunID: opts.RunID}
+				close(acks)
+				close(progress)
+				close(settled)
+			}()
+			return picker.LaunchRunHandle{
+				Detach:   handle.Detach,
+				Acks:     acks,
+				Settled:  settled,
+				Progress: progress,
+			}
+		},
+	}
 }
 
 func runWeb(cmd *cobra.Command, args []string) error {

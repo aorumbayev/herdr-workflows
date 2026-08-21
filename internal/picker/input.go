@@ -9,12 +9,18 @@ import (
 )
 
 // FormatInputPrompt names the field and how to answer it.
-func FormatInputPrompt(spec workflow.InputSpec) string {
+// Optional position,total (1-based) append the collection ordinal when both are > 0.
+func FormatInputPrompt(spec workflow.InputSpec, ordinal ...int) string {
 	label := spec.Name
 	if desc := strings.TrimSpace(spec.Description); desc != "" {
 		label = spec.Name + " - " + desc
 	}
-	return label + tui.ChromeSep + strings.Join(promptHints(spec), tui.ChromeSep)
+	parts := []string{label}
+	if len(ordinal) >= 2 && ordinal[0] > 0 && ordinal[1] > 0 {
+		parts = append(parts, strconv.Itoa(ordinal[0])+" of "+strconv.Itoa(ordinal[1]))
+	}
+	parts = append(parts, promptHints(spec)...)
+	return strings.Join(parts, tui.ChromeSep)
 }
 
 func promptHints(spec workflow.InputSpec) []string {

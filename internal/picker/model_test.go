@@ -62,6 +62,12 @@ func apply(m Model, keys ...string) Model {
 	return m
 }
 
+func applyMsg(m Model, msg tea.Msg) Model {
+	next, cmd := m.Update(msg)
+	m = next.(Model)
+	return runCmd(m, cmd)
+}
+
 func runCmd(m Model, cmd tea.Cmd) Model {
 	for cmd != nil {
 		msg := cmd()

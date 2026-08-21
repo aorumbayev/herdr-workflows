@@ -26,18 +26,6 @@ func Load(repoRoot string, scope Scope, filter, preserveID string, getenv config
 		}
 	}
 	selectedID := preserveID
-	if selectedID != "" {
-		found := false
-		for _, run := range listed.Runs {
-			if run.ID == selectedID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			selectedID = ""
-		}
-	}
 	if selectedID == "" && len(listed.Runs) > 0 {
 		selectedID = listed.Runs[0].ID
 	}
