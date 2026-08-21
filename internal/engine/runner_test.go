@@ -481,6 +481,32 @@ steps:
 	}
 }
 
+func TestRunWorkflowRejectsNonCanonicalRunID(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeRunnerWorkflow(t, root, "m", `version: v1alpha1
+steps:
+  - run: [sh, -c, "printf ok"]
+`)
+	h := newRunnerHarness()
+	rec := newFakeRecorder()
+	rec.runID = "not-a-uuid"
+	_, err := RunWorkflow(RunOptions{
+		Name:     "m",
+		RepoRoot: root,
+		Config:   runnerBaseConfig(),
+		Ctx:      config.InvocationContext{Selection: "", Cwd: root, WorkspaceID: "w1", TabID: "w1:t1", PaneID: "w1:p1"},
+		Deps:     runnerDeps(h),
+		Recorder: rec,
+	})
+	if err == nil {
+		t.Fatal("RunWorkflow error = nil, want non-canonical run id rejection")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "run id") {
+		t.Fatalf("error = %q, want to name run id", err.Error())
+	}
+}
+
 func notifyShowCalls(calls []herdrCallRecord) []herdrCallRecord {
 	var out []herdrCallRecord
 	for _, c := range calls {

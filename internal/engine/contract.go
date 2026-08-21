@@ -112,6 +112,7 @@ type Recorder interface {
 	Dispose()
 }
 
+// ProgressOutcome is CLI progress mapping only — not execution lifecycle vocabulary.
 type ProgressOutcome string
 
 const (
@@ -152,6 +153,7 @@ type StepRunOpts struct {
 	Children             map[string]*workflow.Definition
 	ManagedResponseFiles *[]string
 	Recorder             Recorder
+	Run                  *Run
 	OnProgress           func(step, total int, label string, outcome *ProgressOutcome)
 	OnStderr             func(text string)
 	RunSteps             func(steps []workflow.Step, opts StepRunOpts, values workflow.TemplateNamespace) (StepsResult, error)

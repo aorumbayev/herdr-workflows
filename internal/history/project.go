@@ -2,10 +2,14 @@ package history
 
 import (
 	"time"
+
+	"github.com/aorumbayev/herdr-workflows/internal/engine"
 )
 
 func ProjectStatus(snap Snapshot, now time.Time) string {
-	if snap.Status == "succeeded" || snap.Status == "failed" || snap.Status == "interrupted" {
+	if snap.Status == string(engine.StatusSucceeded) ||
+		snap.Status == string(engine.StatusFailed) ||
+		snap.Status == string(engine.StatusInterrupted) {
 		return snap.Status
 	}
 	hb, ok := parseISOTime(snap.HeartbeatAt)
@@ -59,7 +63,7 @@ func displayRunID(id string) string {
 func failureFactOf(steps []StepRecord) *FailureFact {
 	for i := len(steps) - 1; i >= 0; i-- {
 		switch steps[i].Outcome {
-		case "failed", "failed_continued", "interrupted":
+		case string(engine.OutcomeFailed), string(engine.OutcomeFailedContinued), string(engine.OutcomeInterrupted):
 			return steps[i].Failure
 		}
 	}

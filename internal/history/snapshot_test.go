@@ -170,6 +170,34 @@ func TestIsSnapshotRejectsMalformedNestedStepFields(t *testing.T) {
 	}
 }
 
+func TestIsSnapshotRejectsProgressAndProjectionVocabulary(t *testing.T) {
+	withOutcome := func(outcome string) map[string]any {
+		s := validLiveSnapshot()
+		s["steps"] = []any{map[string]any{
+			"phase":         "main",
+			"workflow":      "demo",
+			"workflow_path": []any{"demo"},
+			"ordinal":       1,
+			"total":         1,
+			"action":        "run",
+			"label":         "x",
+			"finished_at":   validISO,
+			"outcome":       outcome,
+		}}
+		return s
+	}
+	if IsSnapshot(asJSONValue(t, withOutcome("ok"))) {
+		t.Fatal(`outcome "ok" (ProgressOutcome) must not be execution vocabulary`)
+	}
+
+	stale := validLiveSnapshot()
+	stale["finished_at"] = validISO
+	stale["status"] = "stale"
+	if IsSnapshot(asJSONValue(t, stale)) {
+		t.Fatal(`status "stale" (projection) must not be a terminal status`)
+	}
+}
+
 func TestIsSnapshotTruncatedOnlyLiteralTrue(t *testing.T) {
 	// Ports test/history/history-types.test.ts "truncated step fact is accepted only as literal true".
 	withTruncated := func(truncated any) map[string]any {

@@ -6,17 +6,15 @@ import (
 	"errors"
 	"math"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/credentials"
+	"github.com/aorumbayev/herdr-workflows/internal/engine"
 )
 
 const runHistoryVersion = 1
-
-var runUUIDRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 var isoLayouts = []string{time.RFC3339Nano, time.RFC3339}
 
@@ -87,7 +85,7 @@ func parseSnapshotValue(v any) (Snapshot, bool) {
 		return Snapshot{}, false
 	}
 	id, ok := asString(m["id"])
-	if !ok || !runUUIDRe.MatchString(strings.ToLower(strings.TrimSpace(id))) {
+	if !ok || !engine.ValidRunID(id) {
 		return Snapshot{}, false
 	}
 	workflow, ok := nonemptyString(m["workflow"])
@@ -176,7 +174,7 @@ func applyTerminalFields(snap *Snapshot, m map[string]any, hasStatus, hasFinishe
 	}
 	if hasStatus {
 		status, ok := asString(m["status"])
-		if !ok || !isTerminalStatus(status) {
+		if !ok || !engine.ValidTerminalStatus(status) {
 			return false
 		}
 		snap.Status = status
@@ -279,7 +277,7 @@ func parseStepRecord(v any) (StepRecord, bool) {
 		return StepRecord{}, false
 	}
 	outcome, ok := asString(m["outcome"])
-	if !ok || !isOutcomeKind(outcome) {
+	if !ok || !engine.ValidOutcomeKind(outcome) {
 		return StepRecord{}, false
 	}
 	rec := StepRecord{StepIdentity: ident, FinishedAt: finished, Outcome: outcome}
@@ -371,21 +369,8 @@ func parseFailureFact(v any) (FailureFact, bool) {
 	return fact, true
 }
 
-func isTerminalStatus(s string) bool {
-	return s == "succeeded" || s == "failed" || s == "interrupted"
-}
-
 func isActionKind(s string) bool {
 	return s == "agent" || s == "run" || s == "herdr" || s == "workflow"
-}
-
-func isOutcomeKind(s string) bool {
-	switch s {
-	case "succeeded", "skipped", "launched", "failed_continued", "failed", "interrupted":
-		return true
-	default:
-		return false
-	}
 }
 
 func asString(v any) (string, bool) {

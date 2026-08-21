@@ -119,6 +119,31 @@ func TestAgentsDocumentsWorkflowAuthoringBoundary(t *testing.T) {
 	}
 }
 
+func TestAgentsDocumentsWorkflowExecutionBoundary(t *testing.T) {
+	for _, rel := range []string{"AGENTS.md", "CLAUDE.md"} {
+		text := readRepoFile(t, rel)
+		if !strings.Contains(text, "Workflow Execution") {
+			t.Fatalf("%s missing Workflow Execution", rel)
+		}
+		engineCell := ""
+		for _, line := range strings.Split(text, "\n") {
+			if strings.Contains(line, "`internal/engine/`") {
+				engineCell = line
+				break
+			}
+		}
+		if engineCell == "" {
+			t.Fatalf("%s missing internal/engine/ layout row", rel)
+		}
+		if !strings.Contains(engineCell, "Workflow Execution") {
+			t.Fatalf("%s engine layout missing Workflow Execution: %s", rel, engineCell)
+		}
+		if !strings.Contains(engineCell, "Run") {
+			t.Fatalf("%s engine layout missing Run: %s", rel, engineCell)
+		}
+	}
+}
+
 func TestContributingDocumentsUnifiedVerify(t *testing.T) {
 	text := readRepoFile(t, "CONTRIBUTING.md")
 	if !strings.Contains(text, "**1.27**") {
