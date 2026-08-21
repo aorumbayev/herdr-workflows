@@ -1,5 +1,4 @@
 #!/bin/sh
-# Download and verify the release archive matching herdr-plugin.toml, then extract bin/herdr-workflows.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
