@@ -208,8 +208,8 @@ func assertFocusPolicy(method string, params map[string]any) string {
 	return ""
 }
 
-// ValidateHerdrInvocation applies schema params then the explicit-target
-// policy — the shared load-time and runtime gate for a raw `herdr:` action.
+// ValidateHerdrInvocation is the Herdr Adapter gate for raw `herdr:` actions:
+// generated params checks, then explicit-target policy (no live-focus autofill).
 func ValidateHerdrInvocation(method string, params map[string]any, isWholeTemplate func(string) bool) error {
 	if msg := validateMethodParams(method, params, isWholeTemplate); msg != "" {
 		return errors.New(msg)
@@ -220,7 +220,8 @@ func ValidateHerdrInvocation(method string, params map[string]any, isWholeTempla
 	return nil
 }
 
-// MethodDeniedReason reports the invariant a denied method protects.
+// MethodDeniedReason reports the invariant a denied method protects. The
+// denylist is an accidental-misuse rail, not a sandbox.
 func MethodDeniedReason(method string) (string, bool) {
 	entry, ok := herdrMethods[method]
 	if !ok || entry.denied == "" {

@@ -1,10 +1,11 @@
-// Package host resolves the herdr host binary path. The config package
-// uses it to discover the plugin config directory.
+// Package host is the Herdr Adapter: explicit host identities, generated
+// params/result validation, and an accidental-misuse denylist.
 package host
 
 import "strings"
 
-// BinPath resolves the herdr binary, honoring the HERDR_BIN_PATH override.
+// BinPath resolves the herdr binary, honoring HERDR_BIN_PATH. Config uses it
+// for plugin config-dir discovery.
 func BinPath(getenv func(string) string) string {
 	if v := strings.TrimSpace(getenv("HERDR_BIN_PATH")); v != "" {
 		return v
