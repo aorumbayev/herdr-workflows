@@ -67,7 +67,7 @@ npm ci --prefix docs && npm run build --prefix docs
 openspec validate --all --strict
 ```
 
-`go tool verify` runs the Go tests, lint, and the `go run ./scripts/verify-*` gates. Use `go tool verify -fast` when you only need the pre-commit set.
+`go tool verify` runs every host-feasible check: format, vet, Go tests, lint, the `go run ./scripts/verify-*` gates, then docs, OpenSpec, `govulncheck`, and GoReleaser. `go tool verify -fast` is the pre-commit set and includes format and vet.
 
 Then check that generated artifacts still regenerate to identical bytes:
 
