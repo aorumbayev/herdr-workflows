@@ -72,6 +72,9 @@ func TestGoModDeclaresVerifyTool(t *testing.T) {
 			t.Fatalf("go.mod missing %q", want)
 		}
 	}
+	if strings.Contains(text, "golang.org/x/mod v0.39.0") {
+		t.Fatal("go.mod must not select golang.org/x/mod v0.39.0 (GO-2026-6179 / GO-2026-6180; use v0.40.0 or later)")
+	}
 }
 
 func TestGoModHasNoEsbuild(t *testing.T) {
