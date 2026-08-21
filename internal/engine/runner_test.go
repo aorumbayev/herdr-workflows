@@ -148,7 +148,6 @@ func formatProgressEvent(i, n int, label string, outcome *ProgressOutcome) strin
 	return fmt.Sprintf("%d/%d:%s:%s", i, n, label, o)
 }
 
-// TypeScript: runner.test.ts "local argv result and explicit env handoff"
 func TestRunWorkflowLocalArgvEnvHandoff(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -184,7 +183,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "shell rejects reserved HWF_ env keys"
 func TestRunWorkflowShellRejectsReservedHWFEnv(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -213,7 +211,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "when skip continues without recovery"
 func TestRunWorkflowWhenSkipContinuesWithoutRecovery(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -315,7 +312,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "automatic failure notification omits command stderr"
 func TestRunWorkflowAutomaticFailureNotificationOmitsStderr(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -353,7 +349,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "continue_on_error suppresses recovery and leaves run failed"
 func TestRunWorkflowContinueOnErrorSuppressesRecovery(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -390,7 +385,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "retry counts total attempts including the first"
 func TestRunWorkflowRetryCountsTotalAttempts(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -419,7 +413,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "progress reports one outcome line per step including skip"
 func TestRunWorkflowProgressReportsOutcomeIncludingSkip(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -460,7 +453,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "CLI progress emits both start and outcome exactly once per step"
 func TestRunWorkflowCLIProgressEmitsStartAndOutcome(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -577,7 +569,6 @@ func stringParam(t *testing.T, params map[string]any, key string) string {
 	return s
 }
 
-// TypeScript: runner.test.ts "continue_on_error cannot tolerate command timeout"
 func TestRunWorkflowContinueOnErrorCannotTolerateCommandTimeout(t *testing.T) {
 	root := t.TempDir()
 	writeRunnerWorkflow(t, root, "m", `version: v1alpha1
@@ -613,7 +604,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "on_failure runs once with context.error"
 func TestRunWorkflowOnFailureRunsOnceWithContextError(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -651,7 +641,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "agent failure details reach context.error.details in recovery"
 func TestRunWorkflowAgentFailureDetailsReachContextErrorInRecovery(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -706,7 +695,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "herdr failure details include method and reason in recovery"
 func TestRunWorkflowHerdrFailureDetailsIncludeMethodAndReasonInRecovery(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -757,7 +745,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "transport loss skips on_failure"
 func TestRunWorkflowTransportLossSkipsOnFailure(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -815,7 +802,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "RunnerDeps transport-loss code … is coordination loss"
 func TestRunWorkflowTransportLossCodesAreCoordinationLoss(t *testing.T) {
 	t.Parallel()
 	for _, code := range []string{"closed", "no_socket", "unreachable"} {
@@ -872,7 +858,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "port internal HerdrError is ordinary failure and on_failure runs"
 func TestRunWorkflowInternalHerdrErrorRunsOnFailure(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -921,7 +906,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "child failure bubbles to entry recovery with child attribution"
 func TestRunWorkflowChildFailureBubblesToEntryRecoveryWithChildAttribution(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -977,7 +961,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "repeated child calls keep the entry-load definition after mid-run edit"
 func TestRunWorkflowRepeatedChildCallsKeepEntryLoadDefinitionAfterMidRunEdit(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -1021,7 +1004,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "recursive child graph stays frozen for nested mid-run edits"
 func TestRunWorkflowRecursiveChildGraphStaysFrozenForNestedMidRunEdits(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -1071,7 +1053,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "child HWF environment cap fails before child step 1"
 func TestRunWorkflowChildHwfEnvironmentCapFailsBeforeChildStep1(t *testing.T) {
 	t.Parallel()
 	half := strings.Repeat("x", caps.HwfEnvByteLimit/2)
@@ -1141,7 +1122,6 @@ func scratchGlob(t *testing.T, scratch, pattern string) []string {
 	return matches
 }
 
-// TypeScript: runner.test.ts "context.agent uses pane id when the detected agent has a null name"
 func TestRunWorkflowContextAgentUsesPaneIDWhenNameNull(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -1190,7 +1170,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "context.agent prefers the live name over the pane id"
 func TestRunWorkflowContextAgentPrefersLiveName(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -1239,7 +1218,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "context.agent preflight fails when the pane has no recognized agent"
 func TestRunWorkflowContextAgentPreflightFailsWithoutRecognizedAgent(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -1286,7 +1264,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "child-only transcript reference fails entry preflight before step 1"
 func TestRunWorkflowChildOnlyTranscriptFailsEntryPreflight(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -1324,7 +1301,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "child-only unavailable identity fails entry preflight before step 1"
 func TestRunWorkflowChildOnlyUnavailableIdentityFailsEntryPreflight(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -1362,7 +1338,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "entry returns are recorded on the private snapshot" (adapted: recorder)
 func TestRunWorkflowEntryReturnsRecordedOnInjectedRecorder(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -1417,7 +1392,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "transcript file is cleaned up and never logged" (adapted)
 func TestRunWorkflowTranscriptFileIsCleanedUp(t *testing.T) {
 	root := t.TempDir()
 	writeRunnerWorkflow(t, root, "m", `version: v1alpha1
@@ -1458,7 +1432,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "failed run keeps the managed response and still removes the transcript"
 func TestRunWorkflowFailedRunKeepsManagedResponseRemovesTranscript(t *testing.T) {
 	root := t.TempDir()
 	writeRunnerWorkflow(t, root, "m", `version: v1alpha1
@@ -1510,7 +1483,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "successful run removes the managed response and the transcript"
 func TestRunWorkflowSuccessfulRunRemovesManagedResponseAndTranscript(t *testing.T) {
 	root := t.TempDir()
 	writeRunnerWorkflow(t, root, "m", `version: v1alpha1
@@ -1542,7 +1514,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "recovery reads the transcript file before cleanup removes it"
 func TestRunWorkflowRecoveryReadsTranscriptFileBeforeCleanup(t *testing.T) {
 	root := t.TempDir()
 	writeRunnerWorkflow(t, root, "m", `version: v1alpha1
@@ -1572,7 +1543,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "HWF environment cap fails preflight"
 func TestRunWorkflowHwfEnvironmentCapFailsPreflight(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -1603,7 +1573,6 @@ steps:
 	}
 }
 
-// TypeScript: runner.test.ts "detached resolveDynamic false requires domain snapshots"
 func TestRunWorkflowDetachedResolveDynamicFalseRequiresDomainSnapshots(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

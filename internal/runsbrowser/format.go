@@ -276,11 +276,6 @@ func SelectedIndex(items []history.Summary, selectedID string) int {
 	return 0
 }
 
-// IsDetailPollableStatus reports whether snapshot detail should poll.
-func IsDetailPollableStatus(status string) bool {
-	return status == "running" || status == "stale"
-}
-
 func formatRunSummary(item history.Summary) string {
 	return strings.Join([]string{
 		history.StatusLabel(item.Status),

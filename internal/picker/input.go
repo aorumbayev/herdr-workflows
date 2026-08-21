@@ -89,15 +89,6 @@ func FilterChoiceOptions(options []string, filter string) []string {
 	return out
 }
 
-// CustomChoiceValue tags the sentinel row that opens a free-text field.
-type CustomChoiceValue struct{ Kind string }
-
-// IsCustomChoiceValue reports a tagged custom-choice option, never a string sentinel.
-func IsCustomChoiceValue(v any) bool {
-	c, ok := v.(CustomChoiceValue)
-	return ok && c.Kind == "custom"
-}
-
 // ShouldRestoreCustomChoiceText is true when backtrack should seed the custom field.
 func ShouldRestoreCustomChoiceText(hasAnswer bool, answer string, options []string, allowCustom bool) bool {
 	if !hasAnswer || !allowCustom {

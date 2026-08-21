@@ -161,4 +161,4 @@ noise-floor iteration, the score trajectory across iterations rather than only t
 any grading bug you found and fixed, and any regression the winning version introduced. An honest
 "could not execute, here is what I ran instead" is worth more than an invented figure.
 
-Adopt a candidate only after `go test ./...` passes against the skill's YAML fences through the Go loader — followed by the Go verify scripts (`go run ./scripts/verify-prose`, `verify-no-archive`, `verify-file-length`, `verify-comments`).
+Adopt a candidate only after `go tool verify` passes. That run covers loader tests against the skill's YAML fences and the prose, archive, file-length, and comments gates.

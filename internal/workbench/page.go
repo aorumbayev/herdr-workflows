@@ -3,7 +3,6 @@ package workbench
 import (
 	"fmt"
 	"net/http"
-	"regexp"
 	"strings"
 	"sync"
 
@@ -14,12 +13,10 @@ var (
 	pageOnce     sync.Once
 	pageTemplate string
 	pageInitErr  error
-	exportPrefix = regexp.MustCompile(`(?m)^export `)
 )
 
 func initPageTemplate() {
-	js := exportPrefix.ReplaceAllString(assets.FieldModelJS, "")
-	page := strings.Replace(assets.PageHTML, "/* __HWF_FIELD_MODEL__ */", js, 1)
+	page := strings.Replace(assets.PageHTML, "/* __HWF_FIELD_MODEL__ */", assets.FieldModelJS, 1)
 	if !strings.Contains(page, "function addressesField") {
 		pageInitErr = fmt.Errorf("field model failed to inline into the workbench page")
 		return

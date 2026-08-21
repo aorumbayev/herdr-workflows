@@ -24,12 +24,6 @@ func (m Model) render() string {
 		body = "Delete " + m.deleteLabel() + "?\n" + tui.DeleteConfirmHint
 	case modeFail:
 		body = m.status + "\n" + tui.FailHint
-	case modeRun:
-		body = m.status
-		if line := m.consentLine(); line != "" {
-			body = line
-		}
-		body = body + "\n" + tui.RunHint
 	case modeInputText:
 		body = m.renderTextPrompt()
 	case modeInput:

@@ -183,6 +183,3 @@ func flatEnv(extra map[string]string) []string {
 	}
 	return out
 }
-
-// Skipped in TS parity: the Bun preload mock import race has no Go equivalent without
-// mocking internal package load order.

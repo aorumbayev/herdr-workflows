@@ -23,7 +23,6 @@ const (
 	modeInput
 	modeInputText
 	modeFail
-	modeRun
 	modeRuns
 )
 
@@ -234,16 +233,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleInputText(msg)
 	case modeInput:
 		return m.handleInput(msg)
-	case modeFail, modeRun:
+	case modeFail:
 		if key == "enter" || key == "esc" {
-			if m.mode == modeFail || key == "esc" {
-				m.mode = modeList
-				m.status = ""
-			}
-			if m.mode == modeRun && key == "esc" {
-				m.quit = true
-				return m, tea.Quit
-			}
+			m.mode = modeList
+			m.status = ""
 		}
 		return m, nil
 	default:

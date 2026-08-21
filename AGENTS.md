@@ -46,6 +46,7 @@ Go packages under `internal/` and `embed/` (workbench HTML and field-model bytes
 | `internal/transcript/`                       | transcript extractor table, built-in Claude transcript read                                                   |
 | `internal/credentials/`                      | private credential store and file ACL checks                                                                  |
 | `scripts/build-examples/`                    | VitePress example gallery JSON helper (`go run ./scripts/build-examples`)                                     |
+| `scripts/install-release.sh`                 | verified-archive download for managed `[[build]]` install (no Go on the target)                               |
 | `docs/package.json`                          | scoped VitePress 1.6.4 package (`npm ci` / `npm run build` in `docs/`)                                        |
 | `herdr-plugin.toml`                          | plugin manifest (build + `prefix+k` → picker)                                                                 |
 | `openspec/`                                  | tracked specs and changes (OpenSpec CLI root)                                                                 |
@@ -104,7 +105,7 @@ Prose style of record is `CONTRIBUTING.md` "Documentation style" (Simplified Tec
 - **Names and spelling** — `GitHub`, `PowerShell`, `JavaScript`, `TypeScript`, `macOS`. US spelling (`-ize`, `behavior`, `analyze`, `artifact`, `gray`).
 - **Punctuation** — no semicolons in prose, including after a code span.
 
-Code spans, fenced blocks, and link targets are skipped, so a genuine technical term passes inside backticks. A failing run prints every hit with its replacement and reason. Add or relax a rule in `scripts/verify-prose.ts`, and keep out anything a regex can't judge without flagging correct prose, which is why `since`, `while`, and em dashes are absent.
+Code spans, fenced blocks, and link targets are skipped, so a genuine technical term passes inside backticks. A failing run prints every hit with its replacement and reason. Add or relax a rule in `scripts/verify-prose/`, and keep out anything a regex can't judge without flagging correct prose, which is why `since`, `while`, and em dashes are absent.
 
 ## Chat
 

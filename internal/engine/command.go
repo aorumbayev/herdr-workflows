@@ -39,8 +39,6 @@ func ShellArgv(command, shell string) []string {
 	}
 }
 
-// NativeProcessTree reports whether process-tree termination is supported
-// (native Linux and macOS only).
 func NativeProcessTree(goos string) bool {
 	return goos == "linux" || goos == "darwin"
 }

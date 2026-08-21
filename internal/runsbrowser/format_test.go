@@ -250,18 +250,6 @@ func TestSelectedIndex(t *testing.T) {
 	}
 }
 
-func TestIsDetailPollableStatus(t *testing.T) {
-	// Ports test/history/run-history.test.ts "detail poll targets only running and stale statuses".
-	if !IsDetailPollableStatus("running") || !IsDetailPollableStatus("stale") {
-		t.Fatal("running and stale pollable")
-	}
-	for _, status := range []string{"succeeded", "failed", "interrupted"} {
-		if IsDetailPollableStatus(status) {
-			t.Fatalf("%q should not poll", status)
-		}
-	}
-}
-
 func TestFormatRunListEmptyUsesChromeSep(t *testing.T) {
 	got := FormatRunListEmpty(RunListEmptyOpts{
 		Scope: ScopeCurrent, HasMachineRuns: true, FilterActive: false,

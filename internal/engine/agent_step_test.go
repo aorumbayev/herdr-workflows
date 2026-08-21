@@ -625,7 +625,6 @@ func TestAgentStepBusyTargetRejectedBeforePrompt(t *testing.T) {
 	}
 }
 
-// Ports TypeScript targetTurn: agent: target resolved to an empty value.
 func TestAgentStepEmptyTarget(t *testing.T) {
 	repo := t.TempDir()
 	h := newAgentHarness(t, repo)
@@ -644,7 +643,6 @@ func TestAgentStepEmptyTarget(t *testing.T) {
 	}
 }
 
-// Ports TypeScript chooseProfile.
 func TestAgentStepUnknownProfileAndMissingDefault(t *testing.T) {
 	t.Run("unknown", func(t *testing.T) {
 		repo := t.TempDir()
@@ -1248,7 +1246,6 @@ func TestAgentStepBackgroundWorkingIsLaunched(t *testing.T) {
 	}
 }
 
-// Ports TypeScript awaitAgentInteractiveReady.
 func TestAgentStepInteractiveReadyTimeout(t *testing.T) {
 	repo := t.TempDir()
 	h := newAgentHarness(t, repo)
@@ -1263,7 +1260,6 @@ func TestAgentStepInteractiveReadyTimeout(t *testing.T) {
 	}
 }
 
-// Ports TypeScript awaitAgentInteractiveReady: launch_pending false and interactive_ready never true.
 func TestAgentStepProcessExitedBeforeInteractive(t *testing.T) {
 	repo := t.TempDir()
 	h := newAgentHarness(t, repo)

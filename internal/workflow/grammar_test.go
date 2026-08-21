@@ -258,7 +258,4 @@ func TestWhenEvaluation(t *testing.T) {
 	if !EvaluateWhen([]WhenSpec{{Kind: WhenEqual, Path: "context.platform", Value: "macos"}}, ns) {
 		t.Fatal("equality evaluation failed")
 	}
-	if ClausesContain([]WhenSpec{truthy}, []WhenSpec{truthy}) == false || ClausesContain(nil, []WhenSpec{truthy}) {
-		t.Fatal("clause containment failed")
-	}
 }

@@ -453,3 +453,63 @@ func TestProductImprovementDoesNotHideParityGap(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentsCiteVerifyProseGoCommand(t *testing.T) {
+	for _, rel := range []string{"AGENTS.md", "CLAUDE.md"} {
+		text := readRepoFile(t, rel)
+		if strings.Contains(text, "verify-prose.ts") {
+			t.Fatalf("%s must not cite verify-prose.ts (gate is go run ./scripts/verify-prose)", rel)
+		}
+		if !strings.Contains(text, "go run ./scripts/verify-prose") {
+			t.Fatalf("%s missing %q", rel, "go run ./scripts/verify-prose")
+		}
+	}
+}
+
+func TestAgentsDocumentsInstallReleaseScript(t *testing.T) {
+	for _, rel := range []string{"AGENTS.md", "CLAUDE.md"} {
+		text := readRepoFile(t, rel)
+		cell := layoutCell(t, rel, text, "`scripts/install-release.sh`")
+		if !strings.Contains(cell, "verified") && !strings.Contains(cell, "archive") && !strings.Contains(cell, "install") {
+			t.Fatalf("%s install-release layout must describe the verified-archive install path: %s", rel, cell)
+		}
+	}
+}
+
+func TestAgentSkillsTeachGoToolVerifyEntry(t *testing.T) {
+	root := repoRoot(t)
+	var paths []string
+	skillsRoot := filepath.Join(root, ".agents", "skills")
+	err := filepath.WalkDir(skillsRoot, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if strings.EqualFold(filepath.Ext(path), ".md") {
+			rel, relErr := filepath.Rel(root, path)
+			if relErr == nil {
+				paths = append(paths, rel)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, rel := range paths {
+		text := readRepoFile(t, rel)
+		teachesLeafEntry := strings.Contains(text, "go test ./...\ngo run ./scripts/verify-prose") ||
+			strings.Contains(text, "`go test ./...` and the Go verify scripts") ||
+			strings.Contains(text, "followed by the Go verify scripts (`go run ./scripts/verify-prose`") ||
+			(strings.Contains(text, "`go test ./...`") && strings.Contains(text, "go run ./scripts/verify-prose") &&
+				!strings.Contains(text, "go tool verify"))
+		if !teachesLeafEntry {
+			continue
+		}
+		if !strings.Contains(text, "go tool verify") {
+			t.Errorf("%s teaches leaf go test/verify-* as the entry point but missing %q", rel, "go tool verify")
+		}
+	}
+}

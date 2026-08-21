@@ -1,10 +1,10 @@
 # Charm component evaluation
 
-Decision 16 re-evaluates every hand-written picker and TUI mechanism against the latest stable Charm modules. Use a Charm component only when it meets required behavior with less product code and unchanged UX. Default is keep custom code. Each keep-custom row names the missing capability and a focused test.
+Decision 16 evaluates every hand-written picker and TUI mechanism against the latest stable Charm modules. Use a Charm component only when it meets required behavior with less product code and unchanged UX. Default is keep custom code. Each keep-custom row names the missing capability and a focused test.
 
 ## Exact versions (2026-08-21)
 
-Looked up with `go list -m -u` for direct modules and `proxy.golang.org` `@latest` for candidates not in `go.mod`.
+Versions come from `go list -m -u` for direct modules and from `proxy.golang.org` `@latest` for candidates not in `go.mod`.
 
 | Module | Latest stable | In `go.mod` |
 | --- | --- | --- |
@@ -14,7 +14,7 @@ Looked up with `go list -m -u` for direct modules and `proxy.golang.org` `@lates
 | `charm.land/huh/v2` | v2.0.3 | not added |
 | `github.com/charmbracelet/x/ansi` | v0.11.8 | v0.11.8 |
 
-This cycle does not add `bubbles` or `huh`. Adding unused modules violates YAGNI.
+This cycle does not add `bubbles` or `huh`. Unused modules violate YAGNI.
 
 ## Verdict table
 

@@ -58,11 +58,6 @@ func ParseWebRoute(raw string) *WebRoute {
 	}
 }
 
-// RunWorkbenchRoute formats a run deep-link hash body.
-func RunWorkbenchRoute(id string) string {
-	return "run=" + strings.ToLower(id)
-}
-
 type openWorkflow struct {
 	Name   string `json:"name"`
 	Source string `json:"source"`

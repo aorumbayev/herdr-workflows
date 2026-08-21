@@ -267,7 +267,7 @@ refactor away from silently disappearing.
 - `rg -n "time\.Now\(\)|time\.Sleep|rand\." internal e2e --glob '*_test.go'`
 - `rg -n "os\.Getenv\(\"HOME\"\)|os\.UserHomeDir|HERDR_SOCKET" internal e2e --glob '*_test.go'` and check each against the
   temp-dir or injected env the test provides
-- Phase 0 already ran the suite once. A second `go test ./...` catches order and state dependence
+- Phase 0 already ran the suite once. A second `go tool verify` (or `go test ./...` alone) catches order and state dependence
   between runs. Cite shared mutable state by `file:line` when you find it
 
 ### Not a finding

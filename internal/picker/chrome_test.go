@@ -243,12 +243,6 @@ func TestStdinLeakFilter(t *testing.T) {
 }
 
 func TestCustomChoiceHelpers(t *testing.T) {
-	if !IsCustomChoiceValue(CustomChoiceValue{Kind: "custom"}) {
-		t.Fatal("tagged custom")
-	}
-	if IsCustomChoiceValue("__hwf_custom__") || IsCustomChoiceValue("custom...") {
-		t.Fatal("string sentinels")
-	}
 	if !ShouldRestoreCustomChoiceText(true, "", []string{"main"}, true) {
 		t.Fatal("empty custom")
 	}

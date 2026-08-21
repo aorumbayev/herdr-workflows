@@ -61,6 +61,20 @@ func TestPageDoesNotImportEsbuild(t *testing.T) {
 	}
 }
 
+func TestPageDoesNotStripExportPrefix(t *testing.T) {
+	src, err := os.ReadFile("page.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(src)
+	if strings.Contains(text, "exportPrefix") || strings.Contains(text, `^export `) {
+		t.Fatal("page.go must not strip exportPrefix; embed/field-model.js has no export statements")
+	}
+	if strings.Contains(text, `"regexp"`) {
+		t.Fatal("page.go must not import regexp after exportPrefix deletion")
+	}
+}
+
 func TestEmbeddedAssetsMatchSource(t *testing.T) {
 	wantPage, err := os.ReadFile(filepath.Join("..", "..", "embed", "page.html"))
 	if err != nil {

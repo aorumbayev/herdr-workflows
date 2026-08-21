@@ -10,7 +10,6 @@ const (
 	DeleteConfirmHint   = "y delete | n cancel | esc"
 	ChoiceHint          = "type filter" + ChromeSep + "up/down move" + ChromeSep + "enter select" + ChromeSep + "esc back"
 	CustomChoiceHint    = "type filter" + ChromeSep + "up/down" + ChromeSep + "enter select/custom" + ChromeSep + "esc back"
-	RunHint             = "esc dismiss" + ChromeSep + "run continues"
 	FailHint            = "enter/esc close"
 	CustomChoiceLabel   = "custom..."
 	FilterWorkflows     = "filter workflows..."
@@ -31,7 +30,6 @@ var ChromeStrings = []string{
 	DeleteConfirmHint,
 	ChoiceHint,
 	CustomChoiceHint,
-	RunHint,
 	FailHint,
 	CustomChoiceLabel,
 	Ellipsis,

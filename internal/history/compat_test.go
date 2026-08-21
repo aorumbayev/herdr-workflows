@@ -7,8 +7,8 @@ import (
 )
 
 func TestRealInstallSnapshotReadsUnmodified(t *testing.T) {
-	// Fixture is a TypeScript-written run snapshot from a real install,
-	// with checkout_root replaced by a neutral path.
+	// Fixture is a run snapshot from a real install, with checkout_root
+	// replaced by a neutral path.
 	raw, err := os.ReadFile(filepath.Join("testdata", "ts-snapshot.json"))
 	if err != nil {
 		t.Fatal(err)

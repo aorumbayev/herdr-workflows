@@ -3,7 +3,6 @@ package history
 import (
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 )
 
@@ -20,12 +19,7 @@ type HistoryAck struct {
 	Error string
 }
 
-var (
-	progressRE = regexp.MustCompile(`^\[(\d+)/(\d+)\] (.+)$`)
-	ackRE      = regexp.MustCompile(`^@hwf-history:(claimed|unavailable|rejected)(?:\s+(\S+))?(?:\s+(.*))?$`)
-)
-
-var progressSuffixes = []string{"skip", "fail", "launch"}
+var ackRE = regexp.MustCompile(`^@hwf-history:(claimed|unavailable|rejected)(?:\s+(\S+))?(?:\s+(.*))?$`)
 
 func FormatProgressLine(progress ProgressLine) string {
 	head := fmt.Sprintf("[%d/%d] %s", progress.Index, progress.Total, progress.Label)
@@ -36,26 +30,6 @@ func FormatProgressLine(progress ProgressLine) string {
 		return head
 	}
 	return head + " " + progress.Outcome
-}
-
-func ParseProgressLine(line string) *ProgressLine {
-	m := progressRE.FindStringSubmatch(strings.TrimSpace(line))
-	if m == nil {
-		return nil
-	}
-	index, _ := strconv.Atoi(m[1])
-	total, _ := strconv.Atoi(m[2])
-	rest := m[3]
-	if strings.HasSuffix(rest, "…") {
-		return &ProgressLine{Index: index, Total: total, Label: strings.TrimSuffix(rest, "…"), Outcome: "start"}
-	}
-	for _, outcome := range progressSuffixes {
-		suffix := " " + outcome
-		if strings.HasSuffix(rest, suffix) {
-			return &ProgressLine{Index: index, Total: total, Label: strings.TrimSuffix(rest, suffix), Outcome: outcome}
-		}
-	}
-	return &ProgressLine{Index: index, Total: total, Label: rest, Outcome: "ok"}
 }
 
 func FormatHistoryAck(ack HistoryAck) string {

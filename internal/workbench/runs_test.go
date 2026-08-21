@@ -304,7 +304,7 @@ func TestRunHistoryPriorSharedRunsJSONLDoesNotAppearInAll(t *testing.T) {
 func TestRouteParsingRequiresCompleteUUID(t *testing.T) {
 	// Ports test/workbench/web-server.test.ts "route parsing requires complete UUID".
 	id := history.AllocateRunID()
-	parsed := ParseWebRoute(RunWorkbenchRoute(id))
+	parsed := ParseWebRoute("run=" + id)
 	if parsed == nil || parsed.Kind != "run" || parsed.ID != id || parsed.Hash != "run="+id {
 		t.Fatalf("parsed = %+v", parsed)
 	}

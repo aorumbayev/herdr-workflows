@@ -6,10 +6,8 @@ import (
 	"testing"
 )
 
-// The fixtures are copies of real TS-written credential-store files
-// (~/.hwf/state/web-endpoints/): an endpoint record and a session lock, both
-// written 0600 by the TS writer. Secrets (URL token, session id) are
-// redacted to zero UUIDs; structure and lengths are unchanged.
+// Fixtures under testdata/ are endpoint-record and session.lock samples,
+// mode 0600, with secrets redacted to zero UUIDs.
 func TestRealInstallCredentialFilesPassPrivacyChecks(t *testing.T) {
 	store := t.TempDir()
 	if err := AssertCredentialStoreSafe(store, nil); err != nil {
