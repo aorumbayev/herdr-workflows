@@ -81,6 +81,32 @@ func TestRunRejectsContradictoryTransitions(t *testing.T) {
 	}
 }
 
+func TestRunSkipDoesNotPopParentCurrentStep(t *testing.T) {
+	run, err := NewRun(fakeRunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent := StepRef{Ordinal: 1, Total: 1, Label: "workflow: child", Phase: PhaseMain}
+	if err := run.StartStep(parent); err != nil {
+		t.Fatalf("StartStep: %v", err)
+	}
+	if err := run.FinishStep(OutcomeSkipped); err != nil {
+		t.Fatalf("nested skip: %v", err)
+	}
+	if !run.HasCurrentStep() {
+		t.Fatal("parent step must remain current after nested skip")
+	}
+	if got := run.Outcomes(); len(got) != 1 || got[0] != OutcomeSkipped {
+		t.Fatalf("Outcomes() = %v, want [skipped]", got)
+	}
+	if err := run.FinishStep(OutcomeSucceeded); err != nil {
+		t.Fatalf("parent FinishStep: %v", err)
+	}
+	if run.HasCurrentStep() {
+		t.Fatal("parent FinishStep must clear current step")
+	}
+}
+
 func TestRunFinishSucceededRejectsFailedOutcomes(t *testing.T) {
 	run, err := NewRun(fakeRunID)
 	if err != nil {

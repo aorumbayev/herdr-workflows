@@ -87,11 +87,11 @@ func (r *Run) FinishStep(kind StepOutcomeKind) error {
 	if !ValidOutcomeKind(string(kind)) {
 		return fmt.Errorf("unknown step outcome kind %q", kind)
 	}
+	if kind == OutcomeSkipped {
+		r.outcomes = append(r.outcomes, kind)
+		return nil
+	}
 	if len(r.stack) == 0 {
-		if kind == OutcomeSkipped {
-			r.outcomes = append(r.outcomes, kind)
-			return nil
-		}
 		return fmt.Errorf("no current step")
 	}
 	r.stack = r.stack[:len(r.stack)-1]

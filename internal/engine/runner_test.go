@@ -268,6 +268,53 @@ steps:
 	}
 }
 
+func TestRunWorkflowNestedWhenFalseKeepsParentAndFinishes(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeRunnerWorkflows(t, root, map[string]string{
+		"child": `version: v1alpha1
+steps:
+  - id: skipme
+    run: [printf, no]
+    when: '{{context.platform}} == "windows"'
+`,
+		"parent": `version: v1alpha1
+steps:
+  - id: wrap
+    workflow: child
+`,
+	})
+	h := newRunnerHarness()
+	recorder := newFakeRecorder()
+	result, err := RunWorkflow(RunOptions{
+		Name:     "parent",
+		RepoRoot: root,
+		Config:   runnerBaseConfig(),
+		Ctx:      config.InvocationContext{Selection: "", Cwd: root},
+		Deps:     runnerDeps(h),
+		Recorder: recorder,
+	})
+	if err != nil {
+		t.Fatalf("RunWorkflow: %v", err)
+	}
+	if !result.OK {
+		t.Fatalf("result.OK = false, want true; Error = %q", result.Error)
+	}
+	if !slices.ContainsFunc(recorder.stepFinishedCalls, func(c fakeRecorderCall) bool {
+		return c.label == "skipme" && c.outcomeKind == OutcomeSkipped
+	}) {
+		t.Fatalf("stepFinishedCalls = %#v, want skipme skipped", recorder.stepFinishedCalls)
+	}
+	if !slices.ContainsFunc(recorder.stepFinishedCalls, func(c fakeRecorderCall) bool {
+		return c.label == "wrap" && c.outcomeKind == OutcomeSucceeded
+	}) {
+		t.Fatalf("stepFinishedCalls = %#v, want wrap succeeded", recorder.stepFinishedCalls)
+	}
+	if len(recorder.finishedCalls) != 1 || recorder.finishedCalls[0].status != StatusSucceeded {
+		t.Fatalf("finishedCalls = %#v, want one succeeded terminal", recorder.finishedCalls)
+	}
+}
+
 // TypeScript: runner.test.ts "automatic failure notification omits command stderr"
 func TestRunWorkflowAutomaticFailureNotificationOmitsStderr(t *testing.T) {
 	t.Parallel()
