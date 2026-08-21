@@ -45,6 +45,7 @@ func TestVerifyWorkflowUsesUnifiedGoToolVerify(t *testing.T) {
 		"macos-latest",
 		"actions/setup-node@",
 		"golangci/golangci-lint-action@",
+		"version: v2.13",
 		"install-only: true",
 		"install-mode: goinstall",
 		"@fission-ai/openspec",
@@ -55,6 +56,9 @@ func TestVerifyWorkflowUsesUnifiedGoToolVerify(t *testing.T) {
 	}
 	if strings.Count(text, "go tool verify") < 1 {
 		t.Fatal(".github/workflows/verify.yml must invoke go tool verify")
+	}
+	if strings.Contains(text, "version: v2.12") {
+		t.Fatal(".github/workflows/verify.yml must not pin golangci-lint v2.12 (buildir panics on Go 1.27 stdlib poll)")
 	}
 }
 

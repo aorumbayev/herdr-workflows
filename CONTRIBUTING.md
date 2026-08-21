@@ -6,7 +6,7 @@ Thanks for contributing to herdr-workflows.
 
 - [Go](https://go.dev) **1.27** or newer
 - [Node.js](https://nodejs.org) **22** or newer with `npm` (VitePress docs and OpenSpec CLI install)
-- [golangci-lint](https://golangci-lint.run) **v2.12** or newer for full verification and lint in fast verification
+- [golangci-lint](https://golangci-lint.run) **v2.13.1** or newer for full verification and lint in fast verification
 - [herdr](https://herdr.dev) **0.8.2** or newer for live plugin work
 - Git
 
