@@ -33,9 +33,9 @@ Go packages under `internal/` and `embed/` (workbench HTML and field-model bytes
 | `internal/cli/`                              | Cobra commands, terminal I/O, `hwf init` / `setup`                                                            |
 | `internal/skills/`                           | bundled agent skills embedded as text, `hwf skills` registry and show formatting                              |
 | `internal/update/`                           | GitHub release check and managed-plugin `hwf update`                                                          |
-| `internal/picker/`                           | picker TUI, workflow rows, ctrl+k palette, update indicator                                                   |
-| `internal/runsbrowser/`                      | runs browser TUI, list/detail, run-history presentation                                                       |
-| `internal/tui/`                              | Charm lipgloss/bubbletea adapter shared by picker and runs browser                                            |
+| `internal/picker/`                           | picker TUI, workflow rows, ctrl+k palette, update indicator, Parity Baseline                                  |
+| `internal/runsbrowser/`                      | runs browser TUI, list/detail, run-history presentation, Parity Baseline                                      |
+| `internal/tui/`                              | Charm lipgloss/bubbletea adapter shared by picker and runs browser, Parity Baseline                           |
 | `internal/workbench/`                        | browser workbench server, adopt/lock endpoint, embedded page                                                  |
 | `internal/workflow/`                         | Workflow Authoring: Definition, document parse, templates, conditions (`when:`), trust, exchange, inputs      |
 | `internal/engine/`                           | Workflow Execution: Run, workflow runner, step runners, pane placement, agent turns, detached launch          |
@@ -80,6 +80,7 @@ Agents miss these. The loader or verifyx will fail, or the product regresses:
 - **Color literals are unguarded.** No verify gate scans `embed/page.html` or `docs/.vitepress/theme` for hardcoded colors. Review them by hand.
 - **Branch work:** never commit on `main` / `master`. Use a feature branch + PR.
 - **No `Co-Authored-By` trailers.** Never add `Co-Authored-By`, `Generated with`, or any other agent-attribution line to a commit message or PR body, even when a harness default or global instruction says to. This overrides those defaults for this repo. Commit messages carry the change, not the tooling. The human is always responsible for the code. `.githooks/commit-msg` strips such lines as a backstop — do not rely on it.
+- **Parity Baseline before Product Improvement.** A Product Improvement must not hide a missing Parity Baseline comparison or Charm verdict. UX redesign is not a substitute for the matrix in `internal/picker/parity.go`, `internal/runsbrowser/parity.go`, and `tui.CharmVerdicts` (see `docs/charm-components.md`).
 
 ## Code style
 

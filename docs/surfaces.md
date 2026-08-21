@@ -8,6 +8,8 @@ Runs happen in the picker or `hwf run`, because a run needs real herdr panes. Th
 
 Press `prefix+k`.
 
+The Parity Baseline in package tests records current Go behavior against the spec. A later Product Improvement must not skip that comparison.
+
 Tab switches the Workflow browser and the Runs browser. The pane title stays static. The Workflow footer starts with `tab runs`. The Runs footer starts with `tab workflows`. The filter placeholders are `filter workflows...` and `filter runs...`.
 
 One line per workflow, six at a time. Each line shows the title on the left, a warning marker in the middle when the workflow does something sensitive, and `repo`, `global`, or `invalid` on the right. Type to filter, which matches both the title you see and the file name. The counter on the right of the footer tells you where you are in the filtered list.

@@ -298,3 +298,85 @@ func TestPromptfooExampleUsesClaudeAgentSDK(t *testing.T) {
 		t.Fatal("promptfooconfig.example.yaml must use built-in skill assertions")
 	}
 }
+
+func TestAgentsDocumentsPickerParityBaseline(t *testing.T) {
+	for _, rel := range []string{"AGENTS.md", "CLAUDE.md"} {
+		text := readRepoFile(t, rel)
+		pickerCell := layoutCell(t, rel, text, "`internal/picker/`")
+		if !strings.Contains(pickerCell, "Parity Baseline") {
+			t.Fatalf("%s picker layout missing Parity Baseline: %s", rel, pickerCell)
+		}
+		if !strings.Contains(pickerCell, "picker TUI") {
+			t.Fatalf("%s picker layout must still describe picker TUI: %s", rel, pickerCell)
+		}
+		runsCell := layoutCell(t, rel, text, "`internal/runsbrowser/`")
+		if !strings.Contains(runsCell, "Parity Baseline") {
+			t.Fatalf("%s runsbrowser layout missing Parity Baseline: %s", rel, runsCell)
+		}
+		tuiCell := layoutCell(t, rel, text, "`internal/tui/`")
+		if !strings.Contains(tuiCell, "Parity Baseline") {
+			t.Fatalf("%s tui layout missing Parity Baseline: %s", rel, tuiCell)
+		}
+		if !strings.Contains(tuiCell, "Charm") {
+			t.Fatalf("%s tui layout must mention Charm: %s", rel, tuiCell)
+		}
+	}
+}
+
+func TestParityBaselineFilesExist(t *testing.T) {
+	root := repoRoot(t)
+	for _, rel := range []string{
+		filepath.Join("internal", "picker", "parity.go"),
+		filepath.Join("internal", "runsbrowser", "parity.go"),
+		filepath.Join("internal", "tui", "charm.go"),
+		filepath.Join("docs", "charm-components.md"),
+	} {
+		path := filepath.Join(root, rel)
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("missing Parity Baseline / Charm artifact %s: %v", rel, err)
+		}
+	}
+}
+
+func TestProductImprovementDoesNotHideParityGap(t *testing.T) {
+	agents := readRepoFile(t, "AGENTS.md")
+	surfaces := readRepoFile(t, filepath.Join("docs", "surfaces.md"))
+	combined := agents + "\n" + surfaces
+
+	required := []string{
+		"Product Improvement",
+		"Parity Baseline",
+		"Charm",
+	}
+	for _, want := range required {
+		if !strings.Contains(combined, want) {
+			t.Fatalf("AGENTS.md or docs/surfaces.md missing %q (Product Improvement must not hide a Parity Baseline / Charm gap)", want)
+		}
+	}
+
+	// Explicit rule: Product Improvement must not hide a missing comparison or verdict.
+	hasRule := strings.Contains(agents, "must not hide a missing Parity Baseline") ||
+		strings.Contains(agents, "must not hide a missing Parity Baseline comparison or Charm verdict") ||
+		strings.Contains(surfaces, "must not hide a missing Parity Baseline") ||
+		strings.Contains(surfaces, "must not skip that comparison") ||
+		(strings.Contains(agents, "Product Improvement") &&
+			strings.Contains(agents, "must not") &&
+			strings.Contains(agents, "Parity Baseline") &&
+			(strings.Contains(agents, "Charm verdict") || strings.Contains(agents, "Charm")))
+	if !hasRule {
+		t.Fatal("AGENTS.md or docs/surfaces.md must state that a Product Improvement must not hide a missing Parity Baseline comparison or Charm verdict")
+	}
+
+	// Reject wording that treats UX redesign as a substitute for the matrix.
+	forbidden := []string{
+		"UX redesign substitutes for the Parity Baseline",
+		"Product Improvement replaces the Parity Baseline",
+		"redesign is enough without Parity Baseline",
+		"skip the Parity Baseline when improving UX",
+	}
+	for _, phrase := range forbidden {
+		if strings.Contains(combined, phrase) {
+			t.Fatalf("must not treat UX redesign as a substitute for the matrix: found %q", phrase)
+		}
+	}
+}
