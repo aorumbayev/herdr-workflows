@@ -1,6 +1,7 @@
 package update
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -9,6 +10,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/aorumbayev/herdr-workflows/internal/caps"
 )
 
 func githubListJSON() string {
@@ -213,5 +216,23 @@ func TestUpdatePluginOutcomes(t *testing.T) {
 	})
 	if err != nil || ok.Kind != "updated" || ok.To != newer {
 		t.Fatalf("%+v %v", ok, err)
+	}
+}
+
+func TestCheckForUpdateRejectsOversizedBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"tag_name":"v9.9.9","draft":false,"padding":"`))
+		_, _ = w.Write(bytes.Repeat([]byte("x"), caps.CaptureByteLimit+1))
+		_, _ = w.Write([]byte(`"}`))
+	}))
+	t.Cleanup(srv.Close)
+	_, err := CheckForUpdate(CheckOpts{URL: srv.URL, Client: srv.Client()})
+	var limit *caps.CaptureLimitError
+	if err == nil || !errors.As(err, &limit) {
+		t.Fatalf("err = %v, want CaptureLimitError", err)
+	}
+	if limit.Source != "latest release body" || limit.Limit != caps.CaptureByteLimit {
+		t.Fatalf("limit = %#v", limit)
 	}
 }

@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aorumbayev/herdr-workflows/internal/caps"
+
 	"github.com/aorumbayev/herdr-workflows/internal/host"
 )
 
@@ -345,5 +347,17 @@ steps:
 	}
 	if _, err := os.Stat(sentinel); err != nil {
 		t.Fatalf("sentinel missing: %v stderr = %q", err, stderr.String())
+	}
+}
+
+func TestLaunchPayloadRejectsOversizedStdin(t *testing.T) {
+	root := t.TempDir()
+	huge := strings.Repeat("x", caps.CaptureByteLimit+1)
+	got := runCLIEnv(t, []string{"run", "demo", "--launch-payload"}, root, nil, huge)
+	if got.code == 0 {
+		t.Fatalf("exit 0, stderr=%q", got.stderr)
+	}
+	if !strings.Contains(got.stderr, "launch payload") || !strings.Contains(got.stderr, "byte limit") {
+		t.Fatalf("stderr=%q want launch payload capture limit", got.stderr)
 	}
 }
