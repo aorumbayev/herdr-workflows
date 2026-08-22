@@ -76,14 +76,6 @@ func buildPickerScreenOpts(app config.AppContext, entries []workflow.WorkflowLis
 		LoadWorkflow: func(entry workflow.WorkflowListEntry) (*workflow.Definition, error) {
 			return workflow.LoadWorkflowEntry(entry, repoRoot, cfg)
 		},
-		EditWorkflow: func(path, name string) workflow.ValidateResult {
-			return workflow.EditAndValidate(workflow.EditOpts{
-				Path:     path,
-				Name:     name,
-				RepoRoot: repoRoot,
-				Getenv:   os.Getenv,
-			})
-		},
 		OpenURL: func(url string) error {
 			config.OpenInBrowser(url)
 			return nil

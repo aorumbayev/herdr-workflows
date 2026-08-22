@@ -3,6 +3,7 @@ package picker
 import (
 	"context"
 	"os"
+	"os/exec"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -95,6 +96,11 @@ type currentResolvedMsg struct {
 	result workflow.CurrentResult
 }
 
+type editorDoneMsg struct {
+	name   string
+	result workflow.ValidateResult
+}
+
 // NewerReleaseMsg marks the filter row with the hwf update hint.
 type NewerReleaseMsg struct{}
 
@@ -171,6 +177,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case currentResolvedMsg:
 		return m.applyCurrent(msg)
+	case editorDoneMsg:
+		return m.applyEditorDone(msg)
 	case NewerReleaseMsg:
 		m.newerRelease = true
 		return m, nil
@@ -356,15 +364,39 @@ func (m Model) applyEditAction(entry *workflow.WorkflowListEntry) (tea.Model, te
 	if entry == nil {
 		return m, nil
 	}
-	if m.editWorkflow == nil {
-		m.status = "editor handoff unavailable"
-		return m, nil
+	return m, m.beginEdit(entry.File, entry.Name)
+}
+
+func (m Model) beginEdit(path, name string) tea.Cmd {
+	if m.editWorkflow != nil {
+		return func() tea.Msg {
+			return editorDoneMsg{name: name, result: m.editWorkflow(path, name)}
+		}
 	}
-	result := m.editWorkflow(entry.File, entry.Name)
-	if result.OK {
-		m.status = "validated " + entry.Name
+	getenv := m.env
+	if getenv == nil {
+		getenv = os.Getenv
+	}
+	editor, err := workflow.ResolveEditor(getenv)
+	if err != nil {
+		return func() tea.Msg {
+			return editorDoneMsg{name: name, result: workflow.ValidateResult{Error: err.Error()}}
+		}
+	}
+	repoRoot := m.repoRoot
+	return tea.ExecProcess(exec.Command(editor, path), func(err error) tea.Msg {
+		if err != nil {
+			return editorDoneMsg{name: name, result: workflow.ValidateResult{Error: err.Error()}}
+		}
+		return editorDoneMsg{name: name, result: workflow.ValidateFile(path, name, repoRoot)}
+	})
+}
+
+func (m Model) applyEditorDone(msg editorDoneMsg) (tea.Model, tea.Cmd) {
+	if msg.result.OK {
+		m.status = "validated " + msg.name
 	} else {
-		m.status = "validate failed" + tui.ChromeSep + result.Error
+		m.status = "validate failed" + tui.ChromeSep + msg.result.Error
 	}
 	return m, nil
 }
@@ -387,17 +419,7 @@ func (m Model) handleNewName(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.entries = append(m.entries, entry)
 		m.mode = modeList
 		m.promptValue = ""
-		if m.editWorkflow == nil {
-			m.status = "created " + name + tui.ChromeSep + "editor handoff unavailable"
-			return m, nil
-		}
-		result := m.editWorkflow(path, name)
-		if result.OK {
-			m.status = "validated " + name
-		} else {
-			m.status = "validate failed" + tui.ChromeSep + result.Error
-		}
-		return m, nil
+		return m, m.beginEdit(path, name)
 	case "esc":
 		m.mode = modeList
 		m.promptValue = ""
