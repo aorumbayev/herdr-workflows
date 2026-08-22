@@ -7,6 +7,7 @@ import (
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/console"
+	"github.com/aorumbayev/herdr-workflows/internal/tui"
 	"github.com/aorumbayev/herdr-workflows/internal/update"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
@@ -34,7 +35,7 @@ type ScreenOpts struct {
 func PrepareScreen(opts ScreenOpts) (Model, error) {
 	copyFn := opts.CopyClipboard
 	if copyFn == nil {
-		copyFn = CopyToClipboard
+		copyFn = tui.CopyToClipboard
 	}
 	return Prepare(Options{
 		Entries:       opts.Entries,

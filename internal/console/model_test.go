@@ -1,6 +1,8 @@
 package console
 
 import (
+	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -14,6 +16,17 @@ func TestFormatRetryCommand(t *testing.T) {
 	got := FormatRetryCommand("deploy")
 	if got != "hwf run deploy" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestNewDefaultsClipboardToTUI(t *testing.T) {
+	m := New(Options{})
+	if m.copyText == nil {
+		t.Fatal("nil clipboard")
+	}
+	name := runtime.FuncForPC(reflect.ValueOf(m.copyText).Pointer()).Name()
+	if !strings.Contains(name, "tui.CopyToClipboard") {
+		t.Fatalf("copyText = %q", name)
 	}
 }
 

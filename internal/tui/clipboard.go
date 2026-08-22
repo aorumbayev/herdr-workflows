@@ -1,4 +1,4 @@
-package picker
+package tui
 
 import (
 	"os/exec"

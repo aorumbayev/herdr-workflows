@@ -83,7 +83,7 @@ func New(opts Options) Model {
 	}
 	copyFn := opts.CopyClipboard
 	if copyFn == nil {
-		copyFn = func(string) error { return errNoClipboard }
+		copyFn = tui.CopyToClipboard
 	}
 	return Model{
 		entries:    opts.Entries,
@@ -287,14 +287,6 @@ func (m *Model) clampRunWindow() {
 func (m Model) contentWidth() int {
 	return tui.ContentWidth(m.width)
 }
-
-type clipboardError struct{}
-
-func (clipboardError) Error() string {
-	return "no clipboard command"
-}
-
-var errNoClipboard clipboardError
 
 func debugContentOf(d DetailPayload) DebugContent {
 	return DebugContent{
