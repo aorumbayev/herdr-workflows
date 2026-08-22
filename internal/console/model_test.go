@@ -154,3 +154,14 @@ func keyRune(r rune) tea.KeyPressMsg {
 func stripView(v tea.View) string {
 	return v.Content
 }
+
+func TestConsoleListViewportUsesTerminalHeight(t *testing.T) {
+	m := New(Options{Width: 80, Height: 40})
+	if m.listViewport() != 36 {
+		t.Fatalf("listViewport = %d want 36", m.listViewport())
+	}
+	m = New(Options{Width: 80, Height: 6})
+	if m.listViewport() != 3 {
+		t.Fatalf("short terminal = %d", m.listViewport())
+	}
+}

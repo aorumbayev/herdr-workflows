@@ -352,9 +352,6 @@ func (m *Model) listViewport() int {
 	if h < 3 {
 		return 3
 	}
-	if h > 20 {
-		return 20
-	}
 	return h
 }
 
