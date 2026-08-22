@@ -224,6 +224,12 @@ func TestScrollDetailLines(t *testing.T) {
 	if scroll != 3 {
 		t.Fatalf("scroll = %d", scroll)
 	}
+	if ClampDetailScroll(lines, 99, 6) != 6 {
+		t.Fatalf("clamp high = %d", ClampDetailScroll(lines, 99, 6))
+	}
+	if ClampDetailScroll(lines, -5, 6) != 0 {
+		t.Fatalf("clamp low = %d", ClampDetailScroll(lines, -5, 6))
+	}
 }
 
 func TestSelectedIndex(t *testing.T) {

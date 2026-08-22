@@ -255,6 +255,12 @@ func ScrollDetailLines(lines []string, scroll, viewport int) ([]string, int) {
 	return lines[next:end], next
 }
 
+// ClampDetailScroll caps scroll to the legal range for lines and viewport.
+func ClampDetailScroll(lines []string, scroll, viewport int) int {
+	_, next := ScrollDetailLines(lines, scroll, viewport)
+	return next
+}
+
 // SelectedIndex finds the list cursor for selectedID.
 func SelectedIndex(items []history.Summary, selectedID string) int {
 	for i, item := range items {

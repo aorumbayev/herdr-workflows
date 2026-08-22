@@ -336,12 +336,12 @@ func (m Model) handleDetailKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.status = "copied" + tui.ChromeSep + cmd
 		return m, nil
 	case "up":
-		if m.detailScroll > 0 {
-			m.detailScroll--
-		}
+		vp := max(3, m.listViewport())
+		m.detailScroll = runsbrowser.ClampDetailScroll(m.detailScrollLines(), m.detailScroll-1, vp)
 		return m, nil
 	case "down":
-		m.detailScroll++
+		vp := max(3, m.listViewport())
+		m.detailScroll = runsbrowser.ClampDetailScroll(m.detailScrollLines(), m.detailScroll+1, vp)
 		return m, nil
 	}
 	return m, nil

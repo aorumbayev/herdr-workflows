@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/aorumbayev/herdr-workflows/internal/host"
+	"github.com/aorumbayev/herdr-workflows/internal/runsbrowser"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
@@ -56,12 +57,14 @@ func (m Model) handleDiagramViewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.resetDiagramSendback()
 		return m, nil
 	case "up":
-		if m.diagramScroll > 0 {
-			m.diagramScroll--
-		}
+		w := m.contentWidth()
+		vp := max(3, m.listViewport())
+		m.diagramScroll = runsbrowser.ClampDetailScroll(m.diagramScrollLines(w), m.diagramScroll-1, vp)
 		return m, nil
 	case "down":
-		m.diagramScroll++
+		w := m.contentWidth()
+		vp := max(3, m.listViewport())
+		m.diagramScroll = runsbrowser.ClampDetailScroll(m.diagramScrollLines(w), m.diagramScroll+1, vp)
 		return m, nil
 	case "v":
 		m.diagramMode = diagramModeSelect

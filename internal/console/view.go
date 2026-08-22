@@ -63,8 +63,7 @@ func (m Model) renderDiagram() string {
 
 func (m Model) renderDiagramBody(w int) string {
 	vp := max(3, m.listViewport())
-	body := FormatDiagramWithMarks(m.diagram, m.diagramMarks(), w)
-	lines := asciiLines(body, w)
+	lines := m.diagramScrollLines(w)
 	visible, _ := runsbrowser.ScrollDetailLines(lines, m.diagramScroll, vp)
 	for len(visible) < vp {
 		visible = append(visible, "")
@@ -136,8 +135,7 @@ func (m Model) renderDetail() string {
 	w := m.contentWidth()
 	vp := max(3, m.listViewport())
 	chrome := FormatDebugTabChrome(m.debugTab)
-	body := FormatDebugBody(m.debugTab, debugContentOf(m.detail))
-	lines := asciiLines(body, w)
+	lines := m.detailScrollLines()
 	visible, _ := runsbrowser.ScrollDetailLines(lines, m.detailScroll, vp)
 	for len(visible) < vp {
 		visible = append(visible, "")
@@ -160,6 +158,16 @@ func runsFooter() string {
 
 func detailFooter() string {
 	return strings.Join([]string{"1/2/3 tabs", "y retry-copy", "esc back"}, tui.ChromeSep)
+}
+
+func (m Model) detailScrollLines() []string {
+	w := m.contentWidth()
+	body := FormatDebugBody(m.debugTab, debugContentOf(m.detail))
+	return asciiLines(body, w)
+}
+
+func (m Model) diagramScrollLines(w int) []string {
+	return asciiLines(FormatDiagramWithMarks(m.diagram, m.diagramMarks(), w), w)
 }
 
 func diagramFooter(mode diagramMode) string {
