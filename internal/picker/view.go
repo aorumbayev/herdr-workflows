@@ -24,6 +24,8 @@ func (m Model) render() string {
 		body = "Delete " + m.deleteLabel() + "?\n" + tui.DeleteConfirmHint
 	case modeFail:
 		body = m.status + "\n" + tui.FailHint
+	case modeNewName:
+		body = m.renderNewName()
 	case modeInputText:
 		body = m.renderTextPrompt()
 	case modeInput:
@@ -32,6 +34,16 @@ func (m Model) render() string {
 		body = m.renderList()
 	}
 	return tui.PadHeight(body, m.height)
+}
+
+func (m Model) renderNewName() string {
+	w := m.contentWidth()
+	line := "Workflow name: " + m.promptValue
+	hint := "enter create · esc cancel"
+	if m.status != "" {
+		return tui.Truncate(line, w) + "\n" + tui.Truncate(m.status, w) + "\n" + hint
+	}
+	return tui.Truncate(line, w) + "\n" + hint
 }
 
 func (m Model) deleteLabel() string {
@@ -49,7 +61,12 @@ func (m Model) renderList() string {
 	opts := m.matched()
 	w := m.contentWidth()
 	if !HasVisibleEntries(m.entries) {
-		return tui.FormatDetailLines(tui.EmptyCatalogMessage, w) + "\n" + tui.FormatRule(w) + "\n" + tui.FormatListFooter(w, 0, 0, tui.EmptyListHint)
+		parts := []string{tui.FormatDetailLines(tui.EmptyCatalogMessage, w)}
+		if m.status != "" {
+			parts = append(parts, tui.Truncate(m.status, w))
+		}
+		parts = append(parts, tui.FormatRule(w), tui.FormatListFooter(w, 0, 0, tui.EmptyListHint))
+		return strings.Join(parts, "\n")
 	}
 	filter := m.listFilterRow(w)
 	if len(opts) == 0 {
@@ -77,7 +94,12 @@ func (m Model) renderList() string {
 	sel := opts[m.cursor]
 	detail := tui.FormatDetailLines(sel.Description, w)
 	footer := tui.FormatListFooter(w, m.cursor, len(opts), tui.ListHint)
-	return filter + "\n" + strings.Join(rows, "\n") + "\n" + detail + "\n" + tui.FormatRule(w) + "\n" + footer
+	parts := []string{filter, strings.Join(rows, "\n"), detail}
+	if m.status != "" {
+		parts = append(parts, tui.Truncate(m.status, w))
+	}
+	parts = append(parts, tui.FormatRule(w), footer)
+	return strings.Join(parts, "\n")
 }
 
 func (m Model) listFilterRow(width int) string {

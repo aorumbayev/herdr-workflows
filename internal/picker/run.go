@@ -20,6 +20,7 @@ type ScreenOpts struct {
 	LoadWorkflow       func(workflow.WorkflowListEntry) (*workflow.Definition, error)
 	Chdir              func(string) error
 	CopyClipboard      func(string) error
+	EditWorkflow       func(path, name string) workflow.ValidateResult
 	LaunchWorkbench    func(route string)
 	OpenURL            func(url string) error
 	Notify             func(title string, body ...string) error
@@ -42,6 +43,7 @@ func PrepareScreen(opts ScreenOpts) (Model, error) {
 		LoadWorkflow:    opts.LoadWorkflow,
 		CopyClipboard:   copyFn,
 		Chdir:           opts.Chdir,
+		EditWorkflow:    opts.EditWorkflow,
 		LaunchWorkbench: opts.LaunchWorkbench,
 		OpenURL:         opts.OpenURL,
 		Notify:          opts.Notify,

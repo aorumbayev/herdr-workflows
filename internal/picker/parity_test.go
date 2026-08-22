@@ -14,9 +14,9 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-// Spec scenarios owned by picker.ParityBaseline (picker-presentation + picker-workbench-actions).
+// Spec scenarios owned by picker.ParityBaseline (picker-presentation + picker-editor-actions).
 // openspec/specs/picker-presentation/spec.md
-// openspec/specs/picker-workbench-actions/spec.md
+// openspec/specs/picker-editor-actions/spec.md
 var requiredPickerParityScenarios = []string{
 	"Title appears only in the pane label",
 	"No runtime retitling",
@@ -72,12 +72,6 @@ var requiredPickerParityScenarios = []string{
 	"Child fails before claim",
 	"Fast successful workflow",
 	"Leave an active launch",
-	"Existing workbench",
-	"Stale endpoint",
-	"Different repository",
-	"Endpoint record written",
-	"Environment-controlled state directory is checked",
-	"Lock file carries the same protection",
 	"Newer release appears after mount",
 	"Update service is unavailable",
 	"Draft is not advertised",
@@ -90,7 +84,7 @@ var requiredPickerParityScenarios = []string{
 	"Open repo workflow",
 	"Open without selection",
 	"Share copies command",
-	"Share does not open workbench",
+	"Share stays in picker",
 	"Confirmed delete",
 	"Cancel delete",
 }
@@ -784,19 +778,33 @@ func TestParityPrintableKFilters(t *testing.T) {
 }
 
 func TestParityPaletteLettersHandoff(t *testing.T) {
-	// openspec/specs/picker-workbench-actions/spec.md n/i/e/o/s actions
+	// openspec/specs/picker-editor-actions/spec.md n/i/e/o/s actions
+	root := t.TempDir()
+	deployPath := root + "/deploy.yaml"
+	if err := os.WriteFile(deployPath, []byte("version: v1alpha1\nsteps:\n  - run: [echo, hi]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entries := []workflow.WorkflowListEntry{
+		{Name: "build", Source: "repo", File: root + "/build.yaml", Title: "Build"},
+		{Name: "deploy", Source: "repo", File: deployPath, Title: "Deploy"},
+	}
 	var (
-		routes   []string
+		edited   []string
 		opened   []string
 		copied   string
 		notified []string
 	)
+	edit := func(path, name string) workflow.ValidateResult {
+		edited = append(edited, name+"@"+path)
+		return workflow.ValidateResult{OK: true}
+	}
 	m := New(Options{
-		Entries:         catalogEntries(),
-		Width:           80,
-		LaunchWorkbench: func(route string) { routes = append(routes, route) },
-		OpenURL:         func(url string) error { opened = append(opened, url); return nil },
-		CopyClipboard:   func(text string) error { copied = text; return nil },
+		Entries:       entries,
+		Width:         80,
+		RepoRoot:      root,
+		EditWorkflow:  edit,
+		OpenURL:       func(url string) error { opened = append(opened, url); return nil },
+		CopyClipboard: func(text string) error { copied = text; return nil },
 		Notify: func(title string, body ...string) error {
 			notified = append(notified, title+"|"+strings.Join(body, " "))
 			return nil
@@ -806,26 +814,34 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 		},
 	})
 	m = apply(m, "ctrl+k", "n")
-	if !m.quit {
-		t.Fatal("new must dismiss after successful handoff")
+	if m.quit || m.mode != modeNewName {
+		t.Fatalf("new must prompt for name, quit=%v mode=%v", m.quit, m.mode)
 	}
-	if len(routes) == 0 || routes[0] != "new" {
-		t.Fatalf("new route = %v", routes)
+	m = apply(m, "s", "h", "i", "p", "enter")
+	if m.quit || m.mode != modeList {
+		t.Fatalf("new after create quit=%v mode=%v", m.quit, m.mode)
+	}
+	if len(edited) == 0 || !strings.Contains(edited[0], "ship@") {
+		t.Fatalf("new edit = %v", edited)
+	}
+	if !strings.Contains(m.status, "validated ship") {
+		t.Fatalf("new status = %q", m.status)
+	}
+	if _, err := os.Stat(root + "/.hwf/workflows/ship.yaml"); err != nil {
+		t.Fatalf("stub missing: %v", err)
 	}
 
-	m = New(Options{
-		Entries:         catalogEntries(),
-		Width:           80,
-		LaunchWorkbench: func(route string) { routes = append(routes, route) },
-	})
-	routes = nil
+	m = New(Options{Entries: entries, Width: 80, RepoRoot: root})
 	m = apply(m, "ctrl+k", "i")
-	if !m.quit || len(routes) == 0 || routes[0] != "import" {
-		t.Fatalf("import quit=%v routes=%v", m.quit, routes)
+	if m.quit || m.mode != modeList {
+		t.Fatalf("import quit=%v mode=%v", m.quit, m.mode)
+	}
+	if !strings.Contains(m.status, "hwf workflow import") {
+		t.Fatalf("import status = %q", m.status)
 	}
 
 	m = New(Options{
-		Entries: catalogEntries(),
+		Entries: entries,
 		Width:   80,
 		OpenURL: func(url string) error { opened = append(opened, url); return nil },
 	})
@@ -841,22 +857,26 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 		t.Fatalf("examples url = %v", opened)
 	}
 
+	edited = nil
 	m = New(Options{
-		Entries:         catalogEntries(),
-		Width:           80,
-		LaunchWorkbench: func(route string) { routes = append(routes, route) },
+		Entries:      entries,
+		Width:        80,
+		RepoRoot:     root,
+		EditWorkflow: edit,
 	})
-	routes = nil
-	m = apply(m, "down", "ctrl+k", "o") // deploy is second catalog entry
-	if !m.quit {
-		t.Fatal("open must dismiss after handoff")
+	m = apply(m, "down", "ctrl+k", "o")
+	if m.quit || m.mode != modeList {
+		t.Fatalf("open must stay on list, quit=%v mode=%v", m.quit, m.mode)
 	}
-	if len(routes) == 0 || !strings.HasPrefix(routes[0], "w=") {
-		t.Fatalf("open route = %v", routes)
+	if len(edited) != 1 || !strings.HasPrefix(edited[0], "deploy@") {
+		t.Fatalf("open edit = %v", edited)
+	}
+	if !strings.Contains(m.status, "validated deploy") {
+		t.Fatalf("open status = %q", m.status)
 	}
 
 	m = New(Options{
-		Entries:       catalogEntries(),
+		Entries:       entries,
 		Width:         80,
 		CopyClipboard: func(text string) error { copied = text; return nil },
 		Notify: func(title string, body ...string) error {
@@ -879,9 +899,9 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 	if !strings.Contains(joined, "deploy") || !strings.Contains(strings.ToLower(joined), "clipboard") {
 		t.Fatalf("notify = %v", notified)
 	}
-	entry := catalogEntries()[1]
-	if ResolvePaletteLetter("s", &entry) == nil || ResolvePaletteLetter("s", &entry).Route != "" {
-		t.Fatal("share must not open a workbench route")
+	entry := entries[1]
+	if ResolvePaletteLetter("s", &entry) == nil || ResolvePaletteLetter("s", &entry).Entry == nil {
+		t.Fatal("share must keep the selected entry")
 	}
 }
 

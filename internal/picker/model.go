@@ -3,6 +3,7 @@ package picker
 import (
 	"context"
 	"os"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -22,6 +23,7 @@ const (
 	modeDelete
 	modeInput
 	modeInputText
+	modeNewName
 	modeFail
 	modeRuns
 )
@@ -37,6 +39,7 @@ type Options struct {
 	Chdir           func(string) error
 	LoadWorkflow    func(workflow.WorkflowListEntry) (*workflow.Definition, error)
 	CopyClipboard   func(string) error
+	EditWorkflow    func(path, name string) workflow.ValidateResult
 	LaunchWorkbench func(route string)
 	OpenURL         func(url string) error
 	Notify          func(title string, body ...string) error
@@ -55,6 +58,7 @@ type Model struct {
 	load            func(workflow.WorkflowListEntry) (*workflow.Definition, error)
 	copyText        func(string) error
 	env             config.Env
+	editWorkflow    func(path, name string) workflow.ValidateResult
 	launchWorkbench func(string)
 	openURL         func(string) error
 	notify          func(title string, body ...string) error
@@ -125,6 +129,7 @@ func New(opts Options) Model {
 		load:            opts.LoadWorkflow,
 		copyText:        opts.CopyClipboard,
 		env:             opts.Env,
+		editWorkflow:    opts.EditWorkflow,
 		launchWorkbench: opts.LaunchWorkbench,
 		openURL:         opts.OpenURL,
 		notify:          opts.Notify,
@@ -211,6 +216,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handlePalette(msg)
 	case modeDelete:
 		return m.handleDelete(msg)
+	case modeNewName:
+		return m.handleNewName(msg)
 	case modeInputText:
 		return m.handleInputText(msg)
 	case modeInput:
@@ -318,16 +325,19 @@ func (m Model) handlePalette(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) applyPaletteAction(action *PaletteAction) (tea.Model, tea.Cmd) {
 	switch action.ID {
-	case "new", "import", "open":
-		if m.launchWorkbench == nil {
-			m.mode = modeList
-			m.filter = m.savedFilter
-			m.status = "workbench handoff unavailable"
-			return m, nil
-		}
-		m.launchWorkbench(action.Route)
-		m.quit = true
-		return m, tea.Quit
+	case "new":
+		m.mode = modeNewName
+		m.filter = m.savedFilter
+		m.promptValue = ""
+		m.status = ""
+		return m, nil
+	case "import":
+		m.mode = modeList
+		m.filter = m.savedFilter
+		m.status = `import with: hwf workflow import "..."`
+		return m, nil
+	case "open":
+		return m.applyEditAction(action.Entry)
 	case "examples":
 		if m.openURL != nil {
 			_ = m.openURL(config.ExamplesURL)
@@ -342,6 +352,72 @@ func (m Model) applyPaletteAction(action *PaletteAction) (tea.Model, tea.Cmd) {
 		m.filter = m.savedFilter
 		return m, nil
 	}
+}
+
+func (m Model) applyEditAction(entry *workflow.WorkflowListEntry) (tea.Model, tea.Cmd) {
+	m.mode = modeList
+	m.filter = m.savedFilter
+	if entry == nil {
+		return m, nil
+	}
+	if m.editWorkflow == nil {
+		m.status = "editor handoff unavailable"
+		return m, nil
+	}
+	result := m.editWorkflow(entry.File, entry.Name)
+	if result.OK {
+		m.status = "validated " + entry.Name
+	} else {
+		m.status = "validate failed" + tui.ChromeSep + result.Error
+	}
+	return m, nil
+}
+
+func (m Model) handleNewName(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		name := strings.TrimSpace(m.promptValue)
+		if !workflow.NameRE.MatchString(name) {
+			m.status = workflow.NameRule
+			return m, nil
+		}
+		path, err := workflow.CreateRepoWorkflow(m.repoRoot, name)
+		if err != nil {
+			m.status = err.Error()
+			m.mode = modeList
+			return m, nil
+		}
+		entry := workflow.WorkflowListEntry{Name: name, Source: "repo", File: path}
+		m.entries = append(m.entries, entry)
+		m.mode = modeList
+		m.promptValue = ""
+		if m.editWorkflow == nil {
+			m.status = "created " + name + tui.ChromeSep + "editor handoff unavailable"
+			return m, nil
+		}
+		result := m.editWorkflow(path, name)
+		if result.OK {
+			m.status = "validated " + name
+		} else {
+			m.status = "validate failed" + tui.ChromeSep + result.Error
+		}
+		return m, nil
+	case "esc":
+		m.mode = modeList
+		m.promptValue = ""
+		m.status = ""
+		return m, nil
+	case "backspace":
+		if m.promptValue != "" {
+			r := []rune(m.promptValue)
+			m.promptValue = string(r[:len(r)-1])
+		}
+	default:
+		if msg.Mod == 0 && msg.Text != "" {
+			m.promptValue += msg.Text
+		}
+	}
+	return m, nil
 }
 
 func (m Model) applyShareAction(entry *workflow.WorkflowListEntry) (tea.Model, tea.Cmd) {

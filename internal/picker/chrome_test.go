@@ -185,7 +185,7 @@ func TestPaletteLetters(t *testing.T) {
 	if !strings.Contains(tui.ListHint, "tab runs") || !strings.Contains(tui.ListHint, "ctrl+k") {
 		t.Fatalf("list hint = %q", tui.ListHint)
 	}
-	if ResolvePaletteLetter("n", nil).ID != "new" || ResolvePaletteLetter("i", nil).Route != "import" {
+	if ResolvePaletteLetter("n", nil).ID != "new" || ResolvePaletteLetter("i", nil).ID != "import" {
 		t.Fatal("n/i")
 	}
 	if ResolvePaletteLetter("e", nil).ID != "examples" {
@@ -195,7 +195,7 @@ func TestPaletteLetters(t *testing.T) {
 		t.Fatal("selection-dependent without row")
 	}
 	entry := workflow.WorkflowListEntry{Name: "deploy", Source: "repo", File: "/r/d.yaml"}
-	if got := ResolvePaletteLetter("o", &entry); got == nil || got.Route != "w=repo:deploy" {
+	if got := ResolvePaletteLetter("o", &entry); got == nil || got.ID != "open" || got.Entry == nil || got.Entry.Name != "deploy" {
 		t.Fatalf("open = %+v", got)
 	}
 	if got := ResolvePaletteLetter("s", &entry); got == nil || got.Entry.Name != "deploy" {
