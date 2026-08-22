@@ -389,6 +389,10 @@ func TestAgentsDocumentsPickerParityBaseline(t *testing.T) {
 		if !strings.Contains(pickerCell, "picker TUI") {
 			t.Fatalf("%s picker layout must still describe picker TUI: %s", rel, pickerCell)
 		}
+		consoleCell := layoutCell(t, rel, text, "`internal/console/`")
+		if !strings.Contains(consoleCell, "Parity Baseline") {
+			t.Fatalf("%s console layout missing Parity Baseline: %s", rel, consoleCell)
+		}
 		runsCell := layoutCell(t, rel, text, "`internal/runsbrowser/`")
 		if !strings.Contains(runsCell, "Parity Baseline") {
 			t.Fatalf("%s runsbrowser layout missing Parity Baseline: %s", rel, runsCell)
@@ -407,6 +411,7 @@ func TestParityBaselineFilesExist(t *testing.T) {
 	root := repoRoot(t)
 	for _, rel := range []string{
 		filepath.Join("internal", "picker", "parity.go"),
+		filepath.Join("internal", "console", "parity.go"),
 		filepath.Join("internal", "runsbrowser", "parity.go"),
 		filepath.Join("internal", "tui", "charm.go"),
 		filepath.Join("docs", "charm-components.md"),

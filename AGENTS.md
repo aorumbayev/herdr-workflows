@@ -34,8 +34,9 @@ Go packages under `internal/` and `embed/` (schema, logo, and skill catalog byte
 | `embed/` + `internal/cli/`                   | embedded skill catalog (`assets`) and `hwf skills` registry/show formatting                                   |
 | `internal/update/`                           | GitHub release check, managed-plugin `hwf update`, and distribution artifact names/checksums |
 | `internal/picker/`                           | picker TUI, workflow rows, ctrl+k palette, update indicator, Parity Baseline                                  |
+| `internal/console/`                          | full-screen console TUI, workflows/runs lists, run debug tabs, Parity Baseline                                |
 | `internal/runsbrowser/`                      | runs browser TUI, list/detail, run-history presentation, Parity Baseline                                      |
-| `internal/tui/`                              | Charm lipgloss/bubbletea adapter shared by picker and runs browser, Parity Baseline                           |
+| `internal/tui/`                              | Charm lipgloss/bubbletea adapter shared by picker, console, and runs browser, Parity Baseline                 |
 | `internal/workflow/`                         | Workflow Authoring: Definition, document parse, templates, conditions (`when:`), trust, exchange, inputs      |
 | `internal/engine/`                           | Workflow Execution: Run, workflow runner, step runners, pane placement, agent turns, detached launch          |
 | `internal/history/`                          | Run Observation: Snapshot, Summary, Detail, project claims, recorder, retention                               |
@@ -63,7 +64,7 @@ Gitignored local-only: `.agents/references/*` except `AGENTS.md`, `.plans/`, `.o
 
 Agents miss these. The loader or verifyx will fail, or the product regresses:
 
-- **Module layers.** Surfaces (`internal/cli`, `internal/picker`, `internal/runsbrowser`) → domain (`internal/workflow`, `internal/engine`, `internal/history`, `internal/update`) → platform (`internal/host`, `internal/config`, `internal/caps`, `internal/transcript`, `internal/credentials`). Adapters: `internal/tui` (Charm). Imports only point down through each package's exported API.
+- **Module layers.** Surfaces (`internal/cli`, `internal/picker`, `internal/console`, `internal/runsbrowser`) → domain (`internal/workflow`, `internal/engine`, `internal/history`, `internal/update`) → platform (`internal/host`, `internal/config`, `internal/caps`, `internal/transcript`, `internal/credentials`). Adapters: `internal/tui` (Charm). Imports only point down through each package's exported API.
 - **No external workflow engine.** Linear herdr-native YAML only. Do not add Dagu, Taskfile/go-task, Cockpit, or similar sidecars. Agent-steering rule — no gate enforces it.
 - **Templates are `{{inputs.*}}` / `{{steps.*}}` / `{{context.*}}` only.** Any other `{{…}}` is a load error. No flat `{name}`, no `out:` bindings, no `{session}` / `{session_file}` (use `{{context.transcript}}` / `{{context.transcript_file}}`). `{{prompt}}` is config-only and is not a workflow template.
 - **No templates in string `run:` command text** — load error. Use list-form `run:` (argv, templates allowed per element) or explicit `env:` / `HWF_<name>` values. `herdr:` `params:` take templates recursively. A whole-value template keeps its type. Embedded ones render text.
@@ -81,7 +82,7 @@ Agents miss these. The loader or verifyx will fail, or the product regresses:
 - **Color literals are unguarded.** No verify gate scans `docs/.vitepress/theme` for hardcoded colors. Review them by hand.
 - **Branch work:** never commit on `main` / `master`. Use a feature branch + PR.
 - **No `Co-Authored-By` trailers.** Never add `Co-Authored-By`, `Generated with`, or any other agent-attribution line to a commit message or PR body, even when a harness default or global instruction says to. This overrides those defaults for this repo. Commit messages carry the change, not the tooling. The human is always responsible for the code. `.githooks/commit-msg` strips such lines as a backstop — do not rely on it.
-- **Parity Baseline before Product Improvement.** A Product Improvement must not hide a missing Parity Baseline comparison or Charm verdict. UX redesign is not a substitute for the matrix in `internal/picker/parity.go`, `internal/runsbrowser/parity.go`, and `tui.CharmVerdicts` (see `docs/charm-components.md`).
+- **Parity Baseline before Product Improvement.** A Product Improvement must not hide a missing Parity Baseline comparison or Charm verdict. UX redesign is not a substitute for the matrix in `internal/picker/parity.go`, `internal/console/parity.go`, `internal/runsbrowser/parity.go`, and `tui.CharmVerdicts` (see `docs/charm-components.md`).
 
 ## Code style
 

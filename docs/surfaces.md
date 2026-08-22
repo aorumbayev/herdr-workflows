@@ -1,8 +1,8 @@
 # Run and manage
 
-Use the picker to run workflows and the CLI to script them, import bundles, and validate YAML.
+Use the picker to launch workflows and open the console. Use the CLI to script runs, import bundles, and validate YAML.
 
-Runs happen in the picker or `hwf run`, because a run needs real herdr panes.
+Runs happen in the picker or `hwf run`, because a run needs real herdr panes. Inspect runs and workflow lists in the full-screen console.
 
 ## The picker
 
@@ -32,36 +32,44 @@ With no workflows at all, the picker still opens and points you at the actions p
 
 In list mode, press `Ctrl+K`. A single letter fires the action, with no Enter. Escape closes the palette and keeps the picker open.
 
-| Key | Action                                                                                  |
-| --- | --------------------------------------------------------------------------------------- |
-| `n` | Create a repo workflow stub, open it in `$EDITOR`, then validate with the loader          |
-| `i` | Show status naming `hwf workflow import`                                                |
-| `e` | Open the examples page in your browser                                                  |
-| `o` | Edit the selected workflow in `$EDITOR`, then validate with the loader                    |
-| `s` | Copy the selected workflow's import command and show a herdr notification               |
-| `d` | Delete the selected workflow, after a `y` or `n` confirmation                           |
+| Key | Action                                                                                   |
+| --- | ---------------------------------------------------------------------------------------- |
+| `n` | Create a repo workflow stub, open it in `$EDITOR`, then validate with the loader           |
+| `i` | Show status naming `hwf workflow import`                                                 |
+| `e` | Open the examples page in your browser                                                   |
+| `c` | Open the console after a placement chooser (`tab` / `beside` / `below`, default `beside`) |
+| `o` | Edit the selected workflow in `$EDITOR`, then validate with the loader                     |
+| `s` | Copy the selected workflow's import command and show a herdr notification                |
+| `d` | Delete the selected workflow, after a `y` or `n` confirmation                            |
 
-`o`, `s`, and `d` need a selected valid workflow. `n`, `i`, and `e` don't. The picker stays open for every palette action.
+`o`, `s`, and `d` need a selected valid workflow. `n`, `i`, `e`, and `c` don't. The picker stays open for every palette action except `c`, which dismisses the overlay after the console pane opens.
 
 Plain `k` still types into the filter.
 
+## The console
+
+Open it from the picker palette with `c`, or with `hwf console`. Placement is `tab`, `beside`, or `below`. The overlay remembers the last choice for the session. `hwf console --placement` takes the same three values.
+
+The console is a full-screen Charm TUI. Tab switches the workflows list and the runs list. Enter on a run opens debug tabs: `1` log, `2` transcript, `3` yaml-at-run. Press `y` to copy `hwf run <name>` for a retry without submitting it.
+
 ## The CLI
 
-| Command                       | What it does                                                      |
-| ----------------------------- | ----------------------------------------------------------------- |
-| `hwf run <name>`              | Runs a workflow. `--input name=value`, repeatable                 |
+| Command                         | What it does                                                             |
+| ------------------------------- | ------------------------------------------------------------------------ |
+| `hwf run <name>`                | Runs a workflow. `--input name=value`, repeatable                        |
 | `hwf workflow inspect <name>`   | Prints what a workflow will ask for. `--resolve` runs the lookups        |
-| `hwf workflow validate <file>`  | Validates a YAML file through the loader. Prints JSON, exits 0 or 1     |
-| `hwf workflow import "<...>"`   | Imports a shared bundle. `--to repo\|global`, `--yes`, `--force`        |
-| `hwf init`                    | Writes config. `--global`, `--force`                              |
-| `hwf launch`                  | Opens the workflow picker popup                                   |
-| `hwf picker`                  | Runs the picker in the current terminal                           |
-| `hwf update`                  | Installs the latest published release                             |
-| `hwf skills list`             | Lists the bundled agent skills                                    |
-| `hwf skills show <name>`      | Prints one bundled skill with its reference files                 |
-| `hwf response check <file>`   | Checks a response file's verdict. `--one-of TOKEN,TOKEN`          |
-| `hwf help [command]`          | Shows help for one command or all of them                         |
-| `hwf --version`               | Prints the installed plugin version                               |
+| `hwf workflow validate <file>`  | Validates a YAML file through the loader. Prints JSON, exits 0 or 1      |
+| `hwf workflow import "<...>"`   | Imports a shared bundle. `--to repo\|global`, `--yes`, `--force`         |
+| `hwf init`                      | Writes config. `--global`, `--force`                                     |
+| `hwf launch`                    | Opens the workflow picker popup                                          |
+| `hwf picker`                    | Runs the picker in the current terminal                                  |
+| `hwf console`                   | Runs the console TUI, or opens it with `--placement`                     |
+| `hwf update`                    | Installs the latest published release                                    |
+| `hwf skills list`               | Lists the bundled agent skills                                           |
+| `hwf skills show <name>`        | Prints one bundled skill with its reference files                        |
+| `hwf response check <file>`     | Checks a response file's verdict. `--one-of TOKEN,TOKEN`                 |
+| `hwf help [command]`            | Shows help for one command or all of them                                |
+| `hwf --version`                 | Prints the installed plugin version                                      |
 
 Bare `hwf` with no subcommand prints help and exits nonzero.
 
@@ -75,7 +83,7 @@ hwf response check /path/to/response.txt --one-of APPROVE,REJECT
 
 The offline verdict oracle behind [`expect:`](/reference#expect). It reads the final non-empty line of the file, trims it, and matches it against the comma-separated tokens, which follow the same rules as `expect.one_of`. A match exits 0 and prints the token. A mismatch exits nonzero and names both the offending line and the expected tokens. A missing or empty file exits nonzero and names the path. The command never writes to the file.
 
-Only `hwf launch`, `hwf run`, and `hwf picker` run the version and protocol preflight. `skills`, `workflow validate`, and `response` never contact herdr at all, so an agent inside a turn can call `response check` or `workflow validate` and get an answer immediately. That is what the runner's appended instruction asks it to do: rerun the check against its own response file until it exits 0.
+Only `hwf launch`, `hwf run`, `hwf picker`, and `hwf console` run the version and protocol preflight. `skills`, `workflow validate`, and `response` never contact herdr at all, so an agent inside a turn can call `response check` or `workflow validate` and get an answer immediately. That is what the runner's appended instruction asks it to do: rerun the check against its own response file until it exits 0.
 
 ## Share a workflow
 
