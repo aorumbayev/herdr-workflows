@@ -51,8 +51,19 @@ func (m Model) renderWorkflows() string {
 
 func (m Model) renderDiagram() string {
 	w := m.contentWidth()
+	switch m.diagramMode {
+	case diagramModeInstruction:
+		return m.renderDiagramInstruction(w)
+	case diagramModeAgentPick:
+		return m.renderDiagramAgentPick(w)
+	default:
+		return m.renderDiagramBody(w)
+	}
+}
+
+func (m Model) renderDiagramBody(w int) string {
 	vp := max(3, m.listViewport())
-	body := FormatDiagram(m.diagram, w)
+	body := FormatDiagramWithMarks(m.diagram, m.diagramMarks(), w)
 	lines := asciiLines(body, w)
 	visible, _ := runsbrowser.ScrollDetailLines(lines, m.diagramScroll, vp)
 	for len(visible) < vp {
@@ -60,11 +71,41 @@ func (m Model) renderDiagram() string {
 	}
 	status := m.status
 	if status == "" {
-		status = diagramFooter()
+		status = diagramFooter(m.diagramMode)
 	}
 	footer := tui.FormatListFooter(w, 0, 0, status)
 	head := tui.Truncate("diagram"+tui.ChromeSep+m.diagramTitle, w)
 	return head + "\n" + strings.Join(visible, "\n") + "\n" + tui.FormatRule(w) + "\n" + footer
+}
+
+func (m Model) renderDiagramInstruction(w int) string {
+	body := "send-back instruction\n> " + m.instructionDraft
+	status := m.status
+	if status == "" {
+		status = "enter send" + tui.ChromeSep + "esc back"
+	}
+	footer := tui.FormatListFooter(w, 0, 0, status)
+	head := tui.Truncate("diagram"+tui.ChromeSep+m.diagramTitle, w)
+	return head + "\n" + tui.Truncate(body, w) + "\n" + tui.FormatRule(w) + "\n" + footer
+}
+
+func (m Model) renderDiagramAgentPick(w int) string {
+	vp := max(3, m.listViewport())
+	body := FormatAgentPickBody(m.agentPanes, m.agentCursor)
+	lines := strings.Split(body, "\n")
+	for len(lines) < vp {
+		lines = append(lines, "")
+	}
+	if len(lines) > vp {
+		lines = lines[:vp]
+	}
+	status := m.status
+	if status == "" {
+		status = "enter send" + tui.ChromeSep + "esc back"
+	}
+	footer := tui.FormatListFooter(w, m.agentCursor, len(m.agentPanes), status)
+	head := tui.Truncate("diagram"+tui.ChromeSep+m.diagramTitle, w)
+	return head + "\n" + strings.Join(lines, "\n") + "\n" + tui.FormatRule(w) + "\n" + footer
 }
 
 func (m Model) renderRuns() string {
@@ -119,6 +160,11 @@ func detailFooter() string {
 	return strings.Join([]string{"1/2/3 tabs", "y retry-copy", "esc back"}, tui.ChromeSep)
 }
 
-func diagramFooter() string {
-	return strings.Join([]string{"esc back"}, tui.ChromeSep)
+func diagramFooter(mode diagramMode) string {
+	switch mode {
+	case diagramModeSelect:
+		return strings.Join([]string{"v toggle", "s send-back", "esc back"}, tui.ChromeSep)
+	default:
+		return strings.Join([]string{"v select", "s send-back", "esc back"}, tui.ChromeSep)
+	}
 }

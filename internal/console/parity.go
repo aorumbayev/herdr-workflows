@@ -20,5 +20,8 @@ func ParityBaseline() []ParitySurface {
 		{Spec: presentation, Requirement: "Run detail exposes log, transcript, and yaml-at-run", Scenario: "Retry-copy", Kind: "action", GoSurface: "FormatRetryCommand", CoveringTest: "TestModelRunDetailDebugTabsAndRetryCopy"},
 		{Spec: presentation, Requirement: "Workflow diagram projects the parsed definition", Scenario: "Open diagram from the workflows list", Kind: "view", GoSurface: "Model.openSelectedDiagram/FormatDiagram", CoveringTest: "TestModelWorkflowDiagramScreen"},
 		{Spec: presentation, Requirement: "Workflow diagram projects the parsed definition", Scenario: "Return from diagram", Kind: "transition", GoSurface: "Model.handleDiagramKey", CoveringTest: "TestModelWorkflowDiagramScreen"},
+		{Spec: presentation, Requirement: "Diagram send-back types an annotation bundle into an agent pane", Scenario: "Select steps and send-back to one agent", Kind: "action", GoSurface: "Model.finishSendback/PaneSendText", CoveringTest: "TestModelDiagramSendbackSingleAgent"},
+		{Spec: presentation, Requirement: "Diagram send-back types an annotation bundle into an agent pane", Scenario: "Choose among multiple agent panes", Kind: "action", GoSurface: "Model.handleDiagramAgentPickKey", CoveringTest: "TestModelDiagramSendbackAgentChooser"},
+		{Spec: presentation, Requirement: "Diagram send-back types an annotation bundle into an agent pane", Scenario: "Oversize bundle spills to file", Kind: "action", GoSurface: "MaybeSpillSendbackText", CoveringTest: "TestMaybeSpillSendbackTextOverCap"},
 	}
 }

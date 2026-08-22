@@ -79,7 +79,7 @@ func TestModelWorkflowDiagramScreen(t *testing.T) {
 		t.Fatalf("screen = %d, want diagram", m.screen)
 	}
 	view := stripView(m.View())
-	for _, want := range []string{"brief", "tab.close", "pane.close", "when:", "esc back"} {
+	for _, want := range []string{"brief", "tab.close", "pane.close", "when:", "v select", "s send-back"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("diagram view missing %q:\n%s", want, view)
 		}

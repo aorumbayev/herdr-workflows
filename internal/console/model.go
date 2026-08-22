@@ -9,6 +9,7 @@ import (
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/history"
+	"github.com/aorumbayev/herdr-workflows/internal/host"
 	"github.com/aorumbayev/herdr-workflows/internal/runsbrowser"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
@@ -25,43 +26,58 @@ const (
 
 // Options construct a console model.
 type Options struct {
-	Entries       []workflow.WorkflowListEntry
-	RepoRoot      string
-	Width         int
-	Height        int
-	Env           config.Env
-	Config        config.Config
-	LoadRuns      func() []history.Summary
-	LoadDetail    func(runID string) DetailPayload
-	LoadWorkflow  func(workflow.WorkflowListEntry) (*workflow.Definition, error)
-	CopyClipboard func(string) error
+	Entries        []workflow.WorkflowListEntry
+	RepoRoot       string
+	Width          int
+	Height         int
+	Env            config.Env
+	Config         config.Config
+	LoadRuns       func() []history.Summary
+	LoadDetail     func(runID string) DetailPayload
+	LoadWorkflow   func(workflow.WorkflowListEntry) (*workflow.Definition, error)
+	CopyClipboard  func(string) error
+	ListAgentPanes func() ([]AgentPaneEntry, error)
+	PaneSendText   func(paneID, text string) error
+	SpillSendback  func(repoRoot, text string) (string, error)
 }
 
 // Model is the full-screen console Bubble Tea model.
 type Model struct {
-	entries       []workflow.WorkflowListEntry
-	repoRoot      string
-	width         int
-	height        int
-	getenv        config.Env
-	screen        screen
-	wfCursor      int
-	wfOffset      int
-	runCursor     int
-	runOffset     int
-	runs          []history.Summary
-	loadRuns      func() []history.Summary
-	loadDetail    func(runID string) DetailPayload
-	loadWorkflow  func(workflow.WorkflowListEntry) (*workflow.Definition, error)
-	copyText      func(string) error
-	detail        DetailPayload
-	diagram       workflow.Diagram
-	diagramTitle  string
-	diagramScroll int
-	debugTab      DebugTab
-	detailScroll  int
-	status        string
-	quit          bool
+	entries             []workflow.WorkflowListEntry
+	repoRoot            string
+	width               int
+	height              int
+	getenv              config.Env
+	screen              screen
+	wfCursor            int
+	wfOffset            int
+	runCursor           int
+	runOffset           int
+	runs                []history.Summary
+	loadRuns            func() []history.Summary
+	loadDetail          func(runID string) DetailPayload
+	loadWorkflow        func(workflow.WorkflowListEntry) (*workflow.Definition, error)
+	copyText            func(string) error
+	definition          *workflow.Definition
+	diagramMode         diagramMode
+	diagramSelected     map[string]bool
+	diagramNodeCursor   int
+	instructionDraft    string
+	sendbackInstruction string
+	pendingSendText     string
+	agentPanes          []AgentPaneEntry
+	agentCursor         int
+	listAgentPanes      func() ([]AgentPaneEntry, error)
+	paneSendText        func(paneID, text string) error
+	spillSendback       func(repoRoot, text string) (string, error)
+	detail              DetailPayload
+	diagram             workflow.Diagram
+	diagramTitle        string
+	diagramScroll       int
+	debugTab            DebugTab
+	detailScroll        int
+	status              string
+	quit                bool
 }
 
 // New builds a workflows-first console model.
@@ -100,17 +116,38 @@ func New(opts Options) Model {
 	if copyFn == nil {
 		copyFn = tui.CopyToClipboard
 	}
+	listAgents := opts.ListAgentPanes
+	if listAgents == nil {
+		listAgents = func() ([]AgentPaneEntry, error) {
+			panes, err := host.ListAgentPanes()
+			if err != nil {
+				return nil, err
+			}
+			return agentPaneEntriesFromHost(panes), nil
+		}
+	}
+	paneSend := opts.PaneSendText
+	if paneSend == nil {
+		paneSend = host.PaneSendText
+	}
+	spillFn := opts.SpillSendback
+	if spillFn == nil {
+		spillFn = MaybeSpillSendbackText
+	}
 	return Model{
-		entries:      opts.Entries,
-		repoRoot:     opts.RepoRoot,
-		width:        width,
-		height:       opts.Height,
-		getenv:       getenv,
-		screen:       screenWorkflows,
-		loadRuns:     loadRuns,
-		loadDetail:   loadDetail,
-		loadWorkflow: loadWorkflow,
-		copyText:     copyFn,
+		entries:        opts.Entries,
+		repoRoot:       opts.RepoRoot,
+		width:          width,
+		height:         opts.Height,
+		getenv:         getenv,
+		screen:         screenWorkflows,
+		loadRuns:       loadRuns,
+		loadDetail:     loadDetail,
+		loadWorkflow:   loadWorkflow,
+		copyText:       copyFn,
+		listAgentPanes: listAgents,
+		paneSendText:   paneSend,
+		spillSendback:  spillFn,
 	}
 }
 
@@ -253,28 +290,15 @@ func (m Model) openSelectedDiagram() (tea.Model, tea.Cmd) {
 		title = entry.Name
 	}
 	m.diagram = workflow.ProjectDiagram(*def)
+	m.definition = def
 	m.diagramTitle = title
 	m.diagramScroll = 0
+	m.diagramMode = diagramModeView
+	m.diagramSelected = nil
+	m.diagramNodeCursor = 0
+	m.resetDiagramSendback()
 	m.screen = screenDiagram
 	m.status = ""
-	return m, nil
-}
-
-func (m Model) handleDiagramKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
-		m.screen = screenWorkflows
-		m.status = ""
-		return m, nil
-	case "up":
-		if m.diagramScroll > 0 {
-			m.diagramScroll--
-		}
-		return m, nil
-	case "down":
-		m.diagramScroll++
-		return m, nil
-	}
 	return m, nil
 }
 

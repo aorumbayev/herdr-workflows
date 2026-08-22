@@ -10,6 +10,18 @@ import (
 
 // FormatDiagram renders a projected workflow diagram as ASCII lines.
 func FormatDiagram(d workflow.Diagram, width int) string {
+	return FormatDiagramWithMarks(d, DiagramMarks{}, width)
+}
+
+// DiagramMarks highlights send-back selection on the diagram.
+type DiagramMarks struct {
+	SelectMode bool
+	FocusIndex int
+	Selected   map[string]bool
+}
+
+// FormatDiagramWithMarks renders a diagram with optional selection markers.
+func FormatDiagramWithMarks(d workflow.Diagram, marks DiagramMarks, width int) string {
 	if width <= 0 {
 		width = 80
 	}
@@ -18,13 +30,19 @@ func FormatDiagram(d workflow.Diagram, width int) string {
 		if i > 0 {
 			lines = append(lines, diagramEdgeLine(width))
 		}
-		lines = append(lines, formatDiagramNode(node, width)...)
+		lines = append(lines, formatDiagramNode(node, width, marks, i)...)
 	}
 	return strings.Join(lines, "\n")
 }
 
-func formatDiagramNode(node workflow.DiagramNode, width int) []string {
+func formatDiagramNode(node workflow.DiagramNode, width int, marks DiagramMarks, index int) []string {
 	head := formatDiagramNodeHead(node)
+	if marks.Selected != nil && marks.Selected[node.ID] {
+		head = "[x] " + head
+	}
+	if marks.SelectMode && index == marks.FocusIndex {
+		head = "> " + head
+	}
 	lines := []string{tui.Truncate(head, width)}
 	if node.Placement != nil {
 		lines = append(lines, tui.Truncate(formatDiagramPlacement(node.Placement), width))
