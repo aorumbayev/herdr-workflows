@@ -1,6 +1,8 @@
 package history
 
 import (
+	"os"
+
 	"github.com/aorumbayev/herdr-workflows/internal/engine"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
@@ -18,6 +20,7 @@ type recorder struct {
 	runID  string
 	scope  engine.RecorderScope
 	state  *recorderState
+	getenv func(string) string
 }
 
 type recorderState struct {
@@ -42,10 +45,31 @@ func CreateRunRecorder(opts CreateRecorderOpts) (engine.Recorder, error) {
 	if claim.State == "unavailable" {
 		emitAck(opts.OnAck, FormatHistoryAck(HistoryAck{State: "unavailable", ID: claim.ID}))
 		w.Dispose()
-		return &recorder{runID: claim.ID, scope: scope, state: &recorderState{}}, nil
+		return &recorder{runID: claim.ID, scope: scope, state: &recorderState{}, getenv: opts.Getenv}, nil
 	}
 	emitAck(opts.OnAck, FormatHistoryAck(HistoryAck{State: "claimed", ID: claim.ID}))
-	return &recorder{writer: w, runID: claim.ID, scope: scope, state: &recorderState{}}, nil
+	rec := &recorder{writer: w, runID: claim.ID, scope: scope, state: &recorderState{}, getenv: opts.Getenv}
+	rec.persistEntryYAML(opts.Workflow.File)
+	return rec, nil
+}
+
+func (r *recorder) persistEntryYAML(path string) {
+	if path == "" || r.writer == nil {
+		return
+	}
+	body, err := os.ReadFile(path)
+	if err != nil || len(body) == 0 {
+		return
+	}
+	_ = WriteDebugArtifacts(r.runID, DebugArtifacts{EntryYAML: string(body)}, r.getenv)
+}
+
+// RecordTranscript stores the run's captured transcript for console debug views.
+func (r *recorder) RecordTranscript(text string) {
+	if r.writer == nil || text == "" {
+		return
+	}
+	_ = WriteDebugArtifacts(r.runID, DebugArtifacts{Transcript: text}, r.getenv)
 }
 
 type claimError string
@@ -69,7 +93,7 @@ func emitAck(fn func(string), line string) {
 func (r *recorder) RunID() string { return r.runID }
 
 func (r *recorder) Child(scope engine.RecorderScope) engine.Recorder {
-	return &recorder{writer: r.writer, runID: r.runID, scope: scope, state: r.state}
+	return &recorder{writer: r.writer, runID: r.runID, scope: scope, state: r.state, getenv: r.getenv}
 }
 
 func (r *recorder) StepStarted(step workflow.Step, ordinal, total int, label string, phase engine.StepPhase) error {
