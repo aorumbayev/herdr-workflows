@@ -21,7 +21,6 @@ type ScreenOpts struct {
 	Chdir              func(string) error
 	CopyClipboard      func(string) error
 	EditWorkflow       func(path, name string) workflow.ValidateResult
-	LaunchWorkbench    func(route string)
 	OpenURL            func(url string) error
 	Notify             func(title string, body ...string) error
 	LaunchRun          func(LaunchRunOpts) LaunchRunHandle
@@ -36,20 +35,19 @@ func PrepareScreen(opts ScreenOpts) (Model, error) {
 		copyFn = CopyToClipboard
 	}
 	return Prepare(Options{
-		Entries:         opts.Entries,
-		RepoRoot:        opts.RepoRoot,
-		Config:          opts.Config,
-		Env:             opts.Env,
-		LoadWorkflow:    opts.LoadWorkflow,
-		CopyClipboard:   copyFn,
-		Chdir:           opts.Chdir,
-		EditWorkflow:    opts.EditWorkflow,
-		LaunchWorkbench: opts.LaunchWorkbench,
-		OpenURL:         opts.OpenURL,
-		Notify:          opts.Notify,
-		LaunchRun:       opts.LaunchRun,
-		AllocateRunID:   opts.AllocateRunID,
-		ExportShare:     opts.ExportShare,
+		Entries:       opts.Entries,
+		RepoRoot:      opts.RepoRoot,
+		Config:        opts.Config,
+		Env:           opts.Env,
+		LoadWorkflow:  opts.LoadWorkflow,
+		CopyClipboard: copyFn,
+		Chdir:         opts.Chdir,
+		EditWorkflow:  opts.EditWorkflow,
+		OpenURL:       opts.OpenURL,
+		Notify:        opts.Notify,
+		LaunchRun:     opts.LaunchRun,
+		AllocateRunID: opts.AllocateRunID,
+		ExportShare:   opts.ExportShare,
 	})
 }
 

@@ -68,11 +68,10 @@ func (m Model) beginLaunch(def *workflow.Definition, values map[string]string, d
 		getenv = os.Getenv
 	}
 	m.runs = runsbrowser.New(runsbrowser.Options{
-		RepoRoot:        m.repoRoot,
-		Width:           m.width,
-		Height:          m.height,
-		Env:             getenv,
-		LaunchWorkbench: m.launchWorkbench,
+		RepoRoot: m.repoRoot,
+		Width:    m.width,
+		Height:   m.height,
+		Env:      getenv,
 	}).OpenLocalDetail(runsbrowser.DetailView{
 		Kind:     "starting",
 		ID:       runID,

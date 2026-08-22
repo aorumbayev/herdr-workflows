@@ -23,7 +23,6 @@ var requiredRunsParityScenarios = []string{
 	"Inspect an active run",
 	"Inspect a tolerated failure",
 	"Return from detail",
-	"Workbench handoff fails",
 	"No current runs",
 	"No machine runs",
 	"Filter miss",
@@ -182,31 +181,6 @@ func TestParityInspectActiveAndToleratedDetailKinds(t *testing.T) {
 	if !strings.Contains(joined, "failed") || !strings.Contains(joined, "ship") {
 		t.Fatalf("tolerated failure detail:\n%s", joined)
 	}
-}
-
-func TestParityWorkbenchHandoffNilKeepsDetail(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md "Workbench handoff fails"
-	checkout := t.TempDir()
-	m, _ := modelWithRuns(t, checkout, "alpha")
-	m.launchWorkbench = nil
-	m = apply(m, "enter")
-	before := m.View().Content
-	m = apply(m, "w")
-	after := m.View().Content
-	if m.screen != screenDetail {
-		t.Fatal("detail must stay open")
-	}
-	if !strings.Contains(after, "handoff") {
-		t.Fatalf("expected width-bounded handoff error:\n%s", after)
-	}
-	if tui.Columns(after) > 0 {
-		for _, line := range strings.Split(after, "\n") {
-			if tui.Columns(line) > m.contentWidth()+2 {
-				t.Fatalf("line exceeds width: %q", line)
-			}
-		}
-	}
-	_ = before
 }
 
 func TestParityNoMachineRunsCopy(t *testing.T) {

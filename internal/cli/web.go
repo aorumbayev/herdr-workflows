@@ -84,13 +84,6 @@ func buildPickerScreenOpts(app config.AppContext, entries []workflow.WorkflowLis
 				Getenv:   os.Getenv,
 			})
 		},
-		LaunchWorkbench: func(route string) {
-			_ = engine.LaunchDetachedWeb(engine.LaunchWebRequest{
-				Route:      route,
-				RepoRoot:   repoRoot,
-				Executable: execPath,
-			})
-		},
 		OpenURL: func(url string) error {
 			config.OpenInBrowser(url)
 			return nil

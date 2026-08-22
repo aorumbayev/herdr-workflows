@@ -30,66 +30,64 @@ const (
 
 // Options construct a picker model.
 type Options struct {
-	Entries         []workflow.WorkflowListEntry
-	RepoRoot        string
-	Config          config.Config
-	Width           int
-	Height          int
-	Env             config.Env
-	Chdir           func(string) error
-	LoadWorkflow    func(workflow.WorkflowListEntry) (*workflow.Definition, error)
-	CopyClipboard   func(string) error
-	EditWorkflow    func(path, name string) workflow.ValidateResult
-	LaunchWorkbench func(route string)
-	OpenURL         func(url string) error
-	Notify          func(title string, body ...string) error
-	LaunchRun       func(LaunchRunOpts) LaunchRunHandle
-	AllocateRunID   func() string
-	ExportShare     func(entry workflow.WorkflowListEntry) (command string, err error)
+	Entries       []workflow.WorkflowListEntry
+	RepoRoot      string
+	Config        config.Config
+	Width         int
+	Height        int
+	Env           config.Env
+	Chdir         func(string) error
+	LoadWorkflow  func(workflow.WorkflowListEntry) (*workflow.Definition, error)
+	CopyClipboard func(string) error
+	EditWorkflow  func(path, name string) workflow.ValidateResult
+	OpenURL       func(url string) error
+	Notify        func(title string, body ...string) error
+	LaunchRun     func(LaunchRunOpts) LaunchRunHandle
+	AllocateRunID func() string
+	ExportShare   func(entry workflow.WorkflowListEntry) (command string, err error)
 }
 
 // Model is the picker Bubble Tea model.
 type Model struct {
-	entries         []workflow.WorkflowListEntry
-	repoRoot        string
-	config          config.Config
-	width           int
-	height          int
-	load            func(workflow.WorkflowListEntry) (*workflow.Definition, error)
-	copyText        func(string) error
-	env             config.Env
-	editWorkflow    func(path, name string) workflow.ValidateResult
-	launchWorkbench func(string)
-	openURL         func(string) error
-	notify          func(title string, body ...string) error
-	launchRun       func(LaunchRunOpts) LaunchRunHandle
-	allocateRunID   func() string
-	exportShare     func(entry workflow.WorkflowListEntry) (command string, err error)
-	mode            mode
-	filter          string
-	cursor          int
-	offset          int
-	savedFilter     string
-	status          string
-	session         *workflow.InputSession
-	prompt          *workflow.InputPrompt
-	promptValue     string
-	choiceOpts      []string
-	custom          bool
-	queue           []workflow.InputSpec
-	delete          DeleteState
-	quit            bool
-	consent         string
-	newerRelease    bool
-	stopResolve     context.CancelFunc
-	resolveGen      uint64
-	runs            runsbrowser.Model
-	launchRunID     string
-	launchDetach    func()
-	launchAcks      <-chan string
-	launchSettled   <-chan LaunchSettled
-	launchProgress  <-chan string
-	pendingDef      *workflow.Definition
+	entries        []workflow.WorkflowListEntry
+	repoRoot       string
+	config         config.Config
+	width          int
+	height         int
+	load           func(workflow.WorkflowListEntry) (*workflow.Definition, error)
+	copyText       func(string) error
+	env            config.Env
+	editWorkflow   func(path, name string) workflow.ValidateResult
+	openURL        func(string) error
+	notify         func(title string, body ...string) error
+	launchRun      func(LaunchRunOpts) LaunchRunHandle
+	allocateRunID  func() string
+	exportShare    func(entry workflow.WorkflowListEntry) (command string, err error)
+	mode           mode
+	filter         string
+	cursor         int
+	offset         int
+	savedFilter    string
+	status         string
+	session        *workflow.InputSession
+	prompt         *workflow.InputPrompt
+	promptValue    string
+	choiceOpts     []string
+	custom         bool
+	queue          []workflow.InputSpec
+	delete         DeleteState
+	quit           bool
+	consent        string
+	newerRelease   bool
+	stopResolve    context.CancelFunc
+	resolveGen     uint64
+	runs           runsbrowser.Model
+	launchRunID    string
+	launchDetach   func()
+	launchAcks     <-chan string
+	launchSettled  <-chan LaunchSettled
+	launchProgress <-chan string
+	pendingDef     *workflow.Definition
 }
 
 type currentResolvedMsg struct {
@@ -121,21 +119,20 @@ func New(opts Options) Model {
 		width = 80
 	}
 	return Model{
-		entries:         opts.Entries,
-		repoRoot:        opts.RepoRoot,
-		config:          opts.Config,
-		width:           width,
-		height:          opts.Height,
-		load:            opts.LoadWorkflow,
-		copyText:        opts.CopyClipboard,
-		env:             opts.Env,
-		editWorkflow:    opts.EditWorkflow,
-		launchWorkbench: opts.LaunchWorkbench,
-		openURL:         opts.OpenURL,
-		notify:          opts.Notify,
-		launchRun:       opts.LaunchRun,
-		allocateRunID:   opts.AllocateRunID,
-		exportShare:     opts.ExportShare,
+		entries:       opts.Entries,
+		repoRoot:      opts.RepoRoot,
+		config:        opts.Config,
+		width:         width,
+		height:        opts.Height,
+		load:          opts.LoadWorkflow,
+		copyText:      opts.CopyClipboard,
+		env:           opts.Env,
+		editWorkflow:  opts.EditWorkflow,
+		openURL:       opts.OpenURL,
+		notify:        opts.Notify,
+		launchRun:     opts.LaunchRun,
+		allocateRunID: opts.AllocateRunID,
+		exportShare:   opts.ExportShare,
 	}
 }
 
@@ -251,11 +248,10 @@ func (m Model) handleList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			getenv = os.Getenv
 		}
 		m.runs = runsbrowser.New(runsbrowser.Options{
-			RepoRoot:        m.repoRoot,
-			Width:           m.width,
-			Height:          m.height,
-			Env:             getenv,
-			LaunchWorkbench: m.launchWorkbench,
+			RepoRoot: m.repoRoot,
+			Width:    m.width,
+			Height:   m.height,
+			Env:      getenv,
 		})
 		m.mode = modeRuns
 		return m, m.runs.Init()

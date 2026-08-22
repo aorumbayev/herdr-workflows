@@ -16,8 +16,8 @@ import (
 
 func TestBuildPickerScreenOptsWiresLiveHooks(t *testing.T) {
 	opts := buildPickerScreenOpts(config.AppContext{RepoRoot: t.TempDir()}, nil)
-	if opts.LaunchWorkbench == nil {
-		t.Fatal("LaunchWorkbench must be wired")
+	if opts.EditWorkflow == nil {
+		t.Fatal("EditWorkflow must be wired")
 	}
 	if opts.OpenURL == nil {
 		t.Fatal("OpenURL must be wired")

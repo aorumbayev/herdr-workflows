@@ -156,12 +156,8 @@ func RunsFooter(scope Scope, index, total int) string {
 }
 
 // RunDetailFooter is the detail-mode footer hint.
-func RunDetailFooter(allowWorkbench bool) string {
-	parts := []string{"esc back", "up/down scroll"}
-	if allowWorkbench {
-		parts = append([]string{"w workbench"}, parts...)
-	}
-	return strings.Join(parts, tui.ChromeSep)
+func RunDetailFooter() string {
+	return strings.Join([]string{"esc back", "up/down scroll"}, tui.ChromeSep)
 }
 
 // DetailLines renders a detail view into single-width lines.

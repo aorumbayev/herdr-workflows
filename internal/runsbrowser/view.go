@@ -73,13 +73,10 @@ func (m Model) listFilterRow(width int) string {
 func (m Model) renderDetail() string {
 	w := m.contentWidth()
 	lines := DetailLines(m.detailView, w)
-	if m.handoffErr != "" {
-		lines = append(lines, tui.Truncate(m.handoffErr, w))
-	}
 	visible, _ := ScrollDetailLines(lines, m.detailScroll, detailViewport)
 	for len(visible) < detailViewport {
 		visible = append(visible, "")
 	}
-	footer := tui.FormatListFooter(w, 0, 0, RunDetailFooter(viewAllowsWorkbench(m.detailView)))
+	footer := tui.FormatListFooter(w, 0, 0, RunDetailFooter())
 	return strings.Join(visible, "\n") + "\n" + tui.FormatRule(w) + "\n" + footer
 }

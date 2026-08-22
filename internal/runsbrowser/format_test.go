@@ -122,20 +122,12 @@ func TestRunsFooterASCII(t *testing.T) {
 }
 
 func TestRunDetailFooterASCII(t *testing.T) {
-	// Ports test/picker/update-indicator.test.ts ASCII checks for runDetailFooter.
-	for _, s := range []string{
-		RunDetailFooter(true),
-		RunDetailFooter(false),
-	} {
-		if !isASCII(s) {
-			t.Fatalf("non-ASCII footer: %q", s)
-		}
+	got := RunDetailFooter()
+	if !isASCII(got) {
+		t.Fatalf("non-ASCII footer: %q", got)
 	}
-	if !strings.Contains(RunDetailFooter(true), "w workbench") {
-		t.Fatal("workbench hint when allowed")
-	}
-	if strings.Contains(RunDetailFooter(false), "w workbench") {
-		t.Fatal("workbench hint when disallowed")
+	if !strings.Contains(got, "esc back") || strings.Contains(got, "workbench") {
+		t.Fatalf("footer = %q", got)
 	}
 }
 

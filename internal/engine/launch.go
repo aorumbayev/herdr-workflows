@@ -9,7 +9,6 @@ import (
 	"maps"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -74,15 +73,6 @@ type LaunchRunRequest struct {
 	OnProgressLine func(string)
 	OnHistoryAck   func(string)
 	Spawn          func(argv []string, opts SpawnOpts) (*Spawned, error)
-}
-
-// LaunchWebRequest launches a fire-and-forget `hwf web` child.
-type LaunchWebRequest struct {
-	Route      string
-	RepoRoot   string
-	Executable string
-	Env        map[string]string
-	Spawn      func(argv []string, opts SpawnOpts) (*Spawned, error)
 }
 
 type progressLine struct {
@@ -579,64 +569,4 @@ func observeDetachedRun(
 		detail = fmt.Sprintf("run exited %d", code)
 	}
 	settleOnce(DetachedRunResult{OK: false, Detail: detail})
-}
-
-func pluginStateDirForEnv(env map[string]string) string {
-	if dir := env["HERDR_PLUGIN_STATE_DIR"]; dir != "" {
-		return dir
-	}
-	dir, err := config.PluginStateDir(func(name string) string {
-		if env != nil {
-			return env[name]
-		}
-		return os.Getenv(name)
-	})
-	if err != nil {
-		return ""
-	}
-	return dir
-}
-
-func openWebLaunchStderr(stateDir string) any {
-	if stateDir == "" {
-		return "ignore"
-	}
-	if err := os.MkdirAll(stateDir, 0o755); err != nil {
-		return "ignore"
-	}
-	f, err := os.OpenFile(webLaunchStderrPath(stateDir), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return "ignore"
-	}
-	return f
-}
-
-func webLaunchStderrPath(stateDir string) string {
-	return filepath.Join(stateDir, "web-launch.stderr.log")
-}
-
-// LaunchDetachedWeb fire-and-forgets a detached `hwf web` child.
-func LaunchDetachedWeb(req LaunchWebRequest) error {
-	spawn := resolveSpawn(req.Spawn)
-	argv := selfArgv(req.Executable, "web", req.Route)
-	env := mergeEnv(environMap(), req.Env, map[string]string{
-		"HERDR_WORKFLOWS_REPO_ROOT": req.RepoRoot,
-	})
-	stderr := openWebLaunchStderr(pluginStateDirForEnv(env))
-	defer closeStderrFile(stderr)
-
-	_, err := spawn(argv, SpawnOpts{
-		Env:    env,
-		Stdin:  "ignore",
-		Stdout: "ignore",
-		Stderr: stderr,
-		Cwd:    req.RepoRoot,
-	})
-	return err
-}
-
-func closeStderrFile(stderr any) {
-	if f, ok := stderr.(*os.File); ok {
-		_ = f.Close()
-	}
 }
