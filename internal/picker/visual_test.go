@@ -12,7 +12,7 @@ import (
 )
 
 func TestPaletteRenderIsPaletteOnly(t *testing.T) {
-	// openspec/specs/picker-workbench-actions/spec.md palette overlay
+	// openspec/specs/picker-editor-actions/spec.md palette overlay
 	m := New(Options{Entries: catalogEntries(), Width: 80})
 	m = apply(m, "ctrl+k")
 	body := m.View().Content

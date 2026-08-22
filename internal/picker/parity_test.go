@@ -91,7 +91,7 @@ var requiredPickerParityScenarios = []string{
 
 func TestParityBaselineCoversSpecScenarios(t *testing.T) {
 	// openspec/specs/picker-presentation/spec.md
-	// openspec/specs/picker-workbench-actions/spec.md
+	// openspec/specs/picker-editor-actions/spec.md
 	byScenario := make(map[string]ParitySurface, len(ParityBaseline()))
 	for _, row := range ParityBaseline() {
 		if row.Scenario == "" {
@@ -769,7 +769,7 @@ func TestParityLaunchOpensStartingRunningLifecycle(t *testing.T) {
 }
 
 func TestParityPrintableKFilters(t *testing.T) {
-	// openspec/specs/picker-workbench-actions/spec.md "Printable k filters"
+	// openspec/specs/picker-editor-actions/spec.md "Printable k filters"
 	m := New(Options{Entries: catalogEntries(), Width: 80})
 	m = apply(m, "k")
 	if m.filter != "k" || m.mode != modeList {
@@ -906,7 +906,7 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 }
 
 func TestParityCancelDeleteKeepsFile(t *testing.T) {
-	// openspec/specs/picker-workbench-actions/spec.md "Cancel delete"
+	// openspec/specs/picker-editor-actions/spec.md "Cancel delete"
 	dir := t.TempDir()
 	path := dir + "/deploy.yaml"
 	if err := os.WriteFile(path, []byte("name: deploy\n"), 0o644); err != nil {

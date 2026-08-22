@@ -191,7 +191,7 @@ func LooksLikeWorkflowYAML(text string) bool {
 	return workflowYAMLRE.MatchString(t) && workflowStepsRE.MatchString(t)
 }
 
-// CheckPayload performs schema-only validation, including workbench raw YAML.
+// CheckPayload performs schema-only validation, including raw YAML documents.
 func CheckPayload(payload string, name ...string) (WorkflowBundle, error) {
 	text := strings.TrimSpace(payload)
 	bundle, err := DecodePayload(text)

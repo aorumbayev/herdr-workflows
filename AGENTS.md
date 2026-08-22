@@ -1,6 +1,6 @@
 # herdr-workflows
 
-herdr ≥ 0.8.2 plugin. It sequences short linear YAML workflows (`agent` / `run` / `herdr` / `workflow`). herdr owns host panes and lifecycle. This repository owns the picker and browser workbench, and loads and runs workflow steps. Runtime is Go with Charm TUI adapters.
+herdr ≥ 0.8.2 plugin. It sequences short linear YAML workflows (`agent` / `run` / `herdr` / `workflow`). herdr owns host panes and lifecycle. This repository owns the picker overlay and CLI, and loads and runs workflow steps. Runtime is Go with Charm TUI adapters.
 
 Workflow format is `version: v1alpha1`. The package stays semver `0.x`. A later incompatible alpha increments `v1alphaN`. Workflow YAML never declares a herdr version. The plugin manifest and CLI own minimum version and protocol enforcement.
 
