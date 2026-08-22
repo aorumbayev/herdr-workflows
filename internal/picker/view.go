@@ -125,7 +125,7 @@ func (m Model) renderChoice() string {
 	var lines []string
 	end := min(m.offset+ListViewport, len(rows))
 	for i := m.offset; i < end; i++ {
-		lines = append(lines, FormatPickerRowName(rows[i], "repo", false, w, i == m.cursor))
+		lines = append(lines, FormatPickerRowName(rows[i], "", false, w, i == m.cursor))
 	}
 	for len(lines) < ListViewport {
 		lines = append(lines, "")

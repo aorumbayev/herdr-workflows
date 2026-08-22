@@ -405,11 +405,8 @@ func TestParityChoiceRowsUseASCIICursorAndLocation(t *testing.T) {
 	if selected == "" {
 		t.Fatalf("missing ASCII > cursor on selected choice row:\n%s", body)
 	}
-	if !strings.HasSuffix(strings.TrimRight(selected, " "), "repo") {
-		t.Fatalf("selected choice row missing right-aligned location:\n%s", selected)
-	}
-	if idle == "" || !strings.HasSuffix(strings.TrimRight(idle, " "), "repo") {
-		t.Fatalf("idle choice row must use two-space prefix and location:\n%s", body)
+	if idle == "" {
+		t.Fatalf("idle choice row must use two-space prefix:\n%s", body)
 	}
 }
 
