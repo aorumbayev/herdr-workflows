@@ -27,24 +27,25 @@ func FormatAnnotationBundle(workflowTitle string, ids []string, fragments map[st
 }
 
 // MaybeSpillSendbackText keeps text inline under the agent prompt cap or spills it to a private file.
-func MaybeSpillSendbackText(repoRoot, text string) (string, error) {
+// The second return is the spill file path, empty when the text stayed inline.
+func MaybeSpillSendbackText(repoRoot, text string) (string, string, error) {
 	if len(text) <= caps.AgentPromptByteLimit {
-		return text, nil
+		return text, "", nil
 	}
 	if err := caps.AssertUnderCaptureCap("send-back annotation", text); err != nil {
-		return "", err
+		return "", "", err
 	}
 	dir, err := engine.EnsureRunScratchDir(repoRoot, "")
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	var nonce [8]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
-		return "", err
+		return "", "", err
 	}
 	spill := filepath.Join(dir, "sendback-"+hex.EncodeToString(nonce[:])+".txt")
 	if err := os.WriteFile(spill, []byte(text), 0o600); err != nil {
-		return "", err
+		return "", "", err
 	}
-	return engine.SpilledPromptInstruction(spill), nil
+	return engine.SpilledPromptInstruction(spill), spill, nil
 }

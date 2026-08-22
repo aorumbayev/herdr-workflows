@@ -1,6 +1,7 @@
 package console
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -28,19 +29,22 @@ func TestFormatAnnotationBundleHandoff(t *testing.T) {
 func TestMaybeSpillSendbackTextUnderCap(t *testing.T) {
 	repo := t.TempDir()
 	text := "small bundle"
-	got, err := MaybeSpillSendbackText(repo, text)
+	got, spill, err := MaybeSpillSendbackText(repo, text)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got != text {
 		t.Fatalf("got %q, want unchanged", got)
 	}
+	if spill != "" {
+		t.Fatalf("spill = %q, want empty for inline text", spill)
+	}
 }
 
 func TestMaybeSpillSendbackTextOverCap(t *testing.T) {
 	repo := t.TempDir()
 	large := strings.Repeat("x", caps.AgentPromptByteLimit+64)
-	got, err := MaybeSpillSendbackText(repo, large)
+	got, spill, err := MaybeSpillSendbackText(repo, large)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,5 +53,15 @@ func TestMaybeSpillSendbackTextOverCap(t *testing.T) {
 	}
 	if strings.Contains(got, large[:80]) {
 		t.Fatal("spilled text still contains bundle body")
+	}
+	if spill == "" || !strings.Contains(got, spill) {
+		t.Fatalf("spill path %q not named in instruction %q", spill, got)
+	}
+	body, err := os.ReadFile(spill)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != large {
+		t.Fatal("spill file content mismatch")
 	}
 }

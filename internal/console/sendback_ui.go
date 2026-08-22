@@ -1,6 +1,7 @@
 package console
 
 import (
+	"os"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -138,19 +139,20 @@ func (m Model) handleDiagramAgentPickKey(msg tea.KeyPressMsg) (tea.Model, tea.Cm
 	switch msg.String() {
 	case "esc":
 		m.diagramMode = diagramModeView
-		m.pendingSendText = ""
-		m.agentPanes = nil
 		m.status = ""
+		m.abandonSendback()
 		return m, nil
 	case "up":
 		if m.agentCursor > 0 {
 			m.agentCursor--
 		}
+		m.clampAgentWindow()
 		return m, nil
 	case "down":
 		if m.agentCursor+1 < len(m.agentPanes) {
 			m.agentCursor++
 		}
+		m.clampAgentWindow()
 		return m, nil
 	case "enter":
 		if m.agentCursor < 0 || m.agentCursor >= len(m.agentPanes) {
@@ -186,26 +188,30 @@ func (m Model) finishSendback() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	bundle := FormatAnnotationBundle(m.diagramTitle, ids, fragments, m.sendbackInstruction)
-	text, err := m.spillSendback(m.repoRoot, bundle)
+	text, spillPath, err := m.spillSendback(m.repoRoot, bundle)
 	if err != nil {
 		m.status = "send-back failed" + tui.ChromeSep + err.Error()
 		m.diagramMode = diagramModeView
 		return m, nil
 	}
+	m.pendingSpillPath = spillPath
 	if m.listAgentPanes == nil {
 		m.status = "send-back failed" + tui.ChromeSep + "agent list not wired"
 		m.diagramMode = diagramModeView
+		m.abandonSendback()
 		return m, nil
 	}
 	panes, err := m.listAgentPanes()
 	if err != nil {
 		m.status = "send-back failed" + tui.ChromeSep + err.Error()
 		m.diagramMode = diagramModeView
+		m.abandonSendback()
 		return m, nil
 	}
 	if len(panes) == 0 {
 		m.status = "send-back failed" + tui.ChromeSep + "no agent panes"
 		m.diagramMode = diagramModeView
+		m.abandonSendback()
 		return m, nil
 	}
 	m.pendingSendText = text
@@ -223,13 +229,13 @@ func (m Model) deliverSendback(paneID string) (tea.Model, tea.Cmd) {
 	if m.paneSendText == nil {
 		m.status = "send-back failed" + tui.ChromeSep + "pane send not wired"
 		m.diagramMode = diagramModeView
-		m.resetDiagramSendback()
+		m.abandonSendback()
 		return m, nil
 	}
 	if err := m.paneSendText(paneID, m.pendingSendText); err != nil {
 		m.status = "send-back failed" + tui.ChromeSep + err.Error()
 		m.diagramMode = diagramModeView
-		m.resetDiagramSendback()
+		m.abandonSendback()
 		return m, nil
 	}
 	m.status = "typed annotation" + tui.ChromeSep + paneID
@@ -238,10 +244,22 @@ func (m Model) deliverSendback(paneID string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// abandonSendback drops a pending send-back, removing a spilled bundle file
+// nobody will submit. A delivered bundle keeps its spill: the pane holds
+// typed-but-unsubmitted text that points the agent at the file.
+func (m *Model) abandonSendback() {
+	if m.pendingSpillPath != "" {
+		_ = os.Remove(m.pendingSpillPath)
+	}
+	m.resetDiagramSendback()
+}
+
 func (m *Model) resetDiagramSendback() {
 	m.pendingSendText = ""
+	m.pendingSpillPath = ""
 	m.agentPanes = nil
 	m.agentCursor = 0
+	m.agentOffset = 0
 	m.instructionDraft = ""
 	m.sendbackInstruction = ""
 }

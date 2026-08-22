@@ -93,11 +93,13 @@ func (m Model) renderDiagramAgentPick(w int) string {
 	vp := max(3, m.listViewport())
 	body := FormatAgentPickBody(m.agentPanes, m.agentCursor)
 	lines := strings.Split(body, "\n")
+	header, items := lines[0], lines[1:]
+	itemVP := vp - 1
+	offset := min(m.agentOffset, max(0, len(items)-itemVP))
+	items = items[offset:min(offset+itemVP, len(items))]
+	lines = append([]string{header}, items...)
 	for len(lines) < vp {
 		lines = append(lines, "")
-	}
-	if len(lines) > vp {
-		lines = lines[:vp]
 	}
 	status := m.status
 	if status == "" {

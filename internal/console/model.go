@@ -38,7 +38,7 @@ type Options struct {
 	CopyClipboard  func(string) error
 	ListAgentPanes func() ([]AgentPaneEntry, error)
 	PaneSendText   func(paneID, text string) error
-	SpillSendback  func(repoRoot, text string) (string, error)
+	SpillSendback  func(repoRoot, text string) (string, string, error)
 }
 
 // Model is the full-screen console Bubble Tea model.
@@ -67,9 +67,11 @@ type Model struct {
 	pendingSendText     string
 	agentPanes          []AgentPaneEntry
 	agentCursor         int
+	agentOffset         int
+	pendingSpillPath    string
 	listAgentPanes      func() ([]AgentPaneEntry, error)
 	paneSendText        func(paneID, text string) error
-	spillSendback       func(repoRoot, text string) (string, error)
+	spillSendback       func(repoRoot, text string) (string, string, error)
 	detail              DetailPayload
 	diagram             workflow.Diagram
 	diagramTitle        string
@@ -373,6 +375,18 @@ func (m *Model) clampRunWindow() {
 	}
 	if m.runCursor >= m.runOffset+vp {
 		m.runOffset = m.runCursor - vp + 1
+	}
+}
+
+// clampAgentWindow keeps the send-back chooser cursor visible; the rendered
+// list reserves one row of the viewport for its header.
+func (m *Model) clampAgentWindow() {
+	vp := max(1, max(3, m.listViewport())-1)
+	if m.agentCursor < m.agentOffset {
+		m.agentOffset = m.agentCursor
+	}
+	if m.agentCursor >= m.agentOffset+vp {
+		m.agentOffset = m.agentCursor - vp + 1
 	}
 }
 

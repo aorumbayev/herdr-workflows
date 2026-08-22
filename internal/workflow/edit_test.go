@@ -39,6 +39,7 @@ func TestResolveEditorPrefersEDITORThenVISUAL(t *testing.T) {
 }
 
 func TestEditAndValidateRunsEditorThenLoader(t *testing.T) {
+	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", t.TempDir())
 	root := t.TempDir()
 	path := filepath.Join(root, ".hwf", "workflows", "demo.yaml")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -76,6 +77,7 @@ func TestEditAndValidateRunsEditorThenLoader(t *testing.T) {
 }
 
 func TestEditAndValidateReportsLoaderErrorAfterEditor(t *testing.T) {
+	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", t.TempDir())
 	root := t.TempDir()
 	path := filepath.Join(root, "broken.yaml")
 	if err := os.WriteFile(path, []byte("version: v1alpha1\nsteps:\n  - run: [echo, hi]\n"), 0o644); err != nil {
@@ -98,6 +100,7 @@ func TestEditAndValidateReportsLoaderErrorAfterEditor(t *testing.T) {
 }
 
 func TestCreateRepoWorkflowWritesStub(t *testing.T) {
+	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", t.TempDir())
 	root := t.TempDir()
 	path, err := workflow.CreateRepoWorkflow(root, "ship-it")
 	if err != nil {
@@ -138,6 +141,7 @@ func TestCreateRepoWorkflowRejectsBadNameAndConflict(t *testing.T) {
 }
 
 func TestEditAndValidateUsesInjectableRunner(t *testing.T) {
+	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", t.TempDir())
 	root := t.TempDir()
 	path := filepath.Join(root, "x.yaml")
 	if err := os.WriteFile(path, []byte("version: v1alpha1\nsteps:\n  - run: [echo, hi]\n"), 0o644); err != nil {
@@ -187,3 +191,30 @@ var errEditorFailed = errString("editor failed")
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+func TestEditAndValidateSplitsEditorFlags(t *testing.T) {
+	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", t.TempDir())
+	root := t.TempDir()
+	path := filepath.Join(root, "x.yaml")
+	if err := os.WriteFile(path, []byte("version: v1alpha1\nsteps:\n  - run: [echo, hi]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var argv []string
+	result := workflow.EditAndValidate(workflow.EditOpts{
+		Path:     path,
+		Name:     "x",
+		RepoRoot: root,
+		Getenv:   func(string) string { return "code --wait" },
+		Run: func(args []string) error {
+			argv = append([]string(nil), args...)
+			return nil
+		},
+	})
+	if !result.OK {
+		t.Fatalf("result = %+v", result)
+	}
+	want := []string{"code", "--wait", path}
+	if strings.Join(argv, " ") != strings.Join(want, " ") {
+		t.Fatalf("argv = %#v, want %#v", argv, want)
+	}
+}
