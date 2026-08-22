@@ -233,3 +233,52 @@ func ResetProtocolCheck() {
 	defer protocolCheckedMu.Unlock()
 	protocolChecked = false
 }
+
+// PluginPaneOpenConsole opens the console entrypoint at tab, beside, or below.
+// beside maps to split/right; below maps to split/down.
+func PluginPaneOpenConsole(env map[string]string, open string) error {
+	params, err := consoleOpenParams(open)
+	if err != nil {
+		return err
+	}
+	pluginID := os.Getenv("HERDR_PLUGIN_ID")
+	if pluginID == "" {
+		pluginID = "herdr-workflows"
+	}
+	if env == nil {
+		env = map[string]string{}
+	}
+	call := map[string]any{
+		"plugin_id":  pluginID,
+		"entrypoint": "console",
+		"placement":  params.placement,
+		"focus":      true,
+		"env":        env,
+	}
+	if params.direction != "" {
+		call["direction"] = params.direction
+	}
+	if target := strings.TrimSpace(os.Getenv("HERDR_PANE_ID")); target != "" {
+		call["target_pane_id"] = target
+	}
+	_, err = HerdrCall("plugin.pane.open", call)
+	return err
+}
+
+type consoleOpenMapping struct {
+	placement string
+	direction string
+}
+
+func consoleOpenParams(open string) (consoleOpenMapping, error) {
+	switch open {
+	case "tab":
+		return consoleOpenMapping{placement: "tab"}, nil
+	case "beside":
+		return consoleOpenMapping{placement: "split", direction: "right"}, nil
+	case "below":
+		return consoleOpenMapping{placement: "split", direction: "down"}, nil
+	default:
+		return consoleOpenMapping{}, &HerdrError{Code: "invalid_argument", Msg: "placement must be tab, beside, or below"}
+	}
+}

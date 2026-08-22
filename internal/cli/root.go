@@ -92,6 +92,7 @@ func newRoot() *cobra.Command {
 		newWorkflowCmd(),
 		newLaunchCmd(),
 		newPickerCmd(),
+		newConsoleCmd(),
 		newUpdateCmd(),
 		newSkillsCmd(),
 		newResponseCmd(),

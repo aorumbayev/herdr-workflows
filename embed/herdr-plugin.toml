@@ -26,3 +26,9 @@ placement = "popup"
 width = 64
 height = 15
 command = ["./bin/herdr-workflows", "picker"]
+
+[[panes]]
+id = "console"
+title = "Herdr Workflows Console"
+placement = "split"
+command = ["./bin/herdr-workflows", "console"]

@@ -91,6 +91,16 @@ func newPickerCmd() *cobra.Command {
 	}
 }
 
+func newConsoleCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "console",
+		Short: "Open or run the full-screen console TUI",
+		RunE:  runConsole,
+	}
+	cmd.Flags().String("placement", "", "open placement: tab, beside, or below (default beside when opening)")
+	return cmd
+}
+
 func newUpdateCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "update",
