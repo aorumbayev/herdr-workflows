@@ -10,7 +10,7 @@ import (
 )
 
 func (m Model) View() tea.View {
-	return tea.NewView(tui.PadHeight(m.render(), m.height))
+	return tea.NewView(tui.PadHeight(tui.PadContent(m.render(), m.contentWidth()), m.height))
 }
 
 func (m Model) render() string {
@@ -42,11 +42,11 @@ func (m Model) renderWorkflows() string {
 	}
 	detail := ""
 	if len(m.entries) > 0 && m.wfCursor < len(m.entries) {
-		detail = tui.FormatDetailLines(m.entries[m.wfCursor].Description, w)
+		detail = tui.FormatDetailBlock(m.entries[m.wfCursor].Description, w)
 	}
 	footer := tui.FormatListFooter(w, m.wfCursor, len(m.entries), workflowsFooter())
 	head := tui.Truncate("workflows", w)
-	return head + "\n" + strings.Join(rows, "\n") + "\n" + detail + "\n" + tui.FormatRule(w) + "\n" + footer
+	return head + "\n\n" + strings.Join(rows, "\n") + "\n\n" + detail + "\n" + tui.FormatRule(w) + "\n" + footer
 }
 
 func (m Model) renderDiagram() string {
@@ -128,7 +128,7 @@ func (m Model) renderRuns() string {
 	}
 	footer := tui.FormatListFooter(w, m.runCursor, len(m.runs), runsFooter())
 	head := tui.Truncate("runs", w)
-	return head + "\n" + strings.Join(rows, "\n") + "\n" + tui.FormatRule(w) + "\n" + footer
+	return head + "\n\n" + strings.Join(rows, "\n") + "\n" + tui.FormatRule(w) + "\n" + footer
 }
 
 func (m Model) renderDetail() string {

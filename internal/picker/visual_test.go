@@ -60,7 +60,7 @@ func TestFilterRowIsFlushLeftASCIIWithoutSlashPrefix(t *testing.T) {
 	// openspec/specs/picker-presentation/spec.md "Picker chrome uses width-stable ASCII glyphs"
 	m := New(Options{Entries: catalogEntries(), Width: 80})
 	body := m.View().Content
-	first := strings.Split(body, "\n")[0]
+	first := tui.StripContentPadding(strings.Split(body, "\n")[0])
 	if strings.HasPrefix(first, "/ ") || strings.HasPrefix(first, "/") {
 		t.Fatalf("filter must not use OpenTUI slash prefix: %q", first)
 	}
@@ -68,7 +68,7 @@ func TestFilterRowIsFlushLeftASCIIWithoutSlashPrefix(t *testing.T) {
 		t.Fatalf("empty filter row = %q want %q", first, tui.FilterWorkflows)
 	}
 	m = apply(m, "d")
-	first = strings.Split(m.View().Content, "\n")[0]
+	first = tui.StripContentPadding(strings.Split(m.View().Content, "\n")[0])
 	if first != "d" {
 		t.Fatalf("typed filter must be flush-left: %q", first)
 	}

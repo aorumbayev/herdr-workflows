@@ -13,6 +13,21 @@ const Ellipsis = "..."
 // RowTextIndent is the Select name indent (contentX + 1 with indicator off).
 const RowTextIndent = 3
 
+// ChromePaddingX is the one-cell left and right inset inside the popup border.
+const ChromePaddingX = 1
+
+// DetailBlockHeight is the fixed two-row detail area under the list.
+const DetailBlockHeight = 2
+
+// ColumnGutter is the space between the title and warning columns.
+const ColumnGutter = 2
+
+// WarningWidth is the single-cell warning marker column.
+const WarningWidth = 1
+
+// LocationWidth is the right-aligned location column.
+const LocationWidth = 7
+
 // Columns returns the terminal cell width of s.
 func Columns(s string) int {
 	return ansi.StringWidth(s)
@@ -60,7 +75,37 @@ const ListViewport = 6
 
 // ContentWidth is the inner chrome width for a popup of the given terminal columns.
 func ContentWidth(width int) int {
-	return max(0, width-2)
+	if width <= 2*ChromePaddingX {
+		return 0
+	}
+	return width - 2*ChromePaddingX
+}
+
+// PadContent applies one-cell horizontal padding to every line.
+func PadContent(body string, contentWidth int) string {
+	if body == "" {
+		return ""
+	}
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		lines[i] = PadContentLine(line, contentWidth)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// PadContentLine pads one rendered line to the full terminal width.
+func PadContentLine(line string, contentWidth int) string {
+	inner := Truncate(line, contentWidth)
+	return strings.Repeat(" ", ChromePaddingX) + inner + strings.Repeat(" ", ChromePaddingX)
+}
+
+// StripContentPadding removes one-cell horizontal padding from a rendered line.
+func StripContentPadding(line string) string {
+	line = strings.TrimSuffix(line, " ")
+	if strings.HasPrefix(line, " ") {
+		return line[1:]
+	}
+	return line
 }
 
 // ClampListWindow keeps cursor inside [0, n) and scrolls offset so cursor stays
@@ -106,6 +151,19 @@ func takeWrappedLine(text string, budget int) string {
 	return window
 }
 
+// FormatDetailBlock wraps detail text onto two fixed rows.
+func FormatDetailBlock(description string, contentWidth int) string {
+	detail := FormatDetailLines(description, contentWidth)
+	lines := strings.Split(detail, "\n")
+	for len(lines) < DetailBlockHeight {
+		lines = append(lines, "")
+	}
+	if len(lines) > DetailBlockHeight {
+		lines = lines[:DetailBlockHeight]
+	}
+	return strings.Join(lines, "\n")
+}
+
 // FormatDetailLines wraps a description onto at most two indented lines.
 func FormatDetailLines(description string, contentWidth int) string {
 	text := strings.Join(strings.Fields(description), " ")
@@ -126,10 +184,10 @@ func FormatDetailLines(description string, contentWidth int) string {
 	return indent + line1 + "\n" + indent + line2
 }
 
-// FormatRule draws a muted horizontal rule under the list, inset by RowTextIndent.
+// FormatRule draws a muted horizontal rule under the list, inset on both sides.
 func FormatRule(contentWidth int) string {
-	field := max(0, contentWidth-RowTextIndent)
-	return strings.Repeat(" ", RowTextIndent) + strings.Repeat("-", field)
+	field := max(0, contentWidth-2*RowTextIndent)
+	return strings.Repeat(" ", RowTextIndent) + strings.Repeat("-", field) + strings.Repeat(" ", RowTextIndent)
 }
 
 // FormatListFooter places hint on the left and index/total on the right.

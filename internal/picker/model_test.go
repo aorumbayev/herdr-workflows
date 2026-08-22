@@ -83,11 +83,23 @@ func runCmd(m Model, cmd tea.Cmd) Model {
 
 func listRowCount(view string) int {
 	n := 0
+	inList := false
 	for _, line := range strings.Split(view, "\n") {
-		if strings.HasPrefix(line, "> ") || strings.HasPrefix(line, "  ") && (strings.Contains(line, "repo") || strings.Contains(line, "global") || strings.Contains(line, "invalid")) {
-			if strings.HasPrefix(strings.TrimLeft(line, " "), "-") {
-				continue
+		line = tui.StripContentPadding(line)
+		if line == "" {
+			if inList && n > 0 {
+				break
 			}
+			continue
+		}
+		if strings.Contains(line, "----") {
+			break
+		}
+		if !inList {
+			inList = true
+			continue
+		}
+		if strings.HasPrefix(line, "> ") || strings.HasPrefix(line, "  ") {
 			n++
 		}
 	}
@@ -137,7 +149,7 @@ func TestPickerFilterAndPaletteRestore(t *testing.T) {
 		t.Fatalf("filter = %q", m.filter)
 	}
 	body := m.View().Content
-	if got := strings.Split(body, "\n")[0]; got != "dep" {
+	if got := tui.StripContentPadding(strings.Split(body, "\n")[0]); got != "dep" {
 		t.Fatalf("filter row = %q", got)
 	}
 	if !strings.Contains(body, "Deploy") || strings.Contains(body, "Chat handoff") {
@@ -241,12 +253,12 @@ func TestInputFailureScreen(t *testing.T) {
 
 func TestListFilterMissKeepsFilterRow(t *testing.T) {
 	m := New(Options{Entries: catalogEntries(), Width: 80})
-	if got := strings.Split(m.View().Content, "\n")[0]; got != tui.FilterWorkflows {
+	if got := tui.StripContentPadding(strings.Split(m.View().Content, "\n")[0]); got != tui.FilterWorkflows {
 		t.Fatalf("empty filter row = %q", got)
 	}
 	m = apply(m, "z", "z", "z")
 	body := m.View().Content
-	if got := strings.Split(body, "\n")[0]; got != "zzz" {
+	if got := tui.StripContentPadding(strings.Split(body, "\n")[0]); got != "zzz" {
 		t.Fatalf("miss filter row = %q", got)
 	}
 	if !strings.Contains(body, "No workflows matching zzz") {

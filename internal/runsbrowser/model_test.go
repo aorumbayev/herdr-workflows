@@ -151,12 +151,12 @@ func TestOverlappingDetailLatestWins(t *testing.T) {
 func TestFilterMissKeepsFilterRow(t *testing.T) {
 	checkout := t.TempDir()
 	m, _ := modelWithRuns(t, checkout, "alpha")
-	if got := strings.Split(m.View().Content, "\n")[0]; got != tui.FilterRuns {
+	if got := tui.StripContentPadding(strings.Split(m.View().Content, "\n")[0]); got != tui.FilterRuns {
 		t.Fatalf("empty filter = %q", got)
 	}
 	m = apply(m, "z", "z", "z")
 	body := m.View().Content
-	if got := strings.Split(body, "\n")[0]; got != "zzz" {
+	if got := tui.StripContentPadding(strings.Split(body, "\n")[0]); got != "zzz" {
 		t.Fatalf("typed filter = %q", got)
 	}
 	if !strings.Contains(body, "no matching runs") {

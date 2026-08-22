@@ -139,14 +139,14 @@ func TestParityFewerMatchesPadBlankRows(t *testing.T) {
 	lines := strings.Split(body, "\n")
 	blank := 0
 	for _, line := range lines {
-		if line == "" {
+		if tui.StripContentPadding(line) == "" {
 			blank++
 		}
 	}
 	if listRowCount(body) != 2 {
 		t.Fatalf("visible named rows = %d, want 2\n%s", listRowCount(body), body)
 	}
-	if blank < 4 {
+	if blank < 6 {
 		t.Fatalf("expected blank pad rows, blank=%d\n%s", blank, body)
 	}
 	if !strings.Contains(body, tui.ListHint) {
@@ -387,6 +387,7 @@ func TestParityChoiceRowsUseASCIICursorAndLocation(t *testing.T) {
 	body := m.View().Content
 	var selected, idle string
 	for _, line := range strings.Split(body, "\n") {
+		line = tui.StripContentPadding(line)
 		if strings.HasPrefix(line, "/ ") {
 			t.Fatalf("choice must not use OpenTUI slash prefix: %q", line)
 		}

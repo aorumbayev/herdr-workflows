@@ -10,7 +10,7 @@ import (
 )
 
 func (m Model) View() tea.View {
-	return tea.NewView(m.render())
+	return tea.NewView(tui.PadHeight(tui.PadContent(m.render(), m.contentWidth()), m.height))
 }
 
 func (m Model) render() string {
@@ -35,7 +35,7 @@ func (m Model) render() string {
 	default:
 		body = m.renderList()
 	}
-	return tui.PadHeight(body, m.height)
+	return body
 }
 
 func (m Model) renderNewName() string {
@@ -63,7 +63,7 @@ func (m Model) renderList() string {
 	opts := m.matched()
 	w := m.contentWidth()
 	if !HasVisibleEntries(m.entries) {
-		parts := []string{tui.FormatDetailLines(tui.EmptyCatalogMessage, w)}
+		parts := []string{tui.FormatDetailBlock(tui.EmptyCatalogMessage, w)}
 		if m.status != "" {
 			parts = append(parts, tui.Truncate(m.status, w))
 		}
@@ -72,7 +72,7 @@ func (m Model) renderList() string {
 	}
 	filter := m.listFilterRow(w)
 	if len(opts) == 0 {
-		return filter + "\n" + tui.FormatDetailLines("No workflows matching "+m.filter, w) + "\n" + tui.FormatRule(w) + "\n" + tui.FormatListFooter(w, 0, 0, tui.ListHint)
+		return filter + "\n\n" + tui.FormatDetailBlock("No workflows matching "+m.filter, w) + "\n" + tui.FormatRule(w) + "\n" + tui.FormatListFooter(w, 0, 0, tui.ListHint)
 	}
 	end := min(m.offset+ListViewport, len(opts))
 	var rows []string
@@ -94,9 +94,9 @@ func (m Model) renderList() string {
 		rows = append(rows, "")
 	}
 	sel := opts[m.cursor]
-	detail := tui.FormatDetailLines(sel.Description, w)
+	detail := tui.FormatDetailBlock(sel.Description, w)
 	footer := tui.FormatListFooter(w, m.cursor, len(opts), tui.ListHint)
-	parts := []string{filter, strings.Join(rows, "\n"), detail}
+	parts := []string{filter, "", strings.Join(rows, "\n"), "", detail}
 	if m.status != "" {
 		parts = append(parts, tui.Truncate(m.status, w))
 	}
@@ -141,7 +141,7 @@ func (m Model) renderChoice() string {
 		hint = tui.CustomChoiceHint
 	}
 	footer := tui.FormatListFooter(w, m.cursor, len(rows), hint)
-	parts := []string{strings.Join(lines, "\n")}
+	parts := []string{"", strings.Join(lines, "\n"), ""}
 	if line := m.consentLine(); line != "" {
 		parts = append(parts, line)
 	}

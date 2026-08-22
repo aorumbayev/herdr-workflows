@@ -105,11 +105,11 @@ func TestFormatRuleInsetMuted(t *testing.T) {
 	if !strings.HasPrefix(rule, strings.Repeat(" ", RowTextIndent)) {
 		t.Fatalf("rule missing indent: %q", rule)
 	}
-	field := strings.TrimLeft(rule, " ")
-	if field != strings.Repeat("-", 60-RowTextIndent) {
+	field := strings.Trim(rule, " ")
+	if field != strings.Repeat("-", 60-2*RowTextIndent) {
 		t.Fatalf("rule field = %q", field)
 	}
-	if FormatRule(10) != "   "+strings.Repeat("-", 7) {
+	if FormatRule(10) != "   "+strings.Repeat("-", 4)+"   " {
 		t.Fatalf("rule(10) = %q", FormatRule(10))
 	}
 }

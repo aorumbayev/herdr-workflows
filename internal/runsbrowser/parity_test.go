@@ -99,25 +99,24 @@ func TestParityMoreThanSixRunsScrollsViewport(t *testing.T) {
 
 func listViewportRows(body string) int {
 	lines := strings.Split(body, "\n")
+	inList := false
 	n := 0
-	for i, line := range lines {
-		if i == 0 {
-			continue // filter
-		}
-		if strings.HasPrefix(strings.TrimLeft(line, " "), "-") {
-			break // rule
-		}
-		if strings.HasPrefix(line, "> ") || strings.HasPrefix(line, "  ") {
-			if line == "" || line == "  " {
-				n++
-				continue
-			}
-			// detail lines are indented with three spaces via FormatDetailLines
-			if strings.HasPrefix(line, "   ") {
+	for _, line := range lines {
+		line = tui.StripContentPadding(line)
+		if line == "" {
+			if inList && n > 0 {
 				break
 			}
-			n++
+			continue
 		}
+		if strings.Contains(line, "----") {
+			break
+		}
+		if !inList {
+			inList = true
+			continue
+		}
+		n++
 	}
 	return n
 }
