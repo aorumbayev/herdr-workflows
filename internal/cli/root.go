@@ -43,9 +43,6 @@ func Main(args []string, in io.Reader, out, err io.Writer) int {
 }
 
 func run(args []string, ioStreams streams) int {
-	if len(args) == 0 && ioStreams.stdinTTY && ioStreams.stdoutTTY {
-		args = []string{"web"}
-	}
 	root := newRoot()
 	root.SetIn(ioStreams.in)
 	root.SetOut(ioStreams.out)
@@ -95,7 +92,6 @@ func newRoot() *cobra.Command {
 		newWorkflowCmd(),
 		newLaunchCmd(),
 		newPickerCmd(),
-		newWebCmd(),
 		newUpdateCmd(),
 		newSkillsCmd(),
 		newResponseCmd(),
