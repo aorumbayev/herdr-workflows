@@ -20,6 +20,7 @@ const (
 	screenWorkflows screen = iota
 	screenRuns
 	screenDetail
+	screenDiagram
 )
 
 // Options construct a console model.
@@ -29,32 +30,38 @@ type Options struct {
 	Width         int
 	Height        int
 	Env           config.Env
+	Config        config.Config
 	LoadRuns      func() []history.Summary
 	LoadDetail    func(runID string) DetailPayload
+	LoadWorkflow  func(workflow.WorkflowListEntry) (*workflow.Definition, error)
 	CopyClipboard func(string) error
 }
 
 // Model is the full-screen console Bubble Tea model.
 type Model struct {
-	entries      []workflow.WorkflowListEntry
-	repoRoot     string
-	width        int
-	height       int
-	getenv       config.Env
-	screen       screen
-	wfCursor     int
-	wfOffset     int
-	runCursor    int
-	runOffset    int
-	runs         []history.Summary
-	loadRuns     func() []history.Summary
-	loadDetail   func(runID string) DetailPayload
-	copyText     func(string) error
-	detail       DetailPayload
-	debugTab     DebugTab
-	detailScroll int
-	status       string
-	quit         bool
+	entries       []workflow.WorkflowListEntry
+	repoRoot      string
+	width         int
+	height        int
+	getenv        config.Env
+	screen        screen
+	wfCursor      int
+	wfOffset      int
+	runCursor     int
+	runOffset     int
+	runs          []history.Summary
+	loadRuns      func() []history.Summary
+	loadDetail    func(runID string) DetailPayload
+	loadWorkflow  func(workflow.WorkflowListEntry) (*workflow.Definition, error)
+	copyText      func(string) error
+	detail        DetailPayload
+	diagram       workflow.Diagram
+	diagramTitle  string
+	diagramScroll int
+	debugTab      DebugTab
+	detailScroll  int
+	status        string
+	quit          bool
 }
 
 // New builds a workflows-first console model.
@@ -81,20 +88,29 @@ func New(opts Options) Model {
 			return defaultLoadDetail(runID, getenv)
 		}
 	}
+	loadWorkflow := opts.LoadWorkflow
+	if loadWorkflow == nil && opts.RepoRoot != "" {
+		repoRoot := opts.RepoRoot
+		cfg := opts.Config
+		loadWorkflow = func(entry workflow.WorkflowListEntry) (*workflow.Definition, error) {
+			return workflow.LoadWorkflowEntry(entry, repoRoot, cfg)
+		}
+	}
 	copyFn := opts.CopyClipboard
 	if copyFn == nil {
 		copyFn = tui.CopyToClipboard
 	}
 	return Model{
-		entries:    opts.Entries,
-		repoRoot:   opts.RepoRoot,
-		width:      width,
-		height:     opts.Height,
-		getenv:     getenv,
-		screen:     screenWorkflows,
-		loadRuns:   loadRuns,
-		loadDetail: loadDetail,
-		copyText:   copyFn,
+		entries:      opts.Entries,
+		repoRoot:     opts.RepoRoot,
+		width:        width,
+		height:       opts.Height,
+		getenv:       getenv,
+		screen:       screenWorkflows,
+		loadRuns:     loadRuns,
+		loadDetail:   loadDetail,
+		loadWorkflow: loadWorkflow,
+		copyText:     copyFn,
 	}
 }
 
@@ -141,6 +157,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleDetailKey(msg)
 	case screenRuns:
 		return m.handleRunsKey(msg)
+	case screenDiagram:
+		return m.handleDiagramKey(msg)
 	default:
 		return m.handleWorkflowsKey(msg)
 	}
@@ -167,6 +185,8 @@ func (m Model) handleWorkflowsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.clampWorkflowWindow()
 		}
 		return m, nil
+	case "enter":
+		return m.openSelectedDiagram()
 	case "esc":
 		m.quit = true
 		return m, tea.Quit
@@ -206,6 +226,54 @@ func (m Model) handleRunsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.quit = true
 		return m, tea.Quit
+	}
+	return m, nil
+}
+
+func (m Model) openSelectedDiagram() (tea.Model, tea.Cmd) {
+	if m.wfCursor < 0 || m.wfCursor >= len(m.entries) {
+		return m, nil
+	}
+	entry := m.entries[m.wfCursor]
+	if entry.Error != "" {
+		m.status = "diagram unavailable" + tui.ChromeSep + entry.Error
+		return m, nil
+	}
+	if m.loadWorkflow == nil {
+		m.status = "diagram unavailable" + tui.ChromeSep + "workflow loader not wired"
+		return m, nil
+	}
+	def, err := m.loadWorkflow(entry)
+	if err != nil {
+		m.status = "diagram unavailable" + tui.ChromeSep + err.Error()
+		return m, nil
+	}
+	title := entry.Title
+	if title == "" {
+		title = entry.Name
+	}
+	m.diagram = workflow.ProjectDiagram(*def)
+	m.diagramTitle = title
+	m.diagramScroll = 0
+	m.screen = screenDiagram
+	m.status = ""
+	return m, nil
+}
+
+func (m Model) handleDiagramKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.screen = screenWorkflows
+		m.status = ""
+		return m, nil
+	case "up":
+		if m.diagramScroll > 0 {
+			m.diagramScroll--
+		}
+		return m, nil
+	case "down":
+		m.diagramScroll++
+		return m, nil
 	}
 	return m, nil
 }

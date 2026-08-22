@@ -19,6 +19,8 @@ func (m Model) render() string {
 		return m.renderDetail()
 	case screenRuns:
 		return m.renderRuns()
+	case screenDiagram:
+		return m.renderDiagram()
 	default:
 		return m.renderWorkflows()
 	}
@@ -45,6 +47,24 @@ func (m Model) renderWorkflows() string {
 	footer := tui.FormatListFooter(w, m.wfCursor, len(m.entries), workflowsFooter())
 	head := tui.Truncate("workflows", w)
 	return head + "\n" + strings.Join(rows, "\n") + "\n" + detail + "\n" + tui.FormatRule(w) + "\n" + footer
+}
+
+func (m Model) renderDiagram() string {
+	w := m.contentWidth()
+	vp := max(3, m.listViewport())
+	body := FormatDiagram(m.diagram, w)
+	lines := asciiLines(body, w)
+	visible, _ := runsbrowser.ScrollDetailLines(lines, m.diagramScroll, vp)
+	for len(visible) < vp {
+		visible = append(visible, "")
+	}
+	status := m.status
+	if status == "" {
+		status = diagramFooter()
+	}
+	footer := tui.FormatListFooter(w, 0, 0, status)
+	head := tui.Truncate("diagram"+tui.ChromeSep+m.diagramTitle, w)
+	return head + "\n" + strings.Join(visible, "\n") + "\n" + tui.FormatRule(w) + "\n" + footer
 }
 
 func (m Model) renderRuns() string {
@@ -88,7 +108,7 @@ func (m Model) renderDetail() string {
 }
 
 func workflowsFooter() string {
-	return strings.Join([]string{"tab runs", "esc quit"}, tui.ChromeSep)
+	return strings.Join([]string{"enter diagram", "tab runs", "esc quit"}, tui.ChromeSep)
 }
 
 func runsFooter() string {
@@ -97,4 +117,8 @@ func runsFooter() string {
 
 func detailFooter() string {
 	return strings.Join([]string{"1/2/3 tabs", "y retry-copy", "esc back"}, tui.ChromeSep)
+}
+
+func diagramFooter() string {
+	return strings.Join([]string{"esc back"}, tui.ChromeSep)
 }

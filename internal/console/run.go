@@ -22,6 +22,7 @@ func RunScreen(opts ScreenOpts) (int, error) {
 	model := New(Options{
 		Entries:  opts.Entries,
 		RepoRoot: opts.RepoRoot,
+		Config:   opts.Config,
 		Env:      opts.Env,
 	})
 	program := tea.NewProgram(model)
