@@ -433,6 +433,7 @@ func TestWorkflowValidateOKAndFail(t *testing.T) {
 	}
 	got := runCLI([]string{"workflow", "validate", okPath, "ok"}, root, map[string]string{
 		"HERDR_WORKFLOWS_REPO_ROOT": root,
+		"HERDR_PLUGIN_CONFIG_DIR":   t.TempDir(),
 	}, "")
 	if got.code != 0 {
 		t.Fatalf("ok code = %d stderr = %q stdout = %q", got.code, got.stderr, got.stdout)
@@ -447,6 +448,7 @@ func TestWorkflowValidateOKAndFail(t *testing.T) {
 	}
 	bad := runCLI([]string{"workflow", "validate", badPath}, root, map[string]string{
 		"HERDR_WORKFLOWS_REPO_ROOT": root,
+		"HERDR_PLUGIN_CONFIG_DIR":   t.TempDir(),
 	}, "")
 	if bad.code != 1 {
 		t.Fatalf("bad code = %d stdout = %q", bad.code, bad.stdout)
@@ -467,6 +469,7 @@ func TestWorkflowValidateDefaultsNameFromBasename(t *testing.T) {
 	}
 	got := runCLI([]string{"workflow", "validate", path}, root, map[string]string{
 		"HERDR_WORKFLOWS_REPO_ROOT": root,
+		"HERDR_PLUGIN_CONFIG_DIR":   t.TempDir(),
 	}, "")
 	if got.code != 0 {
 		t.Fatalf("code = %d stderr = %q stdout = %q", got.code, got.stderr, got.stdout)
