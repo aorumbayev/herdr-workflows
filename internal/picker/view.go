@@ -20,6 +20,8 @@ func (m Model) render() string {
 		body = m.runs.View().Content
 	case modePalette:
 		body = m.renderPalette()
+	case modeConsolePlace:
+		body = m.renderConsolePlace()
 	case modeDelete:
 		body = "Delete " + m.deleteLabel() + "?\n" + tui.DeleteConfirmHint
 	case modeFail:

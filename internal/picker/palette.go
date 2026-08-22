@@ -25,6 +25,8 @@ func ResolvePaletteLetter(letter string, selected *workflow.WorkflowListEntry) *
 		return &PaletteAction{ID: "import"}
 	case "e":
 		return &PaletteAction{ID: "examples"}
+	case "c":
+		return &PaletteAction{ID: "console"}
 	}
 	if selected == nil || selected.Error != "" {
 		return nil
@@ -50,6 +52,7 @@ func FormatPaletteBody(selected *workflow.WorkflowListEntry) string {
 		"n  Create new in $EDITOR",
 		"i  Import via hwf workflow import",
 		"e  Browse examples",
+		"c  Open console",
 	}
 	if selected != nil && selected.Error == "" {
 		lines = append(lines,

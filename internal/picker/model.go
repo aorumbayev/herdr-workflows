@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
+	"github.com/aorumbayev/herdr-workflows/internal/console"
 	"github.com/aorumbayev/herdr-workflows/internal/runsbrowser"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
@@ -27,6 +28,7 @@ const (
 	modeNewName
 	modeFail
 	modeRuns
+	modeConsolePlace
 )
 
 // Options construct a picker model.
@@ -46,49 +48,53 @@ type Options struct {
 	LaunchRun     func(LaunchRunOpts) LaunchRunHandle
 	AllocateRunID func() string
 	ExportShare   func(entry workflow.WorkflowListEntry) (command string, err error)
+	OpenConsole   func(placement console.Placement) error
 }
 
 // Model is the picker Bubble Tea model.
 type Model struct {
-	entries        []workflow.WorkflowListEntry
-	repoRoot       string
-	config         config.Config
-	width          int
-	height         int
-	load           func(workflow.WorkflowListEntry) (*workflow.Definition, error)
-	copyText       func(string) error
-	env            config.Env
-	editWorkflow   func(path, name string) workflow.ValidateResult
-	openURL        func(string) error
-	notify         func(title string, body ...string) error
-	launchRun      func(LaunchRunOpts) LaunchRunHandle
-	allocateRunID  func() string
-	exportShare    func(entry workflow.WorkflowListEntry) (command string, err error)
-	mode           mode
-	filter         string
-	cursor         int
-	offset         int
-	savedFilter    string
-	status         string
-	session        *workflow.InputSession
-	prompt         *workflow.InputPrompt
-	promptValue    string
-	choiceOpts     []string
-	custom         bool
-	queue          []workflow.InputSpec
-	delete         DeleteState
-	quit           bool
-	consent        string
-	newerRelease   bool
-	stopResolve    context.CancelFunc
-	resolveGen     uint64
-	runs           runsbrowser.Model
-	launchRunID    string
-	launchDetach   func()
-	launchAcks     <-chan string
-	launchSettled  <-chan LaunchSettled
-	launchProgress <-chan string
-	pendingDef     *workflow.Definition
+	entries              []workflow.WorkflowListEntry
+	repoRoot             string
+	config               config.Config
+	width                int
+	height               int
+	load                 func(workflow.WorkflowListEntry) (*workflow.Definition, error)
+	copyText             func(string) error
+	env                  config.Env
+	editWorkflow         func(path, name string) workflow.ValidateResult
+	openURL              func(string) error
+	notify               func(title string, body ...string) error
+	launchRun            func(LaunchRunOpts) LaunchRunHandle
+	allocateRunID        func() string
+	exportShare          func(entry workflow.WorkflowListEntry) (command string, err error)
+	mode                 mode
+	filter               string
+	cursor               int
+	offset               int
+	savedFilter          string
+	status               string
+	session              *workflow.InputSession
+	prompt               *workflow.InputPrompt
+	promptValue          string
+	choiceOpts           []string
+	custom               bool
+	queue                []workflow.InputSpec
+	delete               DeleteState
+	quit                 bool
+	consent              string
+	newerRelease         bool
+	stopResolve          context.CancelFunc
+	resolveGen           uint64
+	runs                 runsbrowser.Model
+	launchRunID          string
+	launchDetach         func()
+	launchAcks           <-chan string
+	launchSettled        <-chan LaunchSettled
+	launchProgress       <-chan string
+	pendingDef           *workflow.Definition
+	openConsole          func(console.Placement) error
+	lastConsolePlacement console.Placement
+	consolePlaceCursor   int
 }
 
 type currentResolvedMsg struct {
@@ -139,6 +145,7 @@ func New(opts Options) Model {
 		launchRun:     opts.LaunchRun,
 		allocateRunID: opts.AllocateRunID,
 		exportShare:   opts.ExportShare,
+		openConsole:   opts.OpenConsole,
 	}
 }
 
@@ -227,6 +234,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleInputText(msg)
 	case modeInput:
 		return m.handleInput(msg)
+	case modeConsolePlace:
+		return m.handleConsolePlace(msg)
 	case modeFail:
 		if key == "enter" || key == "esc" {
 			m.mode = modeList
@@ -351,6 +360,8 @@ func (m Model) applyPaletteAction(action *PaletteAction) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "share":
 		return m.applyShareAction(action.Entry)
+	case "console":
+		return m.beginConsolePlacement()
 	default:
 		m.mode = modeList
 		m.filter = m.savedFilter

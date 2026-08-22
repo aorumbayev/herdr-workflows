@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
+	"github.com/aorumbayev/herdr-workflows/internal/console"
 	"github.com/aorumbayev/herdr-workflows/internal/engine"
 	"github.com/aorumbayev/herdr-workflows/internal/history"
 	"github.com/aorumbayev/herdr-workflows/internal/host"
@@ -124,6 +125,13 @@ func buildPickerScreenOpts(app config.AppContext, entries []workflow.WorkflowLis
 				Settled:  settled,
 				Progress: progress,
 			}
+		},
+		OpenConsole: func(placement console.Placement) error {
+			env := map[string]string{"HERDR_WORKFLOWS_REPO_ROOT": repoRoot}
+			if v := os.Getenv("HERDR_PLUGIN_CONTEXT_JSON"); v != "" {
+				env["HERDR_PLUGIN_CONTEXT_JSON"] = v
+			}
+			return host.PluginPaneOpenConsole(env, string(placement))
 		},
 	}
 }

@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
+	"github.com/aorumbayev/herdr-workflows/internal/console"
 	"github.com/aorumbayev/herdr-workflows/internal/update"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
@@ -26,6 +27,7 @@ type ScreenOpts struct {
 	LaunchRun          func(LaunchRunOpts) LaunchRunHandle
 	AllocateRunID      func() string
 	ExportShare        func(entry workflow.WorkflowListEntry) (command string, err error)
+	OpenConsole        func(placement console.Placement) error
 }
 
 // PrepareScreen changes the working directory and builds a picker model from ScreenOpts hooks.
@@ -48,6 +50,7 @@ func PrepareScreen(opts ScreenOpts) (Model, error) {
 		LaunchRun:     opts.LaunchRun,
 		AllocateRunID: opts.AllocateRunID,
 		ExportShare:   opts.ExportShare,
+		OpenConsole:   opts.OpenConsole,
 	})
 }
 
