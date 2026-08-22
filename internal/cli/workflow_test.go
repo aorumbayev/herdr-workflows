@@ -424,3 +424,67 @@ func TestUpdateHelp(t *testing.T) {
 		t.Fatalf("stdout = %q", got.stdout)
 	}
 }
+
+func TestWorkflowValidateOKAndFail(t *testing.T) {
+	root := t.TempDir()
+	okPath := filepath.Join(root, "ok.yaml")
+	if err := os.WriteFile(okPath, []byte("version: v1alpha1\nsteps:\n  - run: [echo, hi]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := runCLI([]string{"workflow", "validate", okPath, "ok"}, root, map[string]string{
+		"HERDR_WORKFLOWS_REPO_ROOT": root,
+	}, "")
+	if got.code != 0 {
+		t.Fatalf("ok code = %d stderr = %q stdout = %q", got.code, got.stderr, got.stdout)
+	}
+	if strings.TrimSpace(got.stdout) != `{"ok":true}` {
+		t.Fatalf("ok stdout = %q", got.stdout)
+	}
+
+	badPath := filepath.Join(root, "bad.yaml")
+	if err := os.WriteFile(badPath, []byte("version: v1alpha1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bad := runCLI([]string{"workflow", "validate", badPath}, root, map[string]string{
+		"HERDR_WORKFLOWS_REPO_ROOT": root,
+	}, "")
+	if bad.code != 1 {
+		t.Fatalf("bad code = %d stdout = %q", bad.code, bad.stdout)
+	}
+	if !strings.Contains(bad.stdout, `"ok":false`) || !strings.Contains(bad.stdout, `"error"`) {
+		t.Fatalf("bad stdout = %q", bad.stdout)
+	}
+	if !strings.Contains(strings.ToLower(bad.stdout), "steps") {
+		t.Fatalf("bad stdout missing steps error: %q", bad.stdout)
+	}
+}
+
+func TestWorkflowValidateDefaultsNameFromBasename(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "from-file.yaml")
+	if err := os.WriteFile(path, []byte("version: v1alpha1\nsteps:\n  - run: [echo, hi]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := runCLI([]string{"workflow", "validate", path}, root, map[string]string{
+		"HERDR_WORKFLOWS_REPO_ROOT": root,
+	}, "")
+	if got.code != 0 {
+		t.Fatalf("code = %d stderr = %q stdout = %q", got.code, got.stderr, got.stdout)
+	}
+	if strings.TrimSpace(got.stdout) != `{"ok":true}` {
+		t.Fatalf("stdout = %q", got.stdout)
+	}
+}
+
+func TestWorkflowValidateMissingFile(t *testing.T) {
+	root := t.TempDir()
+	got := runCLI([]string{"workflow", "validate", filepath.Join(root, "missing.yaml")}, root, map[string]string{
+		"HERDR_WORKFLOWS_REPO_ROOT": root,
+	}, "")
+	if got.code != 1 {
+		t.Fatalf("code = %d", got.code)
+	}
+	if !strings.Contains(got.stdout, `"ok":false`) {
+		t.Fatalf("stdout = %q", got.stdout)
+	}
+}

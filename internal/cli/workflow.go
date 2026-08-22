@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
@@ -94,6 +95,44 @@ func runWorkflowImport(cmd *cobra.Command, args []string) error {
 		if _, err := fmt.Fprintf(out, "wrote %s\n", row.Path); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func runWorkflowValidate(cmd *cobra.Command, args []string) error {
+	path := args[0]
+	name := ""
+	if len(args) > 1 {
+		name = args[1]
+	}
+	if name == "" {
+		base := filepath.Base(path)
+		name = strings.TrimSuffix(base, filepath.Ext(base))
+	}
+	repoRoot := os.Getenv("HERDR_WORKFLOWS_REPO_ROOT")
+	if repoRoot == "" {
+		wd, wdErr := os.Getwd()
+		if wdErr != nil {
+			return writeValidateJSON(cmd.OutOrStdout(), false, wdErr.Error())
+		}
+		repoRoot = config.ResolveRepoRoot(wd)
+	}
+	result := workflow.ValidateFile(path, name, repoRoot)
+	return writeValidateJSON(cmd.OutOrStdout(), result.OK, result.Error)
+}
+
+func writeValidateJSON(out io.Writer, ok bool, errMsg string) error {
+	payload := map[string]any{"ok": ok}
+	if !ok {
+		payload["error"] = errMsg
+	}
+	enc := json.NewEncoder(out)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(payload); err != nil {
+		return err
+	}
+	if !ok {
+		return &exitCodeError{code: 1, msg: errMsg}
 	}
 	return nil
 }
