@@ -291,11 +291,11 @@ The Runs filter MUST match case-insensitively against workflow title and name, r
 - **THEN** matching rows remain selectable even though detail lookup uses the complete UUID
 
 ### Requirement: Every selected run has a compact detail view
-Enter on any durable run row MUST replace the list with a scrollable ordered step view. Running detail MUST identify the persisted active step, heartbeat-defined state, and elapsed time. Successful detail MUST show every recorded completed or skipped step. Failed detail MUST show recorded outcomes, a known remaining count, and the bounded failure explanation. It MUST NOT invent names for steps that did not start. Nested workflow outcomes MUST remain grouped under one parent wrapper. Interrupted, stale, and unavailable-history detail MUST state their distinct condition. `w` MUST hand the complete run UUID to the authenticated workbench route. Escape MUST return to the Runs root without dismissing the picker.
+Enter on any durable run row MUST replace the list with a scrollable ordered step view. Running detail MUST identify the persisted active step, heartbeat-defined state, and elapsed time. Successful detail MUST show every recorded completed or skipped step. Failed detail MUST show recorded outcomes, a known remaining count, and the bounded failure explanation. It MUST NOT invent names for steps that did not start. Nested workflow outcomes MUST remain grouped under one parent wrapper. Interrupted, stale, and unavailable-history detail MUST state their distinct condition. Escape MUST return to the Runs root without dismissing the picker.
 
 #### Scenario: Inspect a successful run
 - **WHEN** the user presses Enter on a successful four-step run
-- **THEN** detail shows all four outcomes and offers `w` for the workbench
+- **THEN** detail shows all four outcomes
 
 #### Scenario: Inspect an active run
 - **WHEN** the user presses Enter on a running run
@@ -308,10 +308,6 @@ Enter on any durable run row MUST replace the list with a scrollable ordered ste
 #### Scenario: Return from detail
 - **WHEN** run detail is active and the user presses Escape
 - **THEN** the prior Runs selection and filter return
-
-#### Scenario: Workbench handoff fails
-- **WHEN** `w` cannot launch the authenticated workbench route
-- **THEN** detail remains open and reports a width-bounded handoff error
 
 ### Requirement: Run-history empty states identify the remedy
 The picker MUST distinguish no machine history, no runs in Current, and no filter matches. When Current is empty but All has runs, the empty state MUST identify `Ctrl+G` as the way to view them. A filter miss MUST keep the filter visible. No empty state MUST claim that a stale run failed.
@@ -337,7 +333,7 @@ After the final input is accepted, the picker MUST allocate a full run UUID, lau
 
 #### Scenario: Child cannot record history
 - **WHEN** the child acknowledges that private history storage is unavailable
-- **THEN** the open detail identifies unavailable history, continues attached progress observation, does not claim a durable record, and does not offer a workbench deep link for that identity
+- **THEN** the open detail identifies unavailable history, continues attached progress observation, and does not claim a durable record
 
 #### Scenario: Child fails before claim
 - **WHEN** the detached child exits without acknowledging a matching snapshot claim

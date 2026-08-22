@@ -84,7 +84,6 @@ Workflows live in `.hwf/workflows/` for one repo, or `~/.hwf/workflows/` for eve
 | ---------------- | -------------------------------------------------------------------------------------- |
 | `prefix+k`       | Pick and run a workflow. `Ctrl+K` opens the actions palette                            |
 | `hwf run <name>` | Run from a terminal or a script, with `--input name=value`                             |
-| `hwf web`        | Build, edit, share, and import workflows. Manage configuration and inspect run history |
 | `hwf update`     | Install the latest published release                                                   |
 | `hwf help`       | List every command                                                                     |
 
@@ -111,7 +110,7 @@ Set up the herdr-workflows toolkit so you can build workflows for me:
 2. Read the bundled authoring skill with `hwf skills show herdr-workflow-create` and follow
    the authoring workflow it describes.
 3. In this repo: run `hwf init` if .hwf/config.yaml is missing, then start the workbench in
-   the background with `hwf web --no-open` and give me the URL it prints.
+   validate drafts with `hwf workflow validate` (or the skill `scripts/validate.sh`).
 4. Build a small test workflow — one `run: [git, status, --short]` step — save it, send me
    <url>#w=repo:<name>, and confirm the canvas draws it. Then interview me for the real one.
 ```

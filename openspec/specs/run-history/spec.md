@@ -41,15 +41,15 @@ A non-terminal snapshot MUST project as active while its heartbeat is less than 
 - **THEN** it projects as active again
 
 ### Requirement: Current scope is one exact checkout
-Current scope MUST include only snapshots whose canonical checkout root equals the active workbench or picker checkout root. It MUST exclude sibling worktrees, other clones, and repository-family matches. All scope MAY include retained records from every checkout and MUST be an explicit temporary selection.
+Current scope MUST include only snapshots whose canonical checkout root equals the active picker checkout root. It MUST exclude sibling worktrees, other clones, and repository-family matches. All scope MAY include retained records from every checkout and MUST be an explicit temporary selection.
 
 #### Scenario: Sibling worktree has runs
 - **WHEN** two worktrees share Git history but have different canonical roots
 - **THEN** Current in either worktree includes only its exact-root runs
 
-#### Scenario: Return to the workbench
-- **WHEN** a user reloads the workbench after selecting All
-- **THEN** Location returns to the current checkout
+#### Scenario: Picker returns to Current
+- **WHEN** a user leaves All scope in the Runs browser
+- **THEN** matching returns to the current checkout root
 
 ### Requirement: Step history records dispatch outcomes
 Before dispatch the runner MUST persist the current step. After an outcome it MUST append an ordered record and clear the current step. Outcomes MUST distinguish skipped, succeeded, failed-and-continued, launched, hard failed, and coordination interrupted. A successful outcome whose action result reported omitted older terminal rows MUST persist `truncated: true`, and detail projection MUST present that flag with the step outcome. Recovery MUST be identified by phase. Nested records (workflow path longer than the entry path) MUST carry a positive `parent_ordinal` for the invoking step. Top-level entry records MUST omit `parent_ordinal`. Snapshots that omit or invent that identity for nested records MUST be rejected. Detail projection MUST group nested outcomes only under the matching workflow wrapper via `parent_ordinal` and MUST NOT attach nested outcomes by path alone. The projection MUST NOT invent identities for steps that did not start. it MAY report a known remaining count.
@@ -113,7 +113,7 @@ List data MUST contain only allowlisted scalar facts and safe labels. It MUST ex
 - **THEN** that text does not make the run match
 
 ### Requirement: Run storage and responses remain private
-The run-history directory and files MUST pass the existing private credential-store ownership and permission assertions. Authenticated workbench page, list, and detail responses MUST include `Cache-Control: no-store`, matching the workbench rule that authenticated JSON is not stored by caches. A permission mismatch MUST make history unavailable rather than weaken access checks. When the state root or runs directory is a directory with permissive mode but no entries, the runner MUST tighten it to private (0700) and proceed. A non-empty permissive state root or runs directory MUST make history unavailable.
+The run-history directory and files MUST pass the existing private credential-store ownership and permission assertions. A permission mismatch MUST make history unavailable rather than weaken access checks. When the state root or runs directory is a directory with permissive mode but no entries, the runner MUST tighten it to private (0700) and proceed. A non-empty permissive state root or runs directory MUST make history unavailable.
 
 #### Scenario: Run directory is group-readable
 - **WHEN** a non-empty run-history state root has unsafe permissions

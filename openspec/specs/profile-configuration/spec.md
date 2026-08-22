@@ -44,7 +44,7 @@ Profile inputs MUST list merged profile names in deterministic order. Defaults a
 - **THEN** the runner captures capped stdout as `context.transcript` and writes the run-owned transcript file
 
 ### Requirement: Workflow files are reviewed executable code
-Repo workflows MUST carry the same trust as the repository's own scripts. Imported global workflows MUST display full YAML and require explicit confirmation before writing. Merely opening a repository MUST never execute a workflow. Picker and workbench MUST identify repo/global provenance. Import and editing surfaces MUST highlight run actions, transcript references, and sensitive Herdr actions. Neither surface MUST claim per-run transcript confirmation or a sandbox.
+Repo workflows MUST carry the same trust as the repository's own scripts. Imported global workflows MUST display full YAML and require explicit confirmation before writing. Merely opening a repository MUST never execute a workflow. The picker and CLI MUST identify repo/global provenance. Import and editing surfaces MUST highlight run actions, transcript references, and sensitive Herdr actions. Neither surface MUST claim per-run transcript confirmation or a sandbox.
 
 #### Scenario: Import with transcript access
 - **WHEN** an imported workflow references `context.transcript`
