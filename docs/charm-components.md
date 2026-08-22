@@ -37,7 +37,7 @@ This cycle does not add `bubbles` or `huh`. Unused modules violate YAGNI.
 | Delete confirm y/n | `huh/v2` Confirm | v2.0.3 | keep-custom | Confirm does not match bare y/n/esc and `DeleteConfirmHint` ASCII chrome. | `TestChromeStringsAreSingleColumnASCII` |
 | Collected-answers truncation | `bubbles/v2` | v2.2.0 | keep-custom | No `chosen: name=value` join truncated with ASCII ellipsis. Uses `tui.Truncate`. | `TestTruncateEllipsisAtMax` |
 | Viewport height pad | `bubbletea/v2` | v2.0.9 | keep-custom | Bubble Tea does not clear unused TTY rows after a shorter frame. `PadHeight` appends blank lines to the prior frame height. | `TestPadHeight` |
-| Runs detail scroll | `bubbles/v2` viewport | v2.2.0 | keep-custom | `viewport.Model` brings scrollbars, mouse, and soft-wrap chrome. Runs detail needs a fixed ASCII window over pre-wrapped lines with clamped offset and no thumb. | `TestScrollDetailLines` |
+| Runs detail scroll | `bubbles/v2` viewport | v2.1.1 | keep-custom | `viewport.Model` has no scrollbar chrome and keeps `SoftWrap` off by default. Runs detail still scrolls a fixed ASCII window over pre-wrapped lines with clamped offset without importing bubbles. | `TestScrollDetailLines` |
 
 Machine-readable copy lives in `tui.CharmVerdicts()`.
 
@@ -113,4 +113,4 @@ After a shorter frame, Bubble Tea leaves prior TTY rows on screen. `PadHeight` a
 
 ### Runs detail scroll
 
-Runs detail scrolls a fixed ASCII window over lines already wrapped for content width. `bubbles/v2` `viewport.Model` adds scrollbar, mouse, and soft-wrap behavior the product does not want. Keep `ScrollDetailLines` in the runs browser.
+Runs detail scrolls a fixed ASCII window over lines already wrapped for content width. `bubbles/v2` `viewport.Model` has no scrollbar chrome and keeps `SoftWrap` off by default. The product still owns clamped offset scrolling over pre-wrapped lines without importing bubbles. Keep `ScrollDetailLines` in the runs browser.

@@ -163,9 +163,9 @@ func CharmVerdicts() []CharmVerdict {
 		{
 			Mechanism:         "runs-detail-scroll",
 			CandidateModule:   bubbles,
-			CandidateVersion:  bubblesV,
+			CandidateVersion:  "v2.1.1",
 			Decision:          "keep-custom",
-			MissingCapability: "bubbles viewport.Model brings scrollbars, mouse, and soft-wrap chrome. Runs detail needs a fixed ASCII window over pre-wrapped lines with clamped offset and no thumb.",
+			MissingCapability: "viewport.Model has no scrollbar chrome and keeps SoftWrap off by default. Runs detail still scrolls a fixed ASCII window over pre-wrapped lines with clamped offset without importing bubbles.",
 			Test:              "TestScrollDetailLines",
 		},
 	}
