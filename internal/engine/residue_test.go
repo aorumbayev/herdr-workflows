@@ -3,8 +3,8 @@ package engine_test
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -22,12 +22,11 @@ func residueSrc(t *testing.T, rel string) []byte {
 	return raw
 }
 
-func TestNoShouldRetireOnFileResidue(t *testing.T) {
-	src := residueSrc(t, "internal/engine/launch.go")
-	if regexp.MustCompile(`\bShouldRetireOnFile\b`).Match(src) {
-		t.Fatal("ShouldRetireOnFile must not exist (tests-only; RetireOnCodeChange never filters paths)")
-	}
-	if regexp.MustCompile(`\bservedSourceRe\b`).Match(src) {
-		t.Fatal("servedSourceRe must not exist after ShouldRetireOnFile deletion")
+func TestNoCodeWatchResidue(t *testing.T) {
+	src := string(residueSrc(t, "internal/engine/launch.go"))
+	for _, name := range []string{"ShouldRetireOnFile", "servedSourceRe", "RetireOnCodeChange", "CodeWatchPath"} {
+		if strings.Contains(src, name) {
+			t.Fatalf("%s must not exist (watch API deleted until a real watcher lands)", name)
+		}
 	}
 }

@@ -175,7 +175,7 @@ func (m Model) applyLaunchAck(msg launchAckMsg) (tea.Model, tea.Cmd) {
 			ID:       id,
 			Workflow: title,
 			Blocks: []history.Block{{
-				Kind: "head", Status: "RUNNING", Title: title, DisplayID: shortRunID(id),
+				Kind: "head", Status: "RUNNING", Title: title, DisplayID: history.DisplayRunID(id),
 			}},
 		})
 	case "unavailable":
@@ -272,11 +272,4 @@ func (m *Model) detachLaunch() {
 	m.launchAcks = nil
 	m.launchSettled = nil
 	m.launchProgress = nil
-}
-
-func shortRunID(id string) string {
-	if len(id) >= 8 {
-		return id[:8]
-	}
-	return id
 }

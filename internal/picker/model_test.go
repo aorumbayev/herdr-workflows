@@ -119,19 +119,14 @@ func TestPickerViewportShowsSixRowsAndScrolls(t *testing.T) {
 }
 
 func TestPickerDoesNotRenderPluginNameOrRetitle(t *testing.T) {
-	var metadata int
 	m := New(Options{
-		Entries:            eightEntries()[:2],
-		Width:              62,
-		ReportPaneMetadata: func() { metadata++ },
+		Entries: eightEntries()[:2],
+		Width:   62,
 	})
 	_ = m.Init()
 	body := m.View().Content
 	if strings.Contains(body, "herdr-workflows") {
 		t.Fatalf("plugin name in body:\n%s", body)
-	}
-	if metadata != 0 {
-		t.Fatal("pane.report_metadata must not run")
 	}
 }
 

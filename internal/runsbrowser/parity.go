@@ -8,7 +8,6 @@ type ParitySurface struct {
 	Kind         string
 	GoSurface    string
 	CoveringTest string
-	Gap          string
 }
 
 // ParityBaseline is the runs-browser comparison matrix for Cycle 5 slice 1.

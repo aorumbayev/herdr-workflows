@@ -198,7 +198,6 @@ func runWeb(cmd *cobra.Command, args []string) error {
 	}
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	engine.RetireOnCodeChange(shutdown, nil)
 	go func() {
 		<-sigCh
 		shutdown()

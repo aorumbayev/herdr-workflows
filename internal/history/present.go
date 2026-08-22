@@ -78,7 +78,7 @@ func ToDetail(snap Snapshot, now time.Time) Detail {
 	d := Detail{
 		Kind:               "snapshot",
 		ID:                 snap.ID,
-		DisplayID:          displayRunID(snap.ID),
+		DisplayID:          DisplayRunID(snap.ID),
 		Workflow:           snap.Workflow,
 		Title:              snap.Title,
 		Source:             snap.Source,

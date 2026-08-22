@@ -31,12 +31,6 @@ type LaunchPayload struct {
 	RunID   string              `json:"runId,omitempty"`
 }
 
-// CodeWatchPath is the optional filesystem watch target for RetireOnCodeChange.
-type CodeWatchPath struct {
-	Path      string
-	Recursive bool
-}
-
 // SpawnOpts configures the injectable process seam used by detached launchers.
 type SpawnOpts struct {
 	Env    map[string]string
@@ -200,16 +194,6 @@ func BuildIdentity(entry, execPath string) (string, bool) {
 		return "", false
 	}
 	return fmt.Sprintf("%d:%d:%d", st.Ino, fi.ModTime().UnixMilli(), fi.Size()), true
-}
-
-// RetireOnCodeChange watches served sources; a nil path is a no-op disposer.
-func RetireOnCodeChange(onRetire func(), path *CodeWatchPath) (stop func()) {
-	_ = onRetire
-	if path == nil {
-		return func() {}
-	}
-	// context: fsnotify is out of scope for this slice; production watch lands later.
-	return func() {}
 }
 
 func selfArgv(executable, command string, args ...string) []string {

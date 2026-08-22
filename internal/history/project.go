@@ -23,7 +23,7 @@ func ToSummary(snap Snapshot, now time.Time) Summary {
 	status := ProjectStatus(snap, now)
 	item := Summary{
 		ID:           snap.ID,
-		DisplayID:    displayRunID(snap.ID),
+		DisplayID:    DisplayRunID(snap.ID),
 		Workflow:     snap.Workflow,
 		Title:        snap.Title,
 		Source:       snap.Source,
@@ -53,7 +53,7 @@ func ToSummary(snap Snapshot, now time.Time) Summary {
 	return item
 }
 
-func displayRunID(id string) string {
+func DisplayRunID(id string) string {
 	if len(id) < 8 {
 		return id
 	}

@@ -272,18 +272,6 @@ func TestBuildIdentityChangesWithInstall(t *testing.T) {
 	}
 }
 
-func TestRetireOnCodeChangeNoop(t *testing.T) {
-	retired := 0
-	stop := RetireOnCodeChange(func() { retired++ }, nil)
-	if retired != 0 {
-		t.Fatalf("retired = %d before stop, want 0", retired)
-	}
-	stop()
-	if retired != 0 {
-		t.Fatalf("retired = %d after stop, want 0", retired)
-	}
-}
-
 func TestLaunchDetachedRunPinsCallerEnv(t *testing.T) {
 	seen := &spawnSeen{}
 	_ = LaunchDetachedRun(LaunchRunRequest{

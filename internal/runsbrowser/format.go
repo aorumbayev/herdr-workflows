@@ -174,7 +174,7 @@ func DetailLines(view DetailView, width int) []string {
 		}
 		return lines
 	case "local-failure":
-		head := strings.Join([]string{"LAUNCH FAILED", view.Workflow, shortID(view.ID)}, tui.ChromeSep)
+		head := strings.Join([]string{"LAUNCH FAILED", view.Workflow, history.DisplayRunID(view.ID)}, tui.ChromeSep)
 		return []string{tui.Truncate(head, width), asciiGlyphs(tui.Truncate(view.Message, width))}
 	case "history-unavailable":
 		status := "RUNNING"
@@ -203,18 +203,11 @@ func DetailLines(view DetailView, width int) []string {
 }
 
 func formatStartingDetail(workflow, id string, width int) []string {
-	head := strings.Join([]string{"STARTING", workflow, shortID(id)}, tui.ChromeSep)
+	head := strings.Join([]string{"STARTING", workflow, history.DisplayRunID(id)}, tui.ChromeSep)
 	return []string{
 		tui.Truncate(head, width),
 		tui.Truncate("claiming run history...", width),
 	}
-}
-
-func shortID(id string) string {
-	if len(id) >= 8 {
-		return id[:8]
-	}
-	return id
 }
 
 func asciiGlyphs(line string) string {

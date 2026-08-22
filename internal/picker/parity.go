@@ -8,7 +8,6 @@ type ParitySurface struct {
 	Kind         string
 	GoSurface    string
 	CoveringTest string
-	Gap          string
 }
 
 // ParityBaseline is the picker comparison matrix for Cycle 5 slice 1.
@@ -17,7 +16,7 @@ func ParityBaseline() []ParitySurface {
 	const actions = "picker-workbench-actions"
 	return []ParitySurface{
 		{Spec: presentation, Requirement: "The picker names itself once", Scenario: "Title appears only in the pane label", Kind: "view", GoSurface: "Model.renderList", CoveringTest: "TestPickerDoesNotRenderPluginNameOrRetitle"},
-		{Spec: presentation, Requirement: "The picker names itself once", Scenario: "No runtime retitling", Kind: "action", GoSurface: "New/Options.ReportPaneMetadata", CoveringTest: "TestPickerDoesNotRenderPluginNameOrRetitle"},
+		{Spec: presentation, Requirement: "The picker names itself once", Scenario: "No runtime retitling", Kind: "action", GoSurface: "New/View", CoveringTest: "TestPickerDoesNotRenderPluginNameOrRetitle"},
 		{Spec: presentation, Requirement: "Fixed visible list viewport", Scenario: "More workflows than the viewport", Kind: "view", GoSurface: "ListViewport/Model.renderList", CoveringTest: "TestPickerViewportShowsSixRowsAndScrolls"},
 		{Spec: presentation, Requirement: "Fixed visible list viewport", Scenario: "Cursor moves beyond the viewport", Kind: "transition", GoSurface: "Model.clampCursor", CoveringTest: "TestPickerViewportShowsSixRowsAndScrolls"},
 		{Spec: presentation, Requirement: "Fixed visible list viewport", Scenario: "Fewer matches than the viewport", Kind: "view", GoSurface: "Model.renderList blank pad", CoveringTest: "TestParityFewerMatchesPadBlankRows"},
