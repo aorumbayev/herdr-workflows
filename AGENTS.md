@@ -31,7 +31,7 @@ Go packages under `internal/` and `embed/` (workbench HTML and field-model bytes
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `main.go`                                    | plugin binary entry                                                                                           |
 | `internal/cli/`                              | Cobra commands, terminal I/O, `hwf init` / `setup`                                                            |
-| `internal/skills/`                           | bundled agent skills embedded as text, `hwf skills` registry and show formatting                              |
+| `embed/` + `internal/cli/`                   | embedded skill catalog (`assets`) and `hwf skills` registry/show formatting                                   |
 | `internal/update/`                           | GitHub release check, managed-plugin `hwf update`, and distribution artifact names/checksums |
 | `internal/picker/`                           | picker TUI, workflow rows, ctrl+k palette, update indicator, Parity Baseline                                  |
 | `internal/runsbrowser/`                      | runs browser TUI, list/detail, run-history presentation, Parity Baseline                                      |

@@ -148,11 +148,11 @@ Every glyph the picker renders MUST have unambiguous single-column width in ever
 
 #### Scenario: Charm flush-left filter without slash prefix
 - **WHEN** the Workflow browser shows an empty or typed filter row
-- **THEN** the filter text is flush-left ASCII with the `filter workflows...` placeholder (or the typed text) and MUST NOT use an OpenTUI `/ ` prefix or row indent for that field
+- **THEN** the filter text is flush-left ASCII with the `filter workflows...` placeholder (or the typed text) and MUST NOT use a `/ ` prefix or row indent for that field
 
 #### Scenario: ASCII greater-than cursor on choice option rows
 - **WHEN** a choice input shows its option list
-- **THEN** the selected option uses an ASCII `>` cursor prefix, idle options use a two-space prefix, each option row keeps a right-aligned location column, and the list MUST NOT use an OpenTUI `/ ` prefix or box or arrow glyphs
+- **THEN** the selected option uses an ASCII `>` cursor prefix, idle options use a two-space prefix, each option row keeps a right-aligned location column, and the list MUST NOT use a `/ ` prefix or box or arrow glyphs
 
 ### Requirement: Input navigation preserves valid answers
 Escape from an input prompt MUST move to the previous active input and restore its collected value. Escape from the first active input MUST return to the workflow list. Changing an earlier value MUST discard all later answers and resolved dynamic-choice domains before active inputs are recalculated. Returning to the list MUST clear the collection. A terminal run result MUST remain in run detail until the user presses Escape, which MUST return to the Runs root without dismissing the picker.
@@ -276,7 +276,7 @@ The Runs root MUST reuse the fixed six-row viewport, selected-detail area, inset
 - **THEN** its row contains the text `INTERRUPTED` or a width-bounded textual abbreviation in addition to any color
 
 ### Requirement: Run filtering and scope are keyboard safe
-The Runs filter MUST match case-insensitively against workflow title and name, run ID, status, safe step labels, and allowlisted failure facts. It MUST NOT match private failure explanation text. Runs MUST default to the exact current checkout root. `Ctrl+G` MUST toggle Current and All without entering filter text. The stdin pre-handler MUST preserve raw `0x07` for OpenTUI. The active scope MUST be visible without consuming a list row. Printable `g` MUST remain filter text.
+The Runs filter MUST match case-insensitively against workflow title and name, run ID, status, safe step labels, and allowlisted failure facts. It MUST NOT match private failure explanation text. Runs MUST default to the exact current checkout root. `Ctrl+G` MUST toggle Current and All without entering filter text. The stdin pre-handler MUST preserve raw `0x07` for Ctrl+G. The active scope MUST be visible without consuming a list row. Printable `g` MUST remain filter text.
 
 #### Scenario: Toggle all worktrees
 - **WHEN** the Runs root is scoped to Current and the user presses `Ctrl+G`
