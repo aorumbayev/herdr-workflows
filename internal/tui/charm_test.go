@@ -23,6 +23,8 @@ func TestCharmVerdicts(t *testing.T) {
 		"palette-body",
 		"delete-confirm-yn",
 		"collected-answers-truncation",
+		"viewport-height-pad",
+		"runs-detail-scroll",
 	}
 	got := map[string]CharmVerdict{}
 	for _, v := range CharmVerdicts() {

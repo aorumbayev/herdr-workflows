@@ -55,6 +55,35 @@ func PadHeight(s string, height int) string {
 	return s + strings.Repeat("\n", height-n)
 }
 
+// ListViewport is the fixed six-row Select height shared by picker and runs browser.
+const ListViewport = 6
+
+// ContentWidth is the inner chrome width for a popup of the given terminal columns.
+func ContentWidth(width int) int {
+	return max(0, width-2)
+}
+
+// ClampListWindow keeps cursor inside [0, n) and scrolls offset so cursor stays
+// visible inside a viewport-tall window. Empty lists reset both to 0.
+func ClampListWindow(cursor, offset, n, viewport int) (int, int) {
+	if n <= 0 {
+		return 0, 0
+	}
+	if cursor >= n {
+		cursor = n - 1
+	}
+	if cursor < 0 {
+		cursor = 0
+	}
+	if cursor < offset {
+		offset = cursor
+	}
+	if cursor >= offset+viewport {
+		offset = cursor - viewport + 1
+	}
+	return cursor, offset
+}
+
 func takeColumns(s string, max int) string {
 	if max <= 0 {
 		return ""

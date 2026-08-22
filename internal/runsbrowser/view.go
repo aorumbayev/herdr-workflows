@@ -23,7 +23,7 @@ func (m Model) render() string {
 }
 
 func (m Model) contentWidth() int {
-	return max(0, m.width-2)
+	return tui.ContentWidth(m.width)
 }
 
 func (m Model) renderList() string {

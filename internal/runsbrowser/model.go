@@ -296,24 +296,7 @@ func (m *Model) moveCursor(delta int) {
 }
 
 func (m *Model) clampCursor() {
-	n := len(m.state.Items)
-	if n == 0 {
-		m.cursor = 0
-		m.offset = 0
-		return
-	}
-	if m.cursor >= n {
-		m.cursor = n - 1
-	}
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
-	if m.cursor < m.offset {
-		m.offset = m.cursor
-	}
-	if m.cursor >= m.offset+ListViewport {
-		m.offset = m.cursor - ListViewport + 1
-	}
+	m.cursor, m.offset = tui.ClampListWindow(m.cursor, m.offset, len(m.state.Items), ListViewport)
 }
 
 func (m *Model) syncSelectedID() {

@@ -12,7 +12,7 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-const ListViewport = 6
+const ListViewport = tui.ListViewport
 
 type mode int
 
@@ -28,22 +28,21 @@ const (
 
 // Options construct a picker model.
 type Options struct {
-	Entries            []workflow.WorkflowListEntry
-	RepoRoot           string
-	Config             config.Config
-	Width              int
-	Height             int
-	Env                config.Env
-	Chdir              func(string) error
-	LoadWorkflow       func(workflow.WorkflowListEntry) (*workflow.Definition, error)
-	ReportPaneMetadata func()
-	CopyClipboard      func(string) error
-	LaunchWorkbench    func(route string)
-	OpenURL            func(url string) error
-	Notify             func(title string, body ...string) error
-	LaunchRun          func(LaunchRunOpts) LaunchRunHandle
-	AllocateRunID      func() string
-	ExportShare        func(entry workflow.WorkflowListEntry) (command string, err error)
+	Entries         []workflow.WorkflowListEntry
+	RepoRoot        string
+	Config          config.Config
+	Width           int
+	Height          int
+	Env             config.Env
+	Chdir           func(string) error
+	LoadWorkflow    func(workflow.WorkflowListEntry) (*workflow.Definition, error)
+	CopyClipboard   func(string) error
+	LaunchWorkbench func(route string)
+	OpenURL         func(url string) error
+	Notify          func(title string, body ...string) error
+	LaunchRun       func(LaunchRunOpts) LaunchRunHandle
+	AllocateRunID   func() string
+	ExportShare     func(entry workflow.WorkflowListEntry) (command string, err error)
 }
 
 // Model is the picker Bubble Tea model.
@@ -138,7 +137,7 @@ func New(opts Options) Model {
 func (m Model) Init() tea.Cmd { return nil }
 
 func (m Model) contentWidth() int {
-	return max(0, m.width-2)
+	return tui.ContentWidth(m.width)
 }
 
 func (m Model) matched() []ChromeOption {
@@ -156,24 +155,7 @@ func (m Model) selectedEntry() *workflow.WorkflowListEntry {
 }
 
 func (m *Model) clampCursor() {
-	n := len(m.matched())
-	if n == 0 {
-		m.cursor = 0
-		m.offset = 0
-		return
-	}
-	if m.cursor >= n {
-		m.cursor = n - 1
-	}
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
-	if m.cursor < m.offset {
-		m.offset = m.cursor
-	}
-	if m.cursor >= m.offset+ListViewport {
-		m.offset = m.cursor - ListViewport + 1
-	}
+	m.cursor, m.offset = tui.ClampListWindow(m.cursor, m.offset, len(m.matched()), ListViewport)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -477,20 +459,7 @@ func (m *Model) moveChoice(delta int) {
 }
 
 func (m *Model) clampChoice() {
-	n := len(m.choiceRows())
-	if n == 0 {
-		m.cursor, m.offset = 0, 0
-		return
-	}
-	if m.cursor >= n {
-		m.cursor = n - 1
-	}
-	if m.cursor < m.offset {
-		m.offset = m.cursor
-	}
-	if m.cursor >= m.offset+ListViewport {
-		m.offset = m.cursor - ListViewport + 1
-	}
+	m.cursor, m.offset = tui.ClampListWindow(m.cursor, m.offset, len(m.choiceRows()), ListViewport)
 }
 
 func (m Model) choiceRows() []string {
