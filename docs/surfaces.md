@@ -50,7 +50,7 @@ Plain `k` still types into the filter.
 
 Open it from the picker palette with `c`, or with `hwf console`. Placement is `tab`, `beside`, or `below`. The overlay remembers the last choice for the session. `hwf console --placement` takes the same three values.
 
-The console is a full-screen Charm TUI. Tab switches the workflows list and the runs list. Enter on a run opens debug tabs: `1` log, `2` transcript, `3` yaml-at-run. Press `y` to copy `hwf run <name>` for a retry without submitting it.
+The console is a full-screen Charm TUI. Tab switches the workflows list and the runs list. Enter on a workflow opens a read-only diagram of its steps, `when:` edges, and pane targets from the parsed definition. Enter on a run opens debug tabs: `1` log, `2` transcript, `3` yaml-at-run. Press `y` to copy `hwf run <name>` for a retry without submitting it.
 
 ## The CLI
 

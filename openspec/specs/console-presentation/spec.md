@@ -27,3 +27,14 @@ Selecting a run in the console MUST open a detail view with three debug tabs: lo
 #### Scenario: Retry-copy
 - **WHEN** the user presses `y` on a failed run of workflow `alpha`
 - **THEN** the clipboard receives `hwf run alpha`
+
+### Requirement: Workflow diagram projects the parsed definition
+Selecting a workflow in the console MUST open a read-only diagram derived from the parsed definition. The diagram MUST show each step node, each step's `when:` edges, and each step's placement targets. The projection MUST be static for the load. The YAML definition MUST remain the sole source of truth.
+
+#### Scenario: Open diagram from the workflows list
+- **WHEN** the user presses Enter on a valid workflow in the console workflows list
+- **THEN** the diagram shows that workflow's step ids, conditional edges, and pane targets from the parsed definition
+
+#### Scenario: Return from diagram
+- **WHEN** the user presses Escape on the diagram view
+- **THEN** the console returns to the workflows list
