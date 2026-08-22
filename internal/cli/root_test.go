@@ -111,9 +111,6 @@ func TestNoArgsWithoutTTYPrintsHelpOnStderr(t *testing.T) {
 	if !bytes.Contains([]byte(got.stderr), []byte("run")) {
 		t.Fatalf("stderr %q missing run", got.stderr)
 	}
-	if !bytes.Contains([]byte(got.stderr), []byte("web")) {
-		t.Fatalf("stderr %q missing web", got.stderr)
-	}
 	if got.stdout != "" {
 		t.Fatalf("stdout = %q", got.stdout)
 	}
@@ -125,7 +122,7 @@ func TestHelpPrintsRootHelp(t *testing.T) {
 	if got.code != 0 {
 		t.Fatalf("code = %d stderr = %q", got.code, got.stderr)
 	}
-	for _, want := range []string{"Usage:", "Commands:", "run", "web", assets.ManifestDescription(), "Workflow format: v1alpha1"} {
+	for _, want := range []string{"Usage:", "Commands:", "run", "picker", "console", assets.ManifestDescription(), "Workflow format: v1alpha1"} {
 		if !bytes.Contains([]byte(got.stdout), []byte(want)) {
 			t.Fatalf("stdout %q missing %q", got.stdout, want)
 		}

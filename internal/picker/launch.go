@@ -68,11 +68,10 @@ func (m Model) beginLaunch(def *workflow.Definition, values map[string]string, d
 		getenv = os.Getenv
 	}
 	m.runs = runsbrowser.New(runsbrowser.Options{
-		RepoRoot:        m.repoRoot,
-		Width:           m.width,
-		Height:          m.height,
-		Env:             getenv,
-		LaunchWorkbench: m.launchWorkbench,
+		RepoRoot: m.repoRoot,
+		Width:    m.width,
+		Height:   m.height,
+		Env:      getenv,
 	}).OpenLocalDetail(runsbrowser.DetailView{
 		Kind:     "starting",
 		ID:       runID,
@@ -175,7 +174,7 @@ func (m Model) applyLaunchAck(msg launchAckMsg) (tea.Model, tea.Cmd) {
 			ID:       id,
 			Workflow: title,
 			Blocks: []history.Block{{
-				Kind: "head", Status: "RUNNING", Title: title, DisplayID: shortRunID(id),
+				Kind: "head", Status: "RUNNING", Title: title, DisplayID: history.DisplayRunID(id),
 			}},
 		})
 	case "unavailable":
@@ -272,11 +271,4 @@ func (m *Model) detachLaunch() {
 	m.launchAcks = nil
 	m.launchSettled = nil
 	m.launchProgress = nil
-}
-
-func shortRunID(id string) string {
-	if len(id) >= 8 {
-		return id[:8]
-	}
-	return id
 }

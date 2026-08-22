@@ -283,7 +283,7 @@ An agent prompt larger than 16 KiB is written to a file, and the agent is told t
 
 A workflow file is code you're choosing to run. There's no sandbox. A `run:` step can call the whole herdr CLI or socket as you.
 
-Opening a repository never runs a workflow. The picker and workbench label repo or global provenance, and mark commands, transcript references, and sensitive herdr methods. Neither surface claims a per-run confirmation or a sandbox.
+Opening a repository never runs a workflow. The picker and CLI label repo or global provenance, and mark commands, transcript references, and sensitive herdr methods. Neither surface claims a per-run confirmation or a sandbox.
 
 **Denied methods.** Every `server.*`, `plugin.*`, `events.*`, `integration.*`, and `pane.graphics.*` method, plus `session.snapshot`, `popup.close`, `pane.report_agent`, `pane.report_agent_session`, `pane.clear_agent_authority`, `pane.release_agent`, `agent.view.set`, and `agent.view.clear`. Each denial states the rule it protects. Beyond those, only `workspace.*`, `tab.*`, `pane.*`, `worktree.*`, `agent.*`, `layout.*`, `notification.show`, `client.window_title.*`, and `ping` are allowed. Anything newly generated outside them is denied until policy admits it. This is a rail against accidental misuse, not a security boundary.
 

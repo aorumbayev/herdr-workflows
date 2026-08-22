@@ -5,7 +5,7 @@ import (
 	"slices"
 )
 
-// MethodPropSpec describes one herdr method parameter for the workbench catalog.
+// MethodPropSpec describes one herdr method parameter for method docs and skills.
 type MethodPropSpec struct {
 	Kinds      []string `json:"kinds"`
 	Nullable   bool     `json:"nullable"`
@@ -19,7 +19,7 @@ type MethodParamsSpec struct {
 	AdditionalProperties bool                      `json:"additionalProperties"`
 }
 
-// MethodCatalogEntry is one row of the workbench /api/methods table.
+// MethodCatalogEntry is one row of the generated herdr method table.
 type MethodCatalogEntry struct {
 	Method  string           `json:"method"`
 	Allowed bool             `json:"allowed"`
@@ -27,7 +27,7 @@ type MethodCatalogEntry struct {
 	Params  MethodParamsSpec `json:"params"`
 }
 
-// MethodCatalog returns the sorted herdr method table for the workbench.
+// MethodCatalog returns the sorted herdr method table for method docs and skills.
 func MethodCatalog() []MethodCatalogEntry {
 	names := slices.Sorted(maps.Keys(herdrMethods))
 	out := make([]MethodCatalogEntry, len(names))

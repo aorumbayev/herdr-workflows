@@ -22,7 +22,7 @@ func TestBuildPickerOptionsTitleProvenanceAndSensitivity(t *testing.T) {
 		SensitiveMethods: []string{"pane.close"},
 	}
 	options := BuildPickerOptions([]workflow.WorkflowListEntry{entry}, 60)
-	want := "  " + padEndJS("Handover", 47) + " ! " + padStartJS("repo", 7)
+	want := "  " + " " + padEndJS("Handover", 47) + "  !" + padStartJS("repo", 7)
 	if options[0].Name != want {
 		t.Fatalf("row = %q, want %q", options[0].Name, want)
 	}
@@ -40,11 +40,11 @@ func TestFormatPickerRowWarningAndLocationColumns(t *testing.T) {
 	// Ports warning-field, location pad, selected/unselected length, overlong title.
 	warned := FormatPickerRowName("Warned", "repo", true, 60, false)
 	clean := FormatPickerRowName("Clean", "repo", false, 60, false)
-	if warned[49:52] != " ! " {
-		t.Fatalf("warned slice = %q", warned[49:52])
+	if warned[52] != '!' {
+		t.Fatalf("warned marker = %q at col 52", string(warned[52]))
 	}
-	if clean[49:52] != "   " {
-		t.Fatalf("clean slice = %q", clean[49:52])
+	if clean[52] != ' ' {
+		t.Fatalf("clean marker = %q at col 52", string(clean[52]))
 	}
 	if !strings.HasSuffix(warned, "   repo") || !strings.HasSuffix(clean, "   repo") {
 		t.Fatalf("location suffixes: %q %q", warned, clean)
@@ -102,16 +102,14 @@ func TestEntrySensitivityAggregatesFlags(t *testing.T) {
 func TestFormatRuleSpansRowTextField(t *testing.T) {
 	// Ports test/picker/picker.test.ts formatRule.
 	rule := tui.FormatRule(60)
-	if rule != "   "+strings.Repeat("-", 57) || len(rule) != 60 {
+	if rule != "   "+strings.Repeat("-", 54)+"   " || len(rule) != 60 {
 		t.Fatalf("rule(60) = %q", rule)
 	}
-	if tui.FormatRule(10) != "   "+strings.Repeat("-", 7) {
+	if tui.FormatRule(10) != "   "+strings.Repeat("-", 4)+"   " {
 		t.Fatalf("rule(10) = %q", tui.FormatRule(10))
 	}
-	row := FormatPickerRowName("Handoff", "repo", false, 60, false)
-	fieldWidth := len(row) - 2
-	if len(strings.TrimLeft(tui.FormatRule(60), " ")) != fieldWidth {
-		t.Fatalf("rule field %d row field %d", len(strings.TrimLeft(tui.FormatRule(60), " ")), fieldWidth)
+	if strings.Count(rule, "-") != 60-2*tui.RowTextIndent {
+		t.Fatalf("rule dash count = %d", strings.Count(rule, "-"))
 	}
 }
 

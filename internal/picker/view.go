@@ -10,7 +10,7 @@ import (
 )
 
 func (m Model) View() tea.View {
-	return tea.NewView(m.render())
+	return tea.NewView(tui.PadHeight(tui.PadContent(m.render(), m.contentWidth()), m.height))
 }
 
 func (m Model) render() string {
@@ -20,10 +20,14 @@ func (m Model) render() string {
 		body = m.runs.View().Content
 	case modePalette:
 		body = m.renderPalette()
+	case modeConsolePlace:
+		body = m.renderConsolePlace()
 	case modeDelete:
 		body = "Delete " + m.deleteLabel() + "?\n" + tui.DeleteConfirmHint
 	case modeFail:
 		body = m.status + "\n" + tui.FailHint
+	case modeNewName:
+		body = m.renderNewName()
 	case modeInputText:
 		body = m.renderTextPrompt()
 	case modeInput:
@@ -31,7 +35,17 @@ func (m Model) render() string {
 	default:
 		body = m.renderList()
 	}
-	return tui.PadHeight(body, m.height)
+	return body
+}
+
+func (m Model) renderNewName() string {
+	w := m.contentWidth()
+	line := "Workflow name: " + m.promptValue
+	hint := tui.CreateNameHint
+	if m.status != "" {
+		return tui.Truncate(line, w) + "\n" + tui.Truncate(m.status, w) + "\n" + hint
+	}
+	return tui.Truncate(line, w) + "\n" + hint
 }
 
 func (m Model) deleteLabel() string {
@@ -49,11 +63,16 @@ func (m Model) renderList() string {
 	opts := m.matched()
 	w := m.contentWidth()
 	if !HasVisibleEntries(m.entries) {
-		return tui.FormatDetailLines(tui.EmptyCatalogMessage, w) + "\n" + tui.FormatRule(w) + "\n" + tui.FormatListFooter(w, 0, 0, tui.EmptyListHint)
+		parts := []string{tui.FormatDetailBlock(tui.EmptyCatalogMessage, w)}
+		if m.status != "" {
+			parts = append(parts, tui.Truncate(m.status, w))
+		}
+		parts = append(parts, tui.FormatRule(w), tui.FormatListFooter(w, 0, 0, tui.EmptyListHint))
+		return strings.Join(parts, "\n")
 	}
 	filter := m.listFilterRow(w)
 	if len(opts) == 0 {
-		return filter + "\n" + tui.FormatDetailLines("No workflows matching "+m.filter, w) + "\n" + tui.FormatRule(w) + "\n" + tui.FormatListFooter(w, 0, 0, tui.ListHint)
+		return filter + "\n\n" + tui.FormatDetailBlock("No workflows matching "+m.filter, w) + "\n" + tui.FormatRule(w) + "\n" + tui.FormatListFooter(w, 0, 0, tui.ListHint)
 	}
 	end := min(m.offset+ListViewport, len(opts))
 	var rows []string
@@ -75,9 +94,14 @@ func (m Model) renderList() string {
 		rows = append(rows, "")
 	}
 	sel := opts[m.cursor]
-	detail := tui.FormatDetailLines(sel.Description, w)
+	detail := tui.FormatDetailBlock(sel.Description, w)
 	footer := tui.FormatListFooter(w, m.cursor, len(opts), tui.ListHint)
-	return filter + "\n" + strings.Join(rows, "\n") + "\n" + detail + "\n" + tui.FormatRule(w) + "\n" + footer
+	parts := []string{filter, "", strings.Join(rows, "\n"), "", detail}
+	if m.status != "" {
+		parts = append(parts, tui.Truncate(m.status, w))
+	}
+	parts = append(parts, tui.FormatRule(w), footer)
+	return strings.Join(parts, "\n")
 }
 
 func (m Model) listFilterRow(width int) string {
@@ -101,7 +125,7 @@ func (m Model) renderChoice() string {
 	var lines []string
 	end := min(m.offset+ListViewport, len(rows))
 	for i := m.offset; i < end; i++ {
-		lines = append(lines, FormatPickerRowName(rows[i], "repo", false, w, i == m.cursor))
+		lines = append(lines, FormatPickerRowName(rows[i], "", false, w, i == m.cursor))
 	}
 	for len(lines) < ListViewport {
 		lines = append(lines, "")
@@ -117,7 +141,7 @@ func (m Model) renderChoice() string {
 		hint = tui.CustomChoiceHint
 	}
 	footer := tui.FormatListFooter(w, m.cursor, len(rows), hint)
-	parts := []string{strings.Join(lines, "\n")}
+	parts := []string{"", strings.Join(lines, "\n"), ""}
 	if line := m.consentLine(); line != "" {
 		parts = append(parts, line)
 	}

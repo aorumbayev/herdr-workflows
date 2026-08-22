@@ -61,7 +61,7 @@ e.g. `printf %s "kind-$(printf %s "$PANE" | tr -c 'A-Za-z0-9' '-')"`, then pass 
 This skill is installed outside the herdr-workflows checkout, so its `src/`, `docs/` and
 `schemas/` are **not readable** — do not try to read them. Two runtime sources exist instead:
 
-1. The workbench: `GET /api/methods` with the `x-hwf-token` header, on the `hwf web` instance you
+1. The generated method table shipped with this skill (below). Offline inspection:
    already started. It returns `{methods: [{method, allowed, reason?, params:{required, properties}}]}`
    for all 91 known methods. Use it as the authority for **param names**. Use the endpoint when the
    table above omits a method. The table covers every method a workflow normally uses. The selector
@@ -80,7 +80,7 @@ or socket as the current user.
 
 ## Authoring warnings
 
-Import and the workbench flag especially destructive or injectable calls (for example
+Import flags especially destructive or injectable calls (for example
 `pane.close`, `tab.close`, `workspace.close`, `layout.apply`, key/text injection,
 `worktree.create`) even when they are allowlisted.
 

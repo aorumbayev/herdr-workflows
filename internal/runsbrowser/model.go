@@ -2,7 +2,6 @@ package runsbrowser
 
 import (
 	"os"
-	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -21,21 +20,18 @@ const (
 
 // Options construct a runs browser model.
 type Options struct {
-	RepoRoot        string
-	Width           int
-	Height          int
-	Env             config.Env
-	LaunchWorkbench func(route string)
+	RepoRoot string
+	Width    int
+	Height   int
+	Env      config.Env
 }
 
 // Model is the runs browser Bubble Tea model.
 type Model struct {
-	repoRoot        string
-	width           int
-	height          int
-	getenv          config.Env
-	launchWorkbench func(string)
-
+	repoRoot     string
+	width        int
+	height       int
+	getenv       config.Env
 	screen       screen
 	scope        Scope
 	filter       string
@@ -47,7 +43,6 @@ type Model struct {
 	detailScroll int
 	detailGen    *config.Generation
 	refreshGen   *config.Generation
-	handoffErr   string
 }
 
 // SwitchToWorkflowsMsg tells the picker to return to the workflow list.
@@ -66,11 +61,6 @@ type detailLoadedMsg struct {
 	view DetailView
 }
 
-// WorkbenchRoute builds the authenticated workbench hash route for a run id.
-func WorkbenchRoute(id string) string {
-	return "run=" + strings.ToLower(id)
-}
-
 // New builds a list-mode runs browser.
 func New(opts Options) Model {
 	width := opts.Width
@@ -82,15 +72,14 @@ func New(opts Options) Model {
 		getenv = os.Getenv
 	}
 	return Model{
-		repoRoot:        opts.RepoRoot,
-		width:           width,
-		height:          opts.Height,
-		getenv:          getenv,
-		launchWorkbench: opts.LaunchWorkbench,
-		screen:          screenList,
-		scope:           ScopeCurrent,
-		detailGen:       &config.Generation{},
-		refreshGen:      &config.Generation{},
+		repoRoot:   opts.RepoRoot,
+		width:      width,
+		height:     opts.Height,
+		getenv:     getenv,
+		screen:     screenList,
+		scope:      ScopeCurrent,
+		detailGen:  &config.Generation{},
+		refreshGen: &config.Generation{},
 	}
 }
 
@@ -182,7 +171,6 @@ func (m Model) handleDetailKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.detailView = DetailView{}
 		m.detailScroll = 0
 		m.activeRunID = ""
-		m.handoffErr = ""
 		return m, m.refreshCmd(preserve)
 	case "up":
 		m.detailScroll = max(0, m.detailScroll-1)
@@ -190,27 +178,6 @@ func (m Model) handleDetailKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "down":
 		lines := DetailLines(m.detailView, m.contentWidth())
 		_, m.detailScroll = ScrollDetailLines(lines, m.detailScroll+1, detailViewport)
-		return m, nil
-	case "w":
-		if msg.Mod != 0 {
-			return m, nil
-		}
-		id := m.activeRunID
-		if id == "" {
-			return m, nil
-		}
-		if _, ok := history.NormalizeRunUUID(id); !ok {
-			return m, nil
-		}
-		if !viewAllowsWorkbench(m.detailView) {
-			return m, nil
-		}
-		if m.launchWorkbench != nil {
-			m.launchWorkbench(WorkbenchRoute(id))
-			m.handoffErr = ""
-		} else {
-			m.handoffErr = tui.Truncate("workbench handoff unavailable", m.contentWidth())
-		}
 		return m, nil
 	case "tab":
 		return m, nil
@@ -296,24 +263,7 @@ func (m *Model) moveCursor(delta int) {
 }
 
 func (m *Model) clampCursor() {
-	n := len(m.state.Items)
-	if n == 0 {
-		m.cursor = 0
-		m.offset = 0
-		return
-	}
-	if m.cursor >= n {
-		m.cursor = n - 1
-	}
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
-	if m.cursor < m.offset {
-		m.offset = m.cursor
-	}
-	if m.cursor >= m.offset+ListViewport {
-		m.offset = m.cursor - ListViewport + 1
-	}
+	m.cursor, m.offset = tui.ClampListWindow(m.cursor, m.offset, len(m.state.Items), ListViewport)
 }
 
 func (m *Model) syncSelectedID() {
@@ -340,22 +290,12 @@ func (m Model) preserveSelection() string {
 	return m.activeRunID
 }
 
-func viewAllowsWorkbench(view DetailView) bool {
-	switch view.Kind {
-	case "starting", "local-failure", "history-unavailable":
-		return false
-	default:
-		return true
-	}
-}
-
 // OpenLocalDetail replaces the browser with a local detail screen that is not from history.
 func (m Model) OpenLocalDetail(view DetailView) Model {
 	m.screen = screenDetail
 	m.activeRunID = view.ID
 	m.detailView = view
 	m.detailScroll = 0
-	m.handoffErr = ""
 	m.state.SelectedID = view.ID
 	return m
 }

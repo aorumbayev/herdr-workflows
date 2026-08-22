@@ -3,7 +3,6 @@ package engine
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"io"
 	"maps"
 	"os"
@@ -272,18 +271,6 @@ func TestBuildIdentityChangesWithInstall(t *testing.T) {
 	}
 }
 
-func TestRetireOnCodeChangeNoop(t *testing.T) {
-	retired := 0
-	stop := RetireOnCodeChange(func() { retired++ }, nil)
-	if retired != 0 {
-		t.Fatalf("retired = %d before stop, want 0", retired)
-	}
-	stop()
-	if retired != 0 {
-		t.Fatalf("retired = %d after stop, want 0", retired)
-	}
-}
-
 func TestLaunchDetachedRunPinsCallerEnv(t *testing.T) {
 	seen := &spawnSeen{}
 	_ = LaunchDetachedRun(LaunchRunRequest{
@@ -371,37 +358,6 @@ func TestLaunchDetachedRunArgv(t *testing.T) {
 }
 
 // Go deviation: last two elements only — no script path requirement at argv[1].
-func TestLaunchDetachedWebArgv(t *testing.T) {
-	seen := &spawnSeen{}
-	executable := "/tmp/fake-herdr-workflows"
-	if err := LaunchDetachedWeb(LaunchWebRequest{
-		Route:      "w=repo:deploy",
-		RepoRoot:   "/repo",
-		Executable: executable,
-		Env:        map[string]string{"HERDR_PLUGIN_STATE_DIR": t.TempDir()},
-		Spawn: func(argv []string, opts SpawnOpts) (*Spawned, error) {
-			seen.argv = slices.Clone(argv)
-			seen.env = maps.Clone(opts.Env)
-			seen.stdout = opts.Stdout
-			seen.stderr = opts.Stderr
-			return &Spawned{ExitCode: 0}, nil
-		},
-	}); err != nil {
-		t.Fatalf("LaunchDetachedWeb: %v", err)
-	}
-
-	if len(seen.argv) < 2 {
-		t.Fatalf("argv length = %d, want at least 2: %#v", len(seen.argv), seen.argv)
-	}
-	if seen.argv[0] != executable {
-		t.Fatalf("argv[0] = %q, want %q", seen.argv[0], executable)
-	}
-	tail := seen.argv[len(seen.argv)-2:]
-	wantTail := []string{"web", "w=repo:deploy"}
-	if !slices.Equal(tail, wantTail) {
-		t.Fatalf("argv[len-2:] = %#v, want %#v", tail, wantTail)
-	}
-}
 
 func TestLaunchDetachedRunPayloadOnStdin(t *testing.T) {
 	seen := &spawnSeen{}
@@ -506,99 +462,4 @@ func trimForLog(s string) string {
 		return s
 	}
 	return "…" + s[len(s)-63:]
-}
-
-func TestLaunchDetachedWebPinsRepoAndStderr(t *testing.T) {
-	root := t.TempDir()
-	stateDir := filepath.Join(root, "state")
-	seen := &spawnSeen{}
-	executable := "/tmp/fake-herdr-workflows"
-
-	if err := LaunchDetachedWeb(LaunchWebRequest{
-		Route:      "import",
-		RepoRoot:   root,
-		Executable: executable,
-		Env: map[string]string{
-			"HERDR_PLUGIN_STATE_DIR": stateDir,
-		},
-		Spawn: func(argv []string, opts SpawnOpts) (*Spawned, error) {
-			seen.argv = slices.Clone(argv)
-			seen.env = maps.Clone(opts.Env)
-			seen.stdout = opts.Stdout
-			seen.stderr = opts.Stderr
-			return &Spawned{ExitCode: 0}, nil
-		},
-	}); err != nil {
-		t.Fatalf("LaunchDetachedWeb: %v", err)
-	}
-
-	if seen.env["HERDR_WORKFLOWS_REPO_ROOT"] != root {
-		t.Fatalf("HERDR_WORKFLOWS_REPO_ROOT = %q, want %q", seen.env["HERDR_WORKFLOWS_REPO_ROOT"], root)
-	}
-	if seen.stdout != "ignore" {
-		t.Fatalf("stdout mode = %#v, want ignore", seen.stdout)
-	}
-	stderrFile, ok := seen.stderr.(*os.File)
-	if !ok {
-		t.Fatalf("stderr = %#v, want *os.File", seen.stderr)
-	}
-	_ = stderrFile
-	logPath := filepath.Join(stateDir, "web-launch.stderr.log")
-	if _, err := os.Stat(logPath); err != nil {
-		t.Fatalf("stderr log %s: %v", logPath, err)
-	}
-	tail := seen.argv[len(seen.argv)-2:]
-	if !slices.Equal(tail, []string{"web", "import"}) {
-		t.Fatalf("argv[len-2:] = %#v, want [web import]", tail)
-	}
-}
-
-func TestLaunchDetachedWebUnusableState(t *testing.T) {
-	root := t.TempDir()
-	blocker := filepath.Join(root, "not-a-dir")
-	if err := os.WriteFile(blocker, []byte("file"), 0o644); err != nil {
-		t.Fatalf("write blocker: %v", err)
-	}
-	seen := &spawnSeen{}
-	spawned := false
-
-	if err := LaunchDetachedWeb(LaunchWebRequest{
-		Route:      "import",
-		RepoRoot:   root,
-		Executable: "/tmp/fake-herdr-workflows",
-		Env: map[string]string{
-			"HERDR_PLUGIN_STATE_DIR": filepath.Join(blocker, "nested"),
-		},
-		Spawn: func(argv []string, opts SpawnOpts) (*Spawned, error) {
-			spawned = true
-			seen.argv = slices.Clone(argv)
-			seen.stderr = opts.Stderr
-			return &Spawned{ExitCode: 0}, nil
-		},
-	}); err != nil {
-		t.Fatalf("LaunchDetachedWeb: %v", err)
-	}
-
-	if !spawned {
-		t.Fatal("Spawn was not called")
-	}
-	if seen.stderr != "ignore" {
-		t.Fatalf("stderr = %#v, want ignore", seen.stderr)
-	}
-}
-
-func TestLaunchDetachedWebReturnsSpawnError(t *testing.T) {
-	spawnErr := errors.New("exec: no such file")
-	err := LaunchDetachedWeb(LaunchWebRequest{
-		Route:      "import",
-		RepoRoot:   t.TempDir(),
-		Executable: "/tmp/missing-herdr-workflows",
-		Env:        map[string]string{"HERDR_PLUGIN_STATE_DIR": t.TempDir()},
-		Spawn: func([]string, SpawnOpts) (*Spawned, error) {
-			return nil, spawnErr
-		},
-	})
-	if !errors.Is(err, spawnErr) {
-		t.Fatalf("LaunchDetachedWeb error = %v, want %v", err, spawnErr)
-	}
 }

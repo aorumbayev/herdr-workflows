@@ -15,7 +15,7 @@ type CharmVerdict struct {
 func CharmVerdicts() []CharmVerdict {
 	const (
 		bubbles   = "charm.land/bubbles/v2"
-		bubblesV  = "v2.1.1"
+		bubblesV  = "v2.2.0"
 		huh       = "charm.land/huh/v2"
 		huhV      = "v2.0.3"
 		lipgloss  = "charm.land/lipgloss/v2"
@@ -151,6 +151,22 @@ func CharmVerdicts() []CharmVerdict {
 			Decision:          "keep-custom",
 			MissingCapability: "bubbles has no chosen: name=value join truncated with ASCII ellipsis under content width for sequential input answers.",
 			Test:              "TestTruncateEllipsisAtMax",
+		},
+		{
+			Mechanism:         "viewport-height-pad",
+			CandidateModule:   "charm.land/bubbletea/v2",
+			CandidateVersion:  "v2.0.9",
+			Decision:          "keep-custom",
+			MissingCapability: "bubbletea does not clear unused TTY rows after a shorter frame. PadHeight must append blank lines to the prior frame height so ghost rows do not linger.",
+			Test:              "TestPadHeight",
+		},
+		{
+			Mechanism:         "runs-detail-scroll",
+			CandidateModule:   bubbles,
+			CandidateVersion:  "v2.1.1",
+			Decision:          "keep-custom",
+			MissingCapability: "viewport.Model has no scrollbar chrome and keeps SoftWrap off by default. Runs detail still scrolls a fixed ASCII window over pre-wrapped lines with clamped offset without importing bubbles.",
+			Test:              "TestScrollDetailLines",
 		},
 	}
 }

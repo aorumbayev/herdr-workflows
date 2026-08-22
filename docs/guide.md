@@ -285,7 +285,7 @@ It has to exit 0, print something, finish inside 30 seconds, and produce at most
 
 ## Build with an agent instead
 
-The `herdr-workflow-create` skill interviews you, writes the YAML, keeps the workbench canvas in sync, and validates the file with this plugin's own loader before saving. It ships inside the CLI — hand its text to your agent:
+The `herdr-workflow-create` skill interviews you, writes the YAML, and validates the file with `hwf workflow validate` or the bundled `validate.sh` script before saving. It ships inside the CLI — hand its text to your agent:
 
 ```bash
 hwf skills show herdr-workflow-create
@@ -299,6 +299,6 @@ hwf skills show herdr-workflow-upgrade
 
 ## Next
 
-- [Run and manage workflows](/surfaces) — picker, CLI, workbench, sharing
+- [Run and manage workflows](/surfaces) — picker, CLI, sharing
 - [Examples](/examples) — working workflows to import
 - [Reference](/reference) — every field, limit, and rule

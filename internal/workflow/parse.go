@@ -1682,7 +1682,7 @@ func ParseRaw(file, text string) (Document, error) {
 	return raw, nil
 }
 
-// DocIssue is one structured validation problem for the workbench format API.
+// DocIssue is one structured validation problem for structured document validation.
 type DocIssue struct {
 	Path    []any  `json:"path"`
 	Message string `json:"message"`
@@ -1719,7 +1719,7 @@ func ValidateDocMap(doc map[string]any) []DocIssue {
 	return out
 }
 
-// ParseRawWithDoc parses YAML text and returns the document map for the workbench.
+// ParseRawWithDoc parses YAML text and returns the document map for structured tooling.
 func ParseRawWithDoc(file, text string) (map[string]any, error) {
 	if _, err := ParseRaw(file, text); err != nil {
 		return nil, err

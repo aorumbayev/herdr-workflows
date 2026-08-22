@@ -148,11 +148,11 @@ Every glyph the picker renders MUST have unambiguous single-column width in ever
 
 #### Scenario: Charm flush-left filter without slash prefix
 - **WHEN** the Workflow browser shows an empty or typed filter row
-- **THEN** the filter text is flush-left ASCII with the `filter workflows...` placeholder (or the typed text) and MUST NOT use an OpenTUI `/ ` prefix or row indent for that field
+- **THEN** the filter text is flush-left ASCII with the `filter workflows...` placeholder (or the typed text) and MUST NOT use a `/ ` prefix or row indent for that field
 
 #### Scenario: ASCII greater-than cursor on choice option rows
 - **WHEN** a choice input shows its option list
-- **THEN** the selected option uses an ASCII `>` cursor prefix, idle options use a two-space prefix, each option row keeps a right-aligned location column, and the list MUST NOT use an OpenTUI `/ ` prefix or box or arrow glyphs
+- **THEN** the selected option uses an ASCII `>` cursor prefix, idle options use a two-space prefix, each option row keeps a right-aligned location column, and the list MUST NOT use a `/ ` prefix or box or arrow glyphs
 
 ### Requirement: Input navigation preserves valid answers
 Escape from an input prompt MUST move to the previous active input and restore its collected value. Escape from the first active input MUST return to the workflow list. Changing an earlier value MUST discard all later answers and resolved dynamic-choice domains before active inputs are recalculated. Returning to the list MUST clear the collection. A terminal run result MUST remain in run detail until the user presses Escape, which MUST return to the Runs root without dismissing the picker.
@@ -276,7 +276,7 @@ The Runs root MUST reuse the fixed six-row viewport, selected-detail area, inset
 - **THEN** its row contains the text `INTERRUPTED` or a width-bounded textual abbreviation in addition to any color
 
 ### Requirement: Run filtering and scope are keyboard safe
-The Runs filter MUST match case-insensitively against workflow title and name, run ID, status, safe step labels, and allowlisted failure facts. It MUST NOT match private failure explanation text. Runs MUST default to the exact current checkout root. `Ctrl+G` MUST toggle Current and All without entering filter text. The stdin pre-handler MUST preserve raw `0x07` for OpenTUI. The active scope MUST be visible without consuming a list row. Printable `g` MUST remain filter text.
+The Runs filter MUST match case-insensitively against workflow title and name, run ID, status, safe step labels, and allowlisted failure facts. It MUST NOT match private failure explanation text. Runs MUST default to the exact current checkout root. `Ctrl+G` MUST toggle Current and All without entering filter text. The stdin pre-handler MUST preserve raw `0x07` for Ctrl+G. The active scope MUST be visible without consuming a list row. Printable `g` MUST remain filter text.
 
 #### Scenario: Toggle all worktrees
 - **WHEN** the Runs root is scoped to Current and the user presses `Ctrl+G`
@@ -291,11 +291,11 @@ The Runs filter MUST match case-insensitively against workflow title and name, r
 - **THEN** matching rows remain selectable even though detail lookup uses the complete UUID
 
 ### Requirement: Every selected run has a compact detail view
-Enter on any durable run row MUST replace the list with a scrollable ordered step view. Running detail MUST identify the persisted active step, heartbeat-defined state, and elapsed time. Successful detail MUST show every recorded completed or skipped step. Failed detail MUST show recorded outcomes, a known remaining count, and the bounded failure explanation. It MUST NOT invent names for steps that did not start. Nested workflow outcomes MUST remain grouped under one parent wrapper. Interrupted, stale, and unavailable-history detail MUST state their distinct condition. `w` MUST hand the complete run UUID to the authenticated workbench route. Escape MUST return to the Runs root without dismissing the picker.
+Enter on any durable run row MUST replace the list with a scrollable ordered step view. Running detail MUST identify the persisted active step, heartbeat-defined state, and elapsed time. Successful detail MUST show every recorded completed or skipped step. Failed detail MUST show recorded outcomes, a known remaining count, and the bounded failure explanation. It MUST NOT invent names for steps that did not start. Nested workflow outcomes MUST remain grouped under one parent wrapper. Interrupted, stale, and unavailable-history detail MUST state their distinct condition. Escape MUST return to the Runs root without dismissing the picker.
 
 #### Scenario: Inspect a successful run
 - **WHEN** the user presses Enter on a successful four-step run
-- **THEN** detail shows all four outcomes and offers `w` for the workbench
+- **THEN** detail shows all four outcomes
 
 #### Scenario: Inspect an active run
 - **WHEN** the user presses Enter on a running run
@@ -308,10 +308,6 @@ Enter on any durable run row MUST replace the list with a scrollable ordered ste
 #### Scenario: Return from detail
 - **WHEN** run detail is active and the user presses Escape
 - **THEN** the prior Runs selection and filter return
-
-#### Scenario: Workbench handoff fails
-- **WHEN** `w` cannot launch the authenticated workbench route
-- **THEN** detail remains open and reports a width-bounded handoff error
 
 ### Requirement: Run-history empty states identify the remedy
 The picker MUST distinguish no machine history, no runs in Current, and no filter matches. When Current is empty but All has runs, the empty state MUST identify `Ctrl+G` as the way to view them. A filter miss MUST keep the filter visible. No empty state MUST claim that a stale run failed.
@@ -337,7 +333,7 @@ After the final input is accepted, the picker MUST allocate a full run UUID, lau
 
 #### Scenario: Child cannot record history
 - **WHEN** the child acknowledges that private history storage is unavailable
-- **THEN** the open detail identifies unavailable history, continues attached progress observation, does not claim a durable record, and does not offer a workbench deep link for that identity
+- **THEN** the open detail identifies unavailable history, continues attached progress observation, and does not claim a durable record
 
 #### Scenario: Child fails before claim
 - **WHEN** the detached child exits without acknowledging a matching snapshot claim

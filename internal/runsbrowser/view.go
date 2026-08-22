@@ -9,7 +9,7 @@ import (
 )
 
 func (m Model) View() tea.View {
-	return tea.NewView(m.render())
+	return tea.NewView(tui.PadHeight(tui.PadContent(m.render(), m.contentWidth()), m.height))
 }
 
 func (m Model) render() string {
@@ -19,11 +19,11 @@ func (m Model) render() string {
 	} else {
 		body = m.renderList()
 	}
-	return tui.PadHeight(body, m.height)
+	return body
 }
 
 func (m Model) contentWidth() int {
-	return max(0, m.width-2)
+	return tui.ContentWidth(m.width)
 }
 
 func (m Model) renderList() string {
@@ -36,7 +36,7 @@ func (m Model) renderList() string {
 			FilterActive:   strings.TrimSpace(m.filter) != "",
 			Unavailable:    m.state.Unavailable,
 		})
-		body := filter + "\n" + tui.FormatDetailLines(empty, w) + "\n" + tui.FormatRule(w) + "\n" + tui.FormatListFooter(w, 0, 0, RunsFooter(m.scope, 0, 0))
+		body := filter + "\n\n" + tui.FormatDetailBlock(empty, w) + "\n" + tui.FormatRule(w) + "\n" + tui.FormatListFooter(w, 0, 0, RunsFooter(m.scope, 0, 0))
 		return body
 	}
 	end := min(m.offset+ListViewport, len(m.state.Items))
@@ -56,10 +56,10 @@ func (m Model) renderList() string {
 	}
 	detail := ""
 	if item := m.selectedItem(); item != nil {
-		detail = tui.FormatDetailLines(formatRunSummary(*item), w)
+		detail = tui.FormatDetailBlock(formatRunSummary(*item), w)
 	}
 	footer := tui.FormatListFooter(w, m.cursor, len(m.state.Items), RunsFooter(m.scope, m.cursor, len(m.state.Items)))
-	return filter + "\n" + strings.Join(rows, "\n") + "\n" + detail + "\n" + tui.FormatRule(w) + "\n" + footer
+	return filter + "\n\n" + strings.Join(rows, "\n") + "\n\n" + detail + "\n" + tui.FormatRule(w) + "\n" + footer
 }
 
 func (m Model) listFilterRow(width int) string {
@@ -73,13 +73,10 @@ func (m Model) listFilterRow(width int) string {
 func (m Model) renderDetail() string {
 	w := m.contentWidth()
 	lines := DetailLines(m.detailView, w)
-	if m.handoffErr != "" {
-		lines = append(lines, tui.Truncate(m.handoffErr, w))
-	}
 	visible, _ := ScrollDetailLines(lines, m.detailScroll, detailViewport)
 	for len(visible) < detailViewport {
 		visible = append(visible, "")
 	}
-	footer := tui.FormatListFooter(w, 0, 0, RunDetailFooter(viewAllowsWorkbench(m.detailView)))
+	footer := tui.FormatListFooter(w, 0, 0, RunDetailFooter())
 	return strings.Join(visible, "\n") + "\n" + tui.FormatRule(w) + "\n" + footer
 }

@@ -58,7 +58,7 @@ func TestBeginLaunchListenCmdDeliversAckAndSettled(t *testing.T) {
 func TestPrepareScreenWiresHooksFromScreenOpts(t *testing.T) {
 	entry := workflow.WorkflowListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml", Title: "Plain"}
 	var (
-		route    string
+		edited   []string
 		opened   string
 		notified []string
 		launched LaunchRunOpts
@@ -74,8 +74,11 @@ func TestPrepareScreenWiresHooksFromScreenOpts(t *testing.T) {
 				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
 			}, nil
 		},
-		LaunchWorkbench: func(r string) { route = r },
-		OpenURL:         func(url string) error { opened = url; return nil },
+		EditWorkflow: func(path, name string) workflow.ValidateResult {
+			edited = append(edited, name)
+			return workflow.ValidateResult{OK: true}
+		},
+		OpenURL: func(url string) error { opened = url; return nil },
 		Notify: func(title string, body ...string) error {
 			notified = append(notified, title+"|"+strings.Join(body, " "))
 			return nil
@@ -97,22 +100,21 @@ func TestPrepareScreenWiresHooksFromScreenOpts(t *testing.T) {
 		t.Fatalf("PrepareScreen: %v", err)
 	}
 
-	_ = apply(m, "ctrl+k", "n")
-	if route != "new" {
-		t.Fatalf("LaunchWorkbench route = %q, want new (ScreenOpts hooks not passed)", route)
+	_ = apply(m, "ctrl+k", "n", "x", "enter")
+	if len(edited) != 1 || edited[0] != "x" {
+		t.Fatalf("EditWorkflow = %v (ScreenOpts hooks not passed)", edited)
 	}
 
 	m, err = PrepareScreen(ScreenOpts{
-		Entries:         []workflow.WorkflowListEntry{entry},
-		RepoRoot:        root,
-		LaunchWorkbench: func(r string) { route = r },
-		OpenURL:         func(url string) error { opened = url; return nil },
-		Chdir:           func(string) error { return nil },
+		Entries:  []workflow.WorkflowListEntry{entry},
+		RepoRoot: root,
+		OpenURL:  func(url string) error { opened = url; return nil },
+		Chdir:    func(string) error { return nil },
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	route, opened = "", ""
+	opened = ""
 	_ = apply(m, "ctrl+k", "e")
 	if opened == "" {
 		t.Fatal("OpenURL not wired from ScreenOpts")

@@ -28,6 +28,32 @@ func TestPadHeight(t *testing.T) {
 	}
 }
 
+func TestClampListWindow(t *testing.T) {
+	// Worked examples for the shared six-row Select window.
+	cases := []struct {
+		name              string
+		cursor, offset, n int
+		wantCursor        int
+		wantOffset        int
+	}{
+		{name: "empty", cursor: 3, offset: 1, n: 0, wantCursor: 0, wantOffset: 0},
+		{name: "clamp high cursor", cursor: 10, offset: 0, n: 5, wantCursor: 4, wantOffset: 0},
+		{name: "scroll down", cursor: 7, offset: 0, n: 10, wantCursor: 7, wantOffset: 2},
+		{name: "scroll up", cursor: 1, offset: 3, n: 10, wantCursor: 1, wantOffset: 1},
+		{name: "negative cursor", cursor: -2, offset: 0, n: 4, wantCursor: 0, wantOffset: 0},
+	}
+	for _, tc := range cases {
+		gotCursor, gotOffset := ClampListWindow(tc.cursor, tc.offset, tc.n, ListViewport)
+		if gotCursor != tc.wantCursor || gotOffset != tc.wantOffset {
+			t.Fatalf("%s: ClampListWindow(%d,%d,%d,%d)=(%d,%d) want (%d,%d)",
+				tc.name, tc.cursor, tc.offset, tc.n, ListViewport, gotCursor, gotOffset, tc.wantCursor, tc.wantOffset)
+		}
+	}
+	if ListViewport != 6 {
+		t.Fatalf("ListViewport = %d want 6", ListViewport)
+	}
+}
+
 func TestTruncateUsesColumnsNotBytes(t *testing.T) {
 	cjk := strings.Repeat("中", 8)
 	if Columns(cjk) != 16 {

@@ -8,16 +8,15 @@ type ParitySurface struct {
 	Kind         string
 	GoSurface    string
 	CoveringTest string
-	Gap          string
 }
 
-// ParityBaseline is the picker comparison matrix for Cycle 5 slice 1.
+// ParityBaseline is the picker comparison matrix for editor/import actions.
 func ParityBaseline() []ParitySurface {
 	const presentation = "picker-presentation"
-	const actions = "picker-workbench-actions"
+	const actions = "picker-editor-actions"
 	return []ParitySurface{
 		{Spec: presentation, Requirement: "The picker names itself once", Scenario: "Title appears only in the pane label", Kind: "view", GoSurface: "Model.renderList", CoveringTest: "TestPickerDoesNotRenderPluginNameOrRetitle"},
-		{Spec: presentation, Requirement: "The picker names itself once", Scenario: "No runtime retitling", Kind: "action", GoSurface: "New/Options.ReportPaneMetadata", CoveringTest: "TestPickerDoesNotRenderPluginNameOrRetitle"},
+		{Spec: presentation, Requirement: "The picker names itself once", Scenario: "No runtime retitling", Kind: "action", GoSurface: "New/View", CoveringTest: "TestPickerDoesNotRenderPluginNameOrRetitle"},
 		{Spec: presentation, Requirement: "Fixed visible list viewport", Scenario: "More workflows than the viewport", Kind: "view", GoSurface: "ListViewport/Model.renderList", CoveringTest: "TestPickerViewportShowsSixRowsAndScrolls"},
 		{Spec: presentation, Requirement: "Fixed visible list viewport", Scenario: "Cursor moves beyond the viewport", Kind: "transition", GoSurface: "Model.clampCursor", CoveringTest: "TestPickerViewportShowsSixRowsAndScrolls"},
 		{Spec: presentation, Requirement: "Fixed visible list viewport", Scenario: "Fewer matches than the viewport", Kind: "view", GoSurface: "Model.renderList blank pad", CoveringTest: "TestParityFewerMatchesPadBlankRows"},
@@ -71,25 +70,19 @@ func ParityBaseline() []ParitySurface {
 		{Spec: presentation, Requirement: "A launched workflow opens matching run detail", Scenario: "Fast successful workflow", Kind: "state", GoSurface: "beginLaunch/launchSettledMsg", CoveringTest: "TestParityLaunchOpensStartingRunningLifecycle"},
 		{Spec: presentation, Requirement: "A launched workflow opens matching run detail", Scenario: "Leave an active launch", Kind: "transition", GoSurface: "handleRunsKey Escape", CoveringTest: "TestParityLaunchOpensStartingRunningLifecycle"},
 
-		{Spec: actions, Requirement: "Workbench actions reuse a repository endpoint", Scenario: "Existing workbench", Kind: "action", GoSurface: "workbench.OpenWorkbench", CoveringTest: "workbench.TestLiveMatchingEndpointReused"},
-		{Spec: actions, Requirement: "Workbench actions reuse a repository endpoint", Scenario: "Stale endpoint", Kind: "action", GoSurface: "workbench.OpenWorkbench", CoveringTest: "workbench.TestStaleOrMismatchedRecordsNotReused"},
-		{Spec: actions, Requirement: "Workbench actions reuse a repository endpoint", Scenario: "Different repository", Kind: "action", GoSurface: "workbench.OpenWorkbench", CoveringTest: "workbench.TestStaleOrMismatchedRecordsNotReused"},
-		{Spec: actions, Requirement: "Endpoint credentials remain private runtime state", Scenario: "Endpoint record written", Kind: "state", GoSurface: "workbench.WriteEndpointRecord", CoveringTest: "workbench.TestEndpointRecordPrivateAndProbe"},
-		{Spec: actions, Requirement: "Endpoint credentials remain private runtime state", Scenario: "Environment-controlled state directory is checked", Kind: "action", GoSurface: "credentials.AssertCredentialStoreSafe", CoveringTest: "credentials.TestAssertCredentialStoreSafeAcceptsUserOnlyDir"},
-		{Spec: actions, Requirement: "Endpoint credentials remain private runtime state", Scenario: "Lock file carries the same protection", Kind: "state", GoSurface: "workbench endpoint lock", CoveringTest: "workbench.TestEndpointRecordPrivateAndProbe"},
 		{Spec: actions, Requirement: "Picker reports published plugin updates without blocking", Scenario: "Newer release appears after mount", Kind: "view", GoSurface: "NewerReleaseMsg/FormatFilterUpdateHint", CoveringTest: "TestUpdateIndicator"},
 		{Spec: actions, Requirement: "Picker reports published plugin updates without blocking", Scenario: "Update service is unavailable", Kind: "action", GoSurface: "StartUpdateCheck", CoveringTest: "TestStartUpdateCheckNeverBlocksAndIgnoresFailures"},
 		{Spec: actions, Requirement: "Picker reports published plugin updates without blocking", Scenario: "Draft is not advertised", Kind: "action", GoSurface: "UpdateAvailable/StartUpdateCheck", CoveringTest: "TestStartUpdateCheckNeverBlocksAndIgnoresFailures"},
 		{Spec: actions, Requirement: "List mode opens an actions palette with Ctrl+K", Scenario: "Open palette", Kind: "transition", GoSurface: "handleList ctrl+k/modePalette", CoveringTest: "TestPickerFilterAndPaletteRestore"},
 		{Spec: actions, Requirement: "List mode opens an actions palette with Ctrl+K", Scenario: "Printable k filters", Kind: "transition", GoSurface: "handleList printable", CoveringTest: "TestParityPrintableKFilters"},
 		{Spec: actions, Requirement: "List mode opens an actions palette with Ctrl+K", Scenario: "Escape closes palette", Kind: "transition", GoSurface: "handlePalette Escape", CoveringTest: "TestPickerFilterAndPaletteRestore"},
-		{Spec: actions, Requirement: "Palette actions for authorship and discovery", Scenario: "New from empty catalog", Kind: "action", GoSurface: "handlePalette n", CoveringTest: "TestParityPaletteLettersHandoff"},
+		{Spec: actions, Requirement: "Palette actions for authorship and discovery", Scenario: "New from empty catalog", Kind: "action", GoSurface: "handlePalette n/beginEdit", CoveringTest: "TestParityPaletteLettersHandoff"},
 		{Spec: actions, Requirement: "Palette actions for authorship and discovery", Scenario: "Import from empty catalog", Kind: "action", GoSurface: "handlePalette i", CoveringTest: "TestParityPaletteLettersHandoff"},
 		{Spec: actions, Requirement: "Palette actions for authorship and discovery", Scenario: "Browse examples", Kind: "action", GoSurface: "handlePalette e", CoveringTest: "TestParityPaletteLettersHandoff"},
-		{Spec: actions, Requirement: "Palette open edits the selected workflow", Scenario: "Open repo workflow", Kind: "action", GoSurface: "handlePalette o", CoveringTest: "TestParityPaletteLettersHandoff"},
+		{Spec: actions, Requirement: "Palette open edits the selected workflow", Scenario: "Open repo workflow", Kind: "action", GoSurface: "handlePalette o/beginEdit", CoveringTest: "TestParityPaletteLettersHandoff"},
 		{Spec: actions, Requirement: "Palette open edits the selected workflow", Scenario: "Open without selection", Kind: "action", GoSurface: "ResolvePaletteLetter o", CoveringTest: "TestPaletteLetters"},
 		{Spec: actions, Requirement: "Palette share copies the import command and notifies", Scenario: "Share copies command", Kind: "action", GoSurface: "handlePalette s", CoveringTest: "TestParityPaletteLettersHandoff"},
-		{Spec: actions, Requirement: "Palette share copies the import command and notifies", Scenario: "Share does not open workbench", Kind: "action", GoSurface: "handlePalette s", CoveringTest: "TestParityPaletteLettersHandoff"},
+		{Spec: actions, Requirement: "Palette share copies the import command and notifies", Scenario: "Share stays in picker", Kind: "action", GoSurface: "handlePalette s", CoveringTest: "TestParityPaletteLettersHandoff"},
 		{Spec: actions, Requirement: "Palette delete confirms then removes the workflow file", Scenario: "Confirmed delete", Kind: "transition", GoSurface: "modeDelete/BeginConfirmedDelete", CoveringTest: "TestConfirmedDeleteRemovesFile"},
 		{Spec: actions, Requirement: "Palette delete confirms then removes the workflow file", Scenario: "Cancel delete", Kind: "transition", GoSurface: "handleDelete n/esc", CoveringTest: "TestParityCancelDeleteKeepsFile"},
 	}

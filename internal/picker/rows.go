@@ -8,10 +8,7 @@ import (
 )
 
 const (
-	selectNameOffset  = 1
-	cursorPrefixWidth = 2
-	locationWidth     = 7
-	warningWidth      = 2
+	locationWidth = tui.LocationWidth
 )
 
 // ChromeOption is one picker list row.
@@ -42,16 +39,17 @@ func FormatConsentLine(entry workflow.WorkflowListEntry) string {
 
 // FormatPickerRowName lays out cursor, title, warning, and location columns.
 func FormatPickerRowName(title, location string, warned bool, rowWidth int, selected bool) string {
-	titleW := max(0, rowWidth-selectNameOffset-cursorPrefixWidth-1-warningWidth-locationWidth)
+	titleW := max(0, rowWidth-tui.RowTextIndent-tui.ColumnGutter-tui.WarningWidth-locationWidth)
 	prefix := "  "
 	if selected {
-		prefix = "> "
+		prefix = tui.CursorPrefix
 	}
-	warning := "  "
+	warning := " "
 	if warned {
-		warning = "! "
+		warning = "!"
 	}
-	return prefix + tui.PadColumns(tui.Truncate(title, titleW), titleW) + " " + warning + padStart(location, locationWidth)
+	gutter := strings.Repeat(" ", tui.ColumnGutter)
+	return prefix + " " + tui.PadColumns(tui.Truncate(title, titleW), titleW) + gutter + warning + padStart(location, locationWidth)
 }
 
 func padStart(s string, n int) string {

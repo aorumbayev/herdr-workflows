@@ -19,9 +19,3 @@ func TestFilterInputDropsLeakedControlKeys(t *testing.T) {
 		t.Fatal("tab must survive")
 	}
 }
-
-func TestClipboardErrorNamesCommands(t *testing.T) {
-	if errNoClipboard.Error() != "no clipboard command (pbcopy, wl-copy, or xclip)" {
-		t.Fatalf("%q", errNoClipboard.Error())
-	}
-}

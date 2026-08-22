@@ -111,10 +111,9 @@ steps:
           <p>The same runner from a terminal or a script, with <code>--input name=value</code>.</p>
         </article>
         <article>
-          <h3>hwf web</h3>
+          <h3>Console (planned)</h3>
           <p>
-            Edit as YAML or on a canvas, check your config, read past runs, share and import. Never
-            runs anything.
+            A web console for workflow management is planned. Today use the picker and CLI.
           </p>
         </article>
       </div>

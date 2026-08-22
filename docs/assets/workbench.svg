@@ -500,12 +500,12 @@
     <!-- ── 5 · share it ───────────────────────────────────────────────── -->
     <g class="a sc5">
       <text x="56" y="96" class="k">CHAPTER FIVE — HAND IT TO THE HERD</text>
-      <text style="--d:55.1s" x="56" y="150" class="a v95 h2">Build it in the workbench. Send it as one line.</text>
+      <text style="--d:55.1s" x="56" y="150" class="a v95 h2">Write the YAML. Send it as one line.</text>
 
       <g class="a v93" style="--d:55.3s">
         <rect class="well" x="56" y="186" width="420" height="272" rx="6"/>
         <line x1="56" y1="220" x2="476" y2="220" stroke="#434c5e"/>
-        <text x="76" y="209" class="k">localhost:7645 · hwf web</text>
+        <text x="76" y="209" class="k">hwf workflow import · share</text>
         <rect x="72" y="236" width="104" height="206" rx="4" fill="#2b313c"/>
         <text x="86" y="262" class="k">handoff</text><text x="86" y="288" class="k cy">ship</text><text x="86" y="314" class="k">worktree</text>
         <rect x="192" y="236" width="268" height="58" rx="4" fill="#343b49" stroke="#434c5e"/>

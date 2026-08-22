@@ -3,16 +3,19 @@ package picker
 import (
 	"context"
 	"os"
+	"os/exec"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
+	"github.com/aorumbayev/herdr-workflows/internal/console"
 	"github.com/aorumbayev/herdr-workflows/internal/runsbrowser"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-const ListViewport = 6
+const ListViewport = tui.ListViewport
 
 type mode int
 
@@ -22,76 +25,86 @@ const (
 	modeDelete
 	modeInput
 	modeInputText
+	modeNewName
 	modeFail
 	modeRuns
+	modeConsolePlace
 )
 
 // Options construct a picker model.
 type Options struct {
-	Entries            []workflow.WorkflowListEntry
-	RepoRoot           string
-	Config             config.Config
-	Width              int
-	Height             int
-	Env                config.Env
-	Chdir              func(string) error
-	LoadWorkflow       func(workflow.WorkflowListEntry) (*workflow.Definition, error)
-	ReportPaneMetadata func()
-	CopyClipboard      func(string) error
-	LaunchWorkbench    func(route string)
-	OpenURL            func(url string) error
-	Notify             func(title string, body ...string) error
-	LaunchRun          func(LaunchRunOpts) LaunchRunHandle
-	AllocateRunID      func() string
-	ExportShare        func(entry workflow.WorkflowListEntry) (command string, err error)
+	Entries       []workflow.WorkflowListEntry
+	RepoRoot      string
+	Config        config.Config
+	Width         int
+	Height        int
+	Env           config.Env
+	Chdir         func(string) error
+	LoadWorkflow  func(workflow.WorkflowListEntry) (*workflow.Definition, error)
+	CopyClipboard func(string) error
+	EditWorkflow  func(path, name string) workflow.ValidateResult
+	OpenURL       func(url string) error
+	Notify        func(title string, body ...string) error
+	LaunchRun     func(LaunchRunOpts) LaunchRunHandle
+	AllocateRunID func() string
+	ExportShare   func(entry workflow.WorkflowListEntry) (command string, err error)
+	OpenConsole   func(placement console.Placement) error
 }
 
 // Model is the picker Bubble Tea model.
 type Model struct {
-	entries         []workflow.WorkflowListEntry
-	repoRoot        string
-	config          config.Config
-	width           int
-	height          int
-	load            func(workflow.WorkflowListEntry) (*workflow.Definition, error)
-	copyText        func(string) error
-	env             config.Env
-	launchWorkbench func(string)
-	openURL         func(string) error
-	notify          func(title string, body ...string) error
-	launchRun       func(LaunchRunOpts) LaunchRunHandle
-	allocateRunID   func() string
-	exportShare     func(entry workflow.WorkflowListEntry) (command string, err error)
-	mode            mode
-	filter          string
-	cursor          int
-	offset          int
-	savedFilter     string
-	status          string
-	session         *workflow.InputSession
-	prompt          *workflow.InputPrompt
-	promptValue     string
-	choiceOpts      []string
-	custom          bool
-	queue           []workflow.InputSpec
-	delete          DeleteState
-	quit            bool
-	consent         string
-	newerRelease    bool
-	stopResolve     context.CancelFunc
-	resolveGen      uint64
-	runs            runsbrowser.Model
-	launchRunID     string
-	launchDetach    func()
-	launchAcks      <-chan string
-	launchSettled   <-chan LaunchSettled
-	launchProgress  <-chan string
-	pendingDef      *workflow.Definition
+	entries              []workflow.WorkflowListEntry
+	repoRoot             string
+	config               config.Config
+	width                int
+	height               int
+	load                 func(workflow.WorkflowListEntry) (*workflow.Definition, error)
+	copyText             func(string) error
+	env                  config.Env
+	editWorkflow         func(path, name string) workflow.ValidateResult
+	openURL              func(string) error
+	notify               func(title string, body ...string) error
+	launchRun            func(LaunchRunOpts) LaunchRunHandle
+	allocateRunID        func() string
+	exportShare          func(entry workflow.WorkflowListEntry) (command string, err error)
+	mode                 mode
+	filter               string
+	cursor               int
+	offset               int
+	savedFilter          string
+	status               string
+	session              *workflow.InputSession
+	prompt               *workflow.InputPrompt
+	promptValue          string
+	choiceOpts           []string
+	custom               bool
+	queue                []workflow.InputSpec
+	delete               DeleteState
+	quit                 bool
+	consent              string
+	newerRelease         bool
+	stopResolve          context.CancelFunc
+	resolveGen           uint64
+	runs                 runsbrowser.Model
+	launchRunID          string
+	launchDetach         func()
+	launchAcks           <-chan string
+	launchSettled        <-chan LaunchSettled
+	launchProgress       <-chan string
+	pendingDef           *workflow.Definition
+	openConsole          func(console.Placement) error
+	lastConsolePlacement console.Placement
+	consolePlaceCursor   int
 }
 
 type currentResolvedMsg struct {
 	gen    uint64
 	result workflow.CurrentResult
+}
+
+type editorDoneMsg struct {
+	name   string
+	result workflow.ValidateResult
 }
 
 // NewerReleaseMsg marks the filter row with the hwf update hint.
@@ -118,27 +131,28 @@ func New(opts Options) Model {
 		width = 80
 	}
 	return Model{
-		entries:         opts.Entries,
-		repoRoot:        opts.RepoRoot,
-		config:          opts.Config,
-		width:           width,
-		height:          opts.Height,
-		load:            opts.LoadWorkflow,
-		copyText:        opts.CopyClipboard,
-		env:             opts.Env,
-		launchWorkbench: opts.LaunchWorkbench,
-		openURL:         opts.OpenURL,
-		notify:          opts.Notify,
-		launchRun:       opts.LaunchRun,
-		allocateRunID:   opts.AllocateRunID,
-		exportShare:     opts.ExportShare,
+		entries:       opts.Entries,
+		repoRoot:      opts.RepoRoot,
+		config:        opts.Config,
+		width:         width,
+		height:        opts.Height,
+		load:          opts.LoadWorkflow,
+		copyText:      opts.CopyClipboard,
+		env:           opts.Env,
+		editWorkflow:  opts.EditWorkflow,
+		openURL:       opts.OpenURL,
+		notify:        opts.Notify,
+		launchRun:     opts.LaunchRun,
+		allocateRunID: opts.AllocateRunID,
+		exportShare:   opts.ExportShare,
+		openConsole:   opts.OpenConsole,
 	}
 }
 
 func (m Model) Init() tea.Cmd { return nil }
 
 func (m Model) contentWidth() int {
-	return max(0, m.width-2)
+	return tui.ContentWidth(m.width)
 }
 
 func (m Model) matched() []ChromeOption {
@@ -156,24 +170,7 @@ func (m Model) selectedEntry() *workflow.WorkflowListEntry {
 }
 
 func (m *Model) clampCursor() {
-	n := len(m.matched())
-	if n == 0 {
-		m.cursor = 0
-		m.offset = 0
-		return
-	}
-	if m.cursor >= n {
-		m.cursor = n - 1
-	}
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
-	if m.cursor < m.offset {
-		m.offset = m.cursor
-	}
-	if m.cursor >= m.offset+ListViewport {
-		m.offset = m.cursor - ListViewport + 1
-	}
+	m.cursor, m.offset = tui.ClampListWindow(m.cursor, m.offset, len(m.matched()), ListViewport)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -187,6 +184,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case currentResolvedMsg:
 		return m.applyCurrent(msg)
+	case editorDoneMsg:
+		return m.applyEditorDone(msg)
 	case NewerReleaseMsg:
 		m.newerRelease = true
 		return m, nil
@@ -229,10 +228,14 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handlePalette(msg)
 	case modeDelete:
 		return m.handleDelete(msg)
+	case modeNewName:
+		return m.handleNewName(msg)
 	case modeInputText:
 		return m.handleInputText(msg)
 	case modeInput:
 		return m.handleInput(msg)
+	case modeConsolePlace:
+		return m.handleConsolePlace(msg)
 	case modeFail:
 		if key == "enter" || key == "esc" {
 			m.mode = modeList
@@ -262,11 +265,10 @@ func (m Model) handleList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			getenv = os.Getenv
 		}
 		m.runs = runsbrowser.New(runsbrowser.Options{
-			RepoRoot:        m.repoRoot,
-			Width:           m.width,
-			Height:          m.height,
-			Env:             getenv,
-			LaunchWorkbench: m.launchWorkbench,
+			RepoRoot: m.repoRoot,
+			Width:    m.width,
+			Height:   m.height,
+			Env:      getenv,
 		})
 		m.mode = modeRuns
 		return m, m.runs.Init()
@@ -336,16 +338,19 @@ func (m Model) handlePalette(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) applyPaletteAction(action *PaletteAction) (tea.Model, tea.Cmd) {
 	switch action.ID {
-	case "new", "import", "open":
-		if m.launchWorkbench == nil {
-			m.mode = modeList
-			m.filter = m.savedFilter
-			m.status = "workbench handoff unavailable"
-			return m, nil
-		}
-		m.launchWorkbench(action.Route)
-		m.quit = true
-		return m, tea.Quit
+	case "new":
+		m.mode = modeNewName
+		m.filter = m.savedFilter
+		m.promptValue = ""
+		m.status = ""
+		return m, nil
+	case "import":
+		m.mode = modeList
+		m.filter = m.savedFilter
+		m.status = `import with: hwf workflow import "..."`
+		return m, nil
+	case "open":
+		return m.applyEditAction(action.Entry)
 	case "examples":
 		if m.openURL != nil {
 			_ = m.openURL(config.ExamplesURL)
@@ -355,11 +360,93 @@ func (m Model) applyPaletteAction(action *PaletteAction) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "share":
 		return m.applyShareAction(action.Entry)
+	case "console":
+		return m.beginConsolePlacement()
 	default:
 		m.mode = modeList
 		m.filter = m.savedFilter
 		return m, nil
 	}
+}
+
+func (m Model) applyEditAction(entry *workflow.WorkflowListEntry) (tea.Model, tea.Cmd) {
+	m.mode = modeList
+	m.filter = m.savedFilter
+	if entry == nil {
+		return m, nil
+	}
+	return m, m.beginEdit(entry.File, entry.Name)
+}
+
+func (m Model) beginEdit(path, name string) tea.Cmd {
+	if m.editWorkflow != nil {
+		return func() tea.Msg {
+			return editorDoneMsg{name: name, result: m.editWorkflow(path, name)}
+		}
+	}
+	getenv := m.env
+	if getenv == nil {
+		getenv = os.Getenv
+	}
+	editor, err := workflow.ResolveEditor(getenv)
+	if err != nil {
+		return func() tea.Msg {
+			return editorDoneMsg{name: name, result: workflow.ValidateResult{Error: err.Error()}}
+		}
+	}
+	repoRoot := m.repoRoot
+	return tea.ExecProcess(exec.Command(editor, path), func(err error) tea.Msg {
+		if err != nil {
+			return editorDoneMsg{name: name, result: workflow.ValidateResult{Error: err.Error()}}
+		}
+		return editorDoneMsg{name: name, result: workflow.ValidateFile(path, name, repoRoot)}
+	})
+}
+
+func (m Model) applyEditorDone(msg editorDoneMsg) (tea.Model, tea.Cmd) {
+	if msg.result.OK {
+		m.status = "validated " + msg.name
+	} else {
+		m.status = "validate failed" + tui.ChromeSep + msg.result.Error
+	}
+	return m, nil
+}
+
+func (m Model) handleNewName(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		name := strings.TrimSpace(m.promptValue)
+		if !workflow.NameRE.MatchString(name) {
+			m.status = workflow.NameRule
+			return m, nil
+		}
+		path, err := workflow.CreateRepoWorkflow(m.repoRoot, name)
+		if err != nil {
+			m.status = err.Error()
+			m.mode = modeList
+			return m, nil
+		}
+		entry := workflow.WorkflowListEntry{Name: name, Source: "repo", File: path}
+		m.entries = append(m.entries, entry)
+		m.mode = modeList
+		m.promptValue = ""
+		return m, m.beginEdit(path, name)
+	case "esc":
+		m.mode = modeList
+		m.promptValue = ""
+		m.status = ""
+		return m, nil
+	case "backspace":
+		if m.promptValue != "" {
+			r := []rune(m.promptValue)
+			m.promptValue = string(r[:len(r)-1])
+		}
+	default:
+		if msg.Mod == 0 && msg.Text != "" {
+			m.promptValue += msg.Text
+		}
+	}
+	return m, nil
 }
 
 func (m Model) applyShareAction(entry *workflow.WorkflowListEntry) (tea.Model, tea.Cmd) {
@@ -477,20 +564,7 @@ func (m *Model) moveChoice(delta int) {
 }
 
 func (m *Model) clampChoice() {
-	n := len(m.choiceRows())
-	if n == 0 {
-		m.cursor, m.offset = 0, 0
-		return
-	}
-	if m.cursor >= n {
-		m.cursor = n - 1
-	}
-	if m.cursor < m.offset {
-		m.offset = m.cursor
-	}
-	if m.cursor >= m.offset+ListViewport {
-		m.offset = m.cursor - ListViewport + 1
-	}
+	m.cursor, m.offset = tui.ClampListWindow(m.cursor, m.offset, len(m.choiceRows()), ListViewport)
 }
 
 func (m Model) choiceRows() []string {
