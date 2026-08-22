@@ -16,6 +16,7 @@ const (
 	FilterRuns          = "filter runs..."
 	PromptPlaceholder   = "prompt..."
 	SubmitHint          = "enter submit" + ChromeSep + "esc back"
+	CreateNameHint      = "enter create" + ChromeSep + "esc cancel"
 	EmptyCatalogMessage = "Hi there, looks like you got no runnable workflows, start by creating a new one, browsing examples or importing an existing workflow."
 	CursorPrefix        = "> "
 	WarningMark         = "! "
@@ -40,5 +41,6 @@ var ChromeStrings = []string{
 	FilterRuns,
 	PromptPlaceholder,
 	SubmitHint,
+	CreateNameHint,
 	EmptyCatalogMessage,
 }

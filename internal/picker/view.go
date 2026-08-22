@@ -41,7 +41,7 @@ func (m Model) render() string {
 func (m Model) renderNewName() string {
 	w := m.contentWidth()
 	line := "Workflow name: " + m.promptValue
-	hint := "enter create · esc cancel"
+	hint := tui.CreateNameHint
 	if m.status != "" {
 		return tui.Truncate(line, w) + "\n" + tui.Truncate(m.status, w) + "\n" + hint
 	}
