@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
+	"github.com/aorumbayev/herdr-workflows/internal/tui"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
@@ -25,12 +26,18 @@ func TestChoiceRowsOmitLocationColumn(t *testing.T) {
 		},
 	})
 	m = apply(m, "enter")
-	for _, line := range strings.Split(m.View().Content, "\n") {
-		if !strings.Contains(line, "alpha") && !strings.Contains(line, "beta") {
-			continue
-		}
-		if strings.HasSuffix(strings.TrimRight(line, " "), "repo") {
-			t.Fatalf("choice row must not show workflow location: %q", line)
+	w := m.contentWidth()
+	for _, rawLine := range strings.Split(m.View().Content, "\n") {
+		line := tui.StripChromePadding(rawLine)
+		for _, value := range []string{"alpha", "beta"} {
+			if !strings.Contains(line, value) {
+				continue
+			}
+			selected := strings.Contains(line, value) && strings.HasPrefix(line, "> ")
+			want := FormatPickerRowName(value, "", false, w, selected)
+			if line != want {
+				t.Fatalf("choice row = %q want %q", line, want)
+			}
 		}
 	}
 }

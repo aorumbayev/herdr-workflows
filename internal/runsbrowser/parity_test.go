@@ -99,24 +99,24 @@ func TestParityMoreThanSixRunsScrollsViewport(t *testing.T) {
 
 func listViewportRows(body string) int {
 	lines := strings.Split(body, "\n")
-	inList := false
+	i := 0
+	for i < len(lines) && tui.StripContentPadding(lines[i]) == "" {
+		i++
+	}
+	if i >= len(lines) {
+		return 0
+	}
+	i++
+	for i < len(lines) && tui.StripContentPadding(lines[i]) == "" {
+		i++
+	}
 	n := 0
-	for _, line := range lines {
-		line = tui.StripContentPadding(line)
-		if line == "" {
-			if inList && n > 0 {
-				break
-			}
-			continue
-		}
-		if strings.Contains(line, "----") {
+	for j := 0; j < ListViewport && i < len(lines); j++ {
+		if strings.Contains(tui.StripContentPadding(lines[i]), "----") {
 			break
 		}
-		if !inList {
-			inList = true
-			continue
-		}
 		n++
+		i++
 	}
 	return n
 }

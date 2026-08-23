@@ -38,13 +38,13 @@ func TestHumanizedTitleDefault(t *testing.T) {
 	// Ports test/picker/picker.test.ts "humanized title default and provenance badges".
 	got := FilterWorkflowEntries(catalogEntries(), "")
 	options := BuildPickerOptions(got.Valid, 60)
-	if options[0].Name != "  "+" "+padEndJS("Chat handoff", 47)+"  !"+padStartJS("repo", 7) {
+	if options[0].Name != "  "+" "+padEndJS("Chat handoff", 42)+"  "+"!"+"  "+padStartJS("repo", 7)+"   " {
 		t.Fatalf("row0 = %q", options[0].Name)
 	}
 	if options[0].Description != "Pass transcript to a reviewer" {
 		t.Fatalf("desc0 = %q", options[0].Description)
 	}
-	if options[1].Name != "  "+" "+padEndJS("Deploy", 47)+"  !"+padStartJS("global", 7) {
+	if options[1].Name != "  "+" "+padEndJS("Deploy", 42)+"  "+"!"+"  "+padStartJS("global", 7)+"   " {
 		t.Fatalf("row1 = %q", options[1].Name)
 	}
 	if options[1].Description != "deploy" {

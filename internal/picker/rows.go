@@ -7,10 +7,6 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-const (
-	locationWidth = tui.LocationWidth
-)
-
 // ChromeOption is one picker list row.
 type ChromeOption struct {
 	Name        string
@@ -39,25 +35,7 @@ func FormatConsentLine(entry workflow.WorkflowListEntry) string {
 
 // FormatPickerRowName lays out cursor, title, warning, and location columns.
 func FormatPickerRowName(title, location string, warned bool, rowWidth int, selected bool) string {
-	titleW := max(0, rowWidth-tui.RowTextIndent-tui.ColumnGutter-tui.WarningWidth-locationWidth)
-	prefix := "  "
-	if selected {
-		prefix = tui.CursorPrefix
-	}
-	warning := " "
-	if warned {
-		warning = "!"
-	}
-	gutter := strings.Repeat(" ", tui.ColumnGutter)
-	return prefix + " " + tui.PadColumns(tui.Truncate(title, titleW), titleW) + gutter + warning + padStart(location, locationWidth)
-}
-
-func padStart(s string, n int) string {
-	w := tui.Columns(s)
-	if w >= n {
-		return s
-	}
-	return strings.Repeat(" ", n-w) + s
+	return tui.FormatRow(title, location, warned, rowWidth, selected)
 }
 
 func rowLocation(entry workflow.WorkflowListEntry) string {

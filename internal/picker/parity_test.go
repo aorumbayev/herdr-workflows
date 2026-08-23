@@ -365,7 +365,7 @@ func TestParityInputTitleRowKeepsSensitivityFlags(t *testing.T) {
 	}
 }
 
-func TestParityChoiceRowsUseASCIICursorAndLocation(t *testing.T) {
+func TestParityChoiceRowsUseASCIICursor(t *testing.T) {
 	// Product Improvement: ASCII ">" cursor and a location column on choice rows. No box or arrow glyphs.
 	// openspec/specs/picker-presentation/spec.md "ASCII greater-than cursor on choice option rows"
 	entry := workflow.WorkflowListEntry{Name: "branchy", Source: "repo", File: "/r/b.yaml", Title: "Branch check"}

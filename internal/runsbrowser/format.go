@@ -271,7 +271,8 @@ func SelectedIndex(items []history.Summary, selectedID string) int {
 	return 0
 }
 
-func formatRunSummary(item history.Summary) string {
+// FormatRunSummary is the one-line runs list detail block.
+func FormatRunSummary(item history.Summary) string {
 	return strings.Join([]string{
 		history.StatusLabel(item.Status),
 		item.DisplayID,

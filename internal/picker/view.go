@@ -17,7 +17,7 @@ func (m Model) render() string {
 	var body string
 	switch m.mode {
 	case modeRuns:
-		body = m.runs.View().Content
+		body = m.runs.Body()
 	case modePalette:
 		body = m.renderPalette()
 	case modeConsolePlace:

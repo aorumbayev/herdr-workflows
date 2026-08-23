@@ -12,6 +12,11 @@ func (m Model) View() tea.View {
 	return tea.NewView(tui.PadHeight(tui.PadContent(m.render(), m.contentWidth()), m.height))
 }
 
+// Body returns unpadded list or detail text for embedding in the picker.
+func (m Model) Body() string {
+	return m.render()
+}
+
 func (m Model) render() string {
 	var body string
 	if m.screen == screenDetail {
@@ -42,21 +47,18 @@ func (m Model) renderList() string {
 	end := min(m.offset+ListViewport, len(m.state.Items))
 	var rows []string
 	showLocation := m.scope == ScopeAll
+	titleW := max(0, w-tui.RowTextIndent-tui.RowRightGutter)
 	for i := m.offset; i < end; i++ {
 		item := m.state.Items[i]
-		row := FormatRunRow(item, w-tui.RowTextIndent, FormatRunRowOpts{ShowLocation: showLocation})
-		prefix := "  "
-		if i == m.cursor {
-			prefix = tui.CursorPrefix
-		}
-		rows = append(rows, prefix+row)
+		row := FormatRunRow(item, titleW, FormatRunRowOpts{ShowLocation: showLocation})
+		rows = append(rows, tui.FormatRow(row, "", false, w, i == m.cursor))
 	}
 	for len(rows) < ListViewport {
 		rows = append(rows, "")
 	}
 	detail := ""
 	if item := m.selectedItem(); item != nil {
-		detail = tui.FormatDetailBlock(formatRunSummary(*item), w)
+		detail = tui.FormatDetailBlock(FormatRunSummary(*item), w)
 	}
 	footer := tui.FormatListFooter(w, m.cursor, len(m.state.Items), RunsFooter(m.scope, m.cursor, len(m.state.Items)))
 	return filter + "\n\n" + strings.Join(rows, "\n") + "\n\n" + detail + "\n" + tui.FormatRule(w) + "\n" + footer

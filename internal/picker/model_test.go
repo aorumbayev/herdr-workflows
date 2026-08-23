@@ -82,26 +82,28 @@ func runCmd(m Model, cmd tea.Cmd) Model {
 }
 
 func listRowCount(view string) int {
+	lines := strings.Split(view, "\n")
+	i := 0
+	for i < len(lines) && tui.StripContentPadding(lines[i]) == "" {
+		i++
+	}
+	if i >= len(lines) {
+		return 0
+	}
+	i++
+	for i < len(lines) && tui.StripContentPadding(lines[i]) == "" {
+		i++
+	}
 	n := 0
-	inList := false
-	for _, line := range strings.Split(view, "\n") {
-		line = tui.StripContentPadding(line)
-		if line == "" {
-			if inList && n > 0 {
-				break
-			}
-			continue
-		}
+	for j := 0; j < tui.ListViewport && i < len(lines); j++ {
+		line := tui.StripContentPadding(lines[i])
 		if strings.Contains(line, "----") {
 			break
-		}
-		if !inList {
-			inList = true
-			continue
 		}
 		if strings.HasPrefix(line, "> ") || strings.HasPrefix(line, "  ") {
 			n++
 		}
+		i++
 	}
 	return n
 }
