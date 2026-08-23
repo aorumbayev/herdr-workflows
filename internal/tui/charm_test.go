@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -15,6 +18,8 @@ func TestCharmVerdicts(t *testing.T) {
 		"footer-position-counter",
 		"two-line-detail-wrap",
 		"inset-muted-rule",
+		"chrome-horizontal-padding",
+		"detail-block-height",
 		"column-row-layout",
 		"ascii-chrome-strings",
 		"terminal-column-truncate",
@@ -23,6 +28,8 @@ func TestCharmVerdicts(t *testing.T) {
 		"palette-body",
 		"delete-confirm-yn",
 		"collected-answers-truncation",
+		"viewport-height-pad",
+		"runs-detail-scroll",
 	}
 	got := map[string]CharmVerdict{}
 	for _, v := range CharmVerdicts() {
@@ -103,11 +110,11 @@ func TestFormatRuleInsetMuted(t *testing.T) {
 	if !strings.HasPrefix(rule, strings.Repeat(" ", RowTextIndent)) {
 		t.Fatalf("rule missing indent: %q", rule)
 	}
-	field := strings.TrimLeft(rule, " ")
-	if field != strings.Repeat("-", 60-RowTextIndent) {
+	field := strings.Trim(rule, " ")
+	if field != strings.Repeat("-", 60-2*RowTextIndent) {
 		t.Fatalf("rule field = %q", field)
 	}
-	if FormatRule(10) != "   "+strings.Repeat("-", 7) {
+	if FormatRule(10) != "   "+strings.Repeat("-", 4)+"   " {
 		t.Fatalf("rule(10) = %q", FormatRule(10))
 	}
 }
@@ -122,5 +129,22 @@ func TestPadColumnsKeepsASCIIIndicatorSingleColumn(t *testing.T) {
 	want := room + 1 + Columns(indicator)
 	if Columns(row) != want {
 		t.Fatalf("row cols %d want %d (%q)", Columns(row), want, row)
+	}
+}
+
+func TestCharmVerdictVersionsResolve(t *testing.T) {
+	for _, v := range CharmVerdicts() {
+		mod := v.CandidateModule + "@" + v.CandidateVersion
+		if err := exec.Command("go", "list", "-m", "-json", mod).Run(); err != nil {
+			t.Fatalf("%s: %s not resolved: %v", v.Mechanism, mod, err)
+		}
+		modRoot := strings.TrimSpace(os.Getenv("GOMODCACHE"))
+		if modRoot == "" {
+			continue
+		}
+		path := filepath.Join(modRoot, v.CandidateModule+"@"+v.CandidateVersion)
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("%s: %s not in module cache after go list: %v", v.Mechanism, mod, err)
+		}
 	}
 }

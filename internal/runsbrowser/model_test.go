@@ -28,8 +28,6 @@ func press(s string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyBackspace}
 	case "ctrl+g":
 		return tea.KeyPressMsg{Code: 'g', Mod: tea.ModCtrl}
-	case "w":
-		return tea.KeyPressMsg{Text: "w", Code: 'w'}
 	default:
 		r := []rune(s)
 		return tea.KeyPressMsg{Text: s, Code: r[0]}
@@ -109,9 +107,6 @@ func TestEnterShowsDetailEscapeRestoresSelection(t *testing.T) {
 	if !strings.Contains(body, "SUCCEEDED") || !strings.Contains(body, "bravo") {
 		t.Fatalf("detail missing:\n%s", body)
 	}
-	if !strings.Contains(body, "w workbench") {
-		t.Fatal("workbench hint missing in detail footer")
-	}
 	m = apply(m, "esc")
 	body = m.View().Content
 	if !strings.Contains(body, tui.FilterRuns) && !strings.HasPrefix(body, "filter") {
@@ -153,28 +148,15 @@ func TestOverlappingDetailLatestWins(t *testing.T) {
 	_ = ids
 }
 
-func TestWorkbenchLaunchOnSucceededDetail(t *testing.T) {
-	checkout := t.TempDir()
-	var route string
-	m, ids := modelWithRuns(t, checkout, "alpha")
-	m.launchWorkbench = func(r string) { route = r }
-	m = apply(m, "enter")
-	m = apply(m, "w")
-	want := WorkbenchRoute(ids[0])
-	if route != want {
-		t.Fatalf("route = %q want %q", route, want)
-	}
-}
-
 func TestFilterMissKeepsFilterRow(t *testing.T) {
 	checkout := t.TempDir()
 	m, _ := modelWithRuns(t, checkout, "alpha")
-	if got := strings.Split(m.View().Content, "\n")[0]; got != tui.FilterRuns {
+	if got := tui.StripContentPadding(strings.Split(m.View().Content, "\n")[0]); got != tui.FilterRuns {
 		t.Fatalf("empty filter = %q", got)
 	}
 	m = apply(m, "z", "z", "z")
 	body := m.View().Content
-	if got := strings.Split(body, "\n")[0]; got != "zzz" {
+	if got := tui.StripContentPadding(strings.Split(body, "\n")[0]); got != "zzz" {
 		t.Fatalf("typed filter = %q", got)
 	}
 	if !strings.Contains(body, "no matching runs") {

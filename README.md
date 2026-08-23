@@ -84,17 +84,16 @@ Workflows live in `.hwf/workflows/` for one repo, or `~/.hwf/workflows/` for eve
 | ---------------- | -------------------------------------------------------------------------------------- |
 | `prefix+k`       | Pick and run a workflow. `Ctrl+K` opens the actions palette                            |
 | `hwf run <name>` | Run from a terminal or a script, with `--input name=value`                             |
-| `hwf web`        | Build, edit, share, and import workflows. Manage configuration and inspect run history |
 | `hwf update`     | Install the latest published release                                                   |
 | `hwf help`       | List every command                                                                     |
 
-Run workflows from the picker or with `hwf run`. Runs need real herdr panes. The workbench edits and shares workflows, manages configuration, and inspects run history. It never runs workflows.
+Run workflows from the picker or with `hwf run`. Runs need real herdr panes. Edit workflows in `$EDITOR` from the picker palette (`n` / `o`), or import with `hwf workflow import`.
 
 ## Build workflows with your agent
 
 Two agent skills ship inside the CLI, so there is no separate install step — an agent with `hwf` on `PATH` reads a skill through `hwf skills show`:
 
-- `herdr-workflow-create` — interviews you, writes v1alpha1 YAML, keeps the workbench canvas in sync, and validates through the real loader before saving
+- `herdr-workflow-create` — interviews you, writes v1alpha1 YAML, and validates through the real loader before saving
 - `herdr-workflow-upgrade` — brings a repo's existing workflows up to date with the latest herdr, behind version gates and a load oracle
 
 ```bash
@@ -110,10 +109,10 @@ Set up the herdr-workflows toolkit so you can build workflows for me:
 1. If `hwf` is not on PATH: herdr plugin install aorumbayev/herdr-workflows
 2. Read the bundled authoring skill with `hwf skills show herdr-workflow-create` and follow
    the authoring workflow it describes.
-3. In this repo: run `hwf init` if .hwf/config.yaml is missing, then start the workbench in
-   the background with `hwf web --no-open` and give me the URL it prints.
-4. Build a small test workflow — one `run: [git, status, --short]` step — save it, send me
-   <url>#w=repo:<name>, and confirm the canvas draws it. Then interview me for the real one.
+3. In this repo: run `hwf init` if .hwf/config.yaml is missing, then validate drafts with
+   `hwf workflow validate` (or the skill `scripts/validate.sh`).
+4. Build a small test workflow — one `run: [git, status, --short]` step — save it under
+   `.hwf/workflows/`, validate it, then interview me for the real one.
 ```
 
 ## Docs

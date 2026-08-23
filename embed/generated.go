@@ -8,6 +8,5 @@
 //	workflow.schema.json  <- ../docs/workflow.schema.json
 //	skills/**             <- ../skills/**
 //
-// page.html and field-model.js are authored here (one source each).
 // Drift is gated by embed_test.go assertCopy and `go run ./scripts/sync-embed`.
 package assets

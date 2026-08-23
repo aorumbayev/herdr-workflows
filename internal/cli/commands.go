@@ -65,7 +65,13 @@ func newWorkflowCmd() *cobra.Command {
 	}
 	insp.Flags().StringArray("input", nil, "select guarded input path (repeatable)")
 	insp.Flags().Bool("resolve", false, "resolve active dynamic choices")
-	cmd.AddCommand(imp, insp)
+	val := &cobra.Command{
+		Use:   "validate <file> [name]",
+		Short: "Validate a workflow YAML file through the loader",
+		Args:  cobra.RangeArgs(1, 2),
+		RunE:  runWorkflowValidate,
+	}
+	cmd.AddCommand(imp, insp, val)
 	return cmd
 }
 
@@ -85,15 +91,13 @@ func newPickerCmd() *cobra.Command {
 	}
 }
 
-func newWebCmd() *cobra.Command {
+func newConsoleCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "web [route]",
-		Short: "Start the browser workbench",
-		Args:  cobra.MaximumNArgs(1),
-		RunE:  runWeb,
+		Use:   "console",
+		Short: "Open or run the full-screen console TUI",
+		RunE:  runConsole,
 	}
-	cmd.Flags().Int("port", 0, "listen port")
-	cmd.Flags().Bool("no-open", false, "do not open a browser")
+	cmd.Flags().String("placement", "", "open placement: tab, beside, or below (default beside when opening)")
 	return cmd
 }
 

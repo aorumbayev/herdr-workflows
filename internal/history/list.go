@@ -237,6 +237,7 @@ func retentionCleanup(getenv config.Env) error {
 		oldest := terminals[0]
 		terminals = terminals[1:]
 		_ = os.Remove(oldest.path)
+		removeDebugArtifacts(oldest.id, getenv)
 		_ = os.WriteFile(filepath.Join(dir, oldest.id+".expired"), []byte{}, 0o600)
 		bytes -= oldest.size
 	}

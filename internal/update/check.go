@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/aorumbayev/herdr-workflows/internal/caps"
 )
 
 const (
@@ -54,9 +56,12 @@ func CheckForUpdate(opts CheckOpts) (LatestRelease, error) {
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return LatestRelease{}, releaseErr(fmt.Sprintf("latest release request failed: HTTP %d", res.StatusCode))
 	}
-	body, err := io.ReadAll(res.Body)
+	body, err := io.ReadAll(io.LimitReader(res.Body, int64(caps.CaptureByteLimit)+1))
 	if err != nil {
 		return LatestRelease{}, releaseErr("latest release request failed: " + err.Error())
+	}
+	if len(body) > caps.CaptureByteLimit {
+		return LatestRelease{}, &caps.CaptureLimitError{Source: "latest release body", Bytes: len(body), Limit: caps.CaptureByteLimit}
 	}
 	var parsed struct {
 		TagName string `json:"tag_name"`

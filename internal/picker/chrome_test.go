@@ -15,7 +15,7 @@ func TestBuildInvalidOptionsStripsFilePrefix(t *testing.T) {
 	// Ports test/picker/picker.test.ts "invalid entries join the option list with stripped errors".
 	_, invalid := FilterWorkflowEntries(catalogEntries(), "").Valid, FilterWorkflowEntries(catalogEntries(), "").Invalid
 	options := BuildInvalidOptions(invalid, 60)
-	want0 := "  " + padEndJS("Broken", 47) + "   " + "invalid"
+	want0 := FormatPickerRowName("Broken", "invalid", false, 60, false)
 	if options[0].Name != want0 {
 		t.Fatalf("invalid row = %q want %q", options[0].Name, want0)
 	}
@@ -25,7 +25,7 @@ func TestBuildInvalidOptionsStripsFilePrefix(t *testing.T) {
 	if strings.Contains(options[0].Description, "/r/broken.yaml") {
 		t.Fatal("description still contains file path")
 	}
-	want1 := "  " + padEndJS("Chat Broken", 47) + "   " + "invalid"
+	want1 := FormatPickerRowName("Chat Broken", "invalid", false, 60, false)
 	if options[1].Name != want1 {
 		t.Fatalf("second invalid row = %q want %q", options[1].Name, want1)
 	}
@@ -38,13 +38,13 @@ func TestHumanizedTitleDefault(t *testing.T) {
 	// Ports test/picker/picker.test.ts "humanized title default and provenance badges".
 	got := FilterWorkflowEntries(catalogEntries(), "")
 	options := BuildPickerOptions(got.Valid, 60)
-	if options[0].Name != "  "+padEndJS("Chat handoff", 47)+" ! "+padStartJS("repo", 7) {
+	if options[0].Name != "  "+" "+padEndJS("Chat handoff", 42)+"  "+"!"+"  "+padStartJS("repo", 7)+"   " {
 		t.Fatalf("row0 = %q", options[0].Name)
 	}
 	if options[0].Description != "Pass transcript to a reviewer" {
 		t.Fatalf("desc0 = %q", options[0].Description)
 	}
-	if options[1].Name != "  "+padEndJS("Deploy", 47)+" ! "+padStartJS("global", 7) {
+	if options[1].Name != "  "+" "+padEndJS("Deploy", 42)+"  "+"!"+"  "+padStartJS("global", 7)+"   " {
 		t.Fatalf("row1 = %q", options[1].Name)
 	}
 	if options[1].Description != "deploy" {
@@ -185,7 +185,7 @@ func TestPaletteLetters(t *testing.T) {
 	if !strings.Contains(tui.ListHint, "tab runs") || !strings.Contains(tui.ListHint, "ctrl+k") {
 		t.Fatalf("list hint = %q", tui.ListHint)
 	}
-	if ResolvePaletteLetter("n", nil).ID != "new" || ResolvePaletteLetter("i", nil).Route != "import" {
+	if ResolvePaletteLetter("n", nil).ID != "new" || ResolvePaletteLetter("i", nil).ID != "import" {
 		t.Fatal("n/i")
 	}
 	if ResolvePaletteLetter("e", nil).ID != "examples" {
@@ -195,7 +195,7 @@ func TestPaletteLetters(t *testing.T) {
 		t.Fatal("selection-dependent without row")
 	}
 	entry := workflow.WorkflowListEntry{Name: "deploy", Source: "repo", File: "/r/d.yaml"}
-	if got := ResolvePaletteLetter("o", &entry); got == nil || got.Route != "w=repo:deploy" {
+	if got := ResolvePaletteLetter("o", &entry); got == nil || got.ID != "open" || got.Entry == nil || got.Entry.Name != "deploy" {
 		t.Fatalf("open = %+v", got)
 	}
 	if got := ResolvePaletteLetter("s", &entry); got == nil || got.Entry.Name != "deploy" {

@@ -151,7 +151,7 @@ A later layer replaces a whole named entry, never part of one. So `config.local.
 
 Config accepts three keys: `profiles`, `default_profile`, and `transcripts`. Nothing else. See [Reference](/reference#config).
 
-You can also edit both files in the browser. Run `hwf web` and open the **Config** tab, which validates the YAML before it saves.
+Edit both files in your editor, or run `hwf init` to regenerate profile entries from the agents on your `PATH`.
 
 ## Next
 

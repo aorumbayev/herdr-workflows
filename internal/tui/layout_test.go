@@ -39,6 +39,26 @@ func TestFormatListFooterNarrowUnicodeStaysWithinColumns(t *testing.T) {
 	}
 }
 
+func TestFormatDetailBlockReservesTwoRows(t *testing.T) {
+	got := strings.Split(FormatDetailBlock("hello", 60), "\n")
+	if len(got) != DetailBlockHeight {
+		t.Fatalf("detail block lines = %d", len(got))
+	}
+	if got[0] != "   hello" || got[1] != "" {
+		t.Fatalf("short detail = %#v", got)
+	}
+}
+
+func TestPadContentAddsHorizontalPadding(t *testing.T) {
+	line := PadContentLine("abc", 3)
+	if line != " abc " {
+		t.Fatalf("padded = %q", line)
+	}
+	if StripContentPadding(line) != "abc" {
+		t.Fatalf("stripped = %q", StripContentPadding(line))
+	}
+}
+
 func TestFormatDetailLines(t *testing.T) {
 	if FormatDetailLines("hello", 60) != "   hello" {
 		t.Fatalf("short = %q", FormatDetailLines("hello", 60))

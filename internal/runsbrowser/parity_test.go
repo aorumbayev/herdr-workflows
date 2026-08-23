@@ -23,7 +23,6 @@ var requiredRunsParityScenarios = []string{
 	"Inspect an active run",
 	"Inspect a tolerated failure",
 	"Return from detail",
-	"Workbench handoff fails",
 	"No current runs",
 	"No machine runs",
 	"Filter miss",
@@ -100,25 +99,24 @@ func TestParityMoreThanSixRunsScrollsViewport(t *testing.T) {
 
 func listViewportRows(body string) int {
 	lines := strings.Split(body, "\n")
+	i := 0
+	for i < len(lines) && tui.StripContentPadding(lines[i]) == "" {
+		i++
+	}
+	if i >= len(lines) {
+		return 0
+	}
+	i++
+	for i < len(lines) && tui.StripContentPadding(lines[i]) == "" {
+		i++
+	}
 	n := 0
-	for i, line := range lines {
-		if i == 0 {
-			continue // filter
+	for j := 0; j < ListViewport && i < len(lines); j++ {
+		if strings.Contains(tui.StripContentPadding(lines[i]), "----") {
+			break
 		}
-		if strings.HasPrefix(strings.TrimLeft(line, " "), "-") {
-			break // rule
-		}
-		if strings.HasPrefix(line, "> ") || strings.HasPrefix(line, "  ") {
-			if line == "" || line == "  " {
-				n++
-				continue
-			}
-			// detail lines are indented with three spaces via FormatDetailLines
-			if strings.HasPrefix(line, "   ") {
-				break
-			}
-			n++
-		}
+		n++
+		i++
 	}
 	return n
 }
@@ -182,31 +180,6 @@ func TestParityInspectActiveAndToleratedDetailKinds(t *testing.T) {
 	if !strings.Contains(joined, "failed") || !strings.Contains(joined, "ship") {
 		t.Fatalf("tolerated failure detail:\n%s", joined)
 	}
-}
-
-func TestParityWorkbenchHandoffNilKeepsDetail(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md "Workbench handoff fails"
-	checkout := t.TempDir()
-	m, _ := modelWithRuns(t, checkout, "alpha")
-	m.launchWorkbench = nil
-	m = apply(m, "enter")
-	before := m.View().Content
-	m = apply(m, "w")
-	after := m.View().Content
-	if m.screen != screenDetail {
-		t.Fatal("detail must stay open")
-	}
-	if !strings.Contains(after, "handoff") {
-		t.Fatalf("expected width-bounded handoff error:\n%s", after)
-	}
-	if tui.Columns(after) > 0 {
-		for _, line := range strings.Split(after, "\n") {
-			if tui.Columns(line) > m.contentWidth()+2 {
-				t.Fatalf("line exceeds width: %q", line)
-			}
-		}
-	}
-	_ = before
 }
 
 func TestParityNoMachineRunsCopy(t *testing.T) {

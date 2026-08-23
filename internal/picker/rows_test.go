@@ -22,7 +22,7 @@ func TestBuildPickerOptionsTitleProvenanceAndSensitivity(t *testing.T) {
 		SensitiveMethods: []string{"pane.close"},
 	}
 	options := BuildPickerOptions([]workflow.WorkflowListEntry{entry}, 60)
-	want := "  " + padEndJS("Handover", 47) + " ! " + padStartJS("repo", 7)
+	want := "  " + " " + padEndJS("Handover", 42) + "  " + "!" + "  " + padStartJS("repo", 7) + "   "
 	if options[0].Name != want {
 		t.Fatalf("row = %q, want %q", options[0].Name, want)
 	}
@@ -40,20 +40,21 @@ func TestFormatPickerRowWarningAndLocationColumns(t *testing.T) {
 	// Ports warning-field, location pad, selected/unselected length, overlong title.
 	warned := FormatPickerRowName("Warned", "repo", true, 60, false)
 	clean := FormatPickerRowName("Clean", "repo", false, 60, false)
-	if warned[49:52] != " ! " {
-		t.Fatalf("warned slice = %q", warned[49:52])
+	if warned[47] != '!' {
+		t.Fatalf("warned marker = %q at col 47", string(warned[47]))
 	}
-	if clean[49:52] != "   " {
-		t.Fatalf("clean slice = %q", clean[49:52])
+	if clean[47] != ' ' {
+		t.Fatalf("clean marker = %q at col 47", string(clean[47]))
 	}
-	if !strings.HasSuffix(warned, "   repo") || !strings.HasSuffix(clean, "   repo") {
+	if !strings.HasSuffix(warned, padStartJS("repo", 7)+"   ") || !strings.HasSuffix(clean, padStartJS("repo", 7)+"   ") {
 		t.Fatalf("location suffixes: %q %q", warned, clean)
 	}
-	if FormatPickerRowName("A", "global", false, 60, false)[len(FormatPickerRowName("A", "global", false, 60, false))-7:] != " global" {
-		t.Fatal("global location")
+	row := FormatPickerRowName("A", "global", false, 60, false)
+	if row[len(row)-10:] != padStartJS("global", 7)+"   " {
+		t.Fatalf("global location = %q", row[len(row)-10:])
 	}
-	if got := FormatPickerRowName("A", "invalid", false, 60, false); got[len(got)-7:] != "invalid" {
-		t.Fatalf("invalid location = %q", got[len(got)-7:])
+	if got := FormatPickerRowName("A", "invalid", false, 60, false); got[len(got)-10:] != padStartJS("invalid", 7)+"   " {
+		t.Fatalf("invalid location = %q", got[len(got)-10:])
 	}
 	selected := FormatPickerRowName("Handoff", "repo", true, 60, true)
 	idle := FormatPickerRowName("Handoff", "repo", true, 60, false)
@@ -70,6 +71,10 @@ func TestFormatPickerRowWarningAndLocationColumns(t *testing.T) {
 	}
 	if !strings.Contains(long, "...") {
 		t.Fatalf("overlong missing ellipsis: %q", long)
+	}
+	choice := FormatPickerRowName("staging", "", false, 60, true)
+	if tui.Columns(choice) != 60 {
+		t.Fatalf("choice row cols %d want 60", tui.Columns(choice))
 	}
 }
 
@@ -102,16 +107,14 @@ func TestEntrySensitivityAggregatesFlags(t *testing.T) {
 func TestFormatRuleSpansRowTextField(t *testing.T) {
 	// Ports test/picker/picker.test.ts formatRule.
 	rule := tui.FormatRule(60)
-	if rule != "   "+strings.Repeat("-", 57) || len(rule) != 60 {
+	if rule != "   "+strings.Repeat("-", 54)+"   " || len(rule) != 60 {
 		t.Fatalf("rule(60) = %q", rule)
 	}
-	if tui.FormatRule(10) != "   "+strings.Repeat("-", 7) {
+	if tui.FormatRule(10) != "   "+strings.Repeat("-", 4)+"   " {
 		t.Fatalf("rule(10) = %q", tui.FormatRule(10))
 	}
-	row := FormatPickerRowName("Handoff", "repo", false, 60, false)
-	fieldWidth := len(row) - 2
-	if len(strings.TrimLeft(tui.FormatRule(60), " ")) != fieldWidth {
-		t.Fatalf("rule field %d row field %d", len(strings.TrimLeft(tui.FormatRule(60), " ")), fieldWidth)
+	if strings.Count(rule, "-") != 60-2*tui.RowTextIndent {
+		t.Fatalf("rule dash count = %d", strings.Count(rule, "-"))
 	}
 }
 

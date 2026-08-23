@@ -9,7 +9,6 @@ import (
 // PaletteAction is one ctrl+k letter result.
 type PaletteAction struct {
 	ID    string
-	Route string
 	Entry *workflow.WorkflowListEntry
 }
 
@@ -21,18 +20,21 @@ func ResolvePaletteLetter(letter string, selected *workflow.WorkflowListEntry) *
 	key := strings.ToLower(letter)
 	switch key {
 	case "n":
-		return &PaletteAction{ID: "new", Route: "new"}
+		return &PaletteAction{ID: "new"}
 	case "i":
-		return &PaletteAction{ID: "import", Route: "import"}
+		return &PaletteAction{ID: "import"}
 	case "e":
 		return &PaletteAction{ID: "examples"}
+	case "c":
+		return &PaletteAction{ID: "console"}
 	}
 	if selected == nil || selected.Error != "" {
 		return nil
 	}
 	switch key {
 	case "o":
-		return &PaletteAction{ID: "open", Route: "w=" + selected.Source + ":" + selected.Name}
+		e := *selected
+		return &PaletteAction{ID: "open", Entry: &e}
 	case "s":
 		e := *selected
 		return &PaletteAction{ID: "share", Entry: &e}
@@ -46,16 +48,21 @@ func ResolvePaletteLetter(letter string, selected *workflow.WorkflowListEntry) *
 
 // FormatPaletteBody is the ctrl+k menu. A bare letter fires; no Enter step.
 func FormatPaletteBody(selected *workflow.WorkflowListEntry) string {
-	lines := []string{"n  Create new", "i  Import", "e  Browse examples"}
+	lines := []string{
+		"n  Create new in $EDITOR",
+		"i  Import via hwf workflow import",
+		"e  Browse examples",
+		"c  Open console",
+	}
 	if selected != nil && selected.Error == "" {
 		lines = append(lines,
-			"o  Open "+selected.Name,
+			"o  Edit "+selected.Name+" in $EDITOR",
 			"s  Share "+selected.Name+" (copy)",
 			"d  Delete "+selected.Name,
 		)
 	} else {
 		lines = append(lines,
-			"o  Open (needs selection)",
+			"o  Edit (needs selection)",
 			"s  Share (needs selection)",
 			"d  Delete (needs selection)",
 		)

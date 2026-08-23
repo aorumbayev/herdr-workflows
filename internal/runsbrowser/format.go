@@ -156,12 +156,8 @@ func RunsFooter(scope Scope, index, total int) string {
 }
 
 // RunDetailFooter is the detail-mode footer hint.
-func RunDetailFooter(allowWorkbench bool) string {
-	parts := []string{"esc back", "up/down scroll"}
-	if allowWorkbench {
-		parts = append([]string{"w workbench"}, parts...)
-	}
-	return strings.Join(parts, tui.ChromeSep)
+func RunDetailFooter() string {
+	return strings.Join([]string{"esc back", "up/down scroll"}, tui.ChromeSep)
 }
 
 // DetailLines renders a detail view into single-width lines.
@@ -174,7 +170,7 @@ func DetailLines(view DetailView, width int) []string {
 		}
 		return lines
 	case "local-failure":
-		head := strings.Join([]string{"LAUNCH FAILED", view.Workflow, shortID(view.ID)}, tui.ChromeSep)
+		head := strings.Join([]string{"LAUNCH FAILED", view.Workflow, history.DisplayRunID(view.ID)}, tui.ChromeSep)
 		return []string{tui.Truncate(head, width), asciiGlyphs(tui.Truncate(view.Message, width))}
 	case "history-unavailable":
 		status := "RUNNING"
@@ -203,18 +199,11 @@ func DetailLines(view DetailView, width int) []string {
 }
 
 func formatStartingDetail(workflow, id string, width int) []string {
-	head := strings.Join([]string{"STARTING", workflow, shortID(id)}, tui.ChromeSep)
+	head := strings.Join([]string{"STARTING", workflow, history.DisplayRunID(id)}, tui.ChromeSep)
 	return []string{
 		tui.Truncate(head, width),
 		tui.Truncate("claiming run history...", width),
 	}
-}
-
-func shortID(id string) string {
-	if len(id) >= 8 {
-		return id[:8]
-	}
-	return id
 }
 
 func asciiGlyphs(line string) string {
@@ -266,6 +255,12 @@ func ScrollDetailLines(lines []string, scroll, viewport int) ([]string, int) {
 	return lines[next:end], next
 }
 
+// ClampDetailScroll caps scroll to the legal range for lines and viewport.
+func ClampDetailScroll(lines []string, scroll, viewport int) int {
+	_, next := ScrollDetailLines(lines, scroll, viewport)
+	return next
+}
+
 // SelectedIndex finds the list cursor for selectedID.
 func SelectedIndex(items []history.Summary, selectedID string) int {
 	for i, item := range items {
@@ -276,7 +271,8 @@ func SelectedIndex(items []history.Summary, selectedID string) int {
 	return 0
 }
 
-func formatRunSummary(item history.Summary) string {
+// FormatRunSummary is the one-line runs list detail block.
+func FormatRunSummary(item history.Summary) string {
 	return strings.Join([]string{
 		history.StatusLabel(item.Status),
 		item.DisplayID,

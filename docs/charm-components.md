@@ -2,7 +2,7 @@
 
 Decision 16 evaluates every hand-written picker and TUI mechanism against the latest stable Charm modules. Use a Charm component only when it meets required behavior with less product code and unchanged UX. Default is keep custom code. Each keep-custom row names the missing capability and a focused test.
 
-## Exact versions (2026-08-21)
+## Exact versions (2026-08-22)
 
 Versions come from `go list -m -u` for direct modules and from `proxy.golang.org` `@latest` for candidates not in `go.mod`.
 
@@ -28,6 +28,8 @@ This cycle does not add `bubbles` or `huh`. Unused modules violate YAGNI.
 | Footer and position counter | `bubbles/v2` help or status | v2.1.1 | keep-custom | No hint-left index/total-right footer that clips the hint before the counter. | `TestFormatListFooter` |
 | Two-line detail wrap | `lipgloss/v2` | v2.0.6 | keep-custom | No two-line wrap with `RowTextIndent` that truncates only line two with ASCII ellipsis. | `TestFormatDetailLines` |
 | Inset muted horizontal rule | `lipgloss/v2` | v2.0.6 | keep-custom | No inset dash rule matched to `RowTextIndent` and content width. | `TestFormatRuleInsetMuted` |
+| Horizontal content padding | `lipgloss/v2` | v2.0.6 | keep-custom | `Padding` does not pair with `StripContentPadding` or the `Truncate` ASCII ellipsis for the one-cell popup inset on every line. | `TestPadContentAddsHorizontalPadding` |
+| Fixed two-row detail block | `lipgloss/v2` | v2.0.6 | keep-custom | `Style.Height` reserves blank rows but does not wrap detail text onto two indented lines with ASCII ellipsis on line two. | `TestFormatDetailBlockReservesTwoRows` |
 | Column row layout | `bubbles/v2` ItemDelegate | v2.1.1 | keep-custom | No built-in cursor prefix, title truncate, warning, and location columns. | `TestPadColumnsKeepsASCIIIndicatorSingleColumn` |
 | ASCII-only chrome strings | `bubbles/v2` styles | v2.1.1 | keep-custom | Default glyphs are not single-column ASCII `ChromeStrings`. | `TestChromeStringsAreSingleColumnASCII` |
 | Terminal-column truncate | `x/ansi` | v0.11.8 | keep-custom | Width helpers exist. Product still owns ASCII `Ellipsis` and `PadColumns`. | `TestTruncateEllipsisAtMax` |
@@ -36,6 +38,8 @@ This cycle does not add `bubbles` or `huh`. Unused modules violate YAGNI.
 | Palette body | `bubbles/v2` | v2.1.1 | keep-custom | No Ctrl+K letter-fire palette with saved filter and selection-dependent lines. Picker-owned, not `tui`. | `TestCharmVerdicts` |
 | Delete confirm y/n | `huh/v2` Confirm | v2.0.3 | keep-custom | Confirm does not match bare y/n/esc and `DeleteConfirmHint` ASCII chrome. | `TestChromeStringsAreSingleColumnASCII` |
 | Collected-answers truncation | `bubbles/v2` | v2.1.1 | keep-custom | No `chosen: name=value` join truncated with ASCII ellipsis. Uses `tui.Truncate`. | `TestTruncateEllipsisAtMax` |
+| Viewport height pad | `bubbletea/v2` | v2.0.9 | keep-custom | Bubble Tea does not clear unused TTY rows after a shorter frame. `PadHeight` appends blank lines to the prior frame height. | `TestPadHeight` |
+| Runs detail scroll | `bubbles/v2` viewport | v2.1.1 | keep-custom | `viewport.Model` has no scrollbar chrome and keeps `SoftWrap` off by default. Runs detail still scrolls a fixed ASCII window over pre-wrapped lines with clamped offset without importing bubbles. | `TestScrollDetailLines` |
 
 Machine-readable copy lives in `tui.CharmVerdicts()`.
 
@@ -104,3 +108,11 @@ Delete mode accepts bare `y` / `n` / esc with `DeleteConfirmHint`. `huh.Confirm`
 ### Collected-answers truncation
 
 Sequential inputs show `chosen: name=value` joined and truncated to content width. Bubbles has no helper. Keep `FormatInputAnswers` on `tui.Truncate`.
+
+### Viewport height pad
+
+After a shorter frame, Bubble Tea leaves prior TTY rows on screen. `PadHeight` appends blank lines up to the last frame height so ghost chrome does not linger. Keep the helper in `tui`.
+
+### Runs detail scroll
+
+Runs detail scrolls a fixed ASCII window over lines already wrapped for content width. `bubbles/v2` `viewport.Model` has no scrollbar chrome and keeps `SoftWrap` off by default. The product still owns clamped offset scrolling over pre-wrapped lines without importing bubbles. Keep `ScrollDetailLines` in the runs browser.

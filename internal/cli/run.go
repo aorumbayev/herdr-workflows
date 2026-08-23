@@ -7,6 +7,8 @@ import (
 	"os"
 	"syscall"
 
+	"github.com/aorumbayev/herdr-workflows/internal/caps"
+
 	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/engine"
 	"github.com/aorumbayev/herdr-workflows/internal/history"
@@ -35,20 +37,11 @@ func runRun(cmd *cobra.Command, args []string) error {
 	var runID string
 
 	if launchPayload {
-		stdin, err := io.ReadAll(cmd.InOrStdin())
+		var err error
+		inputs, domains, runID, err = loadLaunchPayload(cmd, name)
 		if err != nil {
 			return err
 		}
-		payload, err := engine.ParseLaunchPayload(string(stdin))
-		if err != nil {
-			return err
-		}
-		if payload.Name != name {
-			return fmt.Errorf("launch payload name '%s' does not match run name '%s'", payload.Name, name)
-		}
-		inputs = payload.Inputs
-		domains = payload.Domains
-		runID = payload.RunID
 	}
 
 	flagInputs, err := parseInputs(rawInputs)
@@ -155,4 +148,22 @@ func writeRunBytes(w io.Writer, data []byte) {
 func isClosedPipe(err error) bool {
 	var pathErr *os.PathError
 	return errors.As(err, &pathErr) && errors.Is(pathErr.Err, syscall.EPIPE)
+}
+
+func loadLaunchPayload(cmd *cobra.Command, name string) (map[string]string, map[string][]string, string, error) {
+	stdin, err := io.ReadAll(io.LimitReader(cmd.InOrStdin(), int64(caps.CaptureByteLimit)+1))
+	if err != nil {
+		return nil, nil, "", err
+	}
+	if err := caps.AssertUnderCaptureCap("launch payload", string(stdin)); err != nil {
+		return nil, nil, "", err
+	}
+	payload, err := engine.ParseLaunchPayload(string(stdin))
+	if err != nil {
+		return nil, nil, "", err
+	}
+	if payload.Name != name {
+		return nil, nil, "", fmt.Errorf("launch payload name '%s' does not match run name '%s'", payload.Name, name)
+	}
+	return payload.Inputs, payload.Domains, payload.RunID, nil
 }

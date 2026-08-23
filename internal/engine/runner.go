@@ -115,6 +115,7 @@ type preflightResult struct {
 	ok             bool
 	values         workflow.TemplateNamespace
 	transcriptFile string
+	transcriptText string
 	err            string
 }
 
@@ -179,11 +180,13 @@ func preflightContext(
 	_, needTranscript := keys["transcript"]
 	_, needTranscriptFile := keys["transcript_file"]
 	var transcriptFile string
+	var transcriptText string
 	if needTranscript || needTranscriptFile {
 		text, path, errMsg := loadTranscriptContext(ctx, cfg, deps, runID, repoRoot, needTranscriptFile)
 		if errMsg != "" {
 			return preflightResult{err: errMsg}
 		}
+		transcriptText = text
 		nsOpts.Transcript = &text
 		if path != "" {
 			transcriptFile = path
@@ -195,6 +198,7 @@ func preflightContext(
 		ok:             true,
 		values:         workflow.BuildTemplateNamespace(nsOpts),
 		transcriptFile: transcriptFile,
+		transcriptText: transcriptText,
 	}
 }
 
@@ -796,6 +800,11 @@ func RunWorkflow(opts RunOptions) (StepsResult, error) {
 		return failPrecondition(preflight.err)
 	}
 	transcriptFile = preflight.transcriptFile
+	if preflight.transcriptText != "" {
+		if rt, ok := recorder.(interface{ RecordTranscript(string) }); ok {
+			rt.RecordTranscript(preflight.transcriptText)
+		}
+	}
 
 	primary, err := runSteps(loaded.Steps, stepOpts, preflight.values)
 	if err != nil {

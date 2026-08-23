@@ -16,9 +16,9 @@ const (
 	FilterRuns          = "filter runs..."
 	PromptPlaceholder   = "prompt..."
 	SubmitHint          = "enter submit" + ChromeSep + "esc back"
+	CreateNameHint      = "enter create" + ChromeSep + "esc cancel"
 	EmptyCatalogMessage = "Hi there, looks like you got no runnable workflows, start by creating a new one, browsing examples or importing an existing workflow."
 	CursorPrefix        = "> "
-	WarningMark         = "! "
 )
 
 // ChromeStrings is every chrome fragment the picker draws. Each glyph must be
@@ -35,10 +35,10 @@ var ChromeStrings = []string{
 	Ellipsis,
 	ChromeSep,
 	CursorPrefix,
-	WarningMark,
 	FilterWorkflows,
 	FilterRuns,
 	PromptPlaceholder,
 	SubmitHint,
+	CreateNameHint,
 	EmptyCatalogMessage,
 }

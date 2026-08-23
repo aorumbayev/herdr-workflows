@@ -89,6 +89,22 @@ func CharmVerdicts() []CharmVerdict {
 			Test:              "TestFormatRuleInsetMuted",
 		},
 		{
+			Mechanism:         "chrome-horizontal-padding",
+			CandidateModule:   lipgloss,
+			CandidateVersion:  lipglossV,
+			Decision:          "keep-custom",
+			MissingCapability: "lipgloss.Padding does not pair with StripContentPadding or Truncate ASCII ellipsis for one-cell popup inset on every line.",
+			Test:              "TestPadContentAddsHorizontalPadding",
+		},
+		{
+			Mechanism:         "detail-block-height",
+			CandidateModule:   lipgloss,
+			CandidateVersion:  lipglossV,
+			Decision:          "keep-custom",
+			MissingCapability: "lipgloss Style.Height reserves blank rows but does not wrap detail text onto two indented lines with ASCII ellipsis on line two.",
+			Test:              "TestFormatDetailBlockReservesTwoRows",
+		},
+		{
 			Mechanism:         "column-row-layout",
 			CandidateModule:   bubbles,
 			CandidateVersion:  bubblesV,
@@ -151,6 +167,22 @@ func CharmVerdicts() []CharmVerdict {
 			Decision:          "keep-custom",
 			MissingCapability: "bubbles has no chosen: name=value join truncated with ASCII ellipsis under content width for sequential input answers.",
 			Test:              "TestTruncateEllipsisAtMax",
+		},
+		{
+			Mechanism:         "viewport-height-pad",
+			CandidateModule:   "charm.land/bubbletea/v2",
+			CandidateVersion:  "v2.0.9",
+			Decision:          "keep-custom",
+			MissingCapability: "bubbletea does not clear unused TTY rows after a shorter frame. PadHeight must append blank lines to the prior frame height so ghost rows do not linger.",
+			Test:              "TestPadHeight",
+		},
+		{
+			Mechanism:         "runs-detail-scroll",
+			CandidateModule:   bubbles,
+			CandidateVersion:  bubblesV,
+			Decision:          "keep-custom",
+			MissingCapability: "viewport.Model ships KeyMap bindings and enables MouseWheel by default. Product detail scroll keeps a fixed ASCII window without importing bubbles or accepting that default input surface.",
+			Test:              "TestScrollDetailLines",
 		},
 	}
 }

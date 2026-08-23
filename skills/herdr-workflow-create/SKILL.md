@@ -20,17 +20,17 @@ Where files go:
 | `.hwf/config.local.yaml`       | gitignored whole-entry overrides               |
 
 `<name>`: lowercase, `[a-z0-9][a-z0-9-_]*` (hyphens allowed). Step `id:` is a _different_,
-stricter rule — see Rules. Edit in `hwf web`. Run with `prefix+k` or `hwf run <name> [--input k=v]`.
+stricter rule — see Rules. Edit in `$EDITOR` (picker `n`/`o`) or any text editor. Run with
+`prefix+k` or `hwf run <name> [--input k=v]`.
 
 ## Workflow
 
 ```
 - [ ] 1. Interview: goal, inputs, agent vs shell, placement, failure policy
 - [ ] 2. Survey: read profiles + existing workflows
-- [ ] 3. Start the workbench in the background, hand the user the live canvas link
-- [ ] 4. Compose v1alpha1 YAML only
-- [ ] 5. Validate through the real loader (MUST be ok:true)
-- [ ] 6. Save, then keep iterating on the live canvas
+- [ ] 3. Compose v1alpha1 YAML only
+- [ ] 4. Validate through the real loader (MUST be ok:true)
+- [ ] 5. Save, then keep iterating
 ```
 
 ### 1. Interview
@@ -63,19 +63,7 @@ ls .hwf/workflows ~/.hwf/workflows 2>/dev/null
 on. It also names the runtime fallback for a method absent from the table. This skill is installed
 outside the herdr-workflows checkout, so its `src/` and `schemas/` are **not readable**.
 
-### 3. Open the live canvas (background)
-
-Start the workbench once and keep it running while you compose:
-
-```bash
-hwf web --no-open > /tmp/hwf-web.log 2>&1 &
-# wait until the log prints: herdr-workflows web · http://127.0.0.1:<port>/?token=…
-```
-
-Send `<url>#w=repo:<name>` (or `#w=global:<name>`) and tell them to press **canvas**. Do not
-block the interview/compose loop on the browser.
-
-### 4. Compose
+### 3. Compose
 
 ```yaml
 version: v1alpha1
@@ -107,7 +95,7 @@ Full syntax: **[reference/syntax.md](reference/syntax.md)**.
 Herdr methods + required selectors: **[reference/herdr-api.md](reference/herdr-api.md)**.
 Recipes: **[reference/recipes.md](reference/recipes.md)**.
 
-### 5. Validate — mandatory gate
+### 4. Validate — mandatory gate
 
 Run it **from the project root** (the directory holding `.hwf/`), with an absolute path to the
 script. The loader resolves `workflow:` children and `using:` profiles relative to the current
@@ -122,22 +110,22 @@ sh "<absolute path to this skill>/scripts/validate.sh" "$draft" <name>
 ```
 
 Prints `{"ok":true}` or `{"ok":false,"error":…}`. Exit `0` = valid, `1` = the loader rejected it,
-`2` = cannot check (missing `hwf`/`curl`/`python3`, or web failed). Draft → validate → fix until
-pass. The error names the exact key and, for `herdr:` steps, the exact missing selector.
+`2` = cannot check (missing `hwf`). Draft → validate → fix until pass. The error names the exact
+key and, for `herdr:` steps, the exact missing selector. Prefer `hwf workflow validate <file> [name]`
+when calling the CLI directly.
 
-### 6. Save and iterate
+### 5. Save and iterate
 
-Write validated YAML early so the canvas updates. Re-read the file before each edit — the user
-may have saved from the browser.
+Write validated YAML early. Re-read the file before each edit.
 
 ```
 hwf run <name> [--input k=v …]
 ```
 
-Do **not** hand-write a `# yaml-language-server: $schema=…` line, and never point one at `main`:
-the schema is published per release and a workbench save rewrites the pointer to this build's
-version. If a file needs one before its first workbench save, pin the tag:
+Do **not** hand-write a `# yaml-language-server: $schema=…` line pointing at `main`. Pin the
+release tag when needed:
 `…/herdr-workflows/v$(hwf --version)/docs/workflow.schema.json`.
+Picker `n` stubs already carry this build's schema pointer.
 
 ## Rules that break workflows
 

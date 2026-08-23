@@ -6,6 +6,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
+	"github.com/aorumbayev/herdr-workflows/internal/console"
+	"github.com/aorumbayev/herdr-workflows/internal/tui"
 	"github.com/aorumbayev/herdr-workflows/internal/update"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
@@ -20,34 +22,36 @@ type ScreenOpts struct {
 	LoadWorkflow       func(workflow.WorkflowListEntry) (*workflow.Definition, error)
 	Chdir              func(string) error
 	CopyClipboard      func(string) error
-	LaunchWorkbench    func(route string)
+	EditWorkflow       func(path, name string) workflow.ValidateResult
 	OpenURL            func(url string) error
 	Notify             func(title string, body ...string) error
 	LaunchRun          func(LaunchRunOpts) LaunchRunHandle
 	AllocateRunID      func() string
 	ExportShare        func(entry workflow.WorkflowListEntry) (command string, err error)
+	OpenConsole        func(placement console.Placement) error
 }
 
 // PrepareScreen changes the working directory and builds a picker model from ScreenOpts hooks.
 func PrepareScreen(opts ScreenOpts) (Model, error) {
 	copyFn := opts.CopyClipboard
 	if copyFn == nil {
-		copyFn = CopyToClipboard
+		copyFn = tui.CopyToClipboard
 	}
 	return Prepare(Options{
-		Entries:         opts.Entries,
-		RepoRoot:        opts.RepoRoot,
-		Config:          opts.Config,
-		Env:             opts.Env,
-		LoadWorkflow:    opts.LoadWorkflow,
-		CopyClipboard:   copyFn,
-		Chdir:           opts.Chdir,
-		LaunchWorkbench: opts.LaunchWorkbench,
-		OpenURL:         opts.OpenURL,
-		Notify:          opts.Notify,
-		LaunchRun:       opts.LaunchRun,
-		AllocateRunID:   opts.AllocateRunID,
-		ExportShare:     opts.ExportShare,
+		Entries:       opts.Entries,
+		RepoRoot:      opts.RepoRoot,
+		Config:        opts.Config,
+		Env:           opts.Env,
+		LoadWorkflow:  opts.LoadWorkflow,
+		CopyClipboard: copyFn,
+		Chdir:         opts.Chdir,
+		EditWorkflow:  opts.EditWorkflow,
+		OpenURL:       opts.OpenURL,
+		Notify:        opts.Notify,
+		LaunchRun:     opts.LaunchRun,
+		AllocateRunID: opts.AllocateRunID,
+		ExportShare:   opts.ExportShare,
+		OpenConsole:   opts.OpenConsole,
 	})
 }
 

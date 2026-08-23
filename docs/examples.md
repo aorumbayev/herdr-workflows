@@ -2,7 +2,7 @@
 
 Workflows you can have running in under a minute. Each card copies a `hwf workflow import "<bundle>"` command.
 
-Paste it into a terminal, or into the **Import** view of `hwf web`. You'll see the full YAML and any warnings before anything is written, then you pick one destination: this repo or global. See [Run and manage · Import](/surfaces#import-a-workflow).
+Paste it into a terminal and run `hwf workflow import`. You'll see the full YAML and any warnings before anything is written, then you pick one destination: this repo or global. See [Run and manage · Import](/surfaces#import-a-workflow).
 
 <ExampleCards />
 
