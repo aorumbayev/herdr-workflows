@@ -14,8 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      issues: write
-      pull-requests: write
     steps:
       # GITHUB_TOKEN cannot bypass the "protect main" ruleset on a user-owned repo,
       # so the release commit is pushed with an app installation token instead.
@@ -29,18 +27,153 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
           token: ${{ steps.app-token.outputs.token }}
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          bun-version: latest
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+          go-version: "1.27.x"
+          cache: true
+
+      - name: Read the next version
+        id: dry
+        uses: go-semantic-release/action@2e9dc4247a6004f8377781bef4cb9dad273a741f # v1.24.1
         with:
-          node-version: "22"
-      - run: bun install --frozen-lockfile
-      - name: semantic-release
+          github-token: ${{ steps.app-token.outputs.token }}
+          allow-initial-development-versions: true
+          dry: true
+
+      - name: Stop when no commit needs a release
+        if: steps.dry.outputs.version == ''
+        run: |
+          set -eu
+          echo "No feat, fix, perf, or revert commit since the last release."
+
+      - name: Recover a tagged release with missing assets
+        id: recover
+        if: steps.dry.outputs.version == ''
         env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          GIT_AUTHOR_NAME: herdr-workflows-release
-          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
-          GIT_COMMITTER_NAME: herdr-workflows-release
-          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
-        run: bun x semantic-release
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -eu
+          VERSION=$(sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' herdr-plugin.toml | head -n 1)
+          if [ -z "$VERSION" ]; then
+            echo "herdr-plugin.toml version missing" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          tag="v$VERSION"
+          head=$(git rev-parse HEAD)
+          remote=$(git ls-remote origin "refs/tags/$tag" | awk '{ print $1 }')
+          local=""
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            local=$(git rev-parse "$tag")
+          fi
+          tip="$remote"
+          if [ -z "$tip" ]; then
+            tip="$local"
+          fi
+          if [ -z "$tip" ] || [ "$tip" != "$head" ]; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "No tagged HEAD $tag to recover."
+            exit 0
+          fi
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "GitHub Release $tag is missing."
+            exit 0
+          fi
+          assets=$(gh release view "$tag" --json assets --jq '.assets[].name')
+          needed=false
+          for name in \
+            "herdr-workflows_${VERSION}_linux_amd64.tar.gz" \
+            "herdr-workflows_${VERSION}_linux_arm64.tar.gz" \
+            "herdr-workflows_${VERSION}_darwin_amd64.tar.gz" \
+            "herdr-workflows_${VERSION}_darwin_arm64.tar.gz" \
+            checksums.txt
+          do
+            if ! printf '%s\n' "$assets" | grep -Fxq "$name"; then
+              needed=true
+            fi
+          done
+          echo "needed=$needed" >> "$GITHUB_OUTPUT"
+          if [ "$needed" = true ]; then
+            echo "GitHub Release $tag is missing one or more of the five assets."
+          fi
+
+      - name: Stamp plugin version files
+        if: steps.dry.outputs.version != ''
+        env:
+          VERSION: ${{ steps.dry.outputs.version }}
+        run: go run ./scripts/prepare-release "$VERSION"
+
+      - name: Commit the version
+        if: steps.dry.outputs.version != ''
+        env:
+          VERSION: ${{ steps.dry.outputs.version }}
+        run: |
+          set -eu
+          git config user.name herdr-workflows-release
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add herdr-plugin.toml embed/herdr-plugin.toml docs/workflow.schema.json
+          git commit -m "chore(release): $VERSION [skip ci]"
+          git push origin HEAD:main
+
+      - name: Write release notes
+        if: steps.dry.outputs.version != ''
+        env:
+          CHANGELOG_JSON: ${{ toJSON(steps.dry.outputs.changelog) }}
+        run: go run ./scripts/write-release-notes "${RUNNER_TEMP}/release-notes.md"
+
+      - name: Point the release tag at HEAD
+        if: steps.dry.outputs.version != ''
+        env:
+          VERSION: ${{ steps.dry.outputs.version }}
+        run: |
+          set -eu
+          tag="v$VERSION"
+          head=$(git rev-parse HEAD)
+          remote=$(git ls-remote origin "refs/tags/$tag" | awk '{ print $1 }')
+          if [ -n "$remote" ] && [ "$remote" != "$head" ]; then
+            echo "remote tag $tag is $remote but HEAD is $head; not moving the tag" >&2
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            local=$(git rev-parse "$tag")
+            if [ "$local" != "$head" ]; then
+              echo "local tag $tag is $local but HEAD is $head; not moving the tag" >&2
+              exit 1
+            fi
+          else
+            git tag "$tag"
+            git push origin "refs/tags/$tag"
+          fi
+
+      - name: Build release archives
+        if: steps.dry.outputs.version != '' || steps.recover.outputs.needed == 'true'
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean --skip=publish
+
+      - name: Publish GitHub release
+        if: steps.dry.outputs.version != '' || steps.recover.outputs.needed == 'true'
+        env:
+          VERSION: ${{ steps.dry.outputs.version || steps.recover.outputs.version }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -eu
+          notes="${RUNNER_TEMP}/release-notes.md"
+          if [ ! -f "$notes" ]; then
+            go run ./scripts/write-release-notes "$notes"
+          fi
+          linux_amd64="dist/herdr-workflows_${VERSION}_linux_amd64.tar.gz"
+          linux_arm64="dist/herdr-workflows_${VERSION}_linux_arm64.tar.gz"
+          darwin_amd64="dist/herdr-workflows_${VERSION}_darwin_amd64.tar.gz"
+          darwin_arm64="dist/herdr-workflows_${VERSION}_darwin_arm64.tar.gz"
+          checksums=dist/checksums.txt
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            gh release upload "v$VERSION" --clobber \
+              "$linux_amd64" "$linux_arm64" "$darwin_amd64" "$darwin_arm64" "$checksums"
+          else
+            gh release create "v$VERSION" --notes-file "$notes" \
+              "$linux_amd64" "$linux_arm64" "$darwin_amd64" "$darwin_arm64" "$checksums"
+          fi

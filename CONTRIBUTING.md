@@ -4,21 +4,22 @@ Thanks for contributing to herdr-workflows.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh)
-- [Node.js](https://nodejs.org) with `npm` (OpenSpec CLI install)
+- [Go](https://go.dev) **1.27** or newer
+- [Node.js](https://nodejs.org) **22** or newer with `npm` (VitePress docs and OpenSpec CLI install)
+- [golangci-lint](https://golangci-lint.run) **v2.13.1** or newer for full verification and lint in fast verification
 - [herdr](https://herdr.dev) **0.8.2** or newer for live plugin work
 - Git
 
 ## Local setup
 
 ```bash
-bun install --frozen-lockfile
+go mod download
 ```
 
 Optional live link into herdr:
 
 ```bash
-bun run install:dev
+go run ./scripts/install-dev
 ```
 
 Herdr runtime docs and schema live in a local checkout. Follow `.agents/references/AGENTS.md` to clone and update `.agents/references/herdr`.
@@ -73,21 +74,23 @@ openspec validate --all --strict
 
 ## Checks
 
+Full verification (same command CI runs on Linux and macOS):
+
 ```bash
-bun test ./test
-bun test test/engine
-CI=1 npm run verify
-bun run docs:build
-openspec validate --all --strict
+go tool verify
 ```
 
-Test the module whose interface you changed, in that module's folder under `test/`. Real compiled-binary coverage lives in `test/e2e/`.
+Fast verification for pre-commit:
 
-`npm run verify` fans out every `verify:*` script in `package.json`, including `verify:no-archive`, which fails while `openspec/changes/archive/` holds anything.
+```bash
+go tool verify -fast
+```
 
-Pre-commit runs `CI=1 npm run verify` only. It does not run tests. CI runs tests on Linux and macOS, then verify and the docs build on Linux. `openspec validate` runs locally only.
+Test the Go package whose interface you changed.
 
-Local `npm run verify` auto-fixes lint and format. Under `CI=1` it only checks.
+`go tool verify` fails while `openspec/changes/archive/` holds anything.
+
+Pre-commit runs `go tool verify -fast`. CI runs `go tool verify` on Linux and macOS after it installs Node.js, golangci-lint, GoReleaser, and the OpenSpec CLI. Docs publish uses `npm ci && npm run build` in `docs/`.
 
 ## Documentation style
 

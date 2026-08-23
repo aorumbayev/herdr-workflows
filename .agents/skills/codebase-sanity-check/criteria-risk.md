@@ -29,13 +29,12 @@ list-form `run:` passes argv elements. That promise is the rail.
 
 ### How to measure
 
-- `rg -n 'spawn|exec\(|execSync|execFile|Bun\.\$' src` and classify every hit as argv or shell text.
-  Do not add `shell` to that pattern. It matches `src/engine/command.ts` shell helpers and their
-  importers many times and tells you nothing. `shellArgv` in that file is the real place to read
+- `rg -n 'exec\.Command|exec\.CommandContext' internal` and classify every hit as argv or shell text.
+  Read `internal/engine/command.go` and `internal/workflow/inputs.go` for the shell-form path
 - For each shell-text hit, trace the argument back to its source. Cite the line where user data
   enters
 - Confirm the load-time rejection exists and is reached:
-  `rg -n "templates are not allowed" src` and the test that pins it
+  `rg -n "templates are not allowed" internal/workflow` and the test that pins it
 - Prove the rail rather than reading it: load a workflow with a template inside string `run:` through
   the loader and quote the error
 
@@ -46,7 +45,7 @@ list-form `run:` passes argv elements. That promise is the rail.
 
 ## 2. Caps and failing loud
 
-`src/caps.ts` holds the caps. Crossing one must fail, naming the source and the limit. Truncation
+`internal/caps/` holds the caps. Crossing one must fail, naming the source and the limit. Truncation
 is a data-integrity defect, not a graceful degradation.
 
 ### What to check
@@ -58,8 +57,8 @@ is a data-integrity defect, not a graceful degradation.
 
 ### How to measure
 
-- `rg -n "slice\(0,|substring\(0,|substr\(|\.slice\(-" src` and check each against a cap constant
-- `rg -n "<each exported cap name from src/caps.ts>" src` and confirm every capture, transcript,
+- `rg -n "\[:.*\]|Truncate\(" internal` and check each against a cap constant
+- `rg -n "CaptureByteLimit|HwfEnvByteLimit|AgentPromptByteLimit" internal` and confirm every capture, transcript,
   managed response, and environment path checks its cap
 - Quote the failure message from a test that crosses a cap
 
@@ -75,17 +74,15 @@ is a data-integrity defect, not a graceful degradation.
 
 ### How to measure
 
-- `rg -in "token|secret|password|api[_-]?key|authorization|bearer" src` returns roughly eighty-six
-  hits. Classify each as read, store, or emit. Only emits are findings. Credential ACL helpers in
-  `src/credentials.ts` own private credential checks (including the workbench token path), so judge
+- `rg -in "token|secret|password|api[_-]?key|authorization|bearer" internal` and classify each as read, store, or emit. Only emits are findings. Credential ACL helpers in
+  `internal/credentials/` own private credential checks (including the workbench token path), so judge
   their file mode and callers, never their existence
-- Read `src/history.ts` and `src/transcript.ts` and name exactly what they write
+- Read `internal/history/` and `internal/transcript/` and name exactly what they write
 - For any credential file, require restrictive creation mode and a refusal to follow symlinks:
-  `rg -n "0o600|O_NOFOLLOW|chmod|mode:" src`. A credential file created with default mode is a
+  `rg -n "0o600|O_NOFOLLOW|chmod|FileMode" internal`. A credential file created with default mode is a
   finding
-- Read `src/workflow/exchange.ts` and `src/workflow/inputs.ts` and name exactly what a shared,
-  exported, or `--launch-payload` workflow carries. Do not grep for `import` here — it matches
-  every ES import in the tree
+- Read `internal/workflow/exchange.go` and `internal/workflow/inputs.go` and name exactly what a shared,
+  exported, or `--launch-payload` workflow carries
 
 ## 4. Web workbench surface
 
@@ -93,16 +90,16 @@ is a data-integrity defect, not a graceful degradation.
 
 - Bind address and whether the server is reachable off the machine
 - Path traversal in any route reading or writing a file, including `.hwf/` writes and imports
-- HTML or attribute injection in `src/web/page.html` from workflow names, inputs, or errors
+- HTML or attribute injection in `embed/page.html` from workflow names, inputs, or errors
 - A route that runs anything, when the documented contract says the workbench does not run workflows
 - Missing origin or method checks on state-changing routes
 
 ### How to measure
 
-- `rg -n "listen|hostname|127\.0\.0\.1|0\.0\.0\.0|port" src/workbench.ts`
-- For each route in `src/workbench.ts`, list the file paths it can touch and the normalization
+- `rg -n "Listen|127\.0\.0\.1|0\.0\.0\.0|:port" internal/workbench`
+- For each route in `internal/workbench/`, list the file paths it can touch and the normalization
   applied. Cite the line that joins user input into a path
-- `rg -n "innerHTML|insertAdjacentHTML|outerHTML|document\.write" src/web/page.html`
+- `rg -n "innerHTML|insertAdjacentHTML|outerHTML|document\.write" embed/page.html`
 - Compare the route table against the documented surface in `docs/surfaces.md`. A route the docs do
   not mention is a finding in one of the two
 
@@ -118,18 +115,17 @@ is a data-integrity defect, not a graceful degradation.
 
 ### How to measure
 
-- `rg -n "https://" src scripts herdr-plugin.toml .github/workflows | rg -v "^Binary"` and check
+- `rg -n "https://" internal scripts herdr-plugin.toml .github/workflows | rg -v "^Binary"` and check
   each URL for a version pin
-- `rg -n "main/docs|refs/heads/main|/latest/" src scripts docs herdr-plugin.toml`
+- `rg -n "main/docs|refs/heads/main|/latest/" internal scripts docs herdr-plugin.toml`
 - `rg -n "uses:" .github/workflows/*.yml` and flag any tag-only pin
-- Read the update path in `src/cli.ts` and name the version comparison and what happens on mismatch
+- Read the update path in `internal/update/` and `internal/cli/update.go` and name the version comparison and what happens on mismatch
 
 ## 6. Dependency supply chain
 
-`jq -r '.dependencies, .devDependencies' package.json`. Every version in this repository is exact, so
-a range is a finding. `npm run verify:unused-code` already reports unused dependencies — quote it
+Read `go.mod` and `docs/package.json`. Go module versions should be explicit. `golangci-lint run` already reports unused symbols — quote it
 rather than re-deriving it. What it cannot see is a runtime dependency reached from one site with a
-small used surface. Count sites with `rg -c "from \"<dep>\"" src` and name the stdlib or Bun API that
+small used surface. Count import sites with `rg -c '"<module/path>"' internal` and name the stdlib that
 replaces it.
 
 ---
@@ -145,23 +141,22 @@ The most expensive copout, because it converts a caught defect into an uncaught 
 
 ### What to check
 
-- New `oxlint-disable` comments
-- New `@ts-ignore` or `@ts-expect-error`
-- New `any`, or a cast added to silence a type error
-- A relaxed `verify:*` threshold, a new `verify.config.json` ignore, or a lowered `--max-warnings`
+- New `//nolint` or `golangci-lint` disable comments without justification
+- New unchecked type assertions or `any` casts added to silence a type error
+- A relaxed `verify:*` threshold, a new ignore in a verify script, or a lowered `--max-warnings`
 - A test skipped, deleted, or renamed out of the run
 - An assertion made weaker, such as an exact comparison replaced by a presence check
-- A cap raised in `src/caps.ts` with no requirement behind it
+- A cap raised in `internal/caps/` with no requirement behind it
 
 ### How to measure
 
 Every check below reads added lines only.
 
-- `git diff origin/<base>...HEAD | rg "^\+.*(oxlint-disable|@ts-ignore|@ts-expect-error|\bas any\b|: any\b|as unknown as)"`
-- `git diff origin/<base>...HEAD -- verify.config.json package.json .oxlintrc.json knip.json`
-- `git diff origin/<base>...HEAD -- test | rg "^\+.*(\.skip|\.todo|toBeTruthy|toBeDefined)"`
-- `git diff origin/<base>...HEAD -- test | rg "^-.*(it\(|test\()"` for removed cases
-- `git diff origin/<base>...HEAD -- src/caps.ts`
+- `git diff origin/<base>...HEAD | rg "^\+.*(nolint:|//lint:ignore|as any|: any\b)"`
+- `git diff origin/<base>...HEAD -- scripts/verify-* .golangci.yml`
+- `git diff origin/<base>...HEAD -- internal e2e | rg "^\+.*(t\.Skip|NotNil\(|NoError\()"`
+- `git diff origin/<base>...HEAD -- internal e2e | rg "^-.*func Test"` for removed cases
+- `git diff origin/<base>...HEAD -- internal/caps`
 
 Any hit is Critical unless the diff or the change document states the reason. Quote the reason and
 judge it.
@@ -186,7 +181,7 @@ judge it.
 ### How to measure
 
 - `git diff origin/<base>...HEAD | rg -in "^\+.*(out of scope|not in scope|beyond the scope|follow-?up|future PR|separate PR|phase 2|later)"`
-- `git diff origin/<base>...HEAD | rg "^\+.*(not implemented|TODO.*implement|// stub|throw new Error\(\"TODO)"`
+- `git diff origin/<base>...HEAD | rg "^\+.*(not implemented|TODO.*implement|// stub|panic\(\"TODO)"`
 - Compare the task's completion items against the diff item by item. A completion item with no
   matching change is the finding, and you must name the item
 
@@ -218,7 +213,7 @@ judge it.
 
 - A component, module, or step type added but never reached from an entry point
 - A new export missing from the surface that would make it usable
-- A test file with `describe` blocks and no cases
+- A test file with `t.Run` blocks and no assertions
 - Docs, specs, or generated artifacts not updated alongside a behavior change
 - An empty `catch` swallowing an error
 
@@ -226,9 +221,9 @@ judge it.
 
 - For each new export in the diff, grep for a call site outside its own file
 - `git diff origin/<base>...HEAD --name-only` and check the pairings the repository requires:
-  a `src/workflow/grammar.ts` schema change with no `docs/workflow.schema.json` change, or a
+  a loader change with no `docs/workflow.schema.json` change, or a
   behavior change with no change under `openspec/`
-- `git diff origin/<base>...HEAD | rg "^\+.*catch\s*\([^)]*\)\s*\{\s*\}"`
+- `git diff origin/<base>...HEAD | rg "^\+.*_\s*=\s*err\s*$|^\+.*if err != nil \{\s*\}"`
 
 ### Not a finding
 

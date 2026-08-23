@@ -1,34 +1,33 @@
 description: herdr-workflow-create skill — v1 (as shipped) vs v2 (refined), scored by the real hwf loader
 
 providers:
-  - id: file://provider.js
+  - id: anthropic:claude-agent-sdk
     label: v1-shipped
     config:
       model: sonnet
-      label: v1-shipped
       working_dir: ./fixtures/v1
-  - id: file://provider.js
+      setting_sources: ['project']
+      skills: ['herdr-workflow-create']
+  - id: anthropic:claude-agent-sdk
     label: v2-refined
     config:
       model: sonnet
-      label: v2-refined
       working_dir: ./fixtures/v2
+      setting_sources: ['project']
+      skills: ['herdr-workflow-create']
 
 prompts:
   - "{{task}}"
 
+x-create-skill: &createSkill
+  - type: skill-used
+    value: herdr-workflow-create
+    metric: skill
+
 defaultTest:
   options:
     disableVarExpansion: true
-  vars:
-    expect_skill: herdr-workflow-create
   assert:
-    - type: javascript
-      value: file://assert-loads.js
-      metric: loads
-    - type: javascript
-      value: file://assert-skill.js
-      metric: skill
     # trial-and-error against the loader is what a vague skill costs; price it
     - type: cost
       threshold: 0.40
@@ -41,7 +40,6 @@ defaultTest:
         method: average
         threshold: 0.7
         weights:
-          loads: 4
           skill: 2
           cost: 0.5
           latency: 0.5
@@ -52,6 +50,7 @@ tests:
       task: >-
         Create an hwf workflow called lint-then-test that runs "bun run lint" and then "bun test".
         Do not ask me anything. Print the final YAML in a fenced yaml block in your reply.
+    assert: *createSkill
 
   - description: T2 inputs with a when guard
     vars:
@@ -61,6 +60,7 @@ tests:
         "git diff HEAD" always, and run "bun run lint" only for a deep review, passing the
         scope along. Do not ask me anything, decide sensibly. Print the final YAML in a fenced
         yaml block in your reply.
+    assert: *createSkill
 
   - description: T3 herdr step needing an explicit target
     vars:
@@ -68,7 +68,7 @@ tests:
         Create an hwf workflow called new-worktree that asks for a branch name and then makes a
         herdr worktree for it and focuses it. It must be a real herdr: step, not a shell call.
         Do not ask me anything. Print the final YAML in a fenced yaml block in your reply.
-      must_contain: ["herdr: worktree.create"]
+    assert: *createSkill
 
   - description: T4 on_failure recovery
     vars:
@@ -76,7 +76,7 @@ tests:
         Create an hwf workflow called test-guard that runs "bun test" and, if the workflow fails,
         shows a herdr desktop notification naming the failure. Do not ask me anything. Print the
         final YAML in a fenced yaml block in your reply.
-      must_contain: ["on_failure"]
+    assert: *createSkill
 
   - description: T5 hyphenated step ids and a cross-step reference
     vars:
@@ -85,6 +85,7 @@ tests:
         running "bun run lint", and the second step must echo the first step's stdout. Use those
         step names. Do not ask me anything. Print the final YAML in a fenced yaml block in your
         reply.
+    assert: *createSkill
 
   - description: T6 placed pane with a size
     vars:
@@ -92,12 +93,13 @@ tests:
         Create an hwf workflow called dev-server that opens "bun run dev" in a new herdr tab,
         fire and forget, and give that pane about 40 percent of the space. Do not ask me
         anything. Print the final YAML in a fenced yaml block in your reply.
+    assert: *createSkill
 
   - description: T7 under-specified — ask or invent
     vars:
       task: >-
         Set up an hwf workflow for my release process.
-      require_yaml: false
+    assert: *createSkill
 
   - description: T9 child composition — validation must resolve the existing child workflow
     vars:
@@ -106,7 +108,7 @@ tests:
         Create an hwf workflow called verify-branch that asks for a branch name and reuses
         child-verify instead of repeating its steps. Do not ask me anything. Print the final YAML
         in a fenced yaml block in your reply.
-      must_contain: ["workflow: child-verify"]
+    assert: *createSkill
 
   - description: T10 editor schema pointer
     vars:
@@ -114,7 +116,7 @@ tests:
         Create an hwf workflow called fmt-check that runs "bun run format" and add the editor
         schema comment line at the top so my IDE validates it. Do not ask me anything. Print the
         final YAML in a fenced yaml block in your reply.
-      must_not_contain: ["/main/docs/workflow.schema.json"]
+    assert: *createSkill
 
   - description: T8 routing near-miss — belongs to the smoke-test skill
     vars:
@@ -122,6 +124,7 @@ tests:
         Bring up a throwaway Herdr instance in tmux with its own socket and config so I can
         smoke-test this plugin end to end without touching my live panes. Just tell me the steps,
         do not run anything.
-      require_yaml: false
-      expect_skill: ""
-      forbid_skill: herdr-workflow-create
+    assert:
+      - type: not-skill-used
+        value: herdr-workflow-create
+        metric: skill

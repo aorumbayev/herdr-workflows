@@ -1,0 +1,103 @@
+package picker
+
+import (
+	"strconv"
+	"strings"
+
+	"github.com/aorumbayev/herdr-workflows/internal/tui"
+	"github.com/aorumbayev/herdr-workflows/internal/workflow"
+)
+
+// FormatInputPrompt names the field and how to answer it.
+// When position and total are both greater than 0, the prompt adds a 1-based collection ordinal.
+func FormatInputPrompt(spec workflow.InputSpec, ordinal ...int) string {
+	label := spec.Name
+	if desc := strings.TrimSpace(spec.Description); desc != "" {
+		label = spec.Name + " - " + desc
+	}
+	parts := []string{label}
+	if len(ordinal) >= 2 && ordinal[0] > 0 && ordinal[1] > 0 {
+		parts = append(parts, strconv.Itoa(ordinal[0])+" of "+strconv.Itoa(ordinal[1]))
+	}
+	parts = append(parts, promptHints(spec)...)
+	return strings.Join(parts, tui.ChromeSep)
+}
+
+func promptHints(spec workflow.InputSpec) []string {
+	if spec.Type == "text" {
+		return textPromptHints(spec)
+	}
+	return choicePromptHints(spec)
+}
+
+func textPromptHints(spec workflow.InputSpec) []string {
+	hints := []string{"type free text"}
+	if spec.Default != nil && *spec.Default != "" {
+		hints = append(hints, "default "+*spec.Default)
+	}
+	return append(hints, minLengthHint(spec)...)
+}
+
+func choicePromptHints(spec workflow.InputSpec) []string {
+	hints := []string{"pick one"}
+	if len(spec.Options) > 0 {
+		hints[0] = "pick one of " + strconv.Itoa(len(spec.Options))
+	}
+	if spec.AllowCustom {
+		hints = append(hints, "or type your own")
+	}
+	return append(hints, minLengthHint(spec)...)
+}
+
+func minLengthHint(spec workflow.InputSpec) []string {
+	if spec.MinLength == nil || *spec.MinLength <= 0 {
+		return nil
+	}
+	n := *spec.MinLength
+	unit := " chars"
+	if n == 1 {
+		unit = " char"
+	}
+	return []string{"min " + strconv.Itoa(n) + unit}
+}
+
+// FormatInputAnswers lists collected answers in declaration order.
+func FormatInputAnswers(queue []workflow.InputSpec, values map[string]string, contentWidth int) string {
+	var answered []string
+	for _, spec := range queue {
+		if _, ok := values[spec.Name]; ok {
+			answered = append(answered, spec.Name+"="+values[spec.Name])
+		}
+	}
+	if len(answered) == 0 {
+		return ""
+	}
+	return tui.Truncate("chosen: "+strings.Join(answered, tui.ChromeSep), contentWidth)
+}
+
+// FilterChoiceOptions is a case-sensitive substring filter.
+func FilterChoiceOptions(options []string, filter string) []string {
+	if filter == "" {
+		return options
+	}
+	var out []string
+	for _, option := range options {
+		if strings.Contains(option, filter) {
+			out = append(out, option)
+		}
+	}
+	return out
+}
+
+// ShouldRestoreCustomChoiceText is true when backtrack should seed the custom field.
+func ShouldRestoreCustomChoiceText(hasAnswer bool, answer string, options []string, allowCustom bool) bool {
+	if !hasAnswer || !allowCustom {
+		return false
+	}
+	for _, option := range options {
+		if option == answer {
+			return false
+		}
+	}
+	return true
+}

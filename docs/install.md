@@ -7,10 +7,29 @@ Get the plugin onto your machine, then tell it which agents you have.
 | You need                   | Version        |
 | -------------------------- | -------------- |
 | [herdr](https://herdr.dev) | 0.8.2 or later |
-| [Bun](https://bun.sh)      | 1.3 or later   |
 | Linux or macOS             | Any            |
 
-On Windows, install herdr **and** this plugin inside WSL2. A native Windows herdr can't talk to `hwf` running in WSL, because they're separate servers with separate sockets.
+On Windows, install herdr **and** this plugin inside WSL2. WSL2 uses the Linux release archive. A native Windows herdr can't talk to `hwf` running in WSL, because they're separate servers with separate sockets. Native Windows installs are refused.
+
+### WSL2 smoke
+
+Repeatable check that a Windows host uses the Linux archive inside WSL2, not a native Windows build.
+
+1. Open a WSL2 shell (Ubuntu or another Linux distro).
+2. Install herdr for Linux inside that shell, then install the plugin:
+
+```bash
+herdr plugin install aorumbayev/herdr-workflows
+```
+
+3. Confirm the shell reports Linux (`uname -s` prints `Linux`). The release archive is then `linux_amd64` or `linux_arm64` from `uname -m`.
+4. Confirm the plugin binary:
+
+```bash
+hwf --version
+```
+
+5. Confirm native Windows platforms are refused. A native Windows install path errors and does not use a Windows archive. Do not install a second herdr in your live control workspace for this check.
 
 ## Install the plugin
 
@@ -18,9 +37,9 @@ On Windows, install herdr **and** this plugin inside WSL2. A native Windows herd
 herdr plugin install aorumbayev/herdr-workflows
 ```
 
-herdr builds the plugin from source on your machine: it checks your Bun version, runs `bun install --production --frozen-lockfile`, compiles a binary with `bun build --compile`, then runs setup. If Bun is missing or too old, the build stops and tells you the minimum version.
+herdr clones the release tag and runs the manifest build: it downloads the verified archive for that tag's version, checks the SHA-256 entry in `checksums.txt`, extracts `bin/herdr-workflows`, then runs setup. The target host does not need Go. A checksum mismatch or download failure stops the build and leaves any prior install in place.
 
-There are no prebuilt binaries and no npm package. Releases are GitHub Releases: a tag and notes, nothing to download.
+There is no npm package. Releases publish GitHub Release notes plus platform archives for Linux and macOS (`amd64` and `arm64`).
 
 Setup then links two commands, `hwf` and `herdr-workflows`, into `~/.local/bin` (or `$XDG_BIN_HOME`), and adds the `prefix+k` keybinding to your herdr config. Both steps are optional. If one is skipped, setup prints why and carries on. If setup says your bin directory isn't on `PATH`, add it.
 
@@ -37,15 +56,15 @@ herdr config check
 hwf update
 ```
 
-`hwf update` compares your installed version against the latest published GitHub Release, ignoring drafts. If a newer one exists, it reinstalls through herdr. If you're already current, it says so and changes nothing.
+`hwf update` compares your installed version against the latest published GitHub Release, ignoring drafts. If a newer one exists, a Herdr-managed install reinstalls through herdr, and a standalone or copied binary downloads the matching archive, verifies it, and replaces itself. If you're already current, it says so and changes nothing.
 
 The picker also tells you: when a newer release exists, list mode shows a `run hwf update` hint in the filter row. The hint never blocks you, and a failed check shows nothing at all.
 
 Cases where `hwf update` won't run:
 
 - **Your install predates the command.** Run `herdr plugin install aorumbayev/herdr-workflows` once more to get it. After that, `hwf update` works.
-- **You linked a development checkout.** Use `bun run install:dev`, which compiles your working tree and relinks it.
-- **Your binary is unregistered or directly copied.** Install it through herdr with `herdr plugin install aorumbayev/herdr-workflows`.
+- **You linked a development checkout.** Use `go run ./scripts/install-dev`, which compiles your working tree and relinks it.
+- **Download or checksum verification fails.** The prior binary stays in place and the command exits nonzero.
 
 ## Tell it about your agents
 
@@ -132,7 +151,7 @@ A later layer replaces a whole named entry, never part of one. So `config.local.
 
 Config accepts three keys: `profiles`, `default_profile`, and `transcripts`. Nothing else. See [Reference](/reference#config).
 
-You can also edit both files in the browser. Run `hwf web` and open the **Config** tab, which validates the YAML before it saves.
+Edit both files in your editor, or run `hwf init` to regenerate profile entries from the agents on your `PATH`.
 
 ## Next
 
