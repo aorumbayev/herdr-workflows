@@ -10,7 +10,7 @@ import (
 // Ellipsis is the ASCII truncation marker used in picker chrome.
 const Ellipsis = "..."
 
-// RowTextIndent is the Select name indent (contentX + 1 with indicator off).
+// RowTextIndent is the list-row text indent (cursor prefix plus one space).
 const RowTextIndent = 3
 
 // ChromePaddingX is the one-cell left and right inset inside the popup border.
@@ -95,17 +95,25 @@ func PadContent(body string, contentWidth int) string {
 
 // PadContentLine pads one rendered line to the full terminal width.
 func PadContentLine(line string, contentWidth int) string {
-	inner := Truncate(line, contentWidth)
+	inner := PadColumns(Truncate(line, contentWidth), contentWidth)
 	return strings.Repeat(" ", ChromePaddingX) + inner + strings.Repeat(" ", ChromePaddingX)
 }
 
-// StripContentPadding removes one-cell horizontal padding from a rendered line.
-func StripContentPadding(line string) string {
-	line = strings.TrimSuffix(line, " ")
-	if strings.HasPrefix(line, " ") {
-		return line[1:]
+// StripChromePadding removes only the one-cell popup inset from a rendered line.
+func StripChromePadding(line string) string {
+	pad := strings.Repeat(" ", ChromePaddingX)
+	if strings.HasPrefix(line, pad) {
+		line = line[ChromePaddingX:]
+	}
+	if strings.HasSuffix(line, pad) {
+		line = line[:len(line)-ChromePaddingX]
 	}
 	return line
+}
+
+// StripContentPadding removes popup inset and line-fill spaces used by PadContentLine.
+func StripContentPadding(line string) string {
+	return strings.TrimRight(StripChromePadding(line), " ")
 }
 
 // ClampListWindow keeps cursor inside [0, n) and scrolls offset so cursor stays

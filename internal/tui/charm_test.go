@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -15,6 +18,8 @@ func TestCharmVerdicts(t *testing.T) {
 		"footer-position-counter",
 		"two-line-detail-wrap",
 		"inset-muted-rule",
+		"chrome-horizontal-padding",
+		"detail-block-height",
 		"column-row-layout",
 		"ascii-chrome-strings",
 		"terminal-column-truncate",
@@ -124,5 +129,22 @@ func TestPadColumnsKeepsASCIIIndicatorSingleColumn(t *testing.T) {
 	want := room + 1 + Columns(indicator)
 	if Columns(row) != want {
 		t.Fatalf("row cols %d want %d (%q)", Columns(row), want, row)
+	}
+}
+
+func TestCharmVerdictVersionsResolve(t *testing.T) {
+	for _, v := range CharmVerdicts() {
+		mod := v.CandidateModule + "@" + v.CandidateVersion
+		if err := exec.Command("go", "list", "-m", "-json", mod).Run(); err != nil {
+			t.Fatalf("%s: %s not resolved: %v", v.Mechanism, mod, err)
+		}
+		modRoot := strings.TrimSpace(os.Getenv("GOMODCACHE"))
+		if modRoot == "" {
+			continue
+		}
+		path := filepath.Join(modRoot, v.CandidateModule+"@"+v.CandidateVersion)
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("%s: %s not in module cache after go list: %v", v.Mechanism, mod, err)
+		}
 	}
 }

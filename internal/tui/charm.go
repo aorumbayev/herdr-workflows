@@ -15,7 +15,7 @@ type CharmVerdict struct {
 func CharmVerdicts() []CharmVerdict {
 	const (
 		bubbles   = "charm.land/bubbles/v2"
-		bubblesV  = "v2.2.0"
+		bubblesV  = "v2.1.1"
 		huh       = "charm.land/huh/v2"
 		huhV      = "v2.0.3"
 		lipgloss  = "charm.land/lipgloss/v2"
@@ -87,6 +87,22 @@ func CharmVerdicts() []CharmVerdict {
 			Decision:          "keep-custom",
 			MissingCapability: "lipgloss has no inset horizontal rule that matches RowTextIndent and fills the remaining cells with ASCII dashes.",
 			Test:              "TestFormatRuleInsetMuted",
+		},
+		{
+			Mechanism:         "chrome-horizontal-padding",
+			CandidateModule:   lipgloss,
+			CandidateVersion:  lipglossV,
+			Decision:          "keep-custom",
+			MissingCapability: "lipgloss.Padding does not pair with StripContentPadding or Truncate ASCII ellipsis for one-cell popup inset on every line.",
+			Test:              "TestPadContentAddsHorizontalPadding",
+		},
+		{
+			Mechanism:         "detail-block-height",
+			CandidateModule:   lipgloss,
+			CandidateVersion:  lipglossV,
+			Decision:          "keep-custom",
+			MissingCapability: "lipgloss Style.Height reserves blank rows but does not wrap detail text onto two indented lines with ASCII ellipsis on line two.",
+			Test:              "TestFormatDetailBlockReservesTwoRows",
 		},
 		{
 			Mechanism:         "column-row-layout",
@@ -163,9 +179,9 @@ func CharmVerdicts() []CharmVerdict {
 		{
 			Mechanism:         "runs-detail-scroll",
 			CandidateModule:   bubbles,
-			CandidateVersion:  "v2.1.1",
+			CandidateVersion:  bubblesV,
 			Decision:          "keep-custom",
-			MissingCapability: "viewport.Model has no scrollbar chrome and keeps SoftWrap off by default. Runs detail still scrolls a fixed ASCII window over pre-wrapped lines with clamped offset without importing bubbles.",
+			MissingCapability: "viewport.Model ships KeyMap bindings and enables MouseWheel by default. Product detail scroll keeps a fixed ASCII window without importing bubbles or accepting that default input surface.",
 			Test:              "TestScrollDetailLines",
 		},
 	}
