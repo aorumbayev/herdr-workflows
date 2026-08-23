@@ -68,28 +68,3 @@ type DetailPayload struct {
 	LogLines  []string
 	Artifacts history.DebugArtifacts
 }
-
-// FormatWorkflowRow is one console workflow list row.
-func FormatWorkflowRow(entry workflowEntry, width int, selected bool) string {
-	title := entry.Title
-	if title == "" {
-		title = entry.Name
-	}
-	loc := entry.Source
-	if entry.Error != "" {
-		loc = "invalid"
-	}
-	prefix := "  "
-	if selected {
-		prefix = tui.CursorPrefix
-	}
-	remain := max(0, width-tui.Columns(prefix)-tui.Columns(loc)-tui.Columns(tui.ChromeSep))
-	return prefix + tui.Truncate(title, remain) + tui.ChromeSep + loc
-}
-
-type workflowEntry struct {
-	Name   string
-	Title  string
-	Source string
-	Error  string
-}

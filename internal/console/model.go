@@ -18,6 +18,9 @@ import (
 type screen int
 
 const (
+	listListChrome   = 7 // head, spacer, list, spacer, detail(2), rule, footer
+	scrollViewChrome = 3 // head, scroll body, rule, footer
+
 	screenWorkflows screen = iota
 	screenRuns
 	screenDetail
@@ -336,11 +339,11 @@ func (m Model) handleDetailKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.status = "copied" + tui.ChromeSep + cmd
 		return m, nil
 	case "up":
-		vp := max(3, m.listViewport())
+		vp := m.scrollViewport()
 		m.detailScroll = runsbrowser.ClampDetailScroll(m.detailScrollLines(), m.detailScroll-1, vp)
 		return m, nil
 	case "down":
-		vp := max(3, m.listViewport())
+		vp := m.scrollViewport()
 		m.detailScroll = runsbrowser.ClampDetailScroll(m.detailScrollLines(), m.detailScroll+1, vp)
 		return m, nil
 	}
@@ -348,7 +351,15 @@ func (m Model) handleDetailKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) listViewport() int {
-	h := m.height - 4
+	return m.viewport(listListChrome)
+}
+
+func (m *Model) scrollViewport() int {
+	return m.viewport(scrollViewChrome)
+}
+
+func (m *Model) viewport(chrome int) int {
+	h := m.height - chrome
 	if h < 3 {
 		return 3
 	}
@@ -378,7 +389,7 @@ func (m *Model) clampRunWindow() {
 // clampAgentWindow keeps the send-back chooser cursor visible; the rendered
 // list reserves one row of the viewport for its header.
 func (m *Model) clampAgentWindow() {
-	vp := max(1, max(3, m.listViewport())-1)
+	vp := max(1, m.scrollViewport()-1)
 	if m.agentCursor < m.agentOffset {
 		m.agentOffset = m.agentCursor
 	}

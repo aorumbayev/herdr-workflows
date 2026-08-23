@@ -33,9 +33,15 @@ func (m Model) renderWorkflows() string {
 	end := min(m.wfOffset+vp, len(m.entries))
 	for i := m.wfOffset; i < end; i++ {
 		e := m.entries[i]
-		rows = append(rows, FormatWorkflowRow(workflowEntry{
-			Name: e.Name, Title: e.Title, Source: e.Source, Error: e.Error,
-		}, w, i == m.wfCursor))
+		title := e.Title
+		if title == "" {
+			title = e.Name
+		}
+		loc := e.Source
+		if e.Error != "" {
+			loc = "invalid"
+		}
+		rows = append(rows, tui.FormatRow(title, loc, false, w, i == m.wfCursor))
 	}
 	for len(rows) < vp {
 		rows = append(rows, "")
@@ -62,7 +68,7 @@ func (m Model) renderDiagram() string {
 }
 
 func (m Model) renderDiagramBody(w int) string {
-	vp := max(3, m.listViewport())
+	vp := m.scrollViewport()
 	lines := m.diagramScrollLines(w)
 	visible, _ := runsbrowser.ScrollDetailLines(lines, m.diagramScroll, vp)
 	for len(visible) < vp {
@@ -89,7 +95,7 @@ func (m Model) renderDiagramInstruction(w int) string {
 }
 
 func (m Model) renderDiagramAgentPick(w int) string {
-	vp := max(3, m.listViewport())
+	vp := m.scrollViewport()
 	body := FormatAgentPickBody(m.agentPanes, m.agentCursor)
 	lines := strings.Split(body, "\n")
 	header, items := lines[0], lines[1:]
@@ -114,26 +120,27 @@ func (m Model) renderRuns() string {
 	vp := m.listViewport()
 	var rows []string
 	end := min(m.runOffset+vp, len(m.runs))
+	titleW := max(0, w-tui.RowTextIndent-tui.RowRightGutter)
 	for i := m.runOffset; i < end; i++ {
 		item := m.runs[i]
-		row := runsbrowser.FormatRunRow(item, w-tui.RowTextIndent, runsbrowser.FormatRunRowOpts{})
-		prefix := "  "
-		if i == m.runCursor {
-			prefix = tui.CursorPrefix
-		}
-		rows = append(rows, prefix+row)
+		row := runsbrowser.FormatRunRow(item, titleW, runsbrowser.FormatRunRowOpts{})
+		rows = append(rows, tui.FormatRow(row, "", false, w, i == m.runCursor))
 	}
 	for len(rows) < vp {
 		rows = append(rows, "")
 	}
+	detail := ""
+	if len(m.runs) > 0 && m.runCursor < len(m.runs) {
+		detail = tui.FormatDetailBlock(runsbrowser.FormatRunSummary(m.runs[m.runCursor]), w)
+	}
 	footer := tui.FormatListFooter(w, m.runCursor, len(m.runs), runsFooter())
 	head := tui.Truncate("runs", w)
-	return head + "\n\n" + strings.Join(rows, "\n") + "\n" + tui.FormatRule(w) + "\n" + footer
+	return head + "\n\n" + strings.Join(rows, "\n") + "\n\n" + detail + "\n" + tui.FormatRule(w) + "\n" + footer
 }
 
 func (m Model) renderDetail() string {
 	w := m.contentWidth()
-	vp := max(3, m.listViewport())
+	vp := m.scrollViewport()
 	chrome := FormatDebugTabChrome(m.debugTab)
 	lines := m.detailScrollLines()
 	visible, _ := runsbrowser.ScrollDetailLines(lines, m.detailScroll, vp)

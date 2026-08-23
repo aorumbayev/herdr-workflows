@@ -157,11 +157,15 @@ func stripView(v tea.View) string {
 
 func TestConsoleListViewportUsesTerminalHeight(t *testing.T) {
 	m := New(Options{Width: 80, Height: 40})
-	if m.listViewport() != 36 {
-		t.Fatalf("listViewport = %d want 36", m.listViewport())
+	if m.listViewport() != 33 {
+		t.Fatalf("listViewport = %d want 33", m.listViewport())
 	}
 	m = New(Options{Width: 80, Height: 6})
 	if m.listViewport() != 3 {
 		t.Fatalf("short terminal = %d", m.listViewport())
+	}
+	m = New(Options{Width: 80, Height: 40})
+	if m.scrollViewport() != 37 {
+		t.Fatalf("scrollViewport = %d want 37", m.scrollViewport())
 	}
 }

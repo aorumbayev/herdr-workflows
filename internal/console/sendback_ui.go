@@ -58,12 +58,12 @@ func (m Model) handleDiagramViewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "up":
 		w := m.contentWidth()
-		vp := max(3, m.listViewport())
+		vp := m.scrollViewport()
 		m.diagramScroll = runsbrowser.ClampDetailScroll(m.diagramScrollLines(w), m.diagramScroll-1, vp)
 		return m, nil
 	case "down":
 		w := m.contentWidth()
-		vp := max(3, m.listViewport())
+		vp := m.scrollViewport()
 		m.diagramScroll = runsbrowser.ClampDetailScroll(m.diagramScrollLines(w), m.diagramScroll+1, vp)
 		return m, nil
 	case "v":
