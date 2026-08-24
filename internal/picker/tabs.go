@@ -20,7 +20,7 @@ func tabCells() []tabCell {
 	return out
 }
 
-// FormatTabBar paints the three picker root tabs. Active uses reverse. Inactive uses muted.
+// FormatTabBar shows the three picker root tabs. The active tab uses reverse. Inactive tabs use muted.
 func FormatTabBar(active string, width int) string {
 	theme := tui.DefaultTheme()
 	parts := make([]string, 0, 3)
@@ -36,7 +36,7 @@ func FormatTabBar(active string, width int) string {
 	return tui.Truncate(bar, width)
 }
 
-// TabAtX returns the tab name under a content-column x, or empty.
+// TabAtX gives the tab name at content-column x, or an empty string.
 func TabAtX(x int) string {
 	pos := 0
 	for _, cell := range tabCells() {

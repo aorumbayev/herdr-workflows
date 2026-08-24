@@ -10,8 +10,8 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 )
 
-// tabBodyHeight is the height an embedded browser may draw into. The picker
-// spends one row on the tab bar above it.
+// tabBodyHeight is the height that an embedded browser can use. The picker
+// uses one row for the tab bar above it.
 func (m Model) tabBodyHeight() int {
 	return max(1, m.height-1)
 }
@@ -78,8 +78,8 @@ func (m Model) openConsoleTab() (tea.Model, tea.Cmd) {
 	}
 	m.mode = modeConsole
 	m.hoverRow = -1
-	// The console frame is built from the size it holds, so a resize that
-	// landed on another tab has to reach it before it draws.
+	// The console frame uses the size that it holds. A resize on another tab
+	// must go to the console before the console shows.
 	next, _ := m.console.Update(tea.WindowSizeMsg{Width: m.width, Height: m.tabBodyHeight()})
 	m.console = next.(console.Model)
 	if entry := m.selectedEntry(); entry != nil {
@@ -101,7 +101,7 @@ func (m Model) switchToTab(name string) (tea.Model, tea.Cmd) {
 }
 
 // respawnInto opens the next tab in a popup of its own size and quits this one.
-// herdr has no resize for a live popup, so the size travels with a new process.
+// herdr has no resize for a live popup, so the size moves with a new process.
 func (m Model) respawnInto(tab string) (tea.Model, tea.Cmd) {
 	return m.respawn(m.popupStateFor(tab))
 }

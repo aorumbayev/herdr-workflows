@@ -14,7 +14,7 @@ func (m Model) View() tea.View {
 	return tea.NewView(tui.PadHeight(tui.PadContent(m.render(), m.contentWidth()), m.height))
 }
 
-// Body returns unpadded list or detail text for embedding in the picker.
+// Body gives unpadded list or detail text for the picker.
 func (m Model) Body() string {
 	return m.render()
 }
@@ -101,8 +101,8 @@ func paintStatus(line, token, status string, selected bool) string {
 	return base.Render(head) + statusStyle(base, status).Render(token) + base.Render(rest[len(token):])
 }
 
-// statusStyle carries the row attributes into the status token. A status with
-// no palette slot of its own stays faint rather than losing the row's styling.
+// statusStyle puts the row attributes on the status token. A status with
+// no palette slot of its own stays faint and keeps the row style.
 func statusStyle(base lipgloss.Style, status string) lipgloss.Style {
 	style := tui.DefaultTheme().RunStatusStyle(status)
 	if fg, ok := style.GetForeground().(lipgloss.ANSIColor); ok {

@@ -8,11 +8,11 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-// PopupStateEnv carries a picker state payload into the process a respawn opens.
+// PopupStateEnv is the picker state payload for the process that a respawn opens.
 const PopupStateEnv = "HWF_PICKER_STATE"
 
-// Popup geometry. herdr cannot resize a live popup, so a tab that needs a
-// different size closes this popup and opens the next one at that size.
+// Popup sizes. herdr cannot resize a live popup, so a tab that needs a
+// different size closes this popup and opens the next popup at that size.
 const (
 	compactWidth  = "64"
 	compactHeight = "15"
@@ -20,7 +20,7 @@ const (
 	consoleHeight = "80%"
 )
 
-// PopupState is what a respawned picker restores, plus the geometry it opens at.
+// PopupState is the state that a respawned picker restores, plus the size that it opens at.
 type PopupState struct {
 	Tab    string `json:"tab"`
 	Filter string `json:"filter"`
@@ -28,7 +28,7 @@ type PopupState struct {
 	Offset int    `json:"offset"`
 	Width  string `json:"width"`
 	Height string `json:"height"`
-	// EditFile and EditName carry the in-popup edit across the respawn that
+	// EditFile and EditName keep the in-popup edit across the respawn that
 	// gives $EDITOR the console size.
 	EditFile string `json:"edit_file,omitempty"`
 	EditName string `json:"edit_name,omitempty"`
@@ -44,7 +44,7 @@ func PopupGeometry(tab string) (width, height string) {
 	return compactWidth, compactHeight
 }
 
-// ParsePopupState decodes a respawn payload. Unreadable state starts fresh.
+// ParsePopupState decodes a respawn payload. Unreadable state starts with no restore data.
 func ParsePopupState(payload string) *PopupState {
 	payload = strings.TrimSpace(payload)
 	if payload == "" {
@@ -60,7 +60,7 @@ func ParsePopupState(payload string) *PopupState {
 	return &state
 }
 
-// Encode renders the payload the respawned process reads.
+// Encode makes the payload that the respawned process reads.
 func (s PopupState) Encode() string {
 	body, err := json.Marshal(s)
 	if err != nil {
@@ -80,7 +80,7 @@ func (m Model) currentTabName() string {
 	}
 }
 
-// popupStateFor is the payload a respawn into tab carries.
+// popupStateFor is the payload for a respawn that opens tab.
 func (m Model) popupStateFor(tab string) PopupState {
 	width, height := PopupGeometry(tab)
 	state := PopupState{
@@ -100,8 +100,8 @@ func (m Model) popupStateFor(tab string) PopupState {
 	return state
 }
 
-// popupStateForEdit reopens the workflows tab at the console size with the file
-// the editor takes over. Validation respawns it compact again.
+// popupStateForEdit opens the workflows tab at the console size with the file
+// that the editor uses. Validation then opens a compact popup again.
 func (m Model) popupStateForEdit(entry workflow.ListEntry) PopupState {
 	state := m.popupStateFor(tui.TabWorkflows)
 	state.Width, state.Height = consoleWidth, consoleHeight
@@ -117,8 +117,8 @@ func (m Model) popupStateForRunsDetail(id string) PopupState {
 	return state
 }
 
-// needsRespawn reports whether tab wants a popup size this process did not open
-// with. Comparing against the live geometry is what stops a respawn loop.
+// needsRespawn is true when tab needs a popup size that this process did not open.
+// A comparison with the live size stops a respawn loop.
 func (m Model) needsRespawn(tab string) bool {
 	width, height := PopupGeometry(tab)
 	return width != m.popupWidth || height != m.popupHeight

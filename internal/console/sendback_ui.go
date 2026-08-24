@@ -10,8 +10,8 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 )
 
-// noStepIDStatus explains a mark slot the console cannot fill: selection
-// anchors on a declared id, and a positional title cannot name a step.
+// noStepIDStatus explains a mark slot that the console cannot fill. Selection
+// uses a declared id, and a positional title cannot name a step.
 const noStepIDStatus = "step declares no id" + tui.ChromeSep + "add id: to select it"
 
 type diagramMode int
@@ -23,7 +23,7 @@ const (
 	diagramModeAgentPick
 )
 
-// insertSide names which side of the focused card a new step goes on. The rail
+// insertSide names the side of the focused card for a new step. The rail
 // has no gap cursor, so `a` asks.
 type insertSide string
 
@@ -113,8 +113,8 @@ func (m *Model) toggleFocusedCard() {
 	m.diagramSelected[id] = !m.diagramSelected[id]
 }
 
-// seedInsertInstruction asks which side of the focused card the new step goes
-// on before it opens the composer. An empty diagram has no side to pick.
+// seedInsertInstruction asks which side of the focused card gets the new step
+// before it opens the composer. An empty diagram has no side to pick.
 func (m Model) seedInsertInstruction() (tea.Model, tea.Cmd) {
 	if len(m.diagram.Nodes) == 0 {
 		m.insertAt = ""
@@ -149,8 +149,8 @@ func (m Model) handleDiagramInsertSideKey(msg tea.KeyPressMsg) (tea.Model, tea.C
 	return m.beginDiagramInstruction(insertSeed(m.focusedTitle(), m.insertAt))
 }
 
-// focusedTitle names the focused step the way its card does, so a seeded
-// instruction still points at a step that declares no id.
+// focusedTitle names the focused step the same way its card does. A seeded
+// instruction can still name a step that declares no id.
 func (m Model) focusedTitle() string {
 	if m.diagramFocus.Index < 0 || m.diagramFocus.Index >= len(m.diagram.Nodes) {
 		return ""

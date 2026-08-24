@@ -1,6 +1,6 @@
 package runsbrowser
 
-// ParitySurface names one TypeScript-era runs-browser scenario and its Go coverage.
+// ParitySurface names one TypeScript-era runs-browser scenario and the Go coverage for it.
 type ParitySurface struct {
 	Spec         string
 	Requirement  string

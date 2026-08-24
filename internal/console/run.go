@@ -6,7 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// RunScreen mounts the console TUI.
+// RunScreen starts the console TUI.
 func RunScreen(opts Options) (int, error) {
 	model := New(opts)
 	program := tea.NewProgram(model)

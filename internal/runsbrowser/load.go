@@ -7,7 +7,7 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/history"
 )
 
-// Load lists runs for repoRoot at scope with filter, preserving selectedID when still present.
+// Load lists runs for repoRoot at scope with filter. It keeps selectedID when that id is still present.
 func Load(repoRoot string, scope Scope, filter, preserveID string, getenv config.Env) State {
 	if getenv == nil {
 		getenv = os.Getenv

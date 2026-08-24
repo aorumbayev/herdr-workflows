@@ -9,7 +9,7 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 )
 
-// RunScreen mounts the picker with Prepare, FilterInput, and a background update check.
+// RunScreen starts the picker with Prepare, FilterInput, and a background update check.
 func RunScreen(opts Options) (int, error) {
 	check := opts.CheckLatestRelease
 	if check == nil {

@@ -41,7 +41,7 @@ func names(entries []workflow.ListEntry) []string {
 }
 
 func TestFilterWorkflowEntriesSplitsValidAndInvalid(t *testing.T) {
-	// Ports test/picker/picker.test.ts "splits valid and invalid".
+	// This test copies test/picker/picker.test.ts "splits valid and invalid".
 	got := FilterWorkflowEntries(catalogEntries(), "")
 	if want := []string{"chat-handoff", "deploy"}; !stringSlicesEqual(names(got.Valid), want) {
 		t.Fatalf("valid = %v, want %v", names(got.Valid), want)
@@ -52,7 +52,7 @@ func TestFilterWorkflowEntriesSplitsValidAndInvalid(t *testing.T) {
 }
 
 func TestFilterWorkflowEntriesSubstringAppliesToBoth(t *testing.T) {
-	// Ports test/picker/picker.test.ts "substring filter applies to both".
+	// This test copies test/picker/picker.test.ts "substring filter applies to both".
 	got := FilterWorkflowEntries(catalogEntries(), "chat")
 	if want := []string{"chat-handoff"}; !stringSlicesEqual(names(got.Valid), want) {
 		t.Fatalf("valid = %v, want %v", names(got.Valid), want)
@@ -63,7 +63,7 @@ func TestFilterWorkflowEntriesSubstringAppliesToBoth(t *testing.T) {
 }
 
 func TestFilterWorkflowEntriesMatchesDisplayedTitleCaseInsensitively(t *testing.T) {
-	// Ports test/picker/picker.test.ts "matches displayed title case-insensitively".
+	// This test copies test/picker/picker.test.ts "matches displayed title case-insensitively".
 	catalog := []workflow.ListEntry{
 		{Name: "pr-desc", Source: "repo", File: "/r/pr-desc.yaml", Title: "Draft PR description"},
 		{Name: "handoff", Source: "global", File: "/g/handoff.yaml", Title: "Handoff"},
@@ -77,7 +77,7 @@ func TestFilterWorkflowEntriesMatchesDisplayedTitleCaseInsensitively(t *testing.
 }
 
 func TestFilterWorkflowEntriesMatchesNameWhenTitleDiffers(t *testing.T) {
-	// Ports test/picker/picker.test.ts "matches name when title differs".
+	// This test copies test/picker/picker.test.ts "matches name when title differs".
 	catalog := []workflow.ListEntry{
 		{Name: "pr-desc", Source: "repo", File: "/r/pr-desc.yaml", Title: "Draft PR description"},
 	}
@@ -90,7 +90,7 @@ func TestFilterWorkflowEntriesMatchesNameWhenTitleDiffers(t *testing.T) {
 }
 
 func TestFilterWorkflowEntriesHidesHiddenWorkflows(t *testing.T) {
-	// Ports test/picker/picker.test.ts "hidden workflows are kept out of the picker".
+	// This test copies test/picker/picker.test.ts "hidden workflows are kept out of the picker".
 	withBg := append(append([]workflow.ListEntry{}, catalogEntries()...),
 		workflow.ListEntry{Name: "ship-bg", Source: "repo", File: "/r/ship-bg.yaml", Hidden: true},
 		workflow.ListEntry{Name: "broken-bg", Source: "repo", File: "/r/broken-bg.yaml", Hidden: true, Error: "boom"},
@@ -108,7 +108,7 @@ func TestFilterWorkflowEntriesHidesHiddenWorkflows(t *testing.T) {
 }
 
 func TestHasVisibleEntriesFalseWhenEveryWorkflowIsHidden(t *testing.T) {
-	// Ports test/picker/picker.test.ts "hasVisibleEntries is false when every workflow is hidden".
+	// This test copies test/picker/picker.test.ts "hasVisibleEntries is false when every workflow is hidden".
 	hidden := []workflow.ListEntry{
 		{Name: "ship-bg", Source: "repo", File: "/r/ship-bg.yaml", Hidden: true},
 		{Name: "broken-bg", Source: "repo", File: "/r/broken-bg.yaml", Hidden: true, Error: "boom"},

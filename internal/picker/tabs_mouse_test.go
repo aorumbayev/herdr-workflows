@@ -148,7 +148,7 @@ func tabCellX(name string) int {
 	return 0
 }
 
-// rowHasAttr reports whether any SGR sequence in line opens with attribute attr.
+// rowHasAttr is true when any SGR sequence in line opens with attribute attr.
 func rowHasAttr(line, attr string) bool {
 	for _, chunk := range strings.Split(line, "\x1b[")[1:] {
 		end := strings.Index(chunk, "m")
@@ -174,7 +174,7 @@ func listRowLines(view string) []string {
 
 func TestRowTextFollowsTheTerminalForeground(t *testing.T) {
 	// Only the warning marker and an invalid location pin a palette slot. The
-	// title keeps the user's own foreground so no theme can wash it out.
+	// title keeps the foreground of the user so no theme can remove it.
 	repo := tui.FormatStyledRow("Fine", "repo", false, 60, false, false)
 	if strings.Contains(repo, "38;5;") {
 		t.Fatalf("a clean row must not pin any palette slot: %q", repo)

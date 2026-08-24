@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// Placement is where the console pane opens relative to the caller.
+// Placement is the position of the console pane relative to the caller.
 type Placement string
 
 const (
@@ -17,7 +17,7 @@ const (
 // DefaultPlacement is the first-open console placement.
 const DefaultPlacement = PlacementBeside
 
-// ParsePlacement accepts tab, beside, or below. Empty resolves to DefaultPlacement.
+// ParsePlacement accepts tab, beside, or below. Empty uses DefaultPlacement.
 func ParsePlacement(raw string) (Placement, error) {
 	v := strings.ToLower(strings.TrimSpace(raw))
 	if v == "" {

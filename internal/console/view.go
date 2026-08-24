@@ -138,8 +138,8 @@ func (m Model) renderDiagramInstruction(w int) string {
 	return head + "\n" + strings.Join(lines, "\n") + "\n" + tui.FormatRule(w) + "\n" + footer
 }
 
-// wrapDraft breaks typed text on the content width. Truncating it would hide
-// what the user is typing once the draft passes one row.
+// wrapDraft breaks typed text on the content width. A truncation would not show
+// the typed text after the draft is longer than one row.
 func wrapDraft(s string, width int) []string {
 	if width <= 0 {
 		return []string{s}

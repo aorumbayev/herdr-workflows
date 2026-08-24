@@ -9,7 +9,7 @@ import (
 )
 
 func TestBuildPickerOptionsTitleProvenanceAndSensitivity(t *testing.T) {
-	// Ports test/picker/picker.test.ts "title, provenance, inputs, and sensitivity flags".
+	// This test copies test/picker/picker.test.ts "title, provenance, inputs, and sensitivity flags".
 	entry := workflow.ListEntry{
 		Name:             "handover",
 		Source:           "repo",
@@ -37,7 +37,7 @@ func TestBuildPickerOptionsTitleProvenanceAndSensitivity(t *testing.T) {
 }
 
 func TestFormatPickerRowWarningAndLocationColumns(t *testing.T) {
-	// Ports warning-field, location pad, selected/unselected length, overlong title.
+	// This test copies warning-field, location pad, selected/unselected length, overlong title.
 	warned := FormatPickerRowName("Warned", "repo", true, 60, false)
 	clean := FormatPickerRowName("Clean", "repo", false, 60, false)
 	if warned[47] != '!' {
@@ -79,7 +79,7 @@ func TestFormatPickerRowWarningAndLocationColumns(t *testing.T) {
 }
 
 func TestEntrySensitivityAggregatesFlags(t *testing.T) {
-	// Ports test/picker/picker.test.ts "aggregates command transcript and sensitive methods".
+	// This test copies test/picker/picker.test.ts "aggregates command transcript and sensitive methods".
 	got := EntrySensitivity(workflow.ListEntry{
 		Name:               "x",
 		Source:             "repo",
@@ -105,7 +105,7 @@ func TestEntrySensitivityAggregatesFlags(t *testing.T) {
 }
 
 func TestFormatRuleSpansRowTextField(t *testing.T) {
-	// Ports test/picker/picker.test.ts formatRule.
+	// This test copies test/picker/picker.test.ts formatRule.
 	rule := tui.FormatRule(60)
 	if rule != "   "+strings.Repeat("-", 54)+"   " || len(rule) != 60 {
 		t.Fatalf("rule(60) = %q", rule)

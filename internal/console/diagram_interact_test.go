@@ -313,7 +313,7 @@ func TestFileStampDetectsXORCollidingChange(t *testing.T) {
 	if !ok {
 		t.Fatal("no stamp")
 	}
-	// size 4 @ 100ns and size 5 @ 101ns collide under mtime^size (100^4 == 101^5).
+	// Size 4 at 100ns and size 5 at 101ns collide under mtime^size (100^4 == 101^5).
 	if err := os.WriteFile(path, []byte("12345"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -342,7 +342,7 @@ func TestFileStampDetectsAtomicSavePreservingMtime(t *testing.T) {
 	if !ok {
 		t.Fatal("no stamp")
 	}
-	// Atomic save: write a temp file and rename it over the target, then
+	// Atomic save: write a temp file and rename that file to the target, then
 	// restore the original mtime. Same size, same mtime, new inode.
 	if err := os.WriteFile(path+".tmp", []byte("1234"), 0o600); err != nil {
 		t.Fatal(err)
@@ -592,7 +592,7 @@ func TestModelDiagramToggleOnIDLessCardExplains(t *testing.T) {
 	}
 }
 
-// downTo moves the focus onto the card at index i.
+// downTo moves the focus to the card at index i.
 func downTo(t *testing.T, m Model, i int) Model {
 	t.Helper()
 	for m.diagramFocus.Index != i {

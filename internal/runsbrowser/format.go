@@ -19,7 +19,7 @@ type RunListEmptyOpts struct {
 	Unavailable    bool
 }
 
-// FormatRunRowOpts configures list-row layout.
+// FormatRunRowOpts sets list-row layout.
 type FormatRunRowOpts struct {
 	ShowLocation bool
 }
@@ -63,12 +63,12 @@ func abbreviateStatus(status string, width int) string {
 	}
 }
 
-// rowStatusToken is the status text FormatRunRow puts at the head of a row.
+// rowStatusToken is the status text that FormatRunRow puts at the start of a row.
 func rowStatusToken(item history.Summary, width int) string {
 	return abbreviateStatus(item.Status, min(12, max(3, width)))
 }
 
-// FormatRunRow lays out one list row: status, workflow, progress, elapsed, optional location.
+// FormatRunRow arranges one list row: status, workflow, progress, elapsed, optional location.
 func FormatRunRow(item history.Summary, width int, opts FormatRunRowOpts) string {
 	status := rowStatusToken(item, width)
 	progress := ""
@@ -144,7 +144,7 @@ func FormatRunListEmpty(opts RunListEmptyOpts) string {
 }
 
 // RunsFooter is the list-mode footer hint plus the scope label.
-// tui.FormatListFooter renders the position once. Do not embed the position here.
+// tui.FormatListFooter shows the position one time. This string must not contain the position.
 func RunsFooter(scope Scope) string {
 	scopeLabel := "Current"
 	if scope == ScopeAll {
@@ -163,7 +163,7 @@ func RunDetailFooter() string {
 	return strings.Join([]string{"esc back", "s send", "up/down step"}, tui.ChromeSep)
 }
 
-// DetailLines renders a detail view into single-width lines.
+// DetailLines shows a detail view as single-width lines.
 func DetailLines(view DetailView, width int) []string {
 	switch view.Kind {
 	case "starting":
@@ -213,7 +213,7 @@ func asciiGlyphs(line string) string {
 	return strings.ReplaceAll(line, "…", "...")
 }
 
-// FormatRunDetailLines renders history blocks into width-bounded lines.
+// FormatRunDetailLines shows history blocks as width-bounded lines.
 func FormatRunDetailLines(blocks []history.Block, width int) []string {
 	var out []string
 	for _, block := range blocks {
@@ -250,7 +250,7 @@ func blockToLines(block history.Block, width int) []string {
 	}
 }
 
-// ScrollDetailLines returns the visible window and clamped scroll offset.
+// ScrollDetailLines gives the visible window and the clamped scroll offset.
 func ScrollDetailLines(lines []string, scroll, viewport int) ([]string, int) {
 	maxScroll := max(0, len(lines)-viewport)
 	next := min(max(0, scroll), maxScroll)
@@ -258,7 +258,7 @@ func ScrollDetailLines(lines []string, scroll, viewport int) ([]string, int) {
 	return lines[next:end], next
 }
 
-// ClampDetailScroll caps scroll to the legal range for lines and viewport.
+// ClampDetailScroll limits scroll to the legal range for lines and viewport.
 func ClampDetailScroll(lines []string, scroll, viewport int) int {
 	_, next := ScrollDetailLines(lines, scroll, viewport)
 	return next

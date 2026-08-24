@@ -387,7 +387,7 @@ func isStepItem(line, marker string) bool {
 }
 
 // stepItemPrefix is the indent plus dash of the first sequence item under
-// steps:, which every sibling item repeats exactly.
+// steps:. Every sibling item repeats that prefix exactly.
 func stepItemPrefix(lines []string) string {
 	for _, line := range lines {
 		trim := strings.TrimSpace(line)
