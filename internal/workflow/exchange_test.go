@@ -31,7 +31,7 @@ func encodeTestPayload(t *testing.T, value any) string {
 
 func TestWorkflowPayloadRoundTripAndPreview(t *testing.T) {
 	body := "version: v1alpha1\nsteps:\n  - run: bun test\n"
-	want := WorkflowBundle{{Name: "demo", YAML: body}}
+	want := Bundle{{Name: "demo", YAML: body}}
 	payload, err := EncodePayload(want)
 	if err != nil {
 		t.Fatal(err)
@@ -44,7 +44,7 @@ func TestWorkflowPayloadRoundTripAndPreview(t *testing.T) {
 	if err != nil || !bundleEqual(got, want) {
 		t.Fatalf("decoded = %#v, err = %v", got, err)
 	}
-	preview, err := PreviewBundle(WorkflowBundle{{
+	preview, err := PreviewBundle(Bundle{{
 		Name: "review",
 		YAML: "version: v1alpha1\nsteps:\n  - agent: 'see {{context.transcript}}'\n",
 	}})
@@ -64,7 +64,7 @@ func TestWorkflowImportPreservesExistingFilesUntilReplacement(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "demo.yaml"), []byte(old), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	payload, err := EncodePayload(WorkflowBundle{{Name: "demo", YAML: "version: v1alpha1\nsteps:\n  - run: new\n"}})
+	payload, err := EncodePayload(Bundle{{Name: "demo", YAML: "version: v1alpha1\nsteps:\n  - run: new\n"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,19 +166,19 @@ func TestDecodePayloadRejectsMalformedBundles(t *testing.T) {
 
 func TestDecodePayloadSurvivesWhitespace(t *testing.T) {
 	body := "version: v1alpha1\nsteps:\n  - run: bun test\n"
-	payload, err := EncodePayload(WorkflowBundle{{Name: "demo", YAML: body}})
+	payload, err := EncodePayload(Bundle{{Name: "demo", YAML: body}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	wrapped := payload[:10] + "\n " + payload[10:]
 	got, err := DecodePayload(wrapped)
-	if err != nil || !bundleEqual(got, WorkflowBundle{{Name: "demo", YAML: body}}) {
+	if err != nil || !bundleEqual(got, Bundle{{Name: "demo", YAML: body}}) {
 		t.Fatalf("wrapped decode = %#v, err = %v", got, err)
 	}
 }
 
 func TestPreviewFlagsMissingChildren(t *testing.T) {
-	preview, err := PreviewBundle(WorkflowBundle{{
+	preview, err := PreviewBundle(Bundle{{
 		Name: "parent",
 		YAML: "version: v1alpha1\nsteps:\n  - workflow: missing-child\n",
 	}})
@@ -193,7 +193,7 @@ func TestPreviewFlagsMissingChildren(t *testing.T) {
 func TestRunImportDeclinesWriteNothing(t *testing.T) {
 	root := t.TempDir()
 	home := t.TempDir()
-	payload, err := EncodePayload(WorkflowBundle{{Name: "demo", YAML: "version: v1alpha1\nsteps:\n  - run: bun test\n"}})
+	payload, err := EncodePayload(Bundle{{Name: "demo", YAML: "version: v1alpha1\nsteps:\n  - run: bun test\n"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +212,7 @@ func TestRunImportDeclinesWriteNothing(t *testing.T) {
 func TestRunImportRequiresConfirmPrompt(t *testing.T) {
 	root := t.TempDir()
 	home := t.TempDir()
-	payload, err := EncodePayload(WorkflowBundle{{Name: "demo", YAML: "version: v1alpha1\nsteps:\n  - run: bun test\n"}})
+	payload, err := EncodePayload(Bundle{{Name: "demo", YAML: "version: v1alpha1\nsteps:\n  - run: bun test\n"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +228,7 @@ func TestRunImportRepinsForeignSchemaPointer(t *testing.T) {
 	root := t.TempDir()
 	home := t.TempDir()
 	foreign := "# yaml-language-server: $schema=https://example.com/v0.1.0/docs/workflow.schema.json\nversion: v1alpha1\nsteps:\n  - run: [echo, hi]\n"
-	payload, err := EncodePayload(WorkflowBundle{{Name: "pinned", YAML: foreign}})
+	payload, err := EncodePayload(Bundle{{Name: "pinned", YAML: foreign}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +270,7 @@ func TestParseImportScope(t *testing.T) {
 	}
 }
 
-func bundleEqual(a, b WorkflowBundle) bool {
+func bundleEqual(a, b Bundle) bool {
 	if len(a) != len(b) {
 		return false
 	}

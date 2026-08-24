@@ -1,7 +1,6 @@
 package history
 
 import (
-	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -12,9 +11,8 @@ import (
 )
 
 const (
-	StaleAfter     = 15 * time.Second
-	RetentionBytes = 512_000
-	listLimit      = 40
+	StaleAfter = 15 * time.Second
+	listLimit  = 40
 )
 
 type ListFilter struct {
@@ -60,22 +58,13 @@ type Progress struct {
 }
 
 func ListRuns(filter ListFilter, getenv config.Env) ListResult {
-	if _, err := ensureRunsDir(getenv); err != nil {
-		return ListResult{Unavailable: true}
-	}
 	now := filter.Now
 	if now.IsZero() {
 		now = time.Now()
 	}
-	snaps, incompat, err := loadAllSnapshots(getenv)
+	items, incompat, roots, err := listRunSummaries(now, getenv)
 	if err != nil {
 		return ListResult{Unavailable: true}
-	}
-	items := make([]Summary, 0, len(snaps))
-	roots := map[string]struct{}{}
-	for _, snap := range snaps {
-		items = append(items, ToSummary(snap, now))
-		roots[snap.CheckoutRoot] = struct{}{}
 	}
 	checkout := filter.CheckoutRoot
 	if checkout != nil {
@@ -88,12 +77,8 @@ func ListRuns(filter ListFilter, getenv config.Env) ListResult {
 		Status:       filter.Status,
 		Now:          now,
 	})
-	checkoutRoots := make([]string, 0, len(roots))
-	for r := range roots {
-		checkoutRoots = append(checkoutRoots, r)
-	}
-	slices.Sort(checkoutRoots)
-	return ListResult{OK: true, Runs: runs, Incompatible: incompat, CheckoutRoots: checkoutRoots}
+	slices.Sort(roots)
+	return ListResult{OK: true, Runs: runs, Incompatible: incompat, CheckoutRoots: roots}
 }
 
 func CanonicalRepoRoot(repoRoot string) string {
@@ -101,38 +86,6 @@ func CanonicalRepoRoot(repoRoot string) string {
 		return resolved
 	}
 	return repoRoot
-}
-
-func loadAllSnapshots(getenv config.Env) ([]Snapshot, []IncompatibleSnapshot, error) {
-	dir := RunsDir(getenv)
-	names, err := os.ReadDir(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil, nil
-		}
-		return nil, nil, err
-	}
-	var out []Snapshot
-	var incompat []IncompatibleSnapshot
-	for _, name := range names {
-		n := name.Name()
-		if !strings.HasSuffix(n, ".json") || strings.HasPrefix(n, ".") {
-			continue
-		}
-		id := strings.TrimSuffix(n, ".json")
-		loaded, err := loadSnapshot(id, getenv)
-		if err != nil {
-			return nil, nil, err
-		}
-		if loaded.Incompatible != nil {
-			incompat = append(incompat, *loaded.Incompatible)
-			continue
-		}
-		if loaded.Snap != nil {
-			out = append(out, *loaded.Snap)
-		}
-	}
-	return out, incompat, nil
 }
 
 func filterSortLimit(items []Summary, filter ListFilter) []Summary {
@@ -186,60 +139,4 @@ func searchableText(item Summary) string {
 		}
 	}
 	return strings.ToLower(strings.Join(parts, "\n"))
-}
-
-func retentionCleanup(getenv config.Env) error {
-	dir := RunsDir(getenv)
-	names, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-	type term struct {
-		id      string
-		path    string
-		size    int64
-		started time.Time
-	}
-	var terminals []term
-	var bytes int64
-	for _, name := range names {
-		n := name.Name()
-		if !strings.HasSuffix(n, ".json") || strings.HasPrefix(n, ".") {
-			continue
-		}
-		id := strings.TrimSuffix(n, ".json")
-		path := SnapshotPath(id, getenv)
-		info, err := os.Stat(path)
-		if err != nil {
-			continue
-		}
-		snap, err := ReadSnapshot(id, getenv)
-		if err != nil || snap == nil || snap.Status == "" {
-			continue
-		}
-		started, _ := parseISOTime(snap.StartedAt)
-		terminals = append(terminals, term{id: id, path: path, size: info.Size(), started: started})
-		bytes += info.Size()
-	}
-	if bytes <= RetentionBytes {
-		return nil
-	}
-	slices.SortFunc(terminals, func(a, b term) int {
-		if !a.started.Equal(b.started) {
-			if a.started.Before(b.started) {
-				return -1
-			}
-			return 1
-		}
-		return strings.Compare(a.id, b.id)
-	})
-	for bytes > RetentionBytes && len(terminals) > 1 {
-		oldest := terminals[0]
-		terminals = terminals[1:]
-		_ = os.Remove(oldest.path)
-		removeDebugArtifacts(oldest.id, getenv)
-		_ = os.WriteFile(filepath.Join(dir, oldest.id+".expired"), []byte{}, 0o600)
-		bytes -= oldest.size
-	}
-	return nil
 }

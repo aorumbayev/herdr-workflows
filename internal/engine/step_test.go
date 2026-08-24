@@ -10,7 +10,7 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-// fakeHerdrCall records calls for assertion.
+// fakeHerdrCall records calls so that tests can assert.
 type fakeHerdrCall struct {
 	calls []herdrCallRecord
 }
@@ -157,7 +157,7 @@ func TestShellStepPlacedBesideRun(t *testing.T) {
 		t.Errorf("ShellStep.OK = false, want true. Error: %v", outcome.Error)
 	}
 
-	// Verify no layout.apply was called
+	// Make sure that the test does not call layout.apply
 	hasLayoutApply := slices.ContainsFunc(fake.calls, func(r herdrCallRecord) bool {
 		return r.method == "layout.apply"
 	})
@@ -165,7 +165,7 @@ func TestShellStepPlacedBesideRun(t *testing.T) {
 		t.Error("layout.apply was called, should not be for beside")
 	}
 
-	// Verify split was called with correct direction
+	// Make sure that the test calls split with the correct direction
 	splitCall := findCall(fake.calls, "pane.split")
 	if splitCall == nil {
 		t.Fatal("pane.split was not called")
@@ -174,7 +174,7 @@ func TestShellStepPlacedBesideRun(t *testing.T) {
 		t.Errorf("split direction = %v, want right", splitCall.params["direction"])
 	}
 
-	// Verify send_input was called
+	// Make sure that the test calls send_input
 	sendCall := findCall(fake.calls, "pane.send_input")
 	if sendCall == nil {
 		t.Fatal("pane.send_input was not called")
@@ -231,7 +231,7 @@ func TestShellStepReadinessDefaults(t *testing.T) {
 		t.Errorf("ShellStep.OK = false, want true. Error: %v", outcome.Error)
 	}
 
-	// Verify pane.wait_for_output was called with correct defaults
+	// Make sure that the test calls pane.wait_for_output with the correct defaults
 	waitCall := findCall(fake.calls, "pane.wait_for_output")
 	if waitCall == nil {
 		t.Fatal("pane.wait_for_output was not called")
@@ -497,7 +497,7 @@ func TestHerdrStepTemplatedEnumBadValue(t *testing.T) {
 		t.Errorf("HerdrStep error = %q, want to contain enum validation message", outcome.Error)
 	}
 
-	// Verify pane.split was never called
+	// Make sure that the test does not call pane.split
 	splitCalls := slices.ContainsFunc(fake.calls, func(r herdrCallRecord) bool {
 		return r.method == "pane.split"
 	})
@@ -550,7 +550,7 @@ func TestHerdrStepTemplatedEnumGoodValue(t *testing.T) {
 	}
 }
 
-// Helper to find a call by method
+// Find a recorded call by method
 func findCall(calls []herdrCallRecord, method string) *herdrCallRecord {
 	for i := range calls {
 		if calls[i].method == method {
@@ -558,4 +558,52 @@ func findCall(calls []herdrCallRecord, method string) *herdrCallRecord {
 		}
 	}
 	return nil
+}
+
+func TestShellStepPlacedPaneCarriesRunContextEnv(t *testing.T) {
+	fake := &fakeHerdrCall{}
+	frame := StepFrame{
+		Step: workflow.Step{
+			ID: "boot",
+			Action: &workflow.RunAction{
+				Payload:    workflow.RunPayload{Argv: []string{"sh", "-c", "echo hi"}},
+				Pane:       &workflow.PaneSpec{Open: "beside", Anchor: "w1:pM"},
+				Background: true,
+			},
+		},
+		Values: workflow.TemplateNamespace{Inputs: map[string]any{}},
+		Opts: StepRunOpts{
+			RunID:    "5da1aa28-f1c3-410f-9cfc-e6ecd75c356e",
+			Name:     "ship",
+			RepoRoot: "/repo/a",
+			Ctx: config.InvocationContext{
+				PaneID: "w1:p1", TabID: "w1:t1", WorkspaceID: "w1", Cwd: t.TempDir(),
+			},
+			Deps: RunnerDeps{HerdrCall: fake.call},
+		},
+	}
+	if _, err := ShellStep(frame); err != nil {
+		t.Fatalf("ShellStep returned error: %v", err)
+	}
+	want := map[string]string{
+		"HWF_RUN_ID":        "5da1aa28-f1c3-410f-9cfc-e6ecd75c356e",
+		"HWF_WORKFLOW":      "ship",
+		"HWF_CHECKOUT_ROOT": "/repo/a",
+	}
+	found := false
+	for _, call := range fake.calls {
+		env, ok := call.params["env"].(map[string]string)
+		if !ok {
+			continue
+		}
+		found = true
+		for key, value := range want {
+			if env[key] != value {
+				t.Fatalf("%s env[%s] = %q, want %q", call.method, key, env[key], value)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("no placement call carried an env map: %+v", fake.calls)
+	}
 }

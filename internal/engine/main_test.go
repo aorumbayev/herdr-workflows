@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// TestMain points HERDR_BIN_PATH at a stub that always fails, so a test that
-// forgets to stub a CLI call can never drive the developer's live herdr.
+// TestMain sets HERDR_BIN_PATH to a stub that always fails. A test that
+// does not stub a CLI call cannot start the developer's live herdr.
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "hwf-engine-quarantine")
 	if err != nil {

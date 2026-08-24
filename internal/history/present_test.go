@@ -6,7 +6,7 @@ import (
 )
 
 func TestPresentRunDetailInvalidAndEmpty(t *testing.T) {
-	// Ports test/history/history-project.test.ts presentRunDetail cases.
+	// These cases are the same as test/history/history-project.test.ts presentRunDetail cases.
 	got := PresentRunDetail(Detail{Kind: "invalid", Message: "bad id"})
 	if len(got) != 1 || got[0].Kind != "error" || got[0].Text != "bad id" {
 		t.Fatalf("%+v", got)

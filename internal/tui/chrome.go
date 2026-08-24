@@ -4,8 +4,9 @@ const (
 	// ChromeSep joins chrome fragments.
 	ChromeSep = " | "
 
-	ListHint            = "tab runs" + ChromeSep + "enter run" + ChromeSep + "ctrl+k" + ChromeSep + "esc"
-	EmptyListHint       = "tab runs | ctrl+k | esc"
+	ListHint            = "tab" + ChromeSep + "enter run" + ChromeSep + "ctrl+k" + ChromeSep + "esc"
+	EmptyListHint       = "tab" + ChromeSep + "ctrl+k" + ChromeSep + "esc"
+	ConsoleHint         = "tab" + ChromeSep + "enter diagram" + ChromeSep + "p pop out" + ChromeSep + "esc"
 	PaletteHint         = "letter fires | esc back"
 	DeleteConfirmHint   = "y delete | n cancel | esc"
 	ChoiceHint          = "type filter" + ChromeSep + "up/down move" + ChromeSep + "enter select" + ChromeSep + "esc back"
@@ -19,13 +20,21 @@ const (
 	CreateNameHint      = "enter create" + ChromeSep + "esc cancel"
 	EmptyCatalogMessage = "Hi there, looks like you got no runnable workflows, start by creating a new one, browsing examples or importing an existing workflow."
 	CursorPrefix        = "> "
+
+	TabWorkflows = "workflows"
+	TabRuns      = "runs"
+	TabConsole   = "console"
 )
 
-// ChromeStrings is every chrome fragment the picker draws. Each glyph must be
+// ChromeStrings is every chrome fragment that the picker shows. Each glyph must be
 // unambiguous single-column ASCII.
 var ChromeStrings = []string{
 	ListHint,
 	EmptyListHint,
+	ConsoleHint,
+	TabWorkflows,
+	TabRuns,
+	TabConsole,
 	PaletteHint,
 	DeleteConfirmHint,
 	ChoiceHint,

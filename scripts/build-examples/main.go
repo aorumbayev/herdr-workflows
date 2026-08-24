@@ -1,8 +1,8 @@
-// Command build-examples prints example gallery cards as JSON for VitePress.
+// Command build-examples writes example gallery cards as JSON for VitePress.
 //
 //	go run ./scripts/build-examples [examples-dir]
 //
-// With no argument, examples/ under the repository root is used.
+// When there is no argument, the command uses examples/ in the repository root.
 package main
 
 import (
@@ -90,9 +90,9 @@ func BuildExamples(dir string) ([]ExampleCard, error) {
 		if err != nil {
 			return nil, err
 		}
-		bundle := make(workflow.WorkflowBundle, len(order))
+		bundle := make(workflow.Bundle, len(order))
 		for i, entry := range order {
-			bundle[i] = workflow.WorkflowBundleEntry{Name: entry, YAML: sources[entry].body}
+			bundle[i] = workflow.BundleEntry{Name: entry, YAML: sources[entry].body}
 		}
 		payload, err := workflow.EncodePayload(bundle)
 		if err != nil {

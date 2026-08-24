@@ -332,7 +332,7 @@ func dumpRetryNode(retry *RetrySpec) *yaml.Node {
 // ParseDynamicChoiceStdout normalizes one choice per output line.
 func ParseDynamicChoiceStdout(stdout string) []string {
 	seen := map[string]bool{}
-	choices := make([]string, 0)
+	var choices []string
 	for _, line := range strings.Split(strings.ReplaceAll(stdout, "\r\n", "\n"), "\n") {
 		value := strings.TrimSpace(line)
 		if value == "" || seen[value] {
@@ -686,7 +686,7 @@ func validateInputValue(input InputSpec, value string, options []string) error {
 }
 
 // Current resolves the next prompt. A later call or CancelPending invalidates
-// an in-flight dynamic choice resolution.
+// a dynamic choice resolution that is still in progress.
 func (s *InputSession) Current(ctx context.Context) CurrentResult {
 	s.mu.Lock()
 	if s.cancel != nil {
@@ -733,7 +733,7 @@ func (s *InputSession) Current(ctx context.Context) CurrentResult {
 	return CurrentResult{Prompt: s.pending}
 }
 
-// Answer accepts the current input and invalidates later answers/domains.
+// Answer accepts the current input and invalidates later answers and domains.
 func (s *InputSession) Answer(value string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -814,7 +814,7 @@ func (s *InputSession) Result() (CollectedInputs, error) {
 	return CollectedInputs{Values: cloneStrings(s.values), Domains: cloneStringSlices(s.domains)}, nil
 }
 
-// CompleteFromProvided drives the session without prompting.
+// CompleteFromProvided runs the session without a prompt.
 func (s *InputSession) CompleteFromProvided(ctx context.Context, provided map[string]string) (CollectedInputs, error) {
 	declared := map[string]bool{}
 	for _, input := range s.opts.Specs {
@@ -931,7 +931,7 @@ func inputsOf(file string, raw Document) ([]InputSpec, error) {
 }
 
 func inputIsUsed(name string, workflow Definition) bool {
-	for _, path := range WorkflowTemplateRefs(workflow.Steps, workflow.Returns, workflow.OnFailure) {
+	for _, path := range TemplateRefs(workflow.Steps, workflow.Returns, workflow.OnFailure) {
 		if path.Root == "inputs" && len(path.Segments) > 0 && path.Segments[0] == name {
 			return true
 		}
@@ -990,7 +990,7 @@ func loadFromRaw(name, file, source string, raw Document) (*Definition, error) {
 	workflow := &Definition{
 		Name: name, File: file, Version: raw.Version, Title: raw.Title, Description: raw.Description,
 		Hidden: raw.Hidden, Steps: raw.Steps, Inputs: inputs, Returns: raw.Returns, OnFailure: raw.OnFailure,
-		RepoOwned: source == "repo", NeedsTranscript: WorkflowNeedsTranscript(raw.Steps, raw.Returns), Children: map[string]*Definition{},
+		RepoOwned: source == "repo", NeedsTranscript: NeedsTranscript(raw.Steps, raw.Returns), Children: map[string]*Definition{},
 	}
 	return workflow, nil
 }
@@ -1091,7 +1091,8 @@ func configFor(repoRoot string, supplied []config.Config) (config.Config, error)
 	return config.LoadConfig(repoRoot, nil)
 }
 
-// ParseWorkflowText parses and validates a workflow body without filesystem resolution for the entry.
+// ParseWorkflowText parses and validates a workflow body.
+// It does not resolve the entry from the filesystem.
 func ParseWorkflowText(name, text string, cfg config.Config, repoRoot string, file ...string) (*Definition, error) {
 	entryFile := name + ".yaml"
 	if len(file) > 0 && file[0] != "" {
@@ -1117,11 +1118,11 @@ func LoadWorkflow(name, repoRoot string, supplied ...config.Config) (*Definition
 	if err != nil {
 		return nil, err
 	}
-	return LoadWorkflowEntry(WorkflowListEntry{Name: name, Source: resolved.Source, File: resolved.File}, repoRoot, supplied...)
+	return LoadWorkflowEntry(ListEntry{Name: name, Source: resolved.Source, File: resolved.File}, repoRoot, supplied...)
 }
 
 // LoadWorkflowEntry loads an explicitly selected source file.
-func LoadWorkflowEntry(entry WorkflowListEntry, repoRoot string, supplied ...config.Config) (*Definition, error) {
+func LoadWorkflowEntry(entry ListEntry, repoRoot string, supplied ...config.Config) (*Definition, error) {
 	if _, err := os.Stat(entry.File); err != nil {
 		return nil, bail(entry.File, 0, "", "file not found")
 	}
@@ -1149,7 +1150,7 @@ func yamlWorkflowNames(dir string) []string {
 	if err != nil {
 		return nil
 	}
-	names := make([]string, 0)
+	var names []string
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".yaml" {
 			continue
@@ -1161,8 +1162,8 @@ func yamlWorkflowNames(dir string) []string {
 	return names
 }
 
-// ListWorkflows returns repo-over-global workflow metadata without dynamic execution.
-func ListWorkflows(repoRoot string, supplied ...config.Config) ([]WorkflowListEntry, error) {
+// ListWorkflows returns repo-over-global workflow metadata. It does not run dynamic commands.
+func ListWorkflows(repoRoot string, supplied ...config.Config) ([]ListEntry, error) {
 	cfg, err := configFor(repoRoot, supplied)
 	if err != nil {
 		return nil, err
@@ -1172,20 +1173,22 @@ func ListWorkflows(repoRoot string, supplied ...config.Config) ([]WorkflowListEn
 		return nil, err
 	}
 	globalDir := filepath.Join(home, ".hwf", "workflows")
-	entriesByName := map[string]WorkflowListEntry{}
+	entriesByName := map[string]ListEntry{}
 	for _, name := range yamlWorkflowNames(globalDir) {
-		entriesByName[name] = WorkflowListEntry{Name: name, Source: "global", File: filepath.Join(globalDir, name+".yaml")}
+		entriesByName[name] = ListEntry{Name: name, Source: "global", File: filepath.Join(globalDir, name+".yaml")}
 	}
 	repoDir := filepath.Join(repoRoot, ".hwf", "workflows")
-	for _, name := range yamlWorkflowNames(repoDir) {
-		entriesByName[name] = WorkflowListEntry{Name: name, Source: "repo", File: filepath.Join(repoDir, name+".yaml"), RepoOwned: true}
+	if repoDir != globalDir {
+		for _, name := range yamlWorkflowNames(repoDir) {
+			entriesByName[name] = ListEntry{Name: name, Source: "repo", File: filepath.Join(repoDir, name+".yaml"), RepoOwned: true}
+		}
 	}
 	names := make([]string, 0, len(entriesByName))
 	for name := range entriesByName {
 		names = append(names, name)
 	}
 	slices.Sort(names)
-	result := make([]WorkflowListEntry, 0, len(names))
+	result := make([]ListEntry, 0, len(names))
 	for _, name := range names {
 		entry := entriesByName[name]
 		workflow, loadErr := LoadWorkflowEntry(entry, repoRoot, cfg)
@@ -1207,7 +1210,7 @@ func ListWorkflows(repoRoot string, supplied ...config.Config) ([]WorkflowListEn
 	return result, nil
 }
 
-// CompleteWorkflowInputs drives entry or child input collection.
+// CompleteWorkflowInputs runs input collection for the entry or a child.
 func CompleteWorkflowInputs(ctx context.Context, workflow *Definition, opts InputSessionOptions, provided map[string]string) (CollectedInputs, error) {
 	opts.Specs, opts.File = workflow.Inputs, workflow.File
 	return NewInputSession(opts).CompleteFromProvided(ctx, provided)

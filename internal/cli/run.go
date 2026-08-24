@@ -46,7 +46,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 
 	flagInputs, err := parseInputs(rawInputs)
 	if err != nil {
-		return fmt.Errorf("invalid %s", err.Error())
+		return fmt.Errorf("invalid inputs: %w", err)
 	}
 	for key, val := range flagInputs {
 		inputs[key] = val

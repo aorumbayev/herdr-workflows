@@ -19,19 +19,19 @@ func TestPaletteRenderIsPaletteOnly(t *testing.T) {
 	if strings.Contains(body, "Chat handoff") || strings.Contains(body, "filter workflows") {
 		t.Fatalf("palette must not ghost the workflow list:\n%s", body)
 	}
-	if !strings.Contains(body, "Create new") {
+	if !strings.Contains(body, "new") {
 		t.Fatalf("palette body missing:\n%s", body)
 	}
 }
 
 func TestInputClearsLeftoverListFilter(t *testing.T) {
 	// openspec/specs/picker-presentation/spec.md input prompts
-	entry := workflow.WorkflowListEntry{Name: "branchy", Source: "repo", File: "/r/b.yaml", Title: "Branchy"}
+	entry := workflow.ListEntry{Name: "branchy", Source: "repo", File: "/r/b.yaml", Title: "Branchy"}
 	m := New(Options{
-		Entries: []workflow.WorkflowListEntry{entry},
+		Entries: []workflow.ListEntry{entry},
 		Width:   80,
 		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format,
 				Inputs: []workflow.InputSpec{
@@ -60,7 +60,7 @@ func TestFilterRowIsFlushLeftASCIIWithoutSlashPrefix(t *testing.T) {
 	// openspec/specs/picker-presentation/spec.md "Picker chrome uses width-stable ASCII glyphs"
 	m := New(Options{Entries: catalogEntries(), Width: 80})
 	body := m.View().Content
-	first := tui.StripContentPadding(strings.Split(body, "\n")[0])
+	first := tui.StripContentPadding(strings.Split(body, "\n")[1])
 	if strings.HasPrefix(first, "/ ") || strings.HasPrefix(first, "/") {
 		t.Fatalf("filter must not use OpenTUI slash prefix: %q", first)
 	}
@@ -68,7 +68,7 @@ func TestFilterRowIsFlushLeftASCIIWithoutSlashPrefix(t *testing.T) {
 		t.Fatalf("empty filter row = %q want %q", first, tui.FilterWorkflows)
 	}
 	m = apply(m, "d")
-	first = tui.StripContentPadding(strings.Split(m.View().Content, "\n")[0])
+	first = tui.StripContentPadding(strings.Split(m.View().Content, "\n")[1])
 	if first != "d" {
 		t.Fatalf("typed filter must be flush-left: %q", first)
 	}
@@ -97,12 +97,12 @@ func TestPaletteViewPadsToWindowHeight(t *testing.T) {
 
 func TestInputViewPadsToWindowHeight(t *testing.T) {
 	const height = 24
-	entry := workflow.WorkflowListEntry{Name: "branchy", Source: "repo", File: "/r/b.yaml", Title: "Branch check"}
+	entry := workflow.ListEntry{Name: "branchy", Source: "repo", File: "/r/b.yaml", Title: "Branch check"}
 	m := New(Options{
-		Entries: []workflow.WorkflowListEntry{entry},
+		Entries: []workflow.ListEntry{entry},
 		Width:   80,
 		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format,
 				Inputs: []workflow.InputSpec{

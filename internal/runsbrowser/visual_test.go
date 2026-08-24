@@ -1,10 +1,12 @@
 package runsbrowser
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 )
@@ -26,7 +28,7 @@ func TestRunsListSinglePositionCounter(t *testing.T) {
 }
 
 func TestRunsViewPadsToWindowHeight(t *testing.T) {
-	// The runs pane has the same leftover-line problem as the picker palette and input views.
+	// The runs pane has the same prior-frame row problem as the picker palette and the input views.
 	const height = 24
 	checkout := t.TempDir()
 	m, _ := modelWithRuns(t, checkout, "alpha", "bravo")
@@ -42,5 +44,26 @@ func TestRunsViewPadsToWindowHeight(t *testing.T) {
 	lines = strings.Split(body, "\n")
 	if len(lines) < height {
 		t.Fatalf("runs detail View lines = %d, want >= %d:\n%s", len(lines), height, body)
+	}
+}
+
+func TestRunRowStatusUsesIndexedSlotAndKeepsText(t *testing.T) {
+	// openspec/specs/picker-presentation/spec.md "Runs status uses indexed slots"
+	checkout := t.TempDir()
+	m, _ := modelWithRuns(t, checkout, "alpha", "bravo")
+	row := strings.Split(m.View().Content, "\n")[2]
+	label := rowStatusToken(m.state.Items[0], 12)
+	if !strings.Contains(ansi.Strip(row), label) {
+		t.Fatalf("status text missing from %q", ansi.Strip(row))
+	}
+	want := "38;5;" + strconv.Itoa(tui.KindRunIndex) + "m" + label
+	if !strings.Contains(row, want) {
+		t.Fatalf("succeeded status must use ANSI %d: %q", tui.KindRunIndex, row)
+	}
+	if !strings.HasPrefix(strings.TrimPrefix(row, " "), "\x1b[7m") {
+		t.Fatalf("cursor row must stay reverse across the painted status: %q", row)
+	}
+	if strings.Count(row, "\x1b[7") < 3 {
+		t.Fatalf("reverse must re-open after the status reset: %q", row)
 	}
 }

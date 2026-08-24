@@ -12,7 +12,7 @@ import (
 )
 
 func TestBuildInvalidOptionsStripsFilePrefix(t *testing.T) {
-	// Ports test/picker/picker.test.ts "invalid entries join the option list with stripped errors".
+	// This test copies test/picker/picker.test.ts "invalid entries join the option list with stripped errors".
 	_, invalid := FilterWorkflowEntries(catalogEntries(), "").Valid, FilterWorkflowEntries(catalogEntries(), "").Invalid
 	options := BuildInvalidOptions(invalid, 60)
 	want0 := FormatPickerRowName("Broken", "invalid", false, 60, false)
@@ -35,7 +35,7 @@ func TestBuildInvalidOptionsStripsFilePrefix(t *testing.T) {
 }
 
 func TestHumanizedTitleDefault(t *testing.T) {
-	// Ports test/picker/picker.test.ts "humanized title default and provenance badges".
+	// This test copies test/picker/picker.test.ts "humanized title default and provenance badges".
 	got := FilterWorkflowEntries(catalogEntries(), "")
 	options := BuildPickerOptions(got.Valid, 60)
 	if options[0].Name != "  "+" "+padEndJS("Chat handoff", 42)+"  "+"!"+"  "+padStartJS("repo", 7)+"   " {
@@ -53,13 +53,13 @@ func TestHumanizedTitleDefault(t *testing.T) {
 }
 
 func TestInputsAreNotAdvertisedInTheRow(t *testing.T) {
-	withInputs := workflow.WorkflowListEntry{
+	withInputs := workflow.ListEntry{
 		Name: "ask", Source: "global", File: "/g/ask.yaml", Title: "Ask",
 		Inputs: []workflow.InputSpec{{Name: "target", Type: "text"}},
 	}
-	without := workflow.WorkflowListEntry{Name: "ask", Source: "global", File: "/g/ask.yaml", Title: "Ask"}
-	if BuildPickerOptions([]workflow.WorkflowListEntry{withInputs}, 60)[0].Name !=
-		BuildPickerOptions([]workflow.WorkflowListEntry{without}, 60)[0].Name {
+	without := workflow.ListEntry{Name: "ask", Source: "global", File: "/g/ask.yaml", Title: "Ask"}
+	if BuildPickerOptions([]workflow.ListEntry{withInputs}, 60)[0].Name !=
+		BuildPickerOptions([]workflow.ListEntry{without}, 60)[0].Name {
 		t.Fatal("inputs changed the row")
 	}
 }
@@ -182,7 +182,7 @@ func TestWideTitlesStayAligned(t *testing.T) {
 }
 
 func TestPaletteLetters(t *testing.T) {
-	if !strings.Contains(tui.ListHint, "tab runs") || !strings.Contains(tui.ListHint, "ctrl+k") {
+	if !strings.Contains(tui.ListHint, "tab") || !strings.Contains(tui.ListHint, "ctrl+k") {
 		t.Fatalf("list hint = %q", tui.ListHint)
 	}
 	if ResolvePaletteLetter("n", nil).ID != "new" || ResolvePaletteLetter("i", nil).ID != "import" {
@@ -194,7 +194,16 @@ func TestPaletteLetters(t *testing.T) {
 	if ResolvePaletteLetter("o", nil) != nil || ResolvePaletteLetter("s", nil) != nil || ResolvePaletteLetter("d", nil) != nil {
 		t.Fatal("selection-dependent without row")
 	}
-	entry := workflow.WorkflowListEntry{Name: "deploy", Source: "repo", File: "/r/d.yaml"}
+	empty := FormatPaletteBody(nil, 80)
+	if strings.Contains(empty, "edit") || strings.Contains(empty, "share") || strings.Contains(empty, "delete") {
+		t.Fatalf("empty palette leaked selection actions:\n%s", empty)
+	}
+	for _, label := range []string{"new", "import", "examples", "console"} {
+		if !strings.Contains(empty, label) {
+			t.Fatalf("empty palette missing %q:\n%s", label, empty)
+		}
+	}
+	entry := workflow.ListEntry{Name: "deploy", Source: "repo", File: "/r/d.yaml"}
 	if got := ResolvePaletteLetter("o", &entry); got == nil || got.ID != "open" || got.Entry == nil || got.Entry.Name != "deploy" {
 		t.Fatalf("open = %+v", got)
 	}
@@ -203,6 +212,12 @@ func TestPaletteLetters(t *testing.T) {
 	}
 	if got := ResolvePaletteLetter("d", &entry); got == nil || got.ID != "delete" {
 		t.Fatalf("delete = %+v", got)
+	}
+	full := FormatPaletteBody(&entry, 80)
+	for _, label := range []string{"new", "import", "examples", "console", "edit", "share", "delete"} {
+		if !strings.Contains(full, label) {
+			t.Fatalf("selected palette missing %q:\n%s", label, full)
+		}
 	}
 	if ResolvePaletteLetter("x", &entry) != nil {
 		t.Fatal("x")

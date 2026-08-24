@@ -1,9 +1,12 @@
 package history
 
 import (
-	"encoding/json"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 )
 
@@ -24,7 +27,7 @@ func testWriterEnv(t *testing.T) (stateDir, checkout string, getenv func(string)
 }
 
 func TestClaimRejectsReusedIdentity(t *testing.T) {
-	// Ports test/history/history-store.test.ts "exclusive claims reject reused identity".
+	// This case is the same as test/history/history-store.test.ts "exclusive claims reject reused identity".
 	_, checkout, getenv := testWriterEnv(t)
 	id := AllocateRunID()
 	a := NewWriter(getenv)
@@ -42,7 +45,7 @@ func TestClaimRejectsReusedIdentity(t *testing.T) {
 }
 
 func TestConcurrentClaimsOwnDifferentSnapshots(t *testing.T) {
-	// Ports test/history/history-store.test.ts "concurrent runs own different snapshots".
+	// This case is the same as test/history/history-store.test.ts "concurrent runs own different snapshots".
 	_, checkout, getenv := testWriterEnv(t)
 	a := NewWriter(getenv)
 	b := NewWriter(getenv)
@@ -59,7 +62,7 @@ func TestConcurrentClaimsOwnDifferentSnapshots(t *testing.T) {
 }
 
 func TestUnresolvableClaimCheckoutIsUnavailable(t *testing.T) {
-	// Ports test/history/history-store.test.ts "unresolvable claim checkout is unavailable".
+	// This case is the same as test/history/history-store.test.ts "unresolvable claim checkout is unavailable".
 	_, _, getenv := testWriterEnv(t)
 	w := NewWriter(getenv)
 	defer w.Dispose()
@@ -71,7 +74,7 @@ func TestUnresolvableClaimCheckoutIsUnavailable(t *testing.T) {
 }
 
 func TestClaimStoresRealpathCanonicalRoot(t *testing.T) {
-	// Ports the writer half of "checkout root is realpath-canonicalized".
+	// This case is the same as the writer half of "checkout root is realpath-canonicalized".
 	_, checkout, getenv := testWriterEnv(t)
 	canonical, err := filepath.EvalSymlinks(checkout)
 	if err != nil {
@@ -87,16 +90,66 @@ func TestClaimStoresRealpathCanonicalRoot(t *testing.T) {
 	if result.State != "claimed" {
 		t.Fatalf("claim = %+v", result)
 	}
-	raw, err := os.ReadFile(SnapshotPath(result.ID, getenv))
-	if err != nil {
-		t.Fatal(err)
+	snap, err := ReadSnapshot(result.ID, getenv)
+	if err != nil || snap == nil {
+		t.Fatalf("read err=%v snap=%v", err, snap)
 	}
-	var snap map[string]any
-	if err := json.Unmarshal(raw, &snap); err != nil {
-		t.Fatal(err)
+	if snap.CheckoutRoot != canonical {
+		t.Fatalf("checkout_root = %q, want %q", snap.CheckoutRoot, canonical)
 	}
-	got, _ := snap["checkout_root"].(string)
-	if got != canonical {
-		t.Fatalf("checkout_root = %q, want %q", got, canonical)
+}
+
+func TestClaimRacedAcrossProcessesYieldsOneWinner(t *testing.T) {
+	if os.Getenv("HWF_CLAIM_RACE_STATE") != "" {
+		return
 	}
+	stateDir, _, _ := testWriterEnv(t)
+	id := AllocateRunID()
+	results := make(chan string, 6)
+	var wg sync.WaitGroup
+	for range cap(results) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			cmd := exec.Command(os.Args[0], "-test.run", "TestClaimRaceWorker")
+			cmd.Env = append(os.Environ(), "HWF_CLAIM_RACE_STATE="+stateDir, "HWF_CLAIM_RACE_ID="+id)
+			out, err := cmd.CombinedOutput()
+			state := "no-output"
+			for line := range strings.SplitSeq(string(out), "\n") {
+				if after, ok := strings.CutPrefix(line, "claim-state="); ok {
+					state = after
+				}
+			}
+			if state == "no-output" {
+				t.Errorf("worker produced no verdict: err=%v out=%s", err, out)
+			}
+			results <- state
+		}()
+	}
+	wg.Wait()
+	close(results)
+	counts := map[string]int{}
+	for state := range results {
+		counts[state]++
+	}
+	if counts["claimed"] != 1 || counts["rejected"] != cap(results)-1 {
+		t.Fatalf("racing claims = %v, want one claimed and the rest rejected", counts)
+	}
+}
+
+func TestClaimRaceWorker(t *testing.T) {
+	stateDir := os.Getenv("HWF_CLAIM_RACE_STATE")
+	if stateDir == "" {
+		t.Skip("driven by TestClaimRacedAcrossProcessesYieldsOneWinner")
+	}
+	getenv := func(key string) string {
+		if key == "HERDR_PLUGIN_STATE_DIR" {
+			return stateDir
+		}
+		return os.Getenv(key)
+	}
+	w := NewWriter(getenv)
+	defer w.Dispose()
+	claim := w.Claim(ClaimMeta{ID: os.Getenv("HWF_CLAIM_RACE_ID"), Workflow: "demo", Source: "repo", CheckoutRoot: stateDir})
+	fmt.Printf("claim-state=%s\n", claim.State)
 }

@@ -11,7 +11,7 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-// LaunchRunOpts is the detached-run request that the picker injects.
+// LaunchRunOpts is the detached-run request that the picker supplies.
 type LaunchRunOpts struct {
 	Name     string
 	RepoRoot string
@@ -28,7 +28,7 @@ type LaunchSettled struct {
 }
 
 // LaunchRunHandle is the detached-launch observer.
-// Non-nil Acks, Settled, or Progress require beginLaunch to return a listen tea.Cmd.
+// A non-nil Acks, Settled, or Progress channel requires beginLaunch to give a listen tea.Cmd.
 type LaunchRunHandle struct {
 	Detach   func()
 	Acks     <-chan string
@@ -58,7 +58,7 @@ func (m Model) beginLaunch(def *workflow.Definition, values map[string]string, d
 	}
 	runID := alloc()
 	name := def.Name
-	title := workflow.WorkflowDisplayTitle(def.Name, def.Title)
+	title := workflow.DisplayTitle(def.Name, def.Title)
 	if title == "" {
 		title = name
 	}

@@ -9,8 +9,8 @@ import (
 )
 
 func TestBuildPickerOptionsTitleProvenanceAndSensitivity(t *testing.T) {
-	// Ports test/picker/picker.test.ts "title, provenance, inputs, and sensitivity flags".
-	entry := workflow.WorkflowListEntry{
+	// This test copies test/picker/picker.test.ts "title, provenance, inputs, and sensitivity flags".
+	entry := workflow.ListEntry{
 		Name:             "handover",
 		Source:           "repo",
 		File:             "/r/handover.yaml",
@@ -21,7 +21,7 @@ func TestBuildPickerOptionsTitleProvenanceAndSensitivity(t *testing.T) {
 		NeedsTranscript:  true,
 		SensitiveMethods: []string{"pane.close"},
 	}
-	options := BuildPickerOptions([]workflow.WorkflowListEntry{entry}, 60)
+	options := BuildPickerOptions([]workflow.ListEntry{entry}, 60)
 	want := "  " + " " + padEndJS("Handover", 42) + "  " + "!" + "  " + padStartJS("repo", 7) + "   "
 	if options[0].Name != want {
 		t.Fatalf("row = %q, want %q", options[0].Name, want)
@@ -37,7 +37,7 @@ func TestBuildPickerOptionsTitleProvenanceAndSensitivity(t *testing.T) {
 }
 
 func TestFormatPickerRowWarningAndLocationColumns(t *testing.T) {
-	// Ports warning-field, location pad, selected/unselected length, overlong title.
+	// This test copies warning-field, location pad, selected/unselected length, overlong title.
 	warned := FormatPickerRowName("Warned", "repo", true, 60, false)
 	clean := FormatPickerRowName("Clean", "repo", false, 60, false)
 	if warned[47] != '!' {
@@ -79,8 +79,8 @@ func TestFormatPickerRowWarningAndLocationColumns(t *testing.T) {
 }
 
 func TestEntrySensitivityAggregatesFlags(t *testing.T) {
-	// Ports test/picker/picker.test.ts "aggregates command transcript and sensitive methods".
-	got := EntrySensitivity(workflow.WorkflowListEntry{
+	// This test copies test/picker/picker.test.ts "aggregates command transcript and sensitive methods".
+	got := EntrySensitivity(workflow.ListEntry{
 		Name:               "x",
 		Source:             "repo",
 		File:               "/x",
@@ -93,19 +93,19 @@ func TestEntrySensitivityAggregatesFlags(t *testing.T) {
 	if !stringSlicesEqual(got, want) {
 		t.Fatalf("got %v want %v", got, want)
 	}
-	line := FormatConsentLine(workflow.WorkflowListEntry{
+	line := FormatConsentLine(workflow.ListEntry{
 		Name: "deploy", Source: "global", Title: "Deploy", HasCommands: true, NeedsTranscript: true,
 	})
 	if line != "Deploy | global | commands | transcript" {
 		t.Fatalf("consent = %q", line)
 	}
-	if FormatConsentLine(workflow.WorkflowListEntry{Name: "plain", Source: "repo"}) != "" {
+	if FormatConsentLine(workflow.ListEntry{Name: "plain", Source: "repo"}) != "" {
 		t.Fatal("plain workflow must omit consent")
 	}
 }
 
 func TestFormatRuleSpansRowTextField(t *testing.T) {
-	// Ports test/picker/picker.test.ts formatRule.
+	// This test copies test/picker/picker.test.ts formatRule.
 	rule := tui.FormatRule(60)
 	if rule != "   "+strings.Repeat("-", 54)+"   " || len(rule) != 60 {
 		t.Fatalf("rule(60) = %q", rule)

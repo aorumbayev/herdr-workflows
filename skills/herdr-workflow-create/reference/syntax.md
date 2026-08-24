@@ -45,10 +45,10 @@ project root, receives no partially collected `HWF_*` inputs, and should only do
 discovery.
 
 Dynamic-choice argv elements may carry `{{inputs.<name>}}` templates that name **earlier** declared
-inputs, substituted right before the command runs. `steps.*` and `context.*` roots fail to load, and
-so do a self reference and a forward reference. Referencing a guarded input requires the consuming
-input's `when:` to repeat every clause guarding it. Changing an earlier answer discards the later
-answers and the options resolved from them.
+inputs, substituted immediately before the command runs. `steps.*` and `context.*` roots fail to
+load, and so do a self reference and a forward reference. A reference to a guarded input requires
+the `when:` of the input that consumes it to repeat every clause that guards it. A change to an
+earlier answer discards the later answers and the options resolved from them.
 
 ```yaml
 inputs:
@@ -67,8 +67,8 @@ inputs:
 Exactly one of `agent`, `run`, `herdr`, `workflow`.
 
 Optional `id:` on any step — **must match `[a-z][a-z0-9_]{0,31}`**: lowercase, first character a
-letter, underscores only. `id: run-tests` fails to load — use `run_tests`. Only a step with an `id:`
-can be referenced by `{{steps.<id>.…}}`.
+letter, underscores only. `id: run-tests` fails to load — use `run_tests`. You can reference only a
+step that has an `id:`, through `{{steps.<id>.…}}`.
 
 ### `run:`
 
@@ -88,8 +88,8 @@ Blocking local result: `{stdout, stderr, exit_code, failed}`. A readiness run re
 ```
 
 or `target: "{{context.agent}}"` for an existing **idle/done** agent — it rejects `pane:`, `cwd:`,
-`env:` and `using:`, because that agent already has a pane. A busy target fails before the prompt
-is sent.
+`env:` and `using:`, because that agent already has a pane. A busy target fails before hwf sends
+the prompt.
 
 Blocking result: `{response, agent, pane_id}`, plus `verdict` when the step declares `expect:`.
 
@@ -102,18 +102,18 @@ Blocking result: `{response, agent, pane_id}`, plus `verdict` when the step decl
     require: [APPROVE] # optional non-empty subset that lets the step succeed
 ```
 
-`verdict` is the final non-empty line of the response, trimmed and matched exactly, so reasoning
+`verdict` is the final non-empty line of the response, trimmed and matched exactly, so text
 above it is fine. The runner appends the token list, the final-line rule, and an
-`hwf response check <file> --one-of TOKEN,TOKEN` command to the prompt — the same parse the runner
-applies at settle time, which the agent reruns against its own response file until it exits 0. An
-unmatched final line or a verdict outside `require` is an ordinary step failure that names the
-tokens. `expect:` fails to load with `background: true` or on any other action, and
+`hwf response check <file> --one-of TOKEN,TOKEN` command to the prompt. This is the same parse the
+runner applies at settle time. The agent reruns that parse against its own response file until it
+exits 0. An unmatched final line or a verdict outside `require` is an ordinary step failure that
+names the tokens. `expect:` fails to load with `background: true` or on any other action, and
 `{{steps.<id>.verdict}}` fails to load when the producer declares no `expect:`.
 
 ### `herdr:`
 
-Raw `herdr:` calls never autofill targets from live UI focus, and every method's required selector
-is listed in **reference/herdr-api.md** — read that table rather than guessing. A template on an
+Raw `herdr:` calls never autofill targets from live UI focus, and **reference/herdr-api.md** lists
+every method's required selector — read that table, do not guess. A template on an
 unrelated param does not waive the requirement, and a method not on the allowlist fails at load.
 
 ```yaml
@@ -132,9 +132,9 @@ unrelated param does not waive the requirement, and a method not on the allowlis
     branch: "{{inputs.branch}}"
 ```
 
-The child is resolved from `.hwf/workflows/` relative to the current directory, so validate from
-the project root. The child's `returns:` becomes this step's result. Referencing a result of a
-child that declares no `returns:` fails to load.
+The loader resolves the child from `.hwf/workflows/` relative to the current directory, so validate
+from the project root. The child's `returns:` becomes this step's result. A reference to a result of
+a child that declares no `returns:` fails to load.
 
 ## Templates
 
@@ -175,8 +175,8 @@ Neither, or both, fails to load.
 
 - `when:` one clause or ordered list (AND): scalar truthiness or `==` / `!=`. It rejects structured
   sources — reference a scalar field such as `{{steps.x.stdout}}`, not `{{steps.x}}`
-- Mapped inputs may declare `when:` (earlier inputs only). Inactive inputs are skipped
-- Conditional input refs (templates or shell `$HWF_<name>`) need matching step `when:` guards
+- Mapped inputs may declare `when:` (earlier inputs only). The runner skips inactive inputs
+- Conditional input refs (templates or shell `$HWF_<name>`) need the step's `when:` guards to match
 - `allow_custom: true` on choices only, `min_length` on mapped inputs, `success_codes` on blocking
   local `run:` only
 - `pane.open` may be `{{inputs.place}}` when `place` is an unconditional closed static choice of
@@ -187,7 +187,7 @@ Neither, or both, fails to load.
 
 ## Caps
 
-16 KiB per managed agent prompt — a longer prompt is written to a run-owned file and the agent is
-told to read that path instead, so keep prompts small if the agent must see them inline.
+16 KiB per managed agent prompt. For a longer prompt, hwf writes it to a run-owned file and tells
+the agent to read that path instead. Keep prompts small if the agent must read them inline.
 24 KiB `HWF_*` env (entry and child). 8 MiB per capture. 1,000 dynamic choices / 10s.
 30s transcript extractors.

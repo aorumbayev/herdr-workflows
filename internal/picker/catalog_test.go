@@ -6,8 +6,8 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-func catalogEntries() []workflow.WorkflowListEntry {
-	return []workflow.WorkflowListEntry{
+func catalogEntries() []workflow.ListEntry {
+	return []workflow.ListEntry{
 		{
 			Name:            "chat-handoff",
 			Source:          "repo",
@@ -32,7 +32,7 @@ func catalogEntries() []workflow.WorkflowListEntry {
 	}
 }
 
-func names(entries []workflow.WorkflowListEntry) []string {
+func names(entries []workflow.ListEntry) []string {
 	out := make([]string, len(entries))
 	for i, e := range entries {
 		out[i] = e.Name
@@ -41,7 +41,7 @@ func names(entries []workflow.WorkflowListEntry) []string {
 }
 
 func TestFilterWorkflowEntriesSplitsValidAndInvalid(t *testing.T) {
-	// Ports test/picker/picker.test.ts "splits valid and invalid".
+	// This test copies test/picker/picker.test.ts "splits valid and invalid".
 	got := FilterWorkflowEntries(catalogEntries(), "")
 	if want := []string{"chat-handoff", "deploy"}; !stringSlicesEqual(names(got.Valid), want) {
 		t.Fatalf("valid = %v, want %v", names(got.Valid), want)
@@ -52,7 +52,7 @@ func TestFilterWorkflowEntriesSplitsValidAndInvalid(t *testing.T) {
 }
 
 func TestFilterWorkflowEntriesSubstringAppliesToBoth(t *testing.T) {
-	// Ports test/picker/picker.test.ts "substring filter applies to both".
+	// This test copies test/picker/picker.test.ts "substring filter applies to both".
 	got := FilterWorkflowEntries(catalogEntries(), "chat")
 	if want := []string{"chat-handoff"}; !stringSlicesEqual(names(got.Valid), want) {
 		t.Fatalf("valid = %v, want %v", names(got.Valid), want)
@@ -63,8 +63,8 @@ func TestFilterWorkflowEntriesSubstringAppliesToBoth(t *testing.T) {
 }
 
 func TestFilterWorkflowEntriesMatchesDisplayedTitleCaseInsensitively(t *testing.T) {
-	// Ports test/picker/picker.test.ts "matches displayed title case-insensitively".
-	catalog := []workflow.WorkflowListEntry{
+	// This test copies test/picker/picker.test.ts "matches displayed title case-insensitively".
+	catalog := []workflow.ListEntry{
 		{Name: "pr-desc", Source: "repo", File: "/r/pr-desc.yaml", Title: "Draft PR description"},
 		{Name: "handoff", Source: "global", File: "/g/handoff.yaml", Title: "Handoff"},
 	}
@@ -77,8 +77,8 @@ func TestFilterWorkflowEntriesMatchesDisplayedTitleCaseInsensitively(t *testing.
 }
 
 func TestFilterWorkflowEntriesMatchesNameWhenTitleDiffers(t *testing.T) {
-	// Ports test/picker/picker.test.ts "matches name when title differs".
-	catalog := []workflow.WorkflowListEntry{
+	// This test copies test/picker/picker.test.ts "matches name when title differs".
+	catalog := []workflow.ListEntry{
 		{Name: "pr-desc", Source: "repo", File: "/r/pr-desc.yaml", Title: "Draft PR description"},
 	}
 	if got := names(FilterWorkflowEntries(catalog, "pr-desc").Valid); !stringSlicesEqual(got, []string{"pr-desc"}) {
@@ -90,10 +90,10 @@ func TestFilterWorkflowEntriesMatchesNameWhenTitleDiffers(t *testing.T) {
 }
 
 func TestFilterWorkflowEntriesHidesHiddenWorkflows(t *testing.T) {
-	// Ports test/picker/picker.test.ts "hidden workflows are kept out of the picker".
-	withBg := append(append([]workflow.WorkflowListEntry{}, catalogEntries()...),
-		workflow.WorkflowListEntry{Name: "ship-bg", Source: "repo", File: "/r/ship-bg.yaml", Hidden: true},
-		workflow.WorkflowListEntry{Name: "broken-bg", Source: "repo", File: "/r/broken-bg.yaml", Hidden: true, Error: "boom"},
+	// This test copies test/picker/picker.test.ts "hidden workflows are kept out of the picker".
+	withBg := append(append([]workflow.ListEntry{}, catalogEntries()...),
+		workflow.ListEntry{Name: "ship-bg", Source: "repo", File: "/r/ship-bg.yaml", Hidden: true},
+		workflow.ListEntry{Name: "broken-bg", Source: "repo", File: "/r/broken-bg.yaml", Hidden: true, Error: "boom"},
 	)
 	got := FilterWorkflowEntries(withBg, "")
 	if want := []string{"chat-handoff", "deploy"}; !stringSlicesEqual(names(got.Valid), want) {
@@ -108,8 +108,8 @@ func TestFilterWorkflowEntriesHidesHiddenWorkflows(t *testing.T) {
 }
 
 func TestHasVisibleEntriesFalseWhenEveryWorkflowIsHidden(t *testing.T) {
-	// Ports test/picker/picker.test.ts "hasVisibleEntries is false when every workflow is hidden".
-	hidden := []workflow.WorkflowListEntry{
+	// This test copies test/picker/picker.test.ts "hasVisibleEntries is false when every workflow is hidden".
+	hidden := []workflow.ListEntry{
 		{Name: "ship-bg", Source: "repo", File: "/r/ship-bg.yaml", Hidden: true},
 		{Name: "broken-bg", Source: "repo", File: "/r/broken-bg.yaml", Hidden: true, Error: "boom"},
 	}
@@ -119,7 +119,7 @@ func TestHasVisibleEntriesFalseWhenEveryWorkflowIsHidden(t *testing.T) {
 	if HasVisibleEntries(nil) {
 		t.Fatal("empty catalog must report no visible entries")
 	}
-	if !HasVisibleEntries(append(append([]workflow.WorkflowListEntry{}, hidden...), catalogEntries()[0])) {
+	if !HasVisibleEntries(append(append([]workflow.ListEntry{}, hidden...), catalogEntries()[0])) {
 		t.Fatal("one visible entry must report visible")
 	}
 }

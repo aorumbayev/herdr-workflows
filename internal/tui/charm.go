@@ -1,6 +1,6 @@
 package tui
 
-// CharmVerdict records one hand-written TUI mechanism against a Charm candidate.
+// CharmVerdict records one hand-written TUI mechanism and one Charm candidate.
 type CharmVerdict struct {
 	Mechanism         string
 	CandidateModule   string
@@ -14,22 +14,24 @@ type CharmVerdict struct {
 // required behavior with less product code and unchanged UX.
 func CharmVerdicts() []CharmVerdict {
 	const (
-		bubbles   = "charm.land/bubbles/v2"
-		bubblesV  = "v2.1.1"
-		huh       = "charm.land/huh/v2"
-		huhV      = "v2.0.3"
-		lipgloss  = "charm.land/lipgloss/v2"
-		lipglossV = "v2.0.6"
-		xansi     = "github.com/charmbracelet/x/ansi"
-		xansiV    = "v0.11.8"
+		bubbles    = "charm.land/bubbles/v2"
+		bubblesV   = "v2.1.1"
+		huh        = "charm.land/huh/v2"
+		huhV       = "v2.0.3"
+		lipgloss   = "charm.land/lipgloss/v2"
+		lipglossV  = "v2.0.6"
+		bubbletea  = "charm.land/bubbletea/v2"
+		bubbleteaV = "v2.0.9"
+		xansi      = "github.com/charmbracelet/x/ansi"
+		xansiV     = "v0.11.8"
 	)
 	return []CharmVerdict{
 		{
-			Mechanism:         "fixed-six-row-viewport",
+			Mechanism:         "height-fitted-list-viewport",
 			CandidateModule:   bubbles,
 			CandidateVersion:  bubblesV,
 			Decision:          "keep-custom",
-			MissingCapability: "list.Model pagination always owns PerPage and optional paginator chrome. It cannot lock a fixed six-row viewport with cursor-offset scrolling and no scroll thumb.",
+			MissingCapability: "list.Model SetHeight does fit rows to the host, but it always owns PerPage plus paginator chrome and cannot drop the thumb the picker chrome forbids. FitViewport is one expression over the existing cursor-offset window.",
 			Test:              "TestCharmVerdicts",
 		},
 		{
@@ -42,8 +44,8 @@ func CharmVerdicts() []CharmVerdict {
 		},
 		{
 			Mechanism:         "filter-input-stdin-leak-drop",
-			CandidateModule:   "charm.land/bubbletea/v2",
-			CandidateVersion:  "v2.0.9",
+			CandidateModule:   bubbletea,
+			CandidateVersion:  bubbleteaV,
 			Decision:          "keep-custom",
 			MissingCapability: "tea.WithFilter has no built-in herdr prefix-key C0 leak allowlist that keeps Tab, LF, CR, ESC, Ctrl+K, and Ctrl+G while dropping other controls.",
 			Test:              "TestCharmVerdicts",
@@ -149,7 +151,7 @@ func CharmVerdicts() []CharmVerdict {
 			CandidateModule:   bubbles,
 			CandidateVersion:  bubblesV,
 			Decision:          "keep-custom",
-			MissingCapability: "bubbles has no ctrl+k letter-fire palette that keeps list filter state and selection-dependent open/share/delete lines. Mechanism stays picker-owned.",
+			MissingCapability: "bubbles has no ctrl+k letter-fire palette that keeps list filter state and hides edit/share/delete without a valid selection.",
 			Test:              "TestCharmVerdicts",
 		},
 		{
@@ -170,10 +172,10 @@ func CharmVerdicts() []CharmVerdict {
 		},
 		{
 			Mechanism:         "viewport-height-pad",
-			CandidateModule:   "charm.land/bubbletea/v2",
-			CandidateVersion:  "v2.0.9",
+			CandidateModule:   bubbletea,
+			CandidateVersion:  bubbleteaV,
 			Decision:          "keep-custom",
-			MissingCapability: "bubbletea does not clear unused TTY rows after a shorter frame. PadHeight must append blank lines to the prior frame height so ghost rows do not linger.",
+			MissingCapability: "bubbletea does not clear unused TTY rows after a shorter frame, and its inline renderer erases and redraws whenever the frame line count changes. PadHeight holds one height so ghost rows do not linger and the frame does not blink.",
 			Test:              "TestPadHeight",
 		},
 		{
@@ -181,8 +183,72 @@ func CharmVerdicts() []CharmVerdict {
 			CandidateModule:   bubbles,
 			CandidateVersion:  bubblesV,
 			Decision:          "keep-custom",
-			MissingCapability: "viewport.Model ships KeyMap bindings and enables MouseWheel by default. Product detail scroll keeps a fixed ASCII window without importing bubbles or accepting that default input surface.",
+			MissingCapability: "viewport.Model ships KeyMap bindings and enables MouseWheel by default. Product detail scroll and the console diagram keep a fixed ASCII window without importing bubbles or accepting that default input surface.",
 			Test:              "TestScrollDetailLines",
+		},
+		{
+			Mechanism:         "theme-kind-palette",
+			CandidateModule:   lipgloss,
+			CandidateVersion:  lipglossV,
+			Decision:          "keep-custom",
+			MissingCapability: "lipgloss has no ready Theme with indexed kind colors agent 6, run 2, herdr 5, workflow 4, default 7, fail 1, faint secondary text instead of a palette slot, underline hover distinct from reverse, and run status slots.",
+			Test:              "TestDefaultThemeKindPaletteAndHover",
+		},
+		{
+			Mechanism:         "picker-tab-bar",
+			CandidateModule:   bubbles,
+			CandidateVersion:  bubblesV,
+			Decision:          "keep-custom",
+			MissingCapability: "bubbles tabs do not render a three-label ASCII bar with reverse active and muted inactive states under picker chrome width rules.",
+			Test:              "TestFormatTabBarActiveReverseInactiveMuted",
+		},
+		{
+			Mechanism:         "picker-mouse-hover",
+			CandidateModule:   bubbletea,
+			CandidateVersion:  bubbleteaV,
+			Decision:          "keep-custom",
+			MissingCapability: "bubbletea reports mouse cells but does not map hover to a non-reverse row style while reverse remains the keyboard cursor.",
+			Test:              "TestPickerHoverStyleIsNotReverse",
+		},
+		{
+			Mechanism:         "console-hit-zones",
+			CandidateModule:   "charm.land/bubbletea/v2",
+			CandidateVersion:  "v2.0.9",
+			Decision:          "keep-custom",
+			MissingCapability: "bubbletea reports mouse cells but has no hit-zone registry mapping rail cards to their step anchors.",
+			Test:              "TestModelDiagramClickFocusesCard",
+		},
+		{
+			Mechanism:         "console-mouse-reporting",
+			CandidateModule:   "charm.land/bubbletea/v2",
+			CandidateVersion:  "v2.0.9",
+			Decision:          "keep-custom",
+			MissingCapability: "bubbletea mouse reporting is off unless the view sets MouseMode. Both console hosts must enable all-motion reporting or clicks never arrive.",
+			Test:              "TestModelConsoleViewEnablesMouseReporting",
+		},
+		{
+			Mechanism:         "card-rail",
+			CandidateModule:   lipgloss,
+			CandidateVersion:  lipglossV,
+			Decision:          "keep-custom",
+			MissingCapability: "lipgloss has no kind-colored double-border card rail with ASCII connectors and a paired detail pane.",
+			Test:              "TestFormatDiagramHandoff",
+		},
+		{
+			Mechanism:         "edit-placement",
+			CandidateModule:   huh,
+			CandidateVersion:  huhV,
+			Decision:          "keep-custom",
+			MissingCapability: "huh.Select does not mix an in-popup tea.ExecProcess path with plugin.pane.open placements that quit without reopening.",
+			Test:              "TestEditPlacementTabQuitsWithoutReopen",
+		},
+		{
+			Mechanism:         "failed-run-sendback",
+			CandidateModule:   bubbles,
+			CandidateVersion:  bubblesV,
+			Decision:          "keep-custom",
+			MissingCapability: "bubbles has no send-back that reuses the annotation bundle plus a failure block that excludes the captured output tail.",
+			Test:              "TestRunsSendbackOmitsOutputTail",
 		},
 	}
 }

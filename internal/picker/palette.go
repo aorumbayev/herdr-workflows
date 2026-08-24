@@ -3,17 +3,16 @@ package picker
 import (
 	"strings"
 
+	"github.com/aorumbayev/herdr-workflows/internal/tui"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-// PaletteAction is one ctrl+k letter result.
 type PaletteAction struct {
 	ID    string
-	Entry *workflow.WorkflowListEntry
+	Entry *workflow.ListEntry
 }
 
-// ResolvePaletteLetter maps a bare letter. Selection-dependent actions need a valid row.
-func ResolvePaletteLetter(letter string, selected *workflow.WorkflowListEntry) *PaletteAction {
+func ResolvePaletteLetter(letter string, selected *workflow.ListEntry) *PaletteAction {
 	if len([]rune(letter)) != 1 {
 		return nil
 	}
@@ -46,38 +45,33 @@ func ResolvePaletteLetter(letter string, selected *workflow.WorkflowListEntry) *
 	}
 }
 
-// FormatPaletteBody is the ctrl+k menu. A bare letter fires; no Enter step.
-func FormatPaletteBody(selected *workflow.WorkflowListEntry) string {
-	lines := []string{
-		"n  Create new in $EDITOR",
-		"i  Import via hwf workflow import",
-		"e  Browse examples",
-		"c  Open console",
+func FormatPaletteBody(selected *workflow.ListEntry, width int) string {
+	rows := []string{
+		paletteRow("n", "new", width),
+		paletteRow("i", "import", width),
+		paletteRow("e", "examples", width),
+		paletteRow("c", "console", width),
 	}
-	if selected != nil && selected.Error == "" {
-		lines = append(lines,
-			"o  Edit "+selected.Name+" in $EDITOR",
-			"s  Share "+selected.Name+" (copy)",
-			"d  Delete "+selected.Name,
-		)
-	} else {
-		lines = append(lines,
-			"o  Edit (needs selection)",
-			"s  Share (needs selection)",
-			"d  Delete (needs selection)",
-		)
+	if selected == nil || selected.Error != "" {
+		return strings.Join(rows, "\n")
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(append(rows,
+		paletteRow("o", "edit", width),
+		paletteRow("s", "share", width),
+		paletteRow("d", "delete", width),
+	), "\n")
 }
 
-// DeleteState is the in-flight guard for y-to-delete.
+func paletteRow(letter, label string, width int) string {
+	return tui.FormatRow(letter+"  "+label, "", false, width, false)
+}
+
 type DeleteState struct {
-	PendingDelete  *workflow.WorkflowListEntry
+	PendingDelete  *workflow.ListEntry
 	DeleteInFlight bool
 }
 
-// BeginConfirmedDelete claims the pending target once.
-func BeginConfirmedDelete(state *DeleteState) *workflow.WorkflowListEntry {
+func BeginConfirmedDelete(state *DeleteState) *workflow.ListEntry {
 	if state.DeleteInFlight || state.PendingDelete == nil {
 		return nil
 	}
@@ -87,8 +81,6 @@ func BeginConfirmedDelete(state *DeleteState) *workflow.WorkflowListEntry {
 	return entry
 }
 
-// ShouldDropStdinLeakSequence drops leaked C0 bytes from the herdr prefix key,
-// preserving tab, LF, CR, ESC, Ctrl+K (0x0b), and Ctrl+G (0x07).
 func ShouldDropStdinLeakSequence(sequence string) bool {
 	if len(sequence) != 1 {
 		return false

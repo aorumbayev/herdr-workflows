@@ -38,7 +38,7 @@ func liveAgentInfo(target string) (map[string]any, error) {
 }
 
 func liveTranscriptText(paneID string, transcripts map[string]config.TranscriptExtractor, opts engine.TranscriptTextOpts) (string, error) {
-	return transcript.TranscriptText(paneID, transcripts, transcript.Options{
+	return transcript.Text(paneID, transcripts, transcript.Options{
 		InvocationCwd: opts.InvocationCwd,
 		ProjectsBase:  opts.ProjectsBase,
 	})

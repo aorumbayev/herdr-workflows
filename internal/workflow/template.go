@@ -63,7 +63,7 @@ func TextTemplates(text string) []TemplatePath {
 }
 
 // malformedTemplateSnippet returns the first "{{…}}" span that is not a
-// valid template, or the trailing "{{…" when unclosed.
+// valid template. It returns the trailing "{{…" when the span is unclosed.
 func malformedTemplateSnippet(text string) (string, bool) {
 	from := 0
 	for from < len(text) {
@@ -127,7 +127,7 @@ func resolvePath(ns TemplateNamespace, path TemplatePath) any {
 	return cur
 }
 
-// jsNumber preserves the existing JavaScript-compatible template rendering.
+// jsNumber preserves the existing JavaScript-compatible template output.
 func jsNumber(v float64) string {
 	if math.IsNaN(v) || math.IsInf(v, 0) {
 		return ""
@@ -273,9 +273,9 @@ func isSensitiveContextPath(path TemplatePath) bool {
 	return path.Root == "context" && len(path.Segments) > 0 && sensitiveContextKeys[path.Segments[0]]
 }
 
-// WorkflowTemplateRefs lists every template a workflow's steps, returns,
-// and recovery action reference.
-func WorkflowTemplateRefs(steps []Step, returns *ReturnsSpec, onFailure Action) []TemplatePath {
+// TemplateRefs lists every template that workflow steps, returns,
+// and the recovery action reference.
+func TemplateRefs(steps []Step, returns *ReturnsSpec, onFailure Action) []TemplatePath {
 	var refs []TemplatePath
 	for _, step := range steps {
 		refs = append(refs, stepTemplates(step)...)
@@ -294,10 +294,9 @@ func WorkflowTemplateRefs(steps []Step, returns *ReturnsSpec, onFailure Action) 
 	return refs
 }
 
-// WorkflowNeedsTranscript reports whether any reference reaches transcript
-// context.
-func WorkflowNeedsTranscript(steps []Step, returns *ReturnsSpec) bool {
-	for _, ref := range WorkflowTemplateRefs(steps, returns, nil) {
+// NeedsTranscript reports whether any reference reaches transcript context.
+func NeedsTranscript(steps []Step, returns *ReturnsSpec) bool {
+	for _, ref := range TemplateRefs(steps, returns, nil) {
 		if isSensitiveContextPath(ref) {
 			return true
 		}
@@ -388,7 +387,7 @@ func EvaluateWhen(when []WhenSpec, values TemplateNamespace) bool {
 const DynamicArgvRootRule = "dynamic choice argv templates may only reference earlier inputs"
 
 // DynamicChoiceInputRefs names the inputs a dynamic choice argv references,
-// in first-seen order.
+// in the order of first occurrence.
 func DynamicChoiceInputRefs(dynamic DynamicChoice) []string {
 	var out []string
 	for _, element := range dynamic.Run {

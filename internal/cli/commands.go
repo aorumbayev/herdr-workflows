@@ -84,11 +84,14 @@ func newLaunchCmd() *cobra.Command {
 }
 
 func newPickerCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "picker",
 		Short: "Run the picker TUI (plugin popup entrypoint)",
 		RunE:  runPicker,
 	}
+	cmd.Flags().Bool("reopen", false, "reopen the picker popup at the size its saved tab needs")
+	_ = cmd.Flags().MarkHidden("reopen")
+	return cmd
 }
 
 func newConsoleCmd() *cobra.Command {
@@ -154,6 +157,45 @@ func newResponseCmd() *cobra.Command {
 	check.Flags().String("one-of", "", "comma-separated verdict tokens")
 	_ = check.MarkFlagRequired("one-of")
 	cmd.AddCommand(check)
+	return cmd
+}
+
+func newScratchCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "scratch",
+		Short: "Read and write the flat scratch key-value store",
+		RunE: func(c *cobra.Command, args []string) error {
+			c.SetOut(c.ErrOrStderr())
+			_ = c.Help()
+			return errUsage
+		},
+	}
+	cmd.AddCommand(
+		&cobra.Command{
+			Use:   "get <key>",
+			Short: "Print a scratch value",
+			Args:  cobra.ExactArgs(1),
+			RunE:  runScratchGet,
+		},
+		&cobra.Command{
+			Use:   "set <key> <value>",
+			Short: "Write a scratch value",
+			Args:  cobra.ExactArgs(2),
+			RunE:  runScratchSet,
+		},
+		&cobra.Command{
+			Use:   "list",
+			Short: "List scratch keys",
+			Args:  cobra.NoArgs,
+			RunE:  runScratchList,
+		},
+		&cobra.Command{
+			Use:   "delete <key>",
+			Short: "Delete a scratch key",
+			Args:  cobra.ExactArgs(1),
+			RunE:  runScratchDelete,
+		},
+	)
 	return cmd
 }
 

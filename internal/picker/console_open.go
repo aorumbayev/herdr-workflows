@@ -15,7 +15,7 @@ var consolePlacementOptions = []console.Placement{
 	console.PlacementBelow,
 }
 
-func FormatConsolePlacementBody(cursor int, remembered console.Placement) string {
+func formatConsolePlacementBody(cursor int, remembered console.Placement) string {
 	var lines []string
 	lines = append(lines, "open console placement")
 	for i, p := range consolePlacementOptions {
@@ -33,8 +33,13 @@ func FormatConsolePlacementBody(cursor int, remembered console.Placement) string
 }
 
 func (m Model) beginConsolePlacement() (tea.Model, tea.Cmd) {
+	if m.mode == modeConsole {
+		m.placeBack = modeConsole
+	} else {
+		m.placeBack = modeList
+		m.filter = m.savedFilter
+	}
 	m.mode = modeConsolePlace
-	m.filter = m.savedFilter
 	m.status = ""
 	remembered := m.lastConsolePlacement
 	if remembered == "" {
@@ -53,7 +58,7 @@ func (m Model) beginConsolePlacement() (tea.Model, tea.Cmd) {
 func (m Model) handleConsolePlace(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
-		m.mode = modeList
+		m.mode = m.placeBack
 		return m, nil
 	case "up":
 		if m.consolePlaceCursor > 0 {
@@ -70,7 +75,7 @@ func (m Model) handleConsolePlace(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.lastConsolePlacement = placement
 		if m.openConsole != nil {
 			if err := m.openConsole(placement); err != nil {
-				m.mode = modeList
+				m.mode = m.placeBack
 				m.status = "console open failed" + tui.ChromeSep + err.Error()
 				return m, nil
 			}
@@ -87,7 +92,7 @@ func (m Model) renderConsolePlace() string {
 		remembered = console.DefaultPlacement
 	}
 	w := m.contentWidth()
-	body := FormatConsolePlacementBody(m.consolePlaceCursor, remembered)
+	body := formatConsolePlacementBody(m.consolePlaceCursor, remembered)
 	footer := tui.FormatListFooter(w, m.consolePlaceCursor, len(consolePlacementOptions), "enter open"+tui.ChromeSep+"esc back")
 	return body + "\n" + tui.FormatRule(w) + "\n" + footer
 }

@@ -20,13 +20,13 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/caps"
 )
 
-// WorkflowBundleEntry is the only data carried by a shared workflow payload.
-type WorkflowBundleEntry struct {
+// BundleEntry is the only data that a shared workflow payload contains.
+type BundleEntry struct {
 	Name string `json:"name"`
 	YAML string `json:"yaml"`
 }
 
-type WorkflowBundle []WorkflowBundleEntry
+type Bundle []BundleEntry
 
 var (
 	importCommandRE = regexp.MustCompile(`^hwf\s+workflow\s+import\s+"([^"]+)"\s*$`)
@@ -37,7 +37,7 @@ var (
 
 const gzipOSUnix = 3
 
-func validateBundle(bundle WorkflowBundle) error {
+func validateBundle(bundle Bundle) error {
 	if len(bundle) == 0 {
 		return fmt.Errorf("bundle must contain at least one workflow")
 	}
@@ -58,7 +58,7 @@ func validateBundle(bundle WorkflowBundle) error {
 }
 
 // EncodePayload returns a platform-stable gzip/base64 workflow bundle.
-func EncodePayload(bundle WorkflowBundle) (string, error) {
+func EncodePayload(bundle Bundle) (string, error) {
 	if err := validateBundle(bundle); err != nil {
 		return "", &LoadError{"cannot encode bundle: " + err.Error()}
 	}
@@ -121,8 +121,8 @@ func gunzipBounded(encoded string) ([]byte, error) {
 	return data, nil
 }
 
-// DecodePayload validates the canonical bundle without executing workflows.
-func DecodePayload(payload string) (WorkflowBundle, error) {
+// DecodePayload validates the canonical bundle without workflow execution.
+func DecodePayload(payload string) (Bundle, error) {
 	encoded, err := ExtractPayload(payload)
 	if err != nil {
 		return nil, err
@@ -142,7 +142,7 @@ func DecodePayload(payload string) (WorkflowBundle, error) {
 	if !ok {
 		return nil, &LoadError{"payload is not a shared workflow bundle: expected an array"}
 	}
-	bundle := make(WorkflowBundle, 0, len(items))
+	bundle := make(Bundle, 0, len(items))
 	for _, item := range items {
 		object, ok := item.(map[string]any)
 		if !ok {
@@ -156,7 +156,7 @@ func DecodePayload(payload string) (WorkflowBundle, error) {
 		if len(object) != 2 {
 			return nil, &LoadError{"payload is not a shared workflow bundle: unrecognized entry fields"}
 		}
-		bundle = append(bundle, WorkflowBundleEntry{Name: name, YAML: yaml})
+		bundle = append(bundle, BundleEntry{Name: name, YAML: yaml})
 	}
 	if err := validateBundle(bundle); err != nil {
 		return nil, &LoadError{"payload is not a shared workflow bundle: " + err.Error()}
@@ -192,7 +192,7 @@ func LooksLikeWorkflowYAML(text string) bool {
 }
 
 // CheckPayload performs schema-only validation, including raw YAML documents.
-func CheckPayload(payload string, name ...string) (WorkflowBundle, error) {
+func CheckPayload(payload string, name ...string) (Bundle, error) {
 	text := strings.TrimSpace(payload)
 	bundle, err := DecodePayload(text)
 	if err == nil {
@@ -219,25 +219,25 @@ func CheckPayload(payload string, name ...string) (WorkflowBundle, error) {
 	if _, parseErr := ParseRaw(validated+".yaml", text); parseErr != nil {
 		return nil, parseErr
 	}
-	return WorkflowBundle{{Name: validated, YAML: text}}, nil
+	return Bundle{{Name: validated, YAML: text}}, nil
 }
 
 type ExportedBundle struct {
-	Entries    WorkflowBundle
-	Provenance []WorkflowProvenance
+	Entries    Bundle
+	Provenance []Provenance
 	Payload    string
 	Command    string
 }
 
-type WorkflowProvenance struct {
+type Provenance struct {
 	Name   string
 	Source string
 }
 
 // ExportWorkflowBundle includes the exact selected source and repo-first children.
 func ExportWorkflowBundle(name, scope, repoRoot string) (ExportedBundle, error) {
-	entries := WorkflowBundle{}
-	provenance := []WorkflowProvenance{}
+	entries := Bundle{}
+	provenance := []Provenance{}
 	seen := map[string]bool{}
 	var visit func(string, string, []string) error
 	visit = func(current, exactScope string, stack []string) error {
@@ -251,7 +251,7 @@ func ExportWorkflowBundle(name, scope, repoRoot string) (ExportedBundle, error) 
 		//nolint:nestif // exact-source export needs path, existence, and stat-error checks.
 		if exactScope != "" {
 			var err error
-			file, err = WorkflowPath(exactScope, repoRoot, current)
+			file, err = Path(exactScope, repoRoot, current)
 			if err != nil {
 				return err
 			}
@@ -284,8 +284,8 @@ func ExportWorkflowBundle(name, scope, repoRoot string) (ExportedBundle, error) 
 			return err
 		}
 		seen[current] = true
-		entries = append(entries, WorkflowBundleEntry{Name: current, YAML: string(body)})
-		provenance = append(provenance, WorkflowProvenance{Name: current, Source: source})
+		entries = append(entries, BundleEntry{Name: current, YAML: string(body)})
+		provenance = append(provenance, Provenance{Name: current, Source: source})
 		for _, child := range ReferencedWorkflowChildren(raw) {
 			if err := visit(child, "", append(slices.Clone(stack), current)); err != nil {
 				return err
@@ -318,7 +318,7 @@ type BundlePreview struct {
 	Text               string
 }
 
-func PreviewBundle(bundle WorkflowBundle) (BundlePreview, error) {
+func PreviewBundle(bundle Bundle) (BundlePreview, error) {
 	if err := validateBundle(bundle); err != nil {
 		return BundlePreview{}, err
 	}
@@ -326,7 +326,7 @@ func PreviewBundle(bundle WorkflowBundle) (BundlePreview, error) {
 	for _, entry := range bundle {
 		names[entry.Name] = true
 	}
-	aggregated := WorkflowSensitivity{}
+	aggregated := Sensitivity{}
 	entries := make([]BundlePreviewEntry, 0, len(bundle))
 	for _, entry := range bundle {
 		raw, err := ParseRaw(entry.Name+".yaml", entry.YAML)
@@ -341,7 +341,7 @@ func PreviewBundle(bundle WorkflowBundle) (BundlePreview, error) {
 			}
 		}
 		entries = append(entries, BundlePreviewEntry{
-			Name: entry.Name, YAML: entry.YAML, Title: WorkflowDisplayTitle(entry.Name, raw.Title), Warnings: SensitivityLabels(local),
+			Name: entry.Name, YAML: entry.YAML, Title: DisplayTitle(entry.Name, raw.Title), Warnings: SensitivityLabels(local),
 		})
 	}
 	slices.Sort(aggregated.SensitiveMethods)
@@ -406,7 +406,7 @@ type ImportResult struct {
 	Path string
 }
 
-func PreflightConflicts(bundle WorkflowBundle, dir string) ([]ImportConflict, error) {
+func PreflightConflicts(bundle Bundle, dir string) ([]ImportConflict, error) {
 	conflicts := []ImportConflict{}
 	for _, entry := range bundle {
 		path := filepath.Join(dir, entry.Name+".yaml")
@@ -451,7 +451,7 @@ func journalStale(path string) bool {
 	return err != nil || time.Since(info.ModTime()) >= 10*time.Second
 }
 
-// RecoverInterruptedImport repairs or rolls back an interrupted directory swap.
+// RecoverInterruptedImport repairs an interrupted directory swap or restores the previous directory.
 func RecoverInterruptedImport(dir string, force ...bool) error {
 	path := ImportJournalPath(dir)
 	if !pathExists(path) {
@@ -571,7 +571,7 @@ func claimImportJournal(dir string, journal importJournal) (bool, error) {
 	return claimJournal(journal)
 }
 
-func writeBundleAtomic(bundle WorkflowBundle, dir string, replaceAll bool, hooks ImportHooks) (ImportWriteResult, error) {
+func writeBundleAtomic(bundle Bundle, dir string, replaceAll bool, hooks ImportHooks) (ImportWriteResult, error) {
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 		return ImportWriteResult{}, err
 	}
@@ -693,14 +693,14 @@ type RunImportOptions struct {
 
 type ImportOutcome struct {
 	Aborted bool
-	Bundle  WorkflowBundle
+	Bundle  Bundle
 	Result  ImportWriteResult
 	Dir     string
 }
 
 // RunImport validates, reviews, and atomically writes one workflow bundle.
 func RunImport(payload string, opts RunImportOptions) (ImportOutcome, error) {
-	var bundle WorkflowBundle
+	var bundle Bundle
 	var err error
 	if opts.Name != "" {
 		bundle, err = CheckPayload(payload, opts.Name)

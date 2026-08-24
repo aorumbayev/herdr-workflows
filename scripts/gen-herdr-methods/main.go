@@ -1,10 +1,9 @@
-// Command gen-herdr-methods regenerates internal/host/herdr_methods.gen.go
-// from schemas/herdr-api.schema.json. Run from the repository root:
+// Command gen-herdr-methods writes internal/host/herdr_methods.gen.go again
+// from schemas/herdr-api.schema.json. Start this command from the repository root:
 //
 //	go run ./scripts/gen-herdr-methods
 //
-// It never invokes `herdr api schema`; the committed JSON is the source of
-// truth.
+// This command never calls `herdr api schema`. The committed JSON is the correct source.
 package main
 
 import (
@@ -381,7 +380,7 @@ func collectDotPaths(root schema, s schema, prefix string, out map[string]bool, 
 	}
 }
 
-// extractResultVariantPaths maps each result type to its dot paths.
+// extractResultVariantPaths gives the dot paths for each result type.
 func extractResultVariantPaths(root schema) map[string][]string {
 	schemas := obj(root["schemas"])
 	successResp := obj(schemas["success_response"])
@@ -414,8 +413,8 @@ func extractResultVariantPaths(root schema) map[string][]string {
 	return paths
 }
 
-// Result schema oneOf is keyed by `type`, not `method`; overrides pin the
-// methods whose success type does not follow the naming convention.
+// Result schema oneOf uses the key `type`, not `method`. The overrides specify the
+// methods whose success type does not use the naming convention.
 var methodResultTypeOverrides = map[string][]string{
 	"ping":                          {"pong"},
 	"pane.wait_for_output":          {"output_matched"},
@@ -523,7 +522,7 @@ func resultTypesForMethod(method string, known map[string]bool) []string {
 	return nil
 }
 
-// buildMethodResultVariants maps each request method to its success variants.
+// buildMethodResultVariants gives the success variants for each request method.
 func buildMethodResultVariants(methods []methodEntry, variantPaths map[string][]string) map[string][]resultVariant {
 	known := map[string]bool{}
 	for typ := range variantPaths {
@@ -544,7 +543,7 @@ func buildMethodResultVariants(methods []methodEntry, variantPaths map[string][]
 	return out
 }
 
-// flattenResultPaths returns the union of every result variant's paths, sorted.
+// flattenResultPaths gives the set of all result variant paths, in sort order.
 func flattenResultPaths(variantPaths map[string][]string) []string {
 	set := map[string]bool{}
 	for _, paths := range variantPaths {
@@ -565,8 +564,8 @@ func fatalf(format string, args ...any) {
 	os.Exit(1)
 }
 
-// readMinHerdrVersion extracts min_herdr_version from the repository-root
-// manifest.
+// readMinHerdrVersion reads min_herdr_version from the manifest at the repository
+// root.
 func readMinHerdrVersion(path string) string {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -694,8 +693,8 @@ func emitGenerated(protocol float64, minVersion string, methods []methodEntry, r
 	return string(formatted)
 }
 
-// buildSource regenerates the host method table from the committed schema and
-// manifest without writing anything.
+// buildSource makes the host method table from the committed schema and
+// manifest. It does not write a file.
 func buildSource(schemaPath, manifestPath string) string {
 	data, err := os.ReadFile(schemaPath)
 	if err != nil {

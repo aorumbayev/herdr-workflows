@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
+	"github.com/aorumbayev/herdr-workflows/internal/tui"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
@@ -24,7 +25,7 @@ func TestFormatDiagramHandoff(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := workflow.ProjectDiagram(*def)
-	text := FormatDiagram(d, 80)
+	text, _ := renderRailYAML(d, tui.SplitStepYAML(string(body)), DiagramMarks{}, 120, 60, 0)
 	for _, want := range []string{
 		"brief",
 		"agent",
@@ -64,12 +65,12 @@ func handoffDefinition(t *testing.T) *workflow.Definition {
 func TestModelWorkflowDiagramScreen(t *testing.T) {
 	def := handoffDefinition(t)
 	m := New(Options{
-		Entries: []workflow.WorkflowListEntry{
+		Entries: []workflow.ListEntry{
 			{Name: "handoff", Title: "Handoff", Source: "repo"},
 		},
 		Width:  80,
 		Height: 24,
-		LoadWorkflow: func(entry workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(entry workflow.ListEntry) (*workflow.Definition, error) {
 			return def, nil
 		},
 	})
@@ -79,7 +80,7 @@ func TestModelWorkflowDiagramScreen(t *testing.T) {
 		t.Fatalf("screen = %d, want diagram", m.screen)
 	}
 	view := stripView(m.View())
-	for _, want := range []string{"brief", "tab.close", "pane.close", "when:", "v select", "s send-back"} {
+	for _, want := range []string{"brief", "a insert", "s send-back"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("diagram view missing %q:\n%s", want, view)
 		}

@@ -32,7 +32,7 @@ type Deps struct {
 	InstallRelease func(InstallOpts) error
 }
 
-func UpdatePlugin(deps Deps) (Result, error) {
+func Plugin(deps Deps) (Result, error) {
 	fetch := deps.FetchLatest
 	if fetch == nil {
 		fetch = func() (LatestRelease, error) { return CheckForUpdate(CheckOpts{}) }

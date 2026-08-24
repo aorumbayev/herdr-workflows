@@ -2,12 +2,14 @@ package history
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 )
 
 func TestDebugArtifactsRoundTrip(t *testing.T) {
 	state := t.TempDir()
+	if err := os.Chmod(state, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	getenv := func(k string) string {
 		if k == "HERDR_PLUGIN_STATE_DIR" {
 			return state
@@ -40,14 +42,14 @@ func TestDebugArtifactsRoundTrip(t *testing.T) {
 
 func TestLoadDebugArtifactsMissing(t *testing.T) {
 	state := t.TempDir()
+	if err := os.Chmod(state, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	getenv := func(k string) string {
 		if k == "HERDR_PLUGIN_STATE_DIR" {
 			return state
 		}
 		return ""
-	}
-	if err := os.MkdirAll(filepath.Join(state, "runs"), 0o700); err != nil {
-		t.Fatal(err)
 	}
 	got, err := LoadDebugArtifacts(AllocateRunID(), getenv)
 	if err != nil {

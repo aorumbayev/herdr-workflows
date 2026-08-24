@@ -54,7 +54,7 @@ func testListItem(t *testing.T, partial history.Summary) history.Summary {
 }
 
 func TestFormatRunListEmpty(t *testing.T) {
-	// Ports test/history/run-history.test.ts "empty states distinguish current, machine, and filter miss".
+	// This test copies test/history/run-history.test.ts "empty states distinguish current, machine, and filter miss".
 	if !strings.Contains(FormatRunListEmpty(RunListEmptyOpts{
 		Scope: ScopeCurrent, HasMachineRuns: true, FilterActive: false,
 	}), "Ctrl+G") {
@@ -81,7 +81,7 @@ func TestFormatRunListEmpty(t *testing.T) {
 }
 
 func TestFormatRunRowNarrowTruncation(t *testing.T) {
-	// Ports test/history/run-history.test.ts "narrow truncation keeps status".
+	// This test copies test/history/run-history.test.ts "narrow truncation keeps status".
 	row := testListItem(t, history.Summary{
 		ID:       "550e8400-e29b-41d4-a716-446655440000",
 		Workflow: "workflow-with-a-very-long-name",
@@ -98,25 +98,25 @@ func TestFormatRunRowNarrowTruncation(t *testing.T) {
 }
 
 func TestRunsFooterASCII(t *testing.T) {
-	// Ports test/picker/update-indicator.test.ts ASCII checks for runsFooter.
+	// This test copies test/picker/update-indicator.test.ts ASCII checks for runsFooter.
 	for _, s := range []string{
-		RunsFooter(ScopeCurrent, 0, 3),
-		RunsFooter(ScopeAll, 0, 0),
+		RunsFooter(ScopeCurrent),
+		RunsFooter(ScopeAll),
 	} {
 		if !isASCII(s) {
 			t.Fatalf("non-ASCII footer: %q", s)
 		}
 	}
-	if !strings.Contains(RunsFooter(ScopeCurrent, 0, 3), "Current") {
+	if !strings.Contains(RunsFooter(ScopeCurrent), "Current") {
 		t.Fatal("current scope label")
 	}
-	if !strings.Contains(RunsFooter(ScopeAll, 0, 0), "All") {
+	if !strings.Contains(RunsFooter(ScopeAll), "All") {
 		t.Fatal("all scope label")
 	}
-	if strings.Contains(RunsFooter(ScopeCurrent, 0, 0), "0/0") {
+	if strings.Contains(RunsFooter(ScopeCurrent), "0/0") {
 		t.Fatal("RunsFooter must not embed 0/0")
 	}
-	if got := RunsFooter(ScopeCurrent, 2, 5); strings.HasSuffix(got, "3/5") {
+	if got := RunsFooter(ScopeCurrent); strings.HasSuffix(got, "3/5") {
 		t.Fatalf("RunsFooter must not embed position: %q", got)
 	}
 }
@@ -126,13 +126,13 @@ func TestRunDetailFooterASCII(t *testing.T) {
 	if !isASCII(got) {
 		t.Fatalf("non-ASCII footer: %q", got)
 	}
-	if !strings.Contains(got, "esc back") || strings.Contains(got, "workbench") {
+	if !strings.Contains(got, "esc back") || !strings.Contains(got, "s send") || strings.Contains(got, "workbench") {
 		t.Fatalf("footer = %q", got)
 	}
 }
 
 func TestFormatRunDetailLinesEllipsisMapping(t *testing.T) {
-	// Ports test/picker/update-indicator.test.ts "detail lines map the wire ellipsis to ASCII".
+	// This test copies test/picker/update-indicator.test.ts "detail lines map the wire ellipsis to ASCII".
 	blocks := []history.Block{
 		{Kind: "head", Status: "FAILED", Title: "demo", DisplayID: "abc12345", Elapsed: "1s"},
 		{Kind: "note", Text: "writer heartbeat stale - not a failure"},
@@ -154,7 +154,7 @@ func TestFormatRunDetailLinesEllipsisMapping(t *testing.T) {
 }
 
 func TestFormatRunDetailLinesTruncatedRead(t *testing.T) {
-	// Ports test/history/history-project.test.ts truncated step outcome.
+	// This test copies test/history/history-project.test.ts truncated step outcome.
 	blocks := []history.Block{
 		{
 			Kind: "step", Depth: 0, Ordinal: 1, Total: 1, Label: "read",
@@ -168,7 +168,7 @@ func TestFormatRunDetailLinesTruncatedRead(t *testing.T) {
 }
 
 func TestDetailLinesStartingAndUnavailable(t *testing.T) {
-	// Ports test/history/run-history.test.ts starting vs history-unavailable.
+	// This test copies test/history/run-history.test.ts starting vs history-unavailable.
 	id := "550e8400-e29b-41d4-a716-446655440000"
 	starting := DetailLines(DetailView{Kind: "starting", ID: id, Workflow: "demo"}, 80)
 	if !strings.Contains(starting[0], "STARTING") {
@@ -187,7 +187,7 @@ func TestDetailLinesStartingAndUnavailable(t *testing.T) {
 }
 
 func TestDetailLinesHistoryUnavailableEllipsis(t *testing.T) {
-	// Ports test/picker/update-indicator.test.ts history-unavailable progress/message glyphs.
+	// This test copies test/picker/update-indicator.test.ts history-unavailable progress/message glyphs.
 	id := "550e8400-e29b-41d4-a716-446655440000"
 	lines := DetailLines(DetailView{
 		Kind: "history-unavailable", ID: id, Workflow: "demo",
@@ -208,7 +208,7 @@ func TestDetailLinesHistoryUnavailableEllipsis(t *testing.T) {
 }
 
 func TestScrollDetailLines(t *testing.T) {
-	// Ports test/history/run-history.test.ts "detail scroll keeps a fixed viewport".
+	// This test copies test/history/run-history.test.ts "detail scroll keeps a fixed viewport".
 	lines := make([]string, 12)
 	for i := range lines {
 		lines[i] = "line " + strconv.Itoa(i)
@@ -294,7 +294,7 @@ func TestDetailLinesDetailWithProgress(t *testing.T) {
 }
 
 func TestRunsFooterJoinsWithChromeSep(t *testing.T) {
-	parts := strings.Split(RunsFooter(ScopeCurrent, 0, 3), tui.ChromeSep)
+	parts := strings.Split(RunsFooter(ScopeCurrent), tui.ChromeSep)
 	if len(parts) != 4 {
 		t.Fatalf("parts = %v", parts)
 	}

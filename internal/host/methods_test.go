@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// Copy of workflow.IsWholeValueTemplate's shape: host cannot import workflow.
+// Copy of the shape of workflow.IsWholeValueTemplate. The host package cannot import workflow.
 var wholeTemplateRE = regexp.MustCompile(`^\{\{\s*(?:inputs|steps|context)(?:\.[a-zA-Z_][a-zA-Z0-9_]*)+\s*\}\}$`)
 
 func wholeTemplate(text string) bool {
@@ -197,13 +197,13 @@ func TestAssertFocusPolicy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := assertFocusPolicy(tc.method, tc.params)
 			if tc.want == "" {
-				if got != "" {
-					t.Fatalf("assertFocusPolicy(%q) = %q, want no error", tc.method, got)
+				if got != nil {
+					t.Fatalf("assertFocusPolicy(%q) = %v, want no error", tc.method, got)
 				}
 				return
 			}
-			if !strings.Contains(got, tc.want) {
-				t.Fatalf("assertFocusPolicy(%q) = %q, want substring %q", tc.method, got, tc.want)
+			if got == nil || !strings.Contains(got.Error(), tc.want) {
+				t.Fatalf("assertFocusPolicy(%q) = %v, want substring %q", tc.method, got, tc.want)
 			}
 		})
 	}

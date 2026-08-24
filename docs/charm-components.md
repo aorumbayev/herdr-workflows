@@ -33,13 +33,21 @@ This cycle does not add `bubbles` or `huh`. Unused modules violate YAGNI.
 | Column row layout | `bubbles/v2` ItemDelegate | v2.1.1 | keep-custom | No built-in cursor prefix, title truncate, warning, and location columns. | `TestPadColumnsKeepsASCIIIndicatorSingleColumn` |
 | ASCII-only chrome strings | `bubbles/v2` styles | v2.1.1 | keep-custom | Default glyphs are not single-column ASCII `ChromeStrings`. | `TestChromeStringsAreSingleColumnASCII` |
 | Terminal-column truncate | `x/ansi` | v0.11.8 | keep-custom | Width helpers exist. Product still owns ASCII `Ellipsis` and `PadColumns`. | `TestTruncateEllipsisAtMax` |
-| Theme warning versus muted | `lipgloss/v2` | v2.0.6 | keep-custom | No ready theme for indexed ANSI warn (3), muted (8), and reverse without OSC 4. | `TestDefaultThemeUsesIndexedWarnMutedAndReverse` |
+| Theme warning versus muted | `lipgloss/v2` | v2.0.6 | keep-custom | No ready theme for indexed ANSI warn (3), faint secondary text, and reverse without OSC 4. | `TestDefaultThemeUsesIndexedWarnMutedAndReverse` |
 | Filter-row update indicator | `bubbles/v2` FilterInput | v2.1.1 | keep-custom | No width-gated ASCII update hint that hides under a four-cell filter floor. Picker owns the row. TUI tests cover `Truncate` and `PadColumns`. | `TestPadColumnsKeepsASCIIIndicatorSingleColumn` |
-| Palette body | `bubbles/v2` | v2.1.1 | keep-custom | No Ctrl+K letter-fire palette with saved filter and selection-dependent lines. Picker-owned, not `tui`. | `TestCharmVerdicts` |
+| Palette body | `bubbles/v2` | v2.1.1 | keep-custom | No Ctrl+K letter-fire palette that hides edit/share/delete without a selection. | `TestCharmVerdicts` |
 | Delete confirm y/n | `huh/v2` Confirm | v2.0.3 | keep-custom | Confirm does not match bare y/n/esc and `DeleteConfirmHint` ASCII chrome. | `TestChromeStringsAreSingleColumnASCII` |
 | Collected-answers truncation | `bubbles/v2` | v2.1.1 | keep-custom | No `chosen: name=value` join truncated with ASCII ellipsis. Uses `tui.Truncate`. | `TestTruncateEllipsisAtMax` |
 | Viewport height pad | `bubbletea/v2` | v2.0.9 | keep-custom | Bubble Tea does not clear unused TTY rows after a shorter frame. `PadHeight` appends blank lines to the prior frame height. | `TestPadHeight` |
-| Runs detail scroll | `bubbles/v2` viewport | v2.1.1 | keep-custom | `viewport.Model` has no scrollbar chrome and keeps `SoftWrap` off by default. Runs detail still scrolls a fixed ASCII window over pre-wrapped lines with clamped offset without importing bubbles. | `TestScrollDetailLines` |
+| Runs detail scroll | `bubbles/v2` viewport | v2.1.1 | keep-custom | `viewport.Model` has no scrollbar chrome and keeps `SoftWrap` off by default. Runs detail still scrolls a fixed ASCII window over pre-wrapped lines with clamped offset and no bubbles import. | `TestScrollDetailLines` |
+| Theme kind palette | `lipgloss/v2` | v2.0.6 | keep-custom | No ready theme for indexed kind colors (agent 6, run 2, herdr 5, workflow 4, default 7), fail 1, faint secondary text, underline hover distinct from reverse, and run status slots. | `TestDefaultThemeKindPaletteAndHover` |
+| Picker tab bar | `bubbles/v2` | v2.1.1 | keep-custom | Bubbles tabs do not render a three-label ASCII bar with reverse active and muted inactive states under picker chrome width rules. Picker owns `FormatTabBar`. | `TestFormatTabBarActiveReverseInactiveMuted` |
+| Picker mouse hover | `bubbletea/v2` | v2.0.9 | keep-custom | Bubble Tea reports mouse cells but does not map hover to a non-reverse row style while reverse remains the keyboard cursor. | `TestPickerHoverStyleIsNotReverse` |
+| Console hit zones | `bubbletea/v2` | v2.0.9 | keep-custom | Bubble Tea reports mouse cells but has no hit-zone registry for diagram cards. | `TestModelDiagramClickFocusesCard` |
+| Console mouse reporting | `bubbletea/v2` | v2.0.9 | keep-custom | Mouse reporting stays off unless the view sets MouseMode. Both console hosts enable all-motion reporting. | `TestModelConsoleViewEnablesMouseReporting` |
+| Card rail | `lipgloss/v2` | v2.0.6 | keep-custom | No kind-colored double-border card rail with ASCII connectors and a paired detail pane. | `TestFormatDiagramHandoff` |
+| Edit placement | `huh/v2` Select | v2.0.3 | keep-custom | Select does not mix an in-popup `tea.ExecProcess` path with `plugin.pane.open` placements that quit without reopening. | `TestEditPlacementTabQuitsWithoutReopen` |
+| Failed-run send-back | `bubbles/v2` | v2.1.1 | keep-custom | No send-back that reuses the annotation bundle plus a failure block that excludes the captured output tail. | `TestRunsSendbackOmitsOutputTail` |
 
 Machine-readable copy lives in `tui.CharmVerdicts()`.
 
@@ -51,7 +59,7 @@ Machine-readable copy lives in `tui.CharmVerdicts()`.
 
 ### Filter text accumulation
 
-Filter typing must ignore Ctrl+K, Tab, and other mods while still accepting bare printable runes. `textinput` always accumulates printable input unless the host rewrites keys. Keep the hand-written filter string and key switch.
+Filter typing must ignore Ctrl+K, Tab, and other mods while it still accepts bare printable runes. `textinput` always accumulates printable input unless the host rewrites keys. Keep the hand-written filter string and key switch.
 
 ### FilterInput stdin leak drop
 
@@ -59,7 +67,7 @@ After Bubble Tea parses keys, herdr can still leak C0 bytes from the prefix bind
 
 ### Choice list plus custom row
 
-Choice collection appends a tagged `custom...` row that opens free text. `huh.Select` has no matching sentinel under the shared six-row ASCII list. Keep picker choice mode.
+Choice collection appends a tagged `custom...` row that opens free text. `huh.Select` has no sentinel that matches under the shared six-row ASCII list. Keep picker choice mode.
 
 ### Text prompt
 
@@ -71,11 +79,11 @@ The text prompt shares backtrack, collected answers, and ASCII submit hints with
 
 ### Two-line detail wrap
 
-`FormatDetailLines` wraps to two indented lines and truncates only the second. Lip Gloss has no matching helper. Keep the custom formatter.
+`FormatDetailLines` wraps to two indented lines and truncates only the second. Lip Gloss has no helper that matches. Keep the custom formatter.
 
 ### Inset muted horizontal rule
 
-`FormatRule` indents by `RowTextIndent` and fills with ASCII dashes. Lip Gloss has no matching rule. Keep the custom formatter.
+`FormatRule` indents by `RowTextIndent` and fills with ASCII dashes. Lip Gloss has no rule that matches. Keep the custom formatter.
 
 ### Column row layout
 
@@ -91,7 +99,7 @@ Every chrome fragment must be single-column ASCII. Bubbles defaults are not that
 
 ### Theme warning versus muted
 
-Indexed ANSI warn (3), muted (8), and reverse selection avoid OSC 4 palette queries. Lip Gloss styles colors but does not ship that theme. Keep `DefaultTheme`.
+Indexed ANSI warn (3), faint secondary text, and reverse selection avoid OSC 4 palette queries. Content keeps the terminal foreground, so no slot can render it unreadable. Lip Gloss styles colors but does not ship that theme. Keep `DefaultTheme`.
 
 ### Filter-row update indicator
 
@@ -115,4 +123,25 @@ After a shorter frame, Bubble Tea leaves prior TTY rows on screen. `PadHeight` a
 
 ### Runs detail scroll
 
-Runs detail scrolls a fixed ASCII window over lines already wrapped for content width. `bubbles/v2` `viewport.Model` has no scrollbar chrome and keeps `SoftWrap` off by default. The product still owns clamped offset scrolling over pre-wrapped lines without importing bubbles. Keep `ScrollDetailLines` in the runs browser.
+Runs detail scrolls a fixed ASCII window over lines already wrapped for content width. `bubbles/v2` `viewport.Model` has no scrollbar chrome and keeps `SoftWrap` off by default. The product still owns clamped offset scrolling over pre-wrapped lines with no bubbles import. The console diagram consumes wheel the same way, still without a bubbles viewport. Keep `ScrollDetailLines` in the runs browser.
+
+### Theme kind palette
+
+Lip Gloss can color text. It does not ship indexed kind slots (agent 6, run 2, herdr 5, workflow 4, default 7), fail 1, underline hover distinct from reverse, or run status slots. Keep `DefaultTheme` in `tui`.
+
+### Picker tab bar
+
+The picker needs a three-label ASCII bar with reverse on the active tab and muted inactive tabs, clipped to chrome width. Bubbles tabs do not match that chrome. Keep `FormatTabBar` in the picker.
+
+### Picker mouse hover
+
+Bubble Tea reports mouse cells. It does not map hover to underline while reverse stays the keyboard cursor. Keep picker hover styling on `FormatStyledRow`.
+
+### Console hit zones
+
+Bubble Tea reports mouse cells. It does not map those cells onto diagram cards with their step anchors. Keep hit testing in the console rail.
+
+### Console mouse reporting
+
+Bubble Tea mouse reporting is off until the view sets MouseMode. The standalone console and the picker-hosted console tab both enable all-motion reporting so `click` and wheel events reach the diagram.
+

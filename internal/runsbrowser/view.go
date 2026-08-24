@@ -3,6 +3,8 @@ package runsbrowser
 import (
 	"strings"
 
+	"charm.land/lipgloss/v2"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
@@ -12,7 +14,7 @@ func (m Model) View() tea.View {
 	return tea.NewView(tui.PadHeight(tui.PadContent(m.render(), m.contentWidth()), m.height))
 }
 
-// Body returns unpadded list or detail text for embedding in the picker.
+// Body gives unpadded list or detail text for the picker.
 func (m Model) Body() string {
 	return m.render()
 }
@@ -41,26 +43,27 @@ func (m Model) renderList() string {
 			FilterActive:   strings.TrimSpace(m.filter) != "",
 			Unavailable:    m.state.Unavailable,
 		})
-		body := filter + "\n\n" + tui.FormatDetailBlock(empty, w) + "\n" + tui.FormatRule(w) + "\n" + tui.FormatListFooter(w, 0, 0, RunsFooter(m.scope, 0, 0))
-		return body
+		return filter + "\n\n" + tui.FormatDetailBlock(empty, w) + "\n" + tui.FormatRule(w) + "\n" + tui.MuteChrome(tui.FormatListFooter(w, 0, 0, RunsFooter(m.scope)))
 	}
-	end := min(m.offset+ListViewport, len(m.state.Items))
+	vp := m.listViewport()
+	end := min(m.offset+vp, len(m.state.Items))
 	var rows []string
 	showLocation := m.scope == ScopeAll
 	titleW := max(0, w-tui.RowTextIndent-tui.RowRightGutter)
 	for i := m.offset; i < end; i++ {
 		item := m.state.Items[i]
 		row := FormatRunRow(item, titleW, FormatRunRowOpts{ShowLocation: showLocation})
-		rows = append(rows, tui.FormatRow(row, "", false, w, i == m.cursor))
+		plain := tui.FormatRow(row, "", false, w, i == m.cursor)
+		rows = append(rows, paintStatus(plain, rowStatusToken(item, titleW), item.Status, i == m.cursor))
 	}
-	for len(rows) < ListViewport {
+	for len(rows) < vp {
 		rows = append(rows, "")
 	}
 	detail := ""
 	if item := m.selectedItem(); item != nil {
 		detail = tui.FormatDetailBlock(FormatRunSummary(*item), w)
 	}
-	footer := tui.FormatListFooter(w, m.cursor, len(m.state.Items), RunsFooter(m.scope, m.cursor, len(m.state.Items)))
+	footer := tui.MuteChrome(tui.FormatListFooter(w, m.cursor, len(m.state.Items), RunsFooter(m.scope)))
 	return filter + "\n\n" + strings.Join(rows, "\n") + "\n\n" + detail + "\n" + tui.FormatRule(w) + "\n" + footer
 }
 
@@ -73,12 +76,37 @@ func (m Model) listFilterRow(width int) string {
 }
 
 func (m Model) renderDetail() string {
+	if m.detailView.Kind == "" || m.detailView.Kind == "detail" {
+		if stepCount(m.detailView.Detail) > 0 {
+			return m.renderRailDetail()
+		}
+	}
 	w := m.contentWidth()
 	lines := DetailLines(m.detailView, w)
-	visible, _ := ScrollDetailLines(lines, m.detailScroll, detailViewport)
-	for len(visible) < detailViewport {
+	rows := m.detailRows()
+	visible, _ := ScrollDetailLines(lines, m.detailScroll, rows)
+	for len(visible) < rows {
 		visible = append(visible, "")
 	}
 	footer := tui.FormatListFooter(w, 0, 0, RunDetailFooter())
 	return strings.Join(visible, "\n") + "\n" + tui.FormatRule(w) + "\n" + footer
+}
+
+func paintStatus(line, token, status string, selected bool) string {
+	base := tui.RowBase(selected, false)
+	head, rest := line[:tui.RowTextIndent], line[tui.RowTextIndent:]
+	if !strings.HasPrefix(rest, token) {
+		return base.Render(line)
+	}
+	return base.Render(head) + statusStyle(base, status).Render(token) + base.Render(rest[len(token):])
+}
+
+// statusStyle puts the row attributes on the status token. A status with
+// no palette slot of its own stays faint and keeps the row style.
+func statusStyle(base lipgloss.Style, status string) lipgloss.Style {
+	style := tui.DefaultTheme().RunStatusStyle(status)
+	if fg, ok := style.GetForeground().(lipgloss.ANSIColor); ok {
+		return base.Foreground(fg)
+	}
+	return base.Faint(true)
 }

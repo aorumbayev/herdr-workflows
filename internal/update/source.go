@@ -29,7 +29,7 @@ func ParsePluginListSource(jsonText string) (PluginSourceInfo, error) {
 	if kind == "github" {
 		owner, _ := srcMap["owner"].(string)
 		repo, _ := srcMap["repo"].(string)
-		return PluginSourceInfo{Kind: "github", Owner: nonempty(owner), Repo: nonempty(repo)}, nil
+		return PluginSourceInfo{Kind: "github", Owner: owner, Repo: repo}, nil
 	}
 	return PluginSourceInfo{Kind: "local"}, nil
 }
@@ -66,8 +66,4 @@ func findHerdrWorkflowsPlugin(parsed any) map[string]any {
 		}
 	}
 	return nil
-}
-
-func nonempty(s string) string {
-	return s
 }

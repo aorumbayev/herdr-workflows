@@ -99,14 +99,40 @@ func TestWorkflowTrustHelpers(t *testing.T) {
 	if got := HumanizeWorkflowName("ship-fast_now"); got != "Ship Fast Now" {
 		t.Fatalf("humanized name = %q", got)
 	}
-	if got := WorkflowDisplayTitle("ship-fast", "  "); got != "Ship Fast" {
+	if got := DisplayTitle("ship-fast", "  "); got != "Ship Fast" {
 		t.Fatalf("display title = %q", got)
 	}
-	flags := WorkflowSensitivity{HasCommands: true, HasTranscript: true, SensitiveMethods: []string{"pane.close"}, UnresolvedChildren: []string{"missing"}}
+	flags := Sensitivity{HasCommands: true, HasTranscript: true, SensitiveMethods: []string{"pane.close"}, UnresolvedChildren: []string{"missing"}}
 	if got := FormatSensitivityBanner(flags, "warning"); got != "⚠ warning: commands · transcript · herdr:pane.close · unresolved:missing\n" {
 		t.Fatalf("banner = %q", got)
 	}
-	if got := FormatSensitivityBanner(WorkflowSensitivity{}, ""); got != "" {
+	if got := FormatSensitivityBanner(Sensitivity{}, ""); got != "" {
 		t.Fatalf("empty banner = %q", got)
+	}
+}
+
+func TestHomeRepoRootKeepsGlobalSource(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", filepath.Join(home, "plugin-config"))
+	writeWorkflow(t, home, "pipeline", trustVersion+"steps:\n  - run: [echo, hi]\n")
+
+	resolved, err := ResolveWorkflowFile("pipeline", home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Source != "global" {
+		t.Fatalf("source = %q, want global", resolved.Source)
+	}
+
+	entries, err := ListWorkflows(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("entries = %d, want 1", len(entries))
+	}
+	if entries[0].Source != "global" || entries[0].RepoOwned {
+		t.Fatalf("entry = %+v, want global and not repo-owned", entries[0])
 	}
 }

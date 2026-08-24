@@ -103,7 +103,7 @@ func TestKillSpawn(t *testing.T) {
 			t.Fatalf("failed to start process: %v", err)
 		}
 
-		// Wait for grandchild PID to be written
+		// Wait until the process writes the grandchild PID
 		var grandchildPid int
 		deadline := time.Now().Add(2 * time.Second)
 		for time.Now().Before(deadline) {
@@ -125,10 +125,10 @@ func TestKillSpawn(t *testing.T) {
 		KillSpawn(cmd)
 		_ = cmd.Wait()
 
-		// Give it a moment to die
+		// Wait until the process stops
 		time.Sleep(100 * time.Millisecond)
 
-		// Verify grandchild is actually dead
+		// Make sure that the grandchild process is not alive
 		err := syscall.Kill(grandchildPid, 0)
 		if !errors.Is(err, syscall.ESRCH) {
 			t.Fatalf("grandchild %d should be dead (ESRCH), got %v", grandchildPid, err)
@@ -140,7 +140,7 @@ func TestKillSpawn(t *testing.T) {
 		if err := cmd.Run(); err != nil {
 			t.Fatalf("failed to run process: %v", err)
 		}
-		// Should not panic
+		// The call must not panic
 		KillSpawn(cmd)
 	})
 }
@@ -175,8 +175,8 @@ func TestSpawnCaptureBytesCap(t *testing.T) {
 	})
 
 	t.Run("split budget across stdout and stderr", func(t *testing.T) {
-		// Split the overflow: neither stream alone exceeds the limit,
-		// but their sum does
+		// Split the overflow. Neither stream alone exceeds the limit,
+		// but the sum of the two streams exceeds the limit.
 		half := caps.CaptureByteLimit/2 + 10
 		argv := []string{"sh", "-c", fmt.Sprintf(
 			"head -c %d /dev/zero; head -c %d /dev/zero >&2",
@@ -223,7 +223,7 @@ func TestSpawnCaptureTimeout(t *testing.T) {
 		t.Fatal("expected TimedOut=true")
 	}
 
-	// Check that the marker was written (proving the grandchild launched)
+	// Make sure that the marker exists. This proves that the grandchild started.
 	data, err := os.ReadFile(markerFile)
 	if err != nil {
 		t.Fatal("marker file was never written - grandchild did not launch")
@@ -232,7 +232,7 @@ func TestSpawnCaptureTimeout(t *testing.T) {
 		t.Fatalf("expected marker to be 'start\\n', got %q", string(data))
 	}
 
-	// Check marker file hasn't been overwritten after timeout
+	// Make sure that the marker file was not overwritten after the timeout
 	deadline := time.Now().Add(900 * time.Millisecond)
 	for time.Now().Before(deadline) {
 		data, err := os.ReadFile(markerFile)
@@ -240,7 +240,7 @@ func TestSpawnCaptureTimeout(t *testing.T) {
 			t.Fatalf("failed to read marker: %v", err)
 		}
 		content := string(data)
-		// The marker should still contain "start", not "done"
+		// The marker must still contain "start", not "done"
 		if strings.Contains(content, "done") {
 			t.Fatal("marker was overwritten after timeout - grandchild was not killed")
 		}
@@ -250,7 +250,7 @@ func TestSpawnCaptureTimeout(t *testing.T) {
 
 func TestRunArgvStepSuccess(t *testing.T) {
 	tmpdir := t.TempDir()
-	// Use a direct argv without going through shell to test the argv path
+	// Use a direct argv, not a shell, to test the argv path
 	result, err := RunArgvStep(
 		[]string{"printf", "out\nerr\n"},
 		ArgvStepOpts{
@@ -454,6 +454,18 @@ func TestArgvStepOptsExtended(t *testing.T) {
 	})
 }
 
+func TestRunContextEnv(t *testing.T) {
+	got := runContextEnv(StepRunOpts{RunID: "run-1", Name: "ship", RepoRoot: "/repo"})
+	want := map[string]string{
+		"HWF_RUN_ID":        "run-1",
+		"HWF_WORKFLOW":      "ship",
+		"HWF_CHECKOUT_ROOT": "/repo",
+	}
+	if !maps.Equal(got, want) {
+		t.Fatalf("runContextEnv = %v, want %v", got, want)
+	}
+}
+
 func TestBuildHwfEnv(t *testing.T) {
 	inputs := map[string]any{
 		"branch": "main",
@@ -478,7 +490,7 @@ func TestMergeStepEnv(t *testing.T) {
 
 	result := MergeStepEnv(inherited, hwf, stepEnv)
 
-	// Convert to map for easier comparison
+	// Convert the data to a map for comparison
 	resultMap := make(map[string]string)
 	for _, kv := range result {
 		parts := strings.SplitN(kv, "=", 2)
@@ -497,7 +509,7 @@ func TestMergeStepEnv(t *testing.T) {
 		t.Fatalf("MergeStepEnv returned %v, want %v", resultMap, expectedMap)
 	}
 
-	// Verify only one entry per key
+	// Make sure that each key has one entry
 	keyCount := make(map[string]int)
 	for _, kv := range result {
 		parts := strings.SplitN(kv, "=", 2)

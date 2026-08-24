@@ -14,8 +14,8 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/host"
 )
 
-// WorkflowSensitivity is the trust-relevant surface of one workflow tree.
-type WorkflowSensitivity struct {
+// Sensitivity is the trust-relevant surface of one workflow tree.
+type Sensitivity struct {
 	HasCommands        bool
 	HasTranscript      bool
 	SensitiveMethods   []string
@@ -44,8 +44,8 @@ func AssertWorkflowName(name string) (string, error) {
 	return trimmed, nil
 }
 
-// WorkflowPath returns the repository or global workflow path.
-func WorkflowPath(scope, repoRoot, name string) (string, error) {
+// Path returns the repository or global workflow path.
+func Path(scope, repoRoot, name string) (string, error) {
 	validated, err := AssertWorkflowName(name)
 	if err != nil {
 		return "", err
@@ -64,7 +64,7 @@ func WorkflowPath(scope, repoRoot, name string) (string, error) {
 }
 
 // ResolvedWorkflowFile identifies the repository or global definition that
-// won name resolution.
+// name resolution returns.
 type ResolvedWorkflowFile struct {
 	File   string
 	Source string
@@ -75,18 +75,20 @@ var ErrWorkflowNotFound = errors.New("workflow not found")
 
 // ResolveWorkflowFile prefers a repository workflow over a global workflow.
 func ResolveWorkflowFile(name, repoRoot string) (*ResolvedWorkflowFile, error) {
-	repo, err := WorkflowPath("repo", repoRoot, name)
+	repo, err := Path("repo", repoRoot, name)
 	if err != nil {
 		return nil, err
 	}
-	if _, statErr := os.Stat(repo); statErr == nil {
-		return &ResolvedWorkflowFile{File: repo, Source: "repo"}, nil
-	} else if !os.IsNotExist(statErr) {
-		return nil, statErr
-	}
-	global, err := WorkflowPath("global", repoRoot, name)
+	global, err := Path("global", repoRoot, name)
 	if err != nil {
 		return nil, err
+	}
+	if repo != global {
+		if _, statErr := os.Stat(repo); statErr == nil {
+			return &ResolvedWorkflowFile{File: repo, Source: "repo"}, nil
+		} else if !os.IsNotExist(statErr) {
+			return nil, statErr
+		}
 	}
 	if _, statErr := os.Stat(global); statErr == nil {
 		return &ResolvedWorkflowFile{File: global, Source: "global"}, nil
@@ -129,8 +131,8 @@ func childWorkflowNames(steps []Step, onFailure Action) []string {
 	return names
 }
 
-func analyzeWorkflowSensitivity(raw Document) WorkflowSensitivity {
-	flags := WorkflowSensitivity{}
+func analyzeWorkflowSensitivity(raw Document) Sensitivity {
+	flags := Sensitivity{}
 	for _, step := range raw.Steps {
 		if _, ok := step.Action.(RunAction); ok {
 			flags.HasCommands = true
@@ -139,7 +141,7 @@ func analyzeWorkflowSensitivity(raw Document) WorkflowSensitivity {
 	if _, ok := raw.OnFailure.(RunAction); ok {
 		flags.HasCommands = true
 	}
-	for _, path := range WorkflowTemplateRefs(raw.Steps, raw.Returns, raw.OnFailure) {
+	for _, path := range TemplateRefs(raw.Steps, raw.Returns, raw.OnFailure) {
 		if isSensitiveContextPath(path) {
 			flags.HasTranscript = true
 		}
@@ -154,18 +156,18 @@ func analyzeWorkflowSensitivity(raw Document) WorkflowSensitivity {
 }
 
 // AnalyzeResolvedSensitivity includes sensitivity from reachable child
-// workflows and records children that cannot be loaded.
-func AnalyzeResolvedSensitivity(raw Document, name, repoRoot string) WorkflowSensitivity {
+// workflows and records children that fail to load.
+func AnalyzeResolvedSensitivity(raw Document, name, repoRoot string) Sensitivity {
 	return analyzeResolvedSensitivity(raw, name, repoRoot, nil)
 }
 
-func analyzeResolvedSensitivity(raw Document, name, repoRoot string, stack []string) WorkflowSensitivity {
+func analyzeResolvedSensitivity(raw Document, name, repoRoot string, stack []string) Sensitivity {
 	local := analyzeWorkflowSensitivity(raw)
 	if slices.Contains(stack, name) {
 		return local
 	}
 	nextStack := append(slices.Clone(stack), name)
-	aggregated := WorkflowSensitivity{
+	aggregated := Sensitivity{
 		HasCommands:        local.HasCommands,
 		HasTranscript:      local.HasTranscript,
 		SensitiveMethods:   slices.Clone(local.SensitiveMethods),
@@ -204,15 +206,6 @@ func appendUnique(values []string, value string) []string {
 	return append(values, value)
 }
 
-// AnalyzeYamlTree parses a workflow body and aggregates its sensitivity.
-func AnalyzeYamlTree(file, body, name, repoRoot string) (WorkflowSensitivity, error) {
-	raw, err := ParseRaw(file, body)
-	if err != nil {
-		return WorkflowSensitivity{}, err
-	}
-	return AnalyzeResolvedSensitivity(raw, name, repoRoot), nil
-}
-
 // ReferencedWorkflowChildren returns unique child names in sorted order.
 func ReferencedWorkflowChildren(raw Document) []string {
 	var names []string
@@ -226,7 +219,7 @@ func ReferencedWorkflowChildren(raw Document) []string {
 }
 
 // MergeSensitivity combines one sensitivity result into another.
-func MergeSensitivity(into *WorkflowSensitivity, from WorkflowSensitivity) {
+func MergeSensitivity(into *Sensitivity, from Sensitivity) {
 	into.HasCommands = into.HasCommands || from.HasCommands
 	into.HasTranscript = into.HasTranscript || from.HasTranscript
 	for _, method := range from.SensitiveMethods {
@@ -256,16 +249,16 @@ func HumanizeWorkflowName(name string) string {
 
 var workflowSeparatorRE = regexp.MustCompile(`[-_]+`)
 
-// WorkflowDisplayTitle uses the explicit title or a humanized workflow name.
-func WorkflowDisplayTitle(name, title string) string {
+// DisplayTitle uses the explicit title or a humanized workflow name.
+func DisplayTitle(name, title string) string {
 	if trimmed := strings.TrimSpace(title); trimmed != "" {
 		return trimmed
 	}
 	return HumanizeWorkflowName(name)
 }
 
-// SensitivityLabels returns the compact trust labels used by the UI.
-func SensitivityLabels(flags WorkflowSensitivity) []string {
+// SensitivityLabels returns the compact trust labels that the UI uses.
+func SensitivityLabels(flags Sensitivity) []string {
 	labels := make([]string, 0, 2+len(flags.SensitiveMethods)+len(flags.UnresolvedChildren))
 	if flags.HasCommands {
 		labels = append(labels, "commands")
@@ -282,9 +275,9 @@ func SensitivityLabels(flags WorkflowSensitivity) []string {
 	return labels
 }
 
-// FormatSensitivityBanner formats a visible trust banner, or empty text for
-// a workflow with no flagged surface.
-func FormatSensitivityBanner(flags WorkflowSensitivity, labelArgs ...string) string {
+// FormatSensitivityBanner formats a visible trust banner.
+// It returns empty text for a workflow with no flagged surface.
+func FormatSensitivityBanner(flags Sensitivity, labelArgs ...string) string {
 	labels := SensitivityLabels(flags)
 	if len(labels) == 0 {
 		return ""

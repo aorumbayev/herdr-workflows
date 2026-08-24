@@ -103,8 +103,8 @@ complexity number when the code already names one concept.
 ### How to measure
 
 - `golangci-lint run` for unreachable exports
-- For an unreachable branch, trace backward to the entry point in `internal/cli/`, `internal/picker/`, or
-  `internal/workbench/`. If no entry point can produce the input, quote the entry-point line as evidence
+- For an unreachable branch, trace backward to the entry point in `internal/cli/` or
+  `internal/picker/`. If no entry point can produce the input, quote the entry-point line as evidence
 - A gate whose scope makes it impossible to fire is the same defect in the tooling. That one belongs
   to Group B, which audits the gates
 

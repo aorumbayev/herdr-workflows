@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// jsonQuote renders a string exactly as JavaScript JSON.stringify does: the
-// observable echo surface relies on this escaping, not Go's strconv.Quote.
+// jsonQuote renders a string exactly as JavaScript JSON.stringify does.
+// The observable echo surface uses this escaping, not Go strconv.Quote.
 func jsonQuote(s string) string {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -33,8 +33,8 @@ type AgentResult struct {
 	Verdict  string         `json:"verdict,omitempty"`
 }
 
-// ReadinessResult is the native wait result plus identifiers created by the
-// placed command.
+// ReadinessResult is the native wait result plus identifiers that the
+// placed command creates.
 type ReadinessResult struct {
 	PaneID      string `json:"pane_id"`
 	TabID       string `json:"tab_id"`
@@ -74,7 +74,7 @@ var (
 	}
 )
 
-// ParseVerdict applies the one verdict rule shared by the runner and CLI.
+// ParseVerdict applies the one verdict rule that the runner and CLI share.
 func ParseVerdict(response string, oneOf []string) (string, bool, string) {
 	lines := strings.Split(response, "\n")
 	line := ""
@@ -106,7 +106,7 @@ func VerdictNotRequiredMessage(verdict string, required []string) string {
 
 // ParseVerdictTokens decodes the CLI comma-separated verdict option.
 func ParseVerdictTokens(raw string) ([]string, error) {
-	tokens := make([]string, 0)
+	var tokens []string
 	for _, token := range strings.Split(raw, ",") {
 		token = strings.TrimSpace(token)
 		if token == "" {

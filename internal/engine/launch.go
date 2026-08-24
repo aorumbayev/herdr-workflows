@@ -30,7 +30,7 @@ type LaunchPayload struct {
 	RunID   string              `json:"runId,omitempty"`
 }
 
-// SpawnOpts configures the injectable process seam used by detached launchers.
+// SpawnOpts configures the process seam for detached launchers.
 type SpawnOpts struct {
 	Env    map[string]string
 	Stdin  string
@@ -54,7 +54,7 @@ type DetachedRunResult struct {
 	Detail string
 }
 
-// DetachedRunHandle observes a detached run; Detach settles early like Bun unref.
+// DetachedRunHandle observes a detached run. Detach settles early, like Bun unref.
 type DetachedRunHandle struct {
 	Result chan DetachedRunResult
 	Detach func()
@@ -198,7 +198,7 @@ func selfArgv(executable, command string, args ...string) []string {
 func buildInvocationEnv(ctx config.InvocationContext, repoRoot string) map[string]string {
 	jsonObj := map[string]any{
 		"selected_text": ctx.Selection,
-		"cwd":           ctx.Cwd,
+		"workspace_cwd": ctx.Cwd,
 	}
 	if ctx.PaneID != "" {
 		jsonObj["focused_pane_id"] = ctx.PaneID
@@ -210,7 +210,7 @@ func buildInvocationEnv(ctx config.InvocationContext, repoRoot string) map[strin
 		jsonObj["workspace_id"] = ctx.WorkspaceID
 	}
 	if ctx.WorktreePath != "" {
-		jsonObj["worktree"] = map[string]any{"path": ctx.WorktreePath}
+		jsonObj["worktree"] = map[string]any{"checkout_path": ctx.WorktreePath}
 	}
 	raw, _ := json.Marshal(jsonObj)
 	env := map[string]string{
@@ -425,12 +425,12 @@ func resolveSpawn(spawn func(argv []string, opts SpawnOpts) (*Spawned, error)) f
 	return defaultSpawn
 }
 
-// LaunchDetachedRun spawns a detached run child and observes stdout progress/history lines.
+// LaunchDetachedRun spawns a detached run child and observes stdout progress and history lines.
 func LaunchDetachedRun(req LaunchRunRequest) DetachedRunHandle {
 	spawn := resolveSpawn(req.Spawn)
 	argv := selfArgv(req.Executable, "run", req.Name, "--launch-payload")
 	payload := buildLaunchPayload(req.Name, req.Inputs, req.Domains, req.RunID)
-	payloadBytes, _ := json.Marshal(payload)
+	payloadBytes, marshalErr := json.Marshal(payload)
 	env := mergeEnv(environMap(), req.Env, buildInvocationEnv(req.Ctx, req.RepoRoot))
 
 	resultCh := make(chan DetachedRunResult, 1)
@@ -458,6 +458,10 @@ func LaunchDetachedRun(req LaunchRunRequest) DetachedRunHandle {
 	}
 
 	handle := DetachedRunHandle{Result: resultCh, Detach: detach}
+	if marshalErr != nil {
+		settleOnce(DetachedRunResult{OK: false, Detail: marshalErr.Error()})
+		return handle
+	}
 
 	spawned, err := spawn(argv, SpawnOpts{
 		Env:    env,

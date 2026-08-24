@@ -608,7 +608,7 @@ func ShellStep(frame StepFrame) (StepOutcome, error) {
 		return StepOutcome{OK: false, Error: err.Error()}, nil
 	}
 
-	hwf := BuildHwfEnv(frame.Values.Inputs)
+	hwf := mergeStepEnvMaps(BuildHwfEnv(frame.Values.Inputs), runContextEnv(frame.Opts))
 
 	cwd := frame.Opts.Ctx.Cwd
 	if action.Cwd != "" {
@@ -637,4 +637,18 @@ func mergeStepEnvMaps(hwf, stepEnv map[string]string) map[string]string {
 		result[k] = v
 	}
 	return result
+}
+
+func runContextEnv(opts StepRunOpts) map[string]string {
+	out := map[string]string{}
+	if opts.RunID != "" {
+		out["HWF_RUN_ID"] = opts.RunID
+	}
+	if opts.Name != "" {
+		out["HWF_WORKFLOW"] = opts.Name
+	}
+	if opts.RepoRoot != "" {
+		out["HWF_CHECKOUT_ROOT"] = opts.RepoRoot
+	}
+	return out
 }

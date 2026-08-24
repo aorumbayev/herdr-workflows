@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -16,7 +17,7 @@ type cliResult struct {
 	exitCode int
 }
 
-func herdrCli(args []string) (cliResult, error) {
+func herdrCLI(args []string) (cliResult, error) {
 	bin := BinPath(os.Getenv)
 	cmd := exec.Command(bin, args...)
 	var stdout, stderr bytes.Buffer
@@ -45,7 +46,7 @@ func PaneClose(paneID string) error {
 	return err
 }
 
-// PluginPaneOpen opens a plugin pane over the socket, the picker hot path.
+// PluginPaneOpen opens a plugin pane on the socket. This is the picker hot path.
 func PluginPaneOpen(entrypoint string, env map[string]string, placement string) error {
 	pluginID := os.Getenv("HERDR_PLUGIN_ID")
 	if pluginID == "" {
@@ -68,13 +69,56 @@ func PluginPaneOpen(entrypoint string, env map[string]string, placement string) 
 	return err
 }
 
-// NotificationShow posts a herdr notification through the CLI.
+// PluginPaneOpenPopup opens a popup plugin pane at an explicit size. A size is
+// terminal cells or a percent string such as 85%.
+func PluginPaneOpenPopup(entrypoint string, env map[string]string, width, height string) error {
+	pluginID := os.Getenv("HERDR_PLUGIN_ID")
+	if pluginID == "" {
+		pluginID = "herdr-workflows"
+	}
+	if env == nil {
+		env = map[string]string{}
+	}
+	call := map[string]any{
+		"plugin_id":  pluginID,
+		"entrypoint": entrypoint,
+		"placement":  "popup",
+		"focus":      true,
+		"env":        env,
+	}
+	if v := popupSize(width); v != nil {
+		call["width"] = v
+	}
+	if v := popupSize(height); v != nil {
+		call["height"] = v
+	}
+	_, err := HerdrCall("plugin.pane.open", call)
+	return err
+}
+
+// popupSize keeps a cell count as an integer and a percent as a string. These
+// are the two shapes that PopupSize accepts. Other values use the manifest default.
+func popupSize(value string) any {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	if cells, err := strconv.Atoi(value); err == nil {
+		return cells
+	}
+	if strings.HasSuffix(value, "%") {
+		return value
+	}
+	return nil
+}
+
+// NotificationShow sends a herdr notification with the CLI.
 func NotificationShow(title string, body ...string) error {
 	args := []string{"notification", "show", title}
 	if len(body) > 0 && body[0] != "" {
 		args = append(args, "--body", body[0])
 	}
-	res, err := herdrCli(args)
+	res, err := herdrCLI(args)
 	if err != nil {
 		return err
 	}
@@ -105,7 +149,7 @@ type agentInfo struct {
 }
 
 func agentGet(target string) (*agentInfo, error) {
-	res, err := herdrCli([]string{"agent", "get", target})
+	res, err := herdrCLI([]string{"agent", "get", target})
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +174,7 @@ func agentGet(target string) (*agentInfo, error) {
 	return parsed.Result.Agent, nil
 }
 
-// AgentStatus reports the connected agent's status string.
+// AgentStatus gives the status string of the connected agent.
 func AgentStatus(target string) (string, error) {
 	info, err := agentGet(target)
 	if err != nil {
@@ -147,7 +191,7 @@ func AgentStatus(target string) (string, error) {
 	return status, nil
 }
 
-// AgentSessionInfo is the native agent session an extractor consumes.
+// AgentSessionInfo is the native agent session that an extractor uses.
 type AgentSessionInfo struct {
 	Agent       string
 	SessionID   string
@@ -155,7 +199,7 @@ type AgentSessionInfo struct {
 	Cwd         string
 }
 
-// GetAgentSessionInfo resolves the agent identity and session for a pane.
+// GetAgentSessionInfo finds the agent identity and session for a pane.
 func GetAgentSessionInfo(paneID string) (AgentSessionInfo, error) {
 	info, err := agentGet(paneID)
 	if err != nil {
@@ -179,8 +223,8 @@ func GetAgentSessionInfo(paneID string) (AgentSessionInfo, error) {
 	return out, nil
 }
 
-// ReportToken publishes a report-metadata token through the CLI. A nil value
-// clears the token; an empty string publishes an empty one.
+// ReportToken publishes a report-metadata token with the CLI. A nil value
+// removes the token. An empty string publishes an empty token.
 func ReportToken(paneID string, value *string) error {
 	args := []string{"pane", "report-metadata", paneID, "--source", "herdr-workflows"}
 	if value == nil {
@@ -188,7 +232,7 @@ func ReportToken(paneID string, value *string) error {
 	} else {
 		args = append(args, "--token", "herdr-workflows="+*value, "--ttl-ms", "600000")
 	}
-	res, err := herdrCli(args)
+	res, err := herdrCLI(args)
 	if err != nil {
 		return err
 	}
@@ -203,8 +247,8 @@ var (
 	protocolChecked   bool
 )
 
-// EnsureHerdrProtocol performs the one-shot startup check against the
-// connected herdr, no-oping when no socket is configured.
+// EnsureHerdrProtocol does the one-shot startup check of the connected herdr.
+// If no socket is configured, the function does nothing.
 func EnsureHerdrProtocol() error {
 	protocolCheckedMu.Lock()
 	defer protocolCheckedMu.Unlock()
@@ -226,17 +270,16 @@ func EnsureHerdrProtocol() error {
 	return nil
 }
 
-// ResetProtocolCheck clears the one-shot startup gate so each CLI invocation
-// in-process can observe a fresh ping.
+// ResetProtocolCheck sets the one-shot startup gate to the initial state.
+// Each CLI invocation in the same process can then receive a new ping.
 func ResetProtocolCheck() {
 	protocolCheckedMu.Lock()
 	defer protocolCheckedMu.Unlock()
 	protocolChecked = false
 }
 
-// PluginPaneOpenConsole opens the console entrypoint at tab, beside, or below.
-// beside maps to split/right; below maps to split/down.
-func PluginPaneOpenConsole(env map[string]string, open string) error {
+// PluginPaneOpenPlaced opens a plugin entrypoint at tab, beside, or below.
+func PluginPaneOpenPlaced(entrypoint, open string, env map[string]string) error {
 	params, err := consoleOpenParams(open)
 	if err != nil {
 		return err
@@ -250,7 +293,7 @@ func PluginPaneOpenConsole(env map[string]string, open string) error {
 	}
 	call := map[string]any{
 		"plugin_id":  pluginID,
-		"entrypoint": "console",
+		"entrypoint": entrypoint,
 		"placement":  params.placement,
 		"focus":      true,
 		"env":        env,

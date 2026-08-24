@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 )
 
-// InvocationContext carries the pane identity herdr injected for this run.
+// InvocationContext holds the pane identity that herdr injected for this run.
 type InvocationContext struct {
 	WorkspaceID  string
 	TabID        string
@@ -23,13 +23,12 @@ type ctxJSON struct {
 	FocusedPaneCwd string `json:"focused_pane_cwd"`
 	PaneID         string `json:"pane_id"`
 	SelectedText   string `json:"selected_text"`
-	Cwd            string `json:"cwd"`
+	WorkspaceCwd   string `json:"workspace_cwd"`
 	Worktree       struct {
-		Path string `json:"path"`
+		CheckoutPath string `json:"checkout_path"`
 	} `json:"worktree"`
 	Workspace struct {
 		WorkspaceID string `json:"workspace_id"`
-		Cwd         string `json:"cwd"`
 	} `json:"workspace"`
 	Tab struct {
 		TabID string `json:"tab_id"`
@@ -59,21 +58,25 @@ func readInvocationContext(getenv Env) InvocationContext {
 		WorkspaceID:  firstNonEmpty(env("HERDR_WORKSPACE_ID"), injected.WorkspaceID, injected.Workspace.WorkspaceID),
 		TabID:        firstNonEmpty(env("HERDR_TAB_ID"), injected.TabID, injected.Tab.TabID),
 		PaneID:       firstNonEmpty(env("HERDR_PANE_ID"), injected.FocusedPaneID, injected.PaneID, injected.Pane.PaneID),
-		WorktreePath: injected.Worktree.Path,
+		WorktreePath: injected.Worktree.CheckoutPath,
 		Selection:    injected.SelectedText,
-		Cwd:          firstNonEmpty(injected.Worktree.Path, injected.FocusedPaneCwd, injected.Cwd, injected.Workspace.Cwd, cwd),
+		Cwd:          firstNonEmpty(injected.Worktree.CheckoutPath, injected.FocusedPaneCwd, injected.WorkspaceCwd, cwd),
 	}
 }
 
-// ResolveRepoRoot walks up from start looking for .git or .hwf.
+// ResolveRepoRoot finds .git in parent directories from start, or .hwf that is
+// not in the home directory. .hwf is the global directory of the plugin.
 func ResolveRepoRoot(start string) string {
+	home, _ := HomeDir(nil)
 	dir := start
 	for {
 		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
 			return dir
 		}
-		if _, err := os.Stat(filepath.Join(dir, ".hwf")); err == nil {
-			return dir
+		if dir != home {
+			if _, err := os.Stat(filepath.Join(dir, ".hwf")); err == nil {
+				return dir
+			}
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
@@ -90,7 +93,7 @@ type AppContext struct {
 	Ctx      InvocationContext
 }
 
-// LoadOptions tune LoadContext.
+// LoadOptions holds parameters for LoadContext.
 type LoadOptions struct {
 	Start          string
 	RepoRoot       string
@@ -98,7 +101,7 @@ type LoadOptions struct {
 	Env            Env
 }
 
-// LoadContext resolves config layers, repo root, and invocation context once.
+// LoadContext finds config layers, repo root, and invocation context one time.
 func LoadContext(opts LoadOptions) (AppContext, error) {
 	env := envOr(opts.Env)
 	invocation := readInvocationContext(env)

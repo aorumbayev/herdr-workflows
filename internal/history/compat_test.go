@@ -1,28 +1,21 @@
 package history
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
 func TestRealInstallSnapshotReadsUnmodified(t *testing.T) {
-	// Fixture is a run snapshot from a real install, with checkout_root
-	// replaced by a neutral path.
+	// The fixture is a run snapshot from an install. checkout_root
+	// is a neutral path.
 	raw, err := os.ReadFile(filepath.Join("testdata", "ts-snapshot.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	state := t.TempDir()
 	if err := os.Chmod(state, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	runs := filepath.Join(state, "runs")
-	if err := os.Mkdir(runs, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(runs, "5da1aa28-f1c3-410f-9cfc-e6ecd75c356e.json")
-	if err := os.WriteFile(path, raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	getenv := func(key string) string {
@@ -32,6 +25,24 @@ func TestRealInstallSnapshotReadsUnmodified(t *testing.T) {
 		return os.Getenv(key)
 	}
 	id := "5da1aa28-f1c3-410f-9cfc-e6ecd75c356e"
+	var v any
+	if err := json.Unmarshal(raw, &v); err != nil {
+		t.Fatal(err)
+	}
+	parsed, ok := parseSnapshotValue(v)
+	if !ok {
+		t.Fatal("fixture is not a snapshot")
+	}
+	if err := insertClaim(parsed, getenv); err != nil {
+		t.Fatal(err)
+	}
+	leftover := filepath.Join(legacyRunsDir(getenv), id+".json")
+	if err := os.MkdirAll(filepath.Dir(leftover), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(leftover, []byte(`{"version":1,"id":"`+id+`","workflow":"ignored"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	snap, err := ReadSnapshot(id, getenv)
 	if err != nil || snap == nil {
 		t.Fatalf("read err=%v snap=%v", err, snap)

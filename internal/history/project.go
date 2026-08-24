@@ -7,12 +7,16 @@ import (
 )
 
 func ProjectStatus(snap Snapshot, now time.Time) string {
-	if snap.Status == string(engine.StatusSucceeded) ||
-		snap.Status == string(engine.StatusFailed) ||
-		snap.Status == string(engine.StatusInterrupted) {
-		return snap.Status
+	return projectStatus(snap.Status, snap.HeartbeatAt, now)
+}
+
+func projectStatus(status, heartbeatAt string, now time.Time) string {
+	if status == string(engine.StatusSucceeded) ||
+		status == string(engine.StatusFailed) ||
+		status == string(engine.StatusInterrupted) {
+		return status
 	}
-	hb, ok := parseISOTime(snap.HeartbeatAt)
+	hb, ok := parseISOTime(heartbeatAt)
 	if !ok || now.Sub(hb) >= StaleAfter {
 		return "stale"
 	}
@@ -100,13 +104,17 @@ func progressOf(snap Snapshot) *Progress {
 }
 
 func elapsedMs(snap Snapshot, status string, now time.Time) int64 {
-	started, ok := parseISOTime(snap.StartedAt)
+	return elapsedMsBetween(snap.StartedAt, snap.FinishedAt, status, now)
+}
+
+func elapsedMsBetween(startedAt, finishedAt, status string, now time.Time) int64 {
+	started, ok := parseISOTime(startedAt)
 	if !ok {
 		return 0
 	}
 	end := started
-	if snap.FinishedAt != "" {
-		if finished, ok := parseISOTime(snap.FinishedAt); ok {
+	if finishedAt != "" {
+		if finished, ok := parseISOTime(finishedAt); ok {
 			end = finished
 		}
 	} else if status == "running" || status == "stale" {

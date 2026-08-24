@@ -27,9 +27,9 @@ type captureOptions struct {
 	timeoutMs int
 }
 
-// captureBudget caps the combined stdout and stderr byte count, discarding
-// output past the limit instead of buffering it. os/exec copies each stream
-// from its own goroutine, so the shared counters are mutex-guarded.
+// captureBudget is the maximum combined stdout and stderr byte count. It discards
+// output that is more than the limit. os/exec copies each stream from its own
+// goroutine, so a mutex controls access to the shared counters.
 type captureBudget struct {
 	mu       sync.Mutex
 	limit    int
@@ -60,7 +60,7 @@ func (w *streamWriter) Write(p []byte) (int, error) {
 }
 
 // captureCommand runs argv with a timeout and a shared capture byte budget.
-// The transcript cap bounds how much extractor output is retained.
+// The transcript cap is the maximum extractor output that is kept.
 func captureCommand(argv []string, opts captureOptions) (captureResult, error) {
 	ctx := context.Background()
 	var cancel context.CancelFunc
@@ -83,7 +83,7 @@ func captureCommand(argv []string, opts captureOptions) (captureResult, error) {
 	exitCode := 0
 	if runErr != nil {
 		var exitErr *exec.ExitError
-		// A timeout kills the child, so ExitCode reports -1 through this branch.
+		// A timeout kills the child, so ExitCode is -1 in this branch.
 		if !errors.As(runErr, &exitErr) {
 			return captureResult{}, runErr
 		}

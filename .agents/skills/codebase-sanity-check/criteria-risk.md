@@ -5,7 +5,7 @@ do not report it as a vulnerability. Report where a **rail the product promises*
 where data leaks across a boundary, or where a cap fails open. Then, on a branch, report the ways a
 change made the repository weaker than it was.
 
-**Sections 1 to 6 always run. Sections 7 to 11 run in `branch` scope only**, because each compares a
+**Sections 1 to 5 always run. Sections 6 to 10 run in `branch` scope only**, because each compares a
 diff against what was asked. Skip them when there is no diff.
 
 **Boundary:** a rail with no enforcing site at all is Group B. You own the case where the rail exists
@@ -66,7 +66,7 @@ is a data-integrity defect, not a graceful degradation.
 
 ### What to check
 
-- A token, cookie, or credential reaching the run log, a transcript capture, a workbench response,
+- A token, cookie, or credential reaching the run log, a transcript capture,
   or a notification
 - Environment dumped wholesale into a log or a child process
 - A secret in a shareable artifact, such as a shared or exported workflow
@@ -75,7 +75,7 @@ is a data-integrity defect, not a graceful degradation.
 ### How to measure
 
 - `rg -in "token|secret|password|api[_-]?key|authorization|bearer" internal` and classify each as read, store, or emit. Only emits are findings. Credential ACL helpers in
-  `internal/credentials/` own private credential checks (including the workbench token path), so judge
+  `internal/credentials/` own private credential checks, so judge
   their file mode and callers, never their existence
 - Read `internal/history/` and `internal/transcript/` and name exactly what they write
 - For any credential file, require restrictive creation mode and a refusal to follow symlinks:
@@ -84,26 +84,7 @@ is a data-integrity defect, not a graceful degradation.
 - Read `internal/workflow/exchange.go` and `internal/workflow/inputs.go` and name exactly what a shared,
   exported, or `--launch-payload` workflow carries
 
-## 4. Web workbench surface
-
-### What to check
-
-- Bind address and whether the server is reachable off the machine
-- Path traversal in any route reading or writing a file, including `.hwf/` writes and imports
-- HTML or attribute injection in `embed/page.html` from workflow names, inputs, or errors
-- A route that runs anything, when the documented contract says the workbench does not run workflows
-- Missing origin or method checks on state-changing routes
-
-### How to measure
-
-- `rg -n "Listen|127\.0\.0\.1|0\.0\.0\.0|:port" internal/workbench`
-- For each route in `internal/workbench/`, list the file paths it can touch and the normalization
-  applied. Cite the line that joins user input into a path
-- `rg -n "innerHTML|insertAdjacentHTML|outerHTML|document\.write" embed/page.html`
-- Compare the route table against the documented surface in `docs/surfaces.md`. A route the docs do
-  not mention is a finding in one of the two
-
-## 5. Install, update, and release path
+## 4. Install, update, and release path
 
 ### What to check
 
@@ -121,7 +102,7 @@ is a data-integrity defect, not a graceful degradation.
 - `rg -n "uses:" .github/workflows/*.yml` and flag any tag-only pin
 - Read the update path in `internal/update/` and `internal/cli/update.go` and name the version comparison and what happens on mismatch
 
-## 6. Dependency supply chain
+## 5. Dependency supply chain
 
 Read `go.mod` and `docs/package.json`. Go module versions should be explicit. `golangci-lint run` already reports unused symbols — quote it
 rather than re-deriving it. What it cannot see is a runtime dependency reached from one site with a
@@ -135,7 +116,7 @@ branch claims to complete — the pull request body, the OpenSpec change under `
 the commit messages. Pre-existing problems in unchanged code are out of scope. A change that newly
 breaks unchanged code is in scope.
 
-## 7. Check weakening (branch only)
+## 6. Check weakening (branch only)
 
 The most expensive copout, because it converts a caught defect into an uncaught one.
 
@@ -169,7 +150,7 @@ judge it.
 - An ignore covering a generated file whose generator is itself checked. Group B section 10 owns that
   judgment. Defer to it rather than flagging the ignore twice with opposite verdicts
 
-## 8. Scope escape (branch only)
+## 7. Scope escape (branch only)
 
 ### What to check
 
@@ -190,7 +171,7 @@ judge it.
 - An item the change document lists under non-goals
 - A deliberate placeholder the change document designs, such as a hook awaiting a separate API task
 
-## 9. Deflection (branch only)
+## 8. Deflection (branch only)
 
 ### What to check
 
@@ -207,7 +188,7 @@ judge it.
 
 - A genuine pre-existing issue filed for follow-up, provided the current task's own criteria are met
 
-## 10. Partial completion (branch only)
+## 9. Partial completion (branch only)
 
 ### What to check
 
@@ -229,7 +210,7 @@ judge it.
 
 - A generated artifact that Phase 0 regeneration produced no diff for
 
-## 11. Defer language and process shortcuts (branch only)
+## 10. Defer language and process shortcuts (branch only)
 
 ### What to check
 

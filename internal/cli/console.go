@@ -38,7 +38,7 @@ func runConsole(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	code, err := console.RunScreen(console.ScreenOpts{
+	code, err := console.RunScreen(console.Options{
 		Entries:  entries,
 		RepoRoot: app.RepoRoot,
 		Config:   app.Config,
@@ -65,7 +65,7 @@ func openConsolePane(placement console.Placement) error {
 	if v := os.Getenv("HERDR_PLUGIN_CONTEXT_JSON"); v != "" {
 		env["HERDR_PLUGIN_CONTEXT_JSON"] = v
 	}
-	if err := host.PluginPaneOpenConsole(env, string(placement)); err != nil {
+	if err := host.PluginPaneOpenPlaced("console", string(placement), env); err != nil {
 		var herdr *host.HerdrError
 		if errors.As(err, &herdr) && herdr.Code == "ui_busy" {
 			_ = host.NotificationShow("herdr-workflows", "Another popup is open — close it first.")

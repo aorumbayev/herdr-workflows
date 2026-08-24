@@ -104,8 +104,8 @@ steps:
 
 ## Existing-agent target
 
-Requires an already-running agent that is idle or done. A busy invoking pane fails preflight —
-warn the user before saving this pattern.
+Requires an existing agent that is idle or done. If the pane that invokes the workflow is busy,
+preflight fails. Warn the user before you save this pattern.
 
 ```yaml
 version: v1alpha1
@@ -154,8 +154,8 @@ steps:
 
 ## Guarded input
 
-An input with `when:` only prompts when the guard holds, and every step referencing it needs the
-same guard. Step ids are `[a-z][a-z0-9_]{0,31}` — no hyphens.
+An input with `when:` only prompts when the guard holds, and every step that references it needs
+the same guard. Step ids are `[a-z][a-z0-9_]{0,31}` — no hyphens.
 
 ```yaml
 version: v1alpha1
@@ -179,7 +179,7 @@ steps:
 
 ## Capture before jq
 
-A pipeline reports only the last command's exit status, and `jq` exits 0 on empty input, so
+A pipeline reports only the last command's exit status, and `jq` exits 0 on empty input. So
 `herdr … | jq` hides a herdr failure behind empty output. Capture the output into a variable
 first, in `run:` steps and in dynamic-choice option commands: a herdr failure then aborts the
 command and its stderr reaches the user.

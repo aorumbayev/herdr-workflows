@@ -1,58 +1,19 @@
 package picker
 
 import (
-	"os"
-	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-var (
-	modeRunIdent = regexp.MustCompile(`\bmodeRun\b`)
-	runHintIdent = regexp.MustCompile(`\bRunHint\b`)
-)
-
-func TestNoModeRunResidue(t *testing.T) {
-	for _, name := range []string{"model.go", "view.go"} {
-		src, err := os.ReadFile(name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if modeRunIdent.Match(src) {
-			t.Fatalf("%s still names dead modeRun (never assigned; launch uses modeRuns)", name)
-		}
-	}
-}
-
-func TestNoRunHintResidue(t *testing.T) {
-	src, err := os.ReadFile("../tui/chrome.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if runHintIdent.Match(src) {
-		t.Fatal("tui.RunHint must not exist (only served dead picker modeRun)")
-	}
-}
-
-func TestNoCustomChoiceValueResidue(t *testing.T) {
-	src, err := os.ReadFile("input.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if regexp.MustCompile(`\b(CustomChoiceValue|IsCustomChoiceValue)\b`).Match(src) {
-		t.Fatal("CustomChoiceValue/IsCustomChoiceValue must not exist (tests-only; production never tags custom choice values)")
-	}
-}
-
 func TestAcceptLaunchNeverLeavesModeRun(t *testing.T) {
-	entry := workflow.WorkflowListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml", Title: "Plain"}
+	entry := workflow.ListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml", Title: "Plain"}
 	m := New(Options{
-		Entries:  []workflow.WorkflowListEntry{entry},
+		Entries:  []workflow.ListEntry{entry},
 		Width:    80,
 		RepoRoot: t.TempDir(),
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
 				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},

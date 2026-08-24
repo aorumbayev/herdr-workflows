@@ -491,7 +491,7 @@ steps:
 	}
 }
 
-// Go-only: cycle-5 decision — Recorder is required; no history fallback.
+// Go-only: cycle-5 decision. Recorder is required. There is no history substitute.
 func TestNilRecorderRequired(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

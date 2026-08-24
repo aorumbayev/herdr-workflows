@@ -46,7 +46,6 @@ func listenE2EPing(t *testing.T, protocol int, version string) string {
 			}(conn)
 		}
 	}()
-	time.Sleep(10 * time.Millisecond)
 	return sockPath
 }
 
@@ -88,7 +87,7 @@ func TestCompiledBinaryPickerEmbedsWithoutTSHooks(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := string(data)
-	for _, want := range []string{"picker requires a tty", "tab runs | enter run | ctrl+k | esc"} {
+	for _, want := range []string{"picker requires a tty", "tab | enter run | ctrl+k | esc"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("missing %q", want)
 		}

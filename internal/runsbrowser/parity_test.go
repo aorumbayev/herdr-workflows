@@ -1,6 +1,9 @@
 package runsbrowser
 
 import (
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -10,10 +13,50 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 )
 
-// Spec scenarios owned by runsbrowser.ParityBaseline (picker-presentation Runs requirements).
+var testFuncDecl = regexp.MustCompile(`(?m)^func (Test\w+)\(`)
+
+func loadPackageTestFuncs(dirs ...string) map[string]struct{} {
+	out := make(map[string]struct{})
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), "_test.go") {
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+			if err != nil {
+				continue
+			}
+			for _, m := range testFuncDecl.FindAllSubmatch(data, -1) {
+				out[string(m[1])] = struct{}{}
+			}
+		}
+	}
+	return out
+}
+
+func coveringTestExists(name string, own map[string]struct{}, external map[string]map[string]struct{}) bool {
+	if pkg, fn, ok := strings.Cut(name, "."); ok {
+		funcs, found := external[pkg]
+		if !found {
+			return false
+		}
+		_, ok := funcs[fn]
+		return ok
+	}
+	_, ok := own[name]
+	return ok
+}
+
+// Spec scenarios that runsbrowser.ParityBaseline owns (picker-presentation Runs requirements).
 // openspec/specs/picker-presentation/spec.md
 var requiredRunsParityScenarios = []string{
 	"More than six runs",
+	"Tall host shows more runs",
+	"Run detail fills the host",
 	"Narrow popup",
 	"Interrupted run",
 	"Toggle all worktrees",
@@ -21,7 +64,10 @@ var requiredRunsParityScenarios = []string{
 	"Search a short displayed ID",
 	"Inspect a successful run",
 	"Inspect an active run",
+	"Inspect a failed run",
 	"Inspect a tolerated failure",
+	"Send back the failed step",
+	"Choose an agent pane",
 	"Return from detail",
 	"No current runs",
 	"No machine runs",
@@ -30,6 +76,11 @@ var requiredRunsParityScenarios = []string{
 
 func TestParityBaselineCoversSpecScenarios(t *testing.T) {
 	// openspec/specs/picker-presentation/spec.md Runs requirements
+	ownTests := loadPackageTestFuncs(".")
+	externalTests := map[string]map[string]struct{}{
+		"tui":    loadPackageTestFuncs("../tui"),
+		"picker": loadPackageTestFuncs("../picker"),
+	}
 	byScenario := make(map[string]ParitySurface, len(ParityBaseline()))
 	for _, row := range ParityBaseline() {
 		if row.Scenario == "" {
@@ -51,6 +102,8 @@ func TestParityBaselineCoversSpecScenarios(t *testing.T) {
 		}
 		if row.CoveringTest == "" {
 			t.Errorf("scenario %q missing CoveringTest", scenario)
+		} else if !coveringTestExists(row.CoveringTest, ownTests, externalTests) {
+			t.Errorf("scenario %q CoveringTest %q does not exist", row.Scenario, row.CoveringTest)
 		}
 		if row.Spec == "" || row.Requirement == "" || row.Kind == "" {
 			t.Errorf("scenario %q incomplete metadata: %+v", scenario, row)
@@ -78,19 +131,19 @@ func TestParityMoreThanSixRunsScrollsViewport(t *testing.T) {
 	if len(m.state.Items) != 8 {
 		t.Fatalf("items = %d", len(m.state.Items))
 	}
-	if listViewportRows(m.View().Content) != ListViewport {
-		t.Fatalf("visible rows = %d, want %d\n%s", listViewportRows(m.View().Content), ListViewport, m.View().Content)
+	if listViewportRows(m.View().Content) != tui.ListViewport {
+		t.Fatalf("visible rows = %d, want %d\n%s", listViewportRows(m.View().Content), tui.ListViewport, m.View().Content)
 	}
 	if strings.Contains(m.View().Content, "| g |") || strings.Contains(m.View().Content, "| h |") {
 		t.Fatalf("rows beyond viewport leaked:\n%s", m.View().Content)
 	}
 	m = apply(m, "down", "down", "down", "down", "down", "down")
 	body := m.View().Content
-	if listViewportRows(body) != ListViewport {
+	if listViewportRows(body) != tui.ListViewport {
 		t.Fatalf("scrolled visible = %d\n%s", listViewportRows(body), body)
 	}
 	if !strings.Contains(body, "| g |") && !strings.Contains(body, " g ") {
-		// workflow field is the name; status | name | elapsed
+		// Workflow field is the name. Layout is status | name | elapsed.
 		if !strings.Contains(body, "g |") {
 			t.Fatalf("cursor past viewport must reveal later run:\n%s", body)
 		}
@@ -111,7 +164,7 @@ func listViewportRows(body string) int {
 		i++
 	}
 	n := 0
-	for j := 0; j < ListViewport && i < len(lines); j++ {
+	for j := 0; j < tui.ListViewport && i < len(lines); j++ {
 		if strings.Contains(tui.StripContentPadding(lines[i]), "----") {
 			break
 		}
@@ -209,5 +262,22 @@ func TestParityWindowSizeRecomputesRunsWidth(t *testing.T) {
 		if tui.Columns(line) > 40 {
 			t.Fatalf("line wider than width: %q", line)
 		}
+	}
+}
+
+func TestRunsViewportGrowsWithHostHeight(t *testing.T) {
+	// openspec picker-presentation: run rows fill the host above the six-row minimum.
+	checkout := t.TempDir()
+	m, _ := modelWithRuns(t, checkout, "a", "b", "c", "d", "e", "f", "g", "h")
+	if m.listViewport() != tui.ListViewport {
+		t.Fatalf("unknown height viewport = %d, want the floor %d", m.listViewport(), tui.ListViewport)
+	}
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	m = next.(Model)
+	if m.listViewport() <= tui.ListViewport {
+		t.Fatalf("tall host viewport = %d, want more than %d", m.listViewport(), tui.ListViewport)
+	}
+	if !strings.Contains(m.View().Content, "h |") {
+		t.Fatalf("tall host must show every run without scrolling:\n%s", m.View().Content)
 	}
 }

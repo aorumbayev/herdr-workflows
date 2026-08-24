@@ -14,8 +14,8 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-func TestBuildPickerScreenOptsWiresLiveHooks(t *testing.T) {
-	opts := buildPickerScreenOpts(config.AppContext{RepoRoot: t.TempDir()}, nil)
+func TestBuildPickerOptionsWiresLiveHooks(t *testing.T) {
+	opts := buildPickerOptions(config.AppContext{RepoRoot: t.TempDir()}, nil)
 	if opts.EditWorkflow != nil {
 		t.Fatal("live EditWorkflow must stay nil so the picker uses tea.ExecProcess")
 	}
@@ -42,7 +42,7 @@ func TestBuildPickerScreenOptsWiresLiveHooks(t *testing.T) {
 	}
 }
 
-func TestBuildPickerScreenOptsExportShareCommand(t *testing.T) {
+func TestBuildPickerOptionsExportShareCommand(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, ".hwf", "workflows")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -52,8 +52,8 @@ func TestBuildPickerScreenOptsExportShareCommand(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "demo.yaml"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	opts := buildPickerScreenOpts(config.AppContext{RepoRoot: root}, nil)
-	cmd, err := opts.ExportShare(workflow.WorkflowListEntry{Name: "demo", Source: "repo"})
+	opts := buildPickerOptions(config.AppContext{RepoRoot: root}, nil)
+	cmd, err := opts.ExportShare(workflow.ListEntry{Name: "demo", Source: "repo"})
 	if err != nil {
 		t.Fatalf("ExportShare: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestCompiledBinaryPickerServesWithoutTSRuntime(t *testing.T) {
 	for _, want := range []string{
 		"picker requires a tty",
 		"Open the workflow picker popup",
-		"tab runs | enter run | ctrl+k | esc",
+		"tab | enter run | ctrl+k | esc",
 		"filter workflows...",
 	} {
 		if !strings.Contains(body, want) {

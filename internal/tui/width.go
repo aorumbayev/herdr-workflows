@@ -25,15 +25,15 @@ const ColumnGutter = 2
 // WarningWidth is the single-cell warning marker column.
 const WarningWidth = 1
 
-// LocationWidth is the right-aligned location column.
+// LocationWidth is the location column aligned on the right.
 const LocationWidth = 7
 
-// Columns returns the terminal cell width of s.
+// Columns gives the terminal cell width of s.
 func Columns(s string) int {
 	return ansi.StringWidth(s)
 }
 
-// Truncate shortens s to max cells, appending Ellipsis when it does not fit.
+// Truncate shortens s to max cells and adds Ellipsis when it does not fit.
 func Truncate(s string, max int) string {
 	if Columns(s) <= max {
 		return s
@@ -48,7 +48,7 @@ func Truncate(s string, max int) string {
 	return ansi.Truncate(s, max, Ellipsis)
 }
 
-// PadColumns right-pads s with spaces to width cells.
+// PadColumns adds spaces on the right of s until the width in cells.
 func PadColumns(s string, width int) string {
 	used := Columns(s)
 	if used >= width {
@@ -57,7 +57,7 @@ func PadColumns(s string, width int) string {
 	return s + strings.Repeat(" ", width-used)
 }
 
-// PadHeight adds blank lines until a naive line split of s has at least height lines.
+// PadHeight adds blank lines until a line split of s has at least height lines.
 // Bubble Tea does not clear unused TTY rows. The pad stops prior-frame ghost rows.
 func PadHeight(s string, height int) string {
 	if height <= 0 {
@@ -70,8 +70,17 @@ func PadHeight(s string, height int) string {
 	return s + strings.Repeat("\n", height-n)
 }
 
-// ListViewport is the fixed six-row Select height shared by picker and runs browser.
+// ListViewport is the six-row floor shared by picker and runs browser.
 const ListViewport = 6
+
+// FitViewport gives a scrolling body the unused chrome rows, never fewer than min.
+// An unknown height uses min.
+func FitViewport(height, chrome, min int) int {
+	if height <= 0 {
+		return min
+	}
+	return max(min, height-chrome)
+}
 
 // ContentWidth is the inner chrome width for a popup of the given terminal columns.
 func ContentWidth(width int) int {
@@ -81,7 +90,7 @@ func ContentWidth(width int) int {
 	return width - 2*ChromePaddingX
 }
 
-// PadContent applies one-cell horizontal padding to every line.
+// PadContent adds one-cell horizontal padding on every line.
 func PadContent(body string, contentWidth int) string {
 	if body == "" {
 		return ""
@@ -111,13 +120,13 @@ func StripChromePadding(line string) string {
 	return line
 }
 
-// StripContentPadding removes popup inset and line-fill spaces used by PadContentLine.
+// StripContentPadding removes popup inset and line-fill spaces that PadContentLine adds.
 func StripContentPadding(line string) string {
 	return strings.TrimRight(StripChromePadding(line), " ")
 }
 
-// ClampListWindow keeps cursor inside [0, n) and scrolls offset so cursor stays
-// visible inside a viewport-tall window. Empty lists reset both to 0.
+// ClampListWindow keeps cursor in [0, n) and moves offset so the cursor stays
+// visible in a viewport-tall window. Empty lists set both to 0.
 func ClampListWindow(cursor, offset, n, viewport int) (int, int) {
 	if n <= 0 {
 		return 0, 0
@@ -159,7 +168,7 @@ func takeWrappedLine(text string, budget int) string {
 	return window
 }
 
-// FormatDetailBlock wraps detail text onto two fixed rows.
+// FormatDetailBlock puts detail text on two fixed rows.
 func FormatDetailBlock(description string, contentWidth int) string {
 	detail := FormatDetailLines(description, contentWidth)
 	lines := strings.Split(detail, "\n")
@@ -172,7 +181,7 @@ func FormatDetailBlock(description string, contentWidth int) string {
 	return strings.Join(lines, "\n")
 }
 
-// FormatDetailLines wraps a description onto at most two indented lines.
+// FormatDetailLines puts a description on two indented lines or fewer.
 func FormatDetailLines(description string, contentWidth int) string {
 	text := strings.Join(strings.Fields(description), " ")
 	if text == "" {
@@ -192,13 +201,13 @@ func FormatDetailLines(description string, contentWidth int) string {
 	return indent + line1 + "\n" + indent + line2
 }
 
-// FormatRule draws a muted horizontal rule under the list, inset on both sides.
+// FormatRule shows a muted horizontal rule under the list, inset on both sides.
 func FormatRule(contentWidth int) string {
 	field := max(0, contentWidth-2*RowTextIndent)
 	return strings.Repeat(" ", RowTextIndent) + strings.Repeat("-", field) + strings.Repeat(" ", RowTextIndent)
 }
 
-// FormatListFooter places hint on the left and index/total on the right.
+// FormatListFooter puts hint on the left and index/total on the right.
 func FormatListFooter(contentWidth, selectedIndex, total int, hint string) string {
 	if total == 0 {
 		return Truncate(hint, contentWidth)

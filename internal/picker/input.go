@@ -8,8 +8,8 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-// FormatInputPrompt names the field and how to answer it.
-// When position and total are both greater than 0, the prompt adds a 1-based collection ordinal.
+// FormatInputPrompt names the field and the method that answers it.
+// When position and total are both more than 0, the prompt adds a 1-based collection ordinal.
 func FormatInputPrompt(spec workflow.InputSpec, ordinal ...int) string {
 	label := spec.Name
 	if desc := strings.TrimSpace(spec.Description); desc != "" {
@@ -89,7 +89,7 @@ func FilterChoiceOptions(options []string, filter string) []string {
 	return out
 }
 
-// ShouldRestoreCustomChoiceText is true when backtrack should seed the custom field.
+// ShouldRestoreCustomChoiceText is true when a backtrack must put the custom value in the field.
 func ShouldRestoreCustomChoiceText(hasAnswer bool, answer string, options []string, allowCustom bool) bool {
 	if !hasAnswer || !allowCustom {
 		return false

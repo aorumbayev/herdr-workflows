@@ -51,7 +51,7 @@ func TestDebugTabBodies(t *testing.T) {
 
 func TestModelWorkflowsListAndTabToRuns(t *testing.T) {
 	m := New(Options{
-		Entries: []workflow.WorkflowListEntry{
+		Entries: []workflow.ListEntry{
 			{Name: "alpha", Title: "Alpha", Source: "repo"},
 			{Name: "beta", Title: "Beta", Source: "global"},
 		},
@@ -77,7 +77,7 @@ func TestModelWorkflowsListAndTabToRuns(t *testing.T) {
 	m = next.(Model)
 	view = stripView(m.View())
 	if !strings.Contains(view, "Alpha") || !strings.Contains(strings.ToLower(view), "ok") && !strings.Contains(view, "succeeded") && !strings.Contains(view, "OK") {
-		// status may be abbreviated OK
+		// Status can be abbreviated OK.
 		if !strings.Contains(view, "Alpha") {
 			t.Fatalf("runs view = %q", view)
 		}

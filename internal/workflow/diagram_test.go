@@ -55,3 +55,33 @@ func TestProjectDiagramHandoff(t *testing.T) {
 		t.Fatalf("pane.close when[1] = %+v", paneClose.When[1])
 	}
 }
+
+func TestProjectDiagramDerivedRunAndAgentLabels(t *testing.T) {
+	repoRoot := t.TempDir()
+	body := `version: v1alpha1
+title: Labels
+steps:
+  - run: [git, status, --short]
+  - agent: |
+      hello prompt
+      extra
+  - run: "echo hi"
+`
+	def, err := ParseWorkflowText("labels", body, config.Config{}, repoRoot, "labels.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := ProjectDiagram(*def)
+	if len(d.Nodes) != 3 {
+		t.Fatalf("nodes = %d", len(d.Nodes))
+	}
+	if d.Nodes[0].Label != "git status --short" {
+		t.Fatalf("run argv label = %q", d.Nodes[0].Label)
+	}
+	if d.Nodes[1].Label != "hello prompt" {
+		t.Fatalf("agent label = %q", d.Nodes[1].Label)
+	}
+	if d.Nodes[2].Label != "" {
+		t.Fatalf("shell run label = %q, want empty", d.Nodes[2].Label)
+	}
+}

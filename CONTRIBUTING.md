@@ -22,7 +22,7 @@ Optional live link into herdr:
 go run ./scripts/install-dev
 ```
 
-Herdr runtime docs and schema live in a local checkout. Follow `.agents/references/AGENTS.md` to clone and update `.agents/references/herdr`.
+Herdr runtime docs and schema live in a local checkout. Use `.agents/references/AGENTS.md` to clone and update `.agents/references/herdr`.
 
 ## OpenSpec
 
@@ -55,7 +55,7 @@ Use the OpenSpec slash commands in your agent harness when available:
 3. Review the artifacts under `openspec/changes/<name>/`.
 4. `/opsx:apply` — implement against the tasks and the cited main specs.
 5. Run tests and checks (see [Checks](#checks)).
-6. `/opsx:archive` — archive the change so delta specs merge into the main specs on the feature branch. `openspec archive` also moves the change into `openspec/changes/archive/`. Delete that archived content in the same commit — main keeps no archived specs, and `verify:no-archive` fails the pre-commit gate while the folder holds anything. The pull request carries the main-spec updates only.
+6. `/opsx:archive` — archive the change so delta specs merge into the main specs on the feature branch. `openspec archive` also moves the change into `openspec/changes/archive/`. Delete that archived content in the same commit — main keeps no archived specs, and `verify:no-archive` fails the pre-commit gate when the folder holds anything. The pull request carries the main-spec updates only.
 
 You can drive the same steps with the `openspec` CLI by hand. Keep the root `openspec/` layout.
 
@@ -88,7 +88,7 @@ go tool verify -fast
 
 Test the Go package whose interface you changed.
 
-`go tool verify` fails while `openspec/changes/archive/` holds anything.
+`go tool verify` fails when `openspec/changes/archive/` holds anything.
 
 Pre-commit runs `go tool verify -fast`. CI runs `go tool verify` on Linux and macOS after it installs Node.js, golangci-lint, GoReleaser, and the OpenSpec CLI. Docs publish uses `npm ci && npm run build` in `docs/`.
 

@@ -11,12 +11,12 @@ import (
 type ChromeOption struct {
 	Name        string
 	Description string
-	Entry       workflow.WorkflowListEntry
+	Entry       workflow.ListEntry
 }
 
-// EntrySensitivity returns the compact trust labels for a catalog row.
-func EntrySensitivity(entry workflow.WorkflowListEntry) []string {
-	return workflow.SensitivityLabels(workflow.WorkflowSensitivity{
+// EntrySensitivity gives the compact trust labels for a catalog row.
+func EntrySensitivity(entry workflow.ListEntry) []string {
+	return workflow.SensitivityLabels(workflow.Sensitivity{
 		HasCommands:        entry.HasCommands,
 		HasTranscript:      entry.NeedsTranscript,
 		SensitiveMethods:   entry.SensitiveMethods,
@@ -25,20 +25,20 @@ func EntrySensitivity(entry workflow.WorkflowListEntry) []string {
 }
 
 // FormatConsentLine names the workflow, source, and sensitivity flags.
-func FormatConsentLine(entry workflow.WorkflowListEntry) string {
+func FormatConsentLine(entry workflow.ListEntry) string {
 	flags := EntrySensitivity(entry)
 	if len(flags) == 0 {
 		return ""
 	}
-	return workflow.WorkflowDisplayTitle(entry.Name, entry.Title) + tui.ChromeSep + entry.Source + tui.ChromeSep + strings.Join(flags, tui.ChromeSep)
+	return workflow.DisplayTitle(entry.Name, entry.Title) + tui.ChromeSep + entry.Source + tui.ChromeSep + strings.Join(flags, tui.ChromeSep)
 }
 
-// FormatPickerRowName lays out cursor, title, warning, and location columns.
+// FormatPickerRowName arranges the cursor, title, warning, and location columns.
 func FormatPickerRowName(title, location string, warned bool, rowWidth int, selected bool) string {
 	return tui.FormatRow(title, location, warned, rowWidth, selected)
 }
 
-func rowLocation(entry workflow.WorkflowListEntry) string {
+func rowLocation(entry workflow.ListEntry) string {
 	if entry.Source == "repo" {
 		return "repo"
 	}
@@ -46,7 +46,7 @@ func rowLocation(entry workflow.WorkflowListEntry) string {
 }
 
 // BuildPickerOptions formats valid catalog rows.
-func BuildPickerOptions(valid []workflow.WorkflowListEntry, rowWidth int) []ChromeOption {
+func BuildPickerOptions(valid []workflow.ListEntry, rowWidth int) []ChromeOption {
 	out := make([]ChromeOption, 0, len(valid))
 	for _, entry := range valid {
 		desc := strings.TrimSpace(entry.Description)
@@ -55,7 +55,7 @@ func BuildPickerOptions(valid []workflow.WorkflowListEntry, rowWidth int) []Chro
 		}
 		out = append(out, ChromeOption{
 			Name: FormatPickerRowName(
-				workflow.WorkflowDisplayTitle(entry.Name, entry.Title),
+				workflow.DisplayTitle(entry.Name, entry.Title),
 				rowLocation(entry),
 				len(EntrySensitivity(entry)) > 0,
 				rowWidth,
@@ -78,12 +78,12 @@ func StripFilePrefix(errText, file string) string {
 }
 
 // BuildInvalidOptions formats load-failure rows with location `invalid`.
-func BuildInvalidOptions(invalid []workflow.WorkflowListEntry, rowWidth int) []ChromeOption {
+func BuildInvalidOptions(invalid []workflow.ListEntry, rowWidth int) []ChromeOption {
 	out := make([]ChromeOption, 0, len(invalid))
 	for _, entry := range invalid {
 		out = append(out, ChromeOption{
 			Name: FormatPickerRowName(
-				workflow.WorkflowDisplayTitle(entry.Name, entry.Title),
+				workflow.DisplayTitle(entry.Name, entry.Title),
 				"invalid",
 				len(EntrySensitivity(entry)) > 0,
 				rowWidth,

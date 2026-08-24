@@ -2,8 +2,6 @@ package history
 
 import (
 	"crypto/rand"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -80,18 +78,6 @@ func NormalizeRunUUID(raw string) (string, bool) {
 	return id, true
 }
 
-func RunsDir(getenv config.Env) string {
-	dir, err := config.PluginStateDir(getenv)
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(dir, "runs")
-}
-
-func SnapshotPath(id string, getenv config.Env) string {
-	return filepath.Join(RunsDir(getenv), id+".json")
-}
-
 func (w *Writer) Claim(meta ClaimMeta) ClaimResult {
 	var id string
 	if meta.ID != "" {
@@ -122,34 +108,14 @@ func (w *Writer) Claim(meta ClaimMeta) ClaimResult {
 		HeartbeatAt:  started,
 		Steps:        []StepRecord{},
 	}
-	if err := w.ensureRunsDir(); err != nil {
-		return ClaimResult{OK: true, State: "unavailable", ID: id}
-	}
-	path := SnapshotPath(id, w.getenv)
-	body, err := json.Marshal(snap)
-	if err != nil {
-		return ClaimResult{OK: true, State: "unavailable", ID: id}
-	}
-	body = append(body, '\n')
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		if errors.Is(err, os.ErrExist) {
+	if err := insertClaim(snap, w.getenv); err != nil {
+		if isUniqueConstraint(err) {
 			return ClaimResult{
 				State: "rejected",
 				Error: fmt.Sprintf("run identity '%s' is already claimed", id),
 				ID:    id,
 			}
 		}
-		return ClaimResult{OK: true, State: "unavailable", ID: id}
-	}
-	_, writeErr := f.Write(body)
-	closeErr := f.Close()
-	if writeErr != nil || closeErr != nil {
-		_ = os.Remove(path)
-		return ClaimResult{OK: true, State: "unavailable", ID: id}
-	}
-	if err := credentials.AssertPrivateCredentialFile(path, historyACLOpts()); err != nil {
-		_ = os.Remove(path)
 		return ClaimResult{OK: true, State: "unavailable", ID: id}
 	}
 	w.mu.Lock()
@@ -167,7 +133,14 @@ type FinalizeOpts struct {
 }
 
 func (w *Writer) Touch() {
-	w.mutateLive(func(snap *Snapshot) {})
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if !w.available || w.snapshot == nil || w.snapshot.Status != "" {
+		return
+	}
+	at := nowISO()
+	w.snapshot.HeartbeatAt = at
+	_ = updateHeartbeat(w.snapshot.ID, at, w.getenv)
 }
 
 func (w *Writer) SetCurrentStep(step CurrentStep) {
@@ -221,59 +194,7 @@ func (w *Writer) persistUnlocked() {
 	if !w.available || w.snapshot == nil {
 		return
 	}
-	_ = writeSnapshotAtomic(*w.snapshot, w.getenv)
-}
-
-func writeSnapshotAtomic(snapshot Snapshot, getenv config.Env) error {
-	dir, err := ensureRunsDir(getenv)
-	if err != nil {
-		return err
-	}
-	path := SnapshotPath(snapshot.ID, getenv)
-	var rnd [6]byte
-	_, _ = rand.Read(rnd[:])
-	tmp := filepath.Join(dir, fmt.Sprintf(".%s.%x.tmp", snapshot.ID, rnd))
-	body, err := json.Marshal(snapshot)
-	if err != nil {
-		return err
-	}
-	body = append(body, '\n')
-	if err := os.WriteFile(tmp, body, 0o600); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	if err := credentials.AssertPrivateCredentialFile(tmp, historyACLOpts()); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	return credentials.AssertPrivateCredentialFile(path, historyACLOpts())
-}
-
-func ensureRunsDir(getenv config.Env) (string, error) {
-	state, err := config.PluginStateDir(getenv)
-	if err != nil {
-		return "", err
-	}
-	if err := credentials.AssertCredentialStoreSafe(state, historyACLOpts()); err != nil {
-		return "", err
-	}
-	dir := RunsDir(getenv)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", err
-	}
-	if err := credentials.AssertCredentialStoreSafe(dir, historyACLOpts()); err != nil {
-		return "", err
-	}
-	return dir, nil
-}
-
-func (w *Writer) ensureRunsDir() error {
-	_, err := ensureRunsDir(w.getenv)
-	return err
+	_ = persistRun(*w.snapshot, w.getenv)
 }
 
 func applyFailureExplanation(snap *Snapshot, text string) {

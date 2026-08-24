@@ -9,20 +9,49 @@ import (
 )
 
 func TestFormatAnnotationBundleHandoff(t *testing.T) {
-	fragments := map[string]string{
-		"brief": "- id: brief\n  agent: handoff writer\n",
-	}
-	got := FormatAnnotationBundle("Handoff", []string{"brief"}, fragments, "tighten the focus line")
+	got := FormatAnnotationBundle(AnnotationBundle{
+		Title:       "Handoff",
+		File:        "/repo/handoff.yaml",
+		Focus:       []string{"brief"},
+		AnchorKind:  "step",
+		AnchorID:    "brief",
+		Instruction: "tighten the focus line",
+	})
 	for _, want := range []string{
-		"Selected steps: brief",
-		"--- brief ---",
-		"id: brief",
+		"Workflow: Handoff",
+		"File: /repo/handoff.yaml",
+		"Skill: hwf skills show herdr-workflow-create",
+		"Anchor: step brief",
+		"Focus steps: brief",
 		"--- instruction ---",
 		"tighten the focus line",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("bundle missing %q:\n%s", want, got)
 		}
+	}
+	if strings.Contains(got, "agent:") {
+		t.Fatal("bundle must not include YAML fragments")
+	}
+}
+
+func TestFormatAnnotationBundleFailureOmitsOutput(t *testing.T) {
+	got := FormatAnnotationBundle(AnnotationBundle{
+		Title: "demo",
+		Focus: []string{"build"},
+		Failure: &FailureBlock{
+			Run: "abc", Checkout: "/repo", Step: "build",
+			Cause: "run command failed", ExitCode: "2",
+			Source: "- run: [false]",
+		},
+	})
+	for _, want := range []string{"--- failure ---", "Cause: run command failed", "Exit code: 2", "Step source:", "- run: [false]"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "secret-tail") || strings.Contains(strings.ToLower(got), "stdout") {
+		t.Fatalf("output leaked:\n%s", got)
 	}
 }
 

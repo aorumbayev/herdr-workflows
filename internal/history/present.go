@@ -2,8 +2,6 @@ package history
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
@@ -390,9 +388,6 @@ func loadRunDetail(id string, getenv config.Env, now time.Time) Detail {
 	if !ok {
 		return Detail{Kind: "invalid", Message: "run link is not a complete UUID"}
 	}
-	if _, err := ensureRunsDir(getenv); err != nil {
-		return Detail{Kind: "unavailable", ID: normalized, Message: "run history storage is unavailable"}
-	}
 	loaded, err := loadSnapshot(normalized, getenv)
 	if err != nil {
 		return Detail{Kind: "unavailable", ID: normalized, Message: "run history storage is unavailable"}
@@ -404,16 +399,11 @@ func loadRunDetail(id string, getenv config.Env, now time.Time) Detail {
 			Message: fmt.Sprintf("run snapshot version %d is incompatible", loaded.Incompatible.Version),
 		}
 	}
+	if loaded.Expired {
+		return Detail{Kind: "expired", ID: normalized, Message: "run record expired"}
+	}
 	if loaded.Snap == nil {
-		return missingOrExpired(normalized, getenv)
+		return Detail{Kind: "missing", ID: normalized, Message: "run record not found"}
 	}
 	return ToDetail(*loaded.Snap, now)
-}
-
-func missingOrExpired(id string, getenv config.Env) Detail {
-	path := filepath.Join(RunsDir(getenv), id+".expired")
-	if _, err := os.Stat(path); err == nil {
-		return Detail{Kind: "expired", ID: id, Message: "run record expired"}
-	}
-	return Detail{Kind: "missing", ID: id, Message: "run record not found"}
 }

@@ -10,12 +10,12 @@ import (
 )
 
 func TestChoiceRowsOmitLocationColumn(t *testing.T) {
-	entry := workflow.WorkflowListEntry{Name: "branchy", Source: "repo", File: "/r/b.yaml", Title: "Branch check"}
+	entry := workflow.ListEntry{Name: "branchy", Source: "repo", File: "/r/b.yaml", Title: "Branch check"}
 	m := New(Options{
-		Entries: []workflow.WorkflowListEntry{entry},
+		Entries: []workflow.ListEntry{entry},
 		Width:   80,
 		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format,
 				Inputs: []workflow.InputSpec{
