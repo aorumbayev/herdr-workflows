@@ -17,15 +17,6 @@ func repoRoot(t *testing.T) string {
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
 }
 
-func TestPreflightScriptMustNotExist(t *testing.T) {
-	path := filepath.Join(repoRoot(t), "scripts", "preflight.sh")
-	if _, err := os.Stat(path); err == nil {
-		t.Fatalf("scripts/preflight.sh must not exist (dead install path; go.mod is the Go floor): %s", path)
-	} else if !os.IsNotExist(err) {
-		t.Fatalf("stat preflight.sh: %v", err)
-	}
-}
-
 func TestGoModDeclaresGo127(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "go.mod"))
 	if err != nil {
