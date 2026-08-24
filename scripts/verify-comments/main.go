@@ -1,4 +1,4 @@
-// Command verify-comments fails when interior Go comment blocks exceed two lines.
+// Command verify-comments fails when interior Go comment blocks have more than two lines.
 // Run from the repository root:
 //
 //	go run ./scripts/verify-comments [root]
@@ -23,7 +23,7 @@ type finding struct {
 	line int
 }
 
-// Check scans Go sources under root for long interior comment blocks.
+// Check examines Go sources in root for long interior comment blocks.
 func Check(root string) (exitCode int, stdout, stderr string) {
 	paths, err := goFiles(root)
 	if err != nil {

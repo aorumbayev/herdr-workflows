@@ -119,8 +119,8 @@ func historyDSN(path string) string {
 	return "file:" + uriPath(path) + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
 }
 
-// SQLite ends a file: URI path at '?' or '#' and percent-decodes it, so those
-// bytes must be escaped or the db lands off the ACL-checked path.
+// SQLite stops a file: URI path at '?' or '#' and decodes percent sequences.
+// Escape those bytes, or SQLite opens a database that is not on the ACL path.
 func uriPath(path string) string {
 	var b strings.Builder
 	for _, r := range filepath.ToSlash(path) {
@@ -161,8 +161,8 @@ func pingMigrate(db *sql.DB, path string) error {
 	return last
 }
 
-// migrateSchema owns one connection so a failed statement can roll the write
-// transaction back instead of stranding it open in the pool.
+// migrateSchema uses one connection so a failed statement can reverse the write
+// transaction. The pool does not keep that transaction open.
 func migrateSchema(db *sql.DB, ddl string) error {
 	ctx := context.Background()
 	conn, err := db.Conn(ctx)
@@ -266,8 +266,8 @@ func upsertRun(db *sql.DB, snap Snapshot, insert bool) error {
 	return nil
 }
 
-// restoreRun re-inserts a row that vanished under a live writer. An expired
-// row conflicts and stays expired.
+// restoreRun writes a row again after a writer removed it. An expired
+// row causes a conflict and stays expired.
 func restoreRun(db *sql.DB, snap Snapshot, sum Summary, blob string) error {
 	_, err := db.Exec(`INSERT INTO runs (
 		id, version, expired, workflow, title, source, checkout_root, status,
@@ -447,8 +447,8 @@ func terminalRunIDs(db *sql.DB) ([]string, error) {
 	return ids, rows.Err()
 }
 
-// expireRun strips one run in a single transaction so an interrupted pass
-// never leaves blobs behind a row already marked expired.
+// expireRun removes one run in one transaction. An interrupted pass
+// does not keep blobs after the row is expired.
 func expireRun(db *sql.DB, id string) error {
 	tx, err := db.Begin()
 	if err != nil {

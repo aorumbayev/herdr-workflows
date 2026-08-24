@@ -1,4 +1,4 @@
-// Command verify-prose enforces the machine-checked docs style rules.
+// Command verify-prose applies the machine-checked docs style rules.
 // Run from the repository root:
 //
 //	go run ./scripts/verify-prose [root]
@@ -196,7 +196,7 @@ func scanFile(root, path string) ([]finding, error) {
 	return findings, nil
 }
 
-// Check scans markdown prose under root.
+// Check examines markdown prose in root.
 func Check(root string) (exitCode int, stdout, stderr string) {
 	files, err := markdownFiles(root)
 	if err != nil {

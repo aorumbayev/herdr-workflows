@@ -1,5 +1,5 @@
-// Command sync-embed copies canonical assets into embed/ for go:embed.
-// Generated copies stay byte-identical to their sources; do not hand-edit them.
+// Command sync-embed writes canonical assets into embed/ for go:embed.
+// Generated copies stay the same as their sources, byte for byte. A person must not change the copies by hand.
 //
 //	go run ./scripts/sync-embed
 //
@@ -40,7 +40,7 @@ func embedCopies() []copySpec {
 func syncEmbed(root, embedDir string) error {
 	for _, c := range embedCopies() {
 		src := filepath.Join(root, c.src)
-		// When embedDir is not root/embed (tests), map dst basename path under embedDir.
+		// When embedDir is not root/embed (tests), write the destination basename path in embedDir.
 		rel, err := filepath.Rel("embed", c.dst)
 		if err != nil {
 			return err

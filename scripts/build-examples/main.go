@@ -1,8 +1,8 @@
-// Command build-examples prints example gallery cards as JSON for VitePress.
+// Command build-examples writes example gallery cards as JSON for VitePress.
 //
 //	go run ./scripts/build-examples [examples-dir]
 //
-// With no argument, examples/ under the repository root is used.
+// When there is no argument, the command uses examples/ in the repository root.
 package main
 
 import (

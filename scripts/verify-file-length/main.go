@@ -1,4 +1,4 @@
-// Command verify-file-length fails when Go sources exceed 2500 lines.
+// Command verify-file-length fails when Go sources have more than 2500 lines.
 // Run from the repository root:
 //
 //	go run ./scripts/verify-file-length [root]
@@ -21,7 +21,7 @@ type finding struct {
 	lines int
 }
 
-// Check scans Go sources under root and returns an exit code with output.
+// Check examines Go sources in root and gives an exit code with output.
 func Check(root string) (exitCode int, stdout, stderr string) {
 	var findings []finding
 	scan := func(abs string) {

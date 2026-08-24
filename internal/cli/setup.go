@@ -24,14 +24,14 @@ const (
 	ownedCopy    ownedKind = "copy"
 )
 
-// OwnershipEntry records one installed CLI name under binDir.
+// OwnershipEntry records one installed CLI name in binDir.
 type OwnershipEntry struct {
 	Kind    ownedKind `json:"kind"`
 	Version string    `json:"version"`
 	Source  string    `json:"source,omitempty"`
 }
 
-// OwnershipRegistry is the bin-dir install ledger.
+// OwnershipRegistry is the install record for binDir.
 type OwnershipRegistry struct {
 	Version string                    `json:"version"`
 	Entries map[string]OwnershipEntry `json:"entries"`
@@ -48,7 +48,7 @@ type KeybindingInstallResult struct {
 	Path     string
 }
 
-// ResolveBinDir prefers XDG_BIN_HOME, else ~/.local/bin.
+// ResolveBinDir uses XDG_BIN_HOME when that value is set. When it is empty, ResolveBinDir uses ~/.local/bin.
 func ResolveBinDir(getenv func(string) string) string {
 	if getenv == nil {
 		getenv = os.Getenv
@@ -63,7 +63,7 @@ func ResolveBinDir(getenv func(string) string) string {
 	return filepath.Join(home, ".local", "bin")
 }
 
-// ResolveHerdrConfigPath prefers HERDR_CONFIG_PATH, else XDG/herdr/config.toml.
+// ResolveHerdrConfigPath uses HERDR_CONFIG_PATH when that value is set. When it is empty, ResolveHerdrConfigPath uses XDG/herdr/config.toml.
 func ResolveHerdrConfigPath(getenv func(string) string) string {
 	if getenv == nil {
 		getenv = os.Getenv
@@ -156,7 +156,7 @@ func ownershipPath(binDir string) string {
 	return filepath.Join(binDir, ownershipFile)
 }
 
-// ReadOwnership loads the bin-dir install ledger.
+// ReadOwnership reads the install record for binDir.
 func ReadOwnership(binDir string) OwnershipRegistry {
 	data, err := os.ReadFile(ownershipPath(binDir))
 	if err != nil {
@@ -325,7 +325,7 @@ command = "herdr-workflows.launch"
 description = "launch a herdr-workflows workflow (picker)"
 `
 
-// StripDeadBindings removes whole [[keys.command]] tables for retired actions.
+// StripDeadBindings removes complete [[keys.command]] tables for actions that are no longer in use.
 func StripDeadBindings(text string) string {
 	parts := strings.Split(text, "[[keys.command]]")
 	if len(parts) == 1 {
@@ -432,13 +432,13 @@ func validates(candidate string, getenv func(string) string) (bool, string) {
 	return strings.Contains(out, "config: ok"), out
 }
 
-// KeybindingInstallOpts configures InstallKeybindings.
+// KeybindingInstallOpts sets the options for InstallKeybindings.
 type KeybindingInstallOpts struct {
 	Getenv func(string) string
 	Reload *bool
 }
 
-// InstallKeybindings adds prefix+k launch binding and strips retired tables.
+// InstallKeybindings adds the prefix+k launch binding and removes tables for actions that are no longer in use.
 func InstallKeybindings(opts KeybindingInstallOpts) KeybindingInstallResult {
 	getenv := opts.Getenv
 	if getenv == nil {

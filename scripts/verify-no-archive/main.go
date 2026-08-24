@@ -1,9 +1,9 @@
-// Command verify-no-archive fails when openspec/changes/archive holds entries.
+// Command verify-no-archive fails when openspec/changes/archive contains entries.
 // Run from the repository root:
 //
 //	go run ./scripts/verify-no-archive [root]
 //
-// When root is omitted, the repository root is two levels above this script.
+// When the command does not get root, the repository root is the parent of the parent of this script.
 package main
 
 import (
@@ -15,7 +15,7 @@ import (
 	"strings"
 )
 
-// Check returns an exit code and optional stdout/stderr for the archive gate.
+// Check gives an exit code and optional stdout/stderr for the archive gate.
 func Check(root string) (exitCode int, stdout, stderr string) {
 	archiveDir := filepath.Join(root, "openspec", "changes", "archive")
 	entries, err := os.ReadDir(archiveDir)

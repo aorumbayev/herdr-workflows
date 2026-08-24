@@ -11,14 +11,14 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/picker"
 )
 
-// reopenAttempts and reopenDelay bound the wait for the outgoing popup to die.
-// A popup is a session singleton, so the next open fails until it is gone.
+// reopenAttempts and reopenDelay set the limit for the wait until the current popup stops.
+// A popup is a session singleton. The next open fails until that popup is not there.
 const (
 	reopenAttempts = 60
 	reopenDelay    = 50 * time.Millisecond
 )
 
-// popupEnv is what a respawned picker inherits through plugin.pane.open.
+// popupEnv is the environment that a new picker process gets through plugin.pane.open.
 func popupEnv(state picker.PopupState) map[string]string {
 	env := map[string]string{picker.PopupStateEnv: state.Encode()}
 	for _, key := range []string{"HERDR_WORKFLOWS_REPO_ROOT", "HERDR_PLUGIN_CONTEXT_JSON"} {
@@ -29,8 +29,8 @@ func popupEnv(state picker.PopupState) map[string]string {
 	return env
 }
 
-// spawnPopupReopen hands the respawn to a detached child, because this process
-// dies with the popup it is asked to replace.
+// spawnPopupReopen starts a detached child for the new popup. This process
+// stops when the popup that it replaces stops.
 func spawnPopupReopen(state picker.PopupState) error {
 	exe, err := os.Executable()
 	if err != nil {
@@ -51,8 +51,8 @@ func spawnPopupReopen(state picker.PopupState) error {
 	return cmd.Process.Release()
 }
 
-// runPopupReopen is the detached child: it waits out the closing popup, then
-// opens the next one at the size its tab needs.
+// runPopupReopen is the detached child. It waits until the closing popup stops,
+// then opens the next popup at the size that the tab needs.
 func runPopupReopen() error {
 	state := picker.ParsePopupState(os.Getenv(picker.PopupStateEnv))
 	if state == nil {
