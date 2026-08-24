@@ -7,6 +7,15 @@ import (
 	"testing"
 )
 
+func shouldSkipDir(name string) bool {
+	switch name {
+	case ".git", "node_modules":
+		return true
+	default:
+		return false
+	}
+}
+
 func readRepoFile(t *testing.T, rel string) string {
 	t.Helper()
 	root := repoRoot(t)
