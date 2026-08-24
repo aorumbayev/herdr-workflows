@@ -105,7 +105,7 @@ hwf workflow import "<bundle>"
 
 Get it from the picker palette with `Ctrl+K` then `s`.
 
-The bundle is a gzip-compressed, base64-encoded list of `{name, yaml}` entries. It holds the workflow you picked plus every `workflow:` child it reaches, found the same way a run finds them: repo first, then global. A missing child or a cycle fails the export. The export does not carry an incomplete bundle. Export carries each exact YAML body with an existing `$schema` pointer, and no local paths, config, or scope record. Import pins written files to its own contract.
+The bundle is a gzip-compressed, base64-encoded list of `{name, yaml}` entries. It holds the workflow you picked plus every `workflow:` child it reaches, found the same way a run finds them: repo first, then global. A missing child or a cycle fails the export. The export does not carry an incomplete bundle. Export carries each exact YAML body, including a `$schema` pointer when one exists, and no local paths, config, or scope record. Import pins written files to its own contract.
 
 ## Import a workflow
 

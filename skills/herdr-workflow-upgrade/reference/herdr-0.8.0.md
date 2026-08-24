@@ -7,7 +7,7 @@ pattern, apply the fix, then re-inspect.
 ## 1. Worktree actions: `workspace_id` vs `cwd`
 
 `worktree.create` / `worktree.open` / `worktree.list` take exactly one of `workspace_id` or
-`cwd`. Both together fail to load. Neither one fails at runtime. The trap is
+`cwd`. Both together fail to load. If you omit both, the step fails at runtime. The trap is
 `workspace_id`: herdr 0.8.0 resolves it only for worktree-backed workspaces, so a step that
 targets the invocation's workspace breaks whenever the workflow runs from an ordinary repo
 workspace.

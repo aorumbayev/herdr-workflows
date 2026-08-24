@@ -9,7 +9,7 @@ Install the plugin on your machine, then tell it which agents you have.
 | [herdr](https://herdr.dev) | 0.8.2 or later |
 | Linux or macOS             | Any            |
 
-On Windows, install herdr **and** this plugin inside WSL2. WSL2 uses the Linux release archive. A native Windows herdr cannot connect to `hwf` that runs in WSL, because they are separate servers with separate sockets. herdr does not accept native Windows installs.
+On Windows, install herdr **and** this plugin inside WSL2. WSL2 uses the Linux release archive. A native Windows herdr cannot connect to `hwf` that runs in WSL, because they are separate servers with separate sockets. This plugin refuses a native Windows install.
 
 ### WSL2 smoke
 
@@ -29,7 +29,7 @@ herdr plugin install aorumbayev/herdr-workflows
 hwf --version
 ```
 
-5. Make sure that herdr does not accept native Windows platforms. A native Windows install path errors and does not use a Windows archive. Do not install a second herdr in your live control workspace for this check.
+5. Make sure that this plugin refuses native Windows platforms. A native Windows install path errors and does not use a Windows archive. Do not install a second herdr in your live control workspace for this check.
 
 ## Install the plugin
 

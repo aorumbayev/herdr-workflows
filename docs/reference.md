@@ -41,7 +41,7 @@ Other fields: `shell`, `cwd`, `env`, `pane`, `background`, `ready_when`, `timeou
 - `timeout` accepts `<integer><ms|s|m|h>`. If you omit it, there is no workflow deadline. The command still must finish. A timeout kills the command and its children. `timeout` is invalid with `background`.
 - `success_codes` is a non-empty list of unique integers, and defaults to `[0]`. Blocking local commands only. `failed` reports against this rule.
 
-A placed command with `open: beside` or `open: below` keeps the pane that it split: the runner calls `pane.split`, then sends the argv as one shell-quoted line through `pane.send_input`. herdr has no `pane.run` method, and `layout.apply` replaces a whole tab and does not keep live processes. `open: tab` launches the argv directly through `layout.apply`.
+A placed command with `open: beside` or `open: below` keeps the pane that it split from: the runner calls `pane.split`, then sends the argv as one shell-quoted line through `pane.send_input`. herdr has no `pane.run` method, and `layout.apply` replaces a whole tab and does not keep live processes. `open: tab` launches the argv directly through `layout.apply`.
 
 ### `agent:`
 
@@ -78,7 +78,7 @@ Other fields: `cwd`, `env`, `pane`, `background`, `timeout`, `expect`.
 - `one_of` is a non-empty list of distinct tokens that match `[A-Z][A-Z0-9_]{0,31}`. `require` is an optional non-empty subset that lets the step succeed. If you omit `require`, the step accepts every token and leaves the branching to `when:`.
 - The runner appends the token list, the final-line rule, and an `hwf response check` command to the prompt. The agent reruns that command against its own response file until it exits 0.
 - `verdict` is the final non-empty line of the response, trimmed and matched exactly. Reasoning before it is acceptable. `response` still holds the complete text.
-- A final line that matches no token fails the step and names the expected tokens. A verdict outside `require` fails and names both the verdict and the required tokens. Both are ordinary failures: `continue_on_error` tolerates them and `on_failure` acts on them.
+- A final line that matches no token fails the step and names the expected tokens. A verdict outside `require` fails and names both the verdict and the required tokens. Both are ordinary failures: `continue_on_error` tolerates them and `on_failure` receives them.
 - `expect` is a load error with `background: true`, and on the other three actions. A reference to `{{steps.<id>.verdict}}` when the step that produces it declares no `expect` is a load error.
 
 ### `herdr:`
@@ -91,7 +91,7 @@ Other fields: `cwd`, `env`, `pane`, `background`, `timeout`, `expect`.
 
 Other fields: `params`, `retry`.
 
-The loader infers nothing. Every required or behavior-selecting parameter goes in `params:`, with the method's own field name. The loader rejects a method that would otherwise resolve a target from live UI focus, if it has no such parameter. For herdr 0.8.2 that means:
+The loader infers nothing. Every required or behavior-selecting parameter goes in `params:`, with the method's own field name. The loader rejects a focus-resolving method when you omit the selector parameter. For herdr 0.8.2 that means:
 
 - `tab.create` needs `workspace_id`
 - `pane.split` needs `target_pane_id`
