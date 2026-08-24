@@ -10,7 +10,7 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-// fakeHerdrCall records calls for assertion.
+// fakeHerdrCall records calls so that tests can assert.
 type fakeHerdrCall struct {
 	calls []herdrCallRecord
 }
@@ -157,7 +157,7 @@ func TestShellStepPlacedBesideRun(t *testing.T) {
 		t.Errorf("ShellStep.OK = false, want true. Error: %v", outcome.Error)
 	}
 
-	// Verify no layout.apply was called
+	// Make sure that the test does not call layout.apply
 	hasLayoutApply := slices.ContainsFunc(fake.calls, func(r herdrCallRecord) bool {
 		return r.method == "layout.apply"
 	})
@@ -165,7 +165,7 @@ func TestShellStepPlacedBesideRun(t *testing.T) {
 		t.Error("layout.apply was called, should not be for beside")
 	}
 
-	// Verify split was called with correct direction
+	// Make sure that the test calls split with the correct direction
 	splitCall := findCall(fake.calls, "pane.split")
 	if splitCall == nil {
 		t.Fatal("pane.split was not called")
@@ -174,7 +174,7 @@ func TestShellStepPlacedBesideRun(t *testing.T) {
 		t.Errorf("split direction = %v, want right", splitCall.params["direction"])
 	}
 
-	// Verify send_input was called
+	// Make sure that the test calls send_input
 	sendCall := findCall(fake.calls, "pane.send_input")
 	if sendCall == nil {
 		t.Fatal("pane.send_input was not called")
@@ -231,7 +231,7 @@ func TestShellStepReadinessDefaults(t *testing.T) {
 		t.Errorf("ShellStep.OK = false, want true. Error: %v", outcome.Error)
 	}
 
-	// Verify pane.wait_for_output was called with correct defaults
+	// Make sure that the test calls pane.wait_for_output with the correct defaults
 	waitCall := findCall(fake.calls, "pane.wait_for_output")
 	if waitCall == nil {
 		t.Fatal("pane.wait_for_output was not called")
@@ -497,7 +497,7 @@ func TestHerdrStepTemplatedEnumBadValue(t *testing.T) {
 		t.Errorf("HerdrStep error = %q, want to contain enum validation message", outcome.Error)
 	}
 
-	// Verify pane.split was never called
+	// Make sure that the test does not call pane.split
 	splitCalls := slices.ContainsFunc(fake.calls, func(r herdrCallRecord) bool {
 		return r.method == "pane.split"
 	})
@@ -550,7 +550,7 @@ func TestHerdrStepTemplatedEnumGoodValue(t *testing.T) {
 	}
 }
 
-// Helper to find a call by method
+// Find a recorded call by method
 func findCall(calls []herdrCallRecord, method string) *herdrCallRecord {
 	for i := range calls {
 		if calls[i].method == method {

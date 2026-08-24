@@ -1,5 +1,5 @@
-// Package workflow is the Workflow Authoring boundary: it parses and
-// validates YAML and produces an immutable executable Definition.
+// Package workflow is the Workflow Authoring boundary.
+// It parses YAML, validates it, and produces an immutable executable Definition.
 package workflow
 
 import (
@@ -22,19 +22,19 @@ var NameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-_]*$`)
 const NameRule = "workflow name must match [a-z0-9][a-z0-9-_]*"
 
 // Shells are the accepted `shell:` values. The parser accepts Windows shell
-// names, while execution supports native Linux and macOS environments.
+// names. Execution supports native Linux and macOS environments.
 var Shells = []string{"sh", "bash", "zsh", "pwsh", "powershell", "cmd"}
 
 // PaneOpens are the literal `pane.open` values.
 var PaneOpens = []string{"tab", "beside", "below"}
 
-// WhenKind distinguishes a truthiness clause from an equality clause.
+// WhenKind identifies a truthiness clause or an equality clause.
 type WhenKind int
 
 const (
-	// WhenTruthy checks the referenced scalar for truthiness.
+	// WhenTruthy examines the referenced scalar for truthiness.
 	WhenTruthy WhenKind = iota
-	// WhenEqual compares the referenced scalar's text rendering with Value.
+	// WhenEqual compares the text form of the referenced scalar with Value.
 	WhenEqual
 )
 
@@ -48,13 +48,13 @@ type WhenSpec struct {
 
 // PaneSpec is the parsed `pane:` placement block.
 type PaneSpec struct {
-	Open      string // a PaneOpens literal, or a whole-value template
+	Open      string // PaneOpens literal or a whole-value template
 	Anchor    string
 	Workspace string
 	Size      *int
 	Focus     *bool
 	Name      string
-	Close     string // "", "success", or "always"
+	Close     string // empty, "success", or "always"
 }
 
 // RetrySpec is the parsed `retry:` block. Delay is zero when omitted.
@@ -75,7 +75,7 @@ type RunPayload struct {
 	Argv []string
 	// Command is the shell source for the shell form.
 	Command string
-	// Shell is the explicit `shell:` value, empty for the default sh.
+	// Shell is the explicit `shell:` value. Empty means the default sh.
 	Shell string
 }
 
@@ -138,12 +138,12 @@ type Step struct {
 	Action          Action
 }
 
-// DynamicChoice discovers choice options by running argv.
+// DynamicChoice discovers choice options from argv.
 type DynamicChoice struct {
 	Run []string
 }
 
-// InputSpec is the resolved declaration used by validation and collection.
+// InputSpec is the resolved declaration that validation and collection use.
 type InputSpec struct {
 	Name           string
 	Type           string
@@ -206,7 +206,7 @@ type ReturnsSpec struct {
 	Fields   []NamedTemplate
 }
 
-// Document is the validated v1alpha1 YAML authoring value before child-graph Definition.
+// Document is the validated v1alpha1 YAML authoring value before the child-graph Definition.
 type Document struct {
 	Version     string
 	Title       string
@@ -218,7 +218,7 @@ type Document struct {
 	Steps       []Step
 }
 
-// Definition is the immutable executable workflow produced by authoring.
+// Definition is the immutable executable workflow that authoring produces.
 // Children are the frozen child graph for one load/process.
 type Definition struct {
 	Name            string
@@ -236,7 +236,7 @@ type Definition struct {
 	Children        map[string]*Definition
 }
 
-// SourceKind reports whether this definition loaded from the repo or global store.
+// SourceKind reports whether this definition loaded from the repo or the global store.
 func (d Definition) SourceKind() string {
 	if d.RepoOwned {
 		return "repo"
@@ -262,14 +262,14 @@ type ListEntry struct {
 	RepoOwned          bool
 }
 
-// TemplatePath is a parsed template reference rooted at inputs, steps, or
+// TemplatePath is a parsed template reference that starts at inputs, steps, or
 // context.
 type TemplatePath struct {
 	Root     string
 	Segments []string
 }
 
-// TemplateNamespace holds the values templates resolve against.
+// TemplateNamespace holds the values that templates resolve.
 type TemplateNamespace struct {
 	Inputs  map[string]any
 	Steps   map[string]any

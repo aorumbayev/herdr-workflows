@@ -17,9 +17,9 @@ import (
 
 const agentNameMax = 32
 
-// normalizedPrefix normalizes a prefix by lowercasing, collapsing runs of
-// non-[a-z0-9_-] into single dashes, stripping leading non-letters, and
-// falling back to "agent" if nothing remains.
+// normalizedPrefix converts a prefix to lowercase and collapses runs of
+// non-[a-z0-9_-] into single dashes. It removes leading non-letters.
+// When nothing remains, the function uses "agent".
 func normalizedPrefix(raw string) string {
 	lowered := strings.ToLower(raw)
 	// Replace runs of non-[a-z0-9_-] with single dash
@@ -35,11 +35,11 @@ func normalizedPrefix(raw string) string {
 	return stripped
 }
 
-// GenerateAgentName generates a herdr identifier from a step ID (or ordinal
-// fallback), ordinal, and suffix, respecting the 32-character budget and
-// identifier rule ^[a-z][a-z0-9_-]{0,31}$.
+// GenerateAgentName generates a herdr identifier from a step ID or an ordinal
+// substitute, plus an ordinal and a suffix. The name obeys the 32-character
+// budget and the identifier rule ^[a-z][a-z0-9_-]{0,31}$.
 func GenerateAgentName(stepID string, ordinal int, suffix string) string {
-	// Normalize suffix: lowercase and drop non-alphanumeric, fallback to "0"
+	// Normalize suffix: lowercase, drop non-alphanumeric characters, use "0" when empty
 	tail := strings.ToLower(suffix)
 	re := regexp.MustCompile(`[^a-z0-9]+`)
 	tail = re.ReplaceAllString(tail, "")
@@ -64,7 +64,7 @@ func GenerateAgentName(stepID string, ordinal int, suffix string) string {
 	// Truncate prefix and build result
 	result := fmt.Sprintf("%s-%s", prefix[:min(len(prefix), room)], tail)
 
-	// Final cap at 32 chars (should already fit, but be safe)
+	// Cap the result at 32 characters
 	if len(result) > agentNameMax {
 		result = result[:agentNameMax]
 	}
@@ -82,10 +82,10 @@ func ManagedPromptSpillPath(runID string, stepIndex int, responseDir string) str
 	return filepath.Join(responseDir, fmt.Sprintf("%s-step-%d-prompt.txt", runID, stepIndex))
 }
 
-// ReadManagedResponse reads the managed response file, with size checks before
-// and after decoding.
+// ReadManagedResponse reads the managed response file. It examines size
+// before the read and after decode.
 func ReadManagedResponse(path string) (string, error) {
-	// Check if file exists
+	// Examine whether the file exists
 	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -97,7 +97,7 @@ func ReadManagedResponse(path string) (string, error) {
 		return "", err
 	}
 
-	// Check file size before reading
+	// Examine the file size before the read
 	if info.Size() > int64(caps.CaptureByteLimit) {
 		return "", &caps.CaptureLimitError{
 			Source: "managed response",
@@ -106,7 +106,7 @@ func ReadManagedResponse(path string) (string, error) {
 		}
 	}
 
-	// Read file
+	// Read the file
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
@@ -114,12 +114,12 @@ func ReadManagedResponse(path string) (string, error) {
 
 	text := string(data)
 
-	// Check decoded text against cap
+	// Compare the decoded text with the cap
 	if err := caps.AssertUnderCaptureCap("managed response", text); err != nil {
 		return "", err
 	}
 
-	// Check for whitespace-only content
+	// Reject content that is only whitespace
 	if strings.TrimSpace(text) == "" {
 		return "", &host.HerdrError{
 			Code: "managed_response_empty",
@@ -130,9 +130,9 @@ func ReadManagedResponse(path string) (string, error) {
 	return text, nil
 }
 
-// AppendResponseInstruction appends instructions to a prompt for managing an
-// agent response. If expect is nil, only the file-write instruction is added;
-// otherwise the verdict requirement is also added.
+// AppendResponseInstruction appends instructions to a prompt for a managed
+// agent response. When expect is nil, the function adds only the file-write
+// instruction. Otherwise the function also adds the verdict requirement.
 func AppendResponseInstruction(prompt string, path string, expect *workflow.ExpectSpec) string {
 	base := fmt.Sprintf("%s\n\nRequired: use your file-write tool to write your full answer as plain UTF-8 text to the absolute path %s, overwriting whatever is there. Do not finish until that file exists with your answer. Write nothing else to that path and do not create other files for it. Printing the answer in chat is not enough.", prompt, path)
 
@@ -145,14 +145,14 @@ func AppendResponseInstruction(prompt string, path string, expect *workflow.Expe
 	return fmt.Sprintf("%s\n\nRequired verdict: the final non-empty line of that file must be exactly one of these tokens and nothing else: %s. Put your reasoning above it. Before you finish the turn, run `%s` and correct the file until that command exits 0.", base, tokens, check)
 }
 
-// SpilledPromptInstruction returns the instruction text for reading a spilled
-// prompt from a file.
+// SpilledPromptInstruction returns the instruction text that tells the agent
+// to read a spilled prompt from a file.
 func SpilledPromptInstruction(spillPath string) string {
 	return fmt.Sprintf("Read the absolute path %s as UTF-8 and follow its instructions exactly. Do not invent content beyond that file.", spillPath)
 }
 
-// ApplyVerdict applies the verdict rule: parsing the response's final
-// non-empty line and checking it against the expect spec.
+// ApplyVerdict applies the verdict rule. It parses the last non-empty line
+// of the response and compares it with the expect spec.
 func ApplyVerdict(response string, expect workflow.ExpectSpec, details map[string]any) (string, StepOutcome) {
 	parsed, ok, line := workflow.ParseVerdict(response, expect.OneOf)
 
@@ -165,7 +165,7 @@ func ApplyVerdict(response string, expect workflow.ExpectSpec, details map[strin
 	}
 
 	if len(expect.Require) > 0 {
-		// Check if parsed verdict is in the require list
+		// Examine whether the parsed verdict is in the require list
 		found := false
 		for _, req := range expect.Require {
 			if req == parsed {
@@ -396,8 +396,8 @@ func preparedResponsePath(frame *StepFrame) (string, error) {
 	if _, err := EnsureRunScratchDir(frame.Opts.RepoRoot, filepath.Dir(path)); err != nil {
 		return "", err
 	}
-	// context: child workflows reuse runId with step indexes restarting at 0;
-	// a leftover parent file must not count as this turn's pickup.
+	// context: child workflows reuse runId, and step indexes start at 0 again.
+	// A leftover parent file must not count as pickup for this turn.
 	_ = os.Remove(path)
 	trackManagedResponseFile(&frame.Opts, path)
 	return path, nil

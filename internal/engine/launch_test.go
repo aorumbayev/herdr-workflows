@@ -15,7 +15,7 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/config"
 )
 
-// capturingStdin records bytes written by LaunchDetachedRun before Close.
+// capturingStdin records bytes that LaunchDetachedRun writes before Close.
 type capturingStdin struct {
 	bytes.Buffer
 }
@@ -110,7 +110,7 @@ func TestRecordedOutcomeKind(t *testing.T) {
 	}
 }
 
-// and "launch payload forwards domains and round-trips snapshots"
+// "launch payload forwards domains and round-trips snapshots"
 func TestParseLaunchPayloadRoundTrip(t *testing.T) {
 	t.Run("inputs", func(t *testing.T) {
 		raw := `{"name":"sleep","inputs":{"focus":"x"}}`
@@ -184,7 +184,7 @@ func TestParseLaunchPayloadErrors(t *testing.T) {
 	}
 }
 
-// and "a script entry claims no build identity"
+// "a script entry claims no build identity"
 func TestBuildIdentityCompiledVsScript(t *testing.T) {
 	dir := t.TempDir()
 	execPath := filepath.Join(dir, "herdr-workflows")

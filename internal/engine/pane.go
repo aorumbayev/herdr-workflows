@@ -180,7 +180,7 @@ func PlaceEmptyPane(o PlaceOpts) (PlacedPane, error) {
 	return placedFrom(pane, "pane.split")
 }
 
-// PlaceCommandPane creates a pane running a command.
+// PlaceCommandPane creates a pane that runs a command.
 func PlaceCommandPane(o PlaceOpts) (PlacedPane, error) {
 	if o.Open == "tab" {
 		workspace, err := requireWorkspace(o)
@@ -304,7 +304,8 @@ func QuotePosixArg(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
-// ResolvePaneLabel resolves a pane name template, falling back to the step ID if blank.
+// ResolvePaneLabel resolves a pane name template. When the result is blank,
+// the function uses the fallback value.
 func ResolvePaneLabel(name string, ns workflow.TemplateNamespace, fallback string) string {
 	if name == "" {
 		return fallback

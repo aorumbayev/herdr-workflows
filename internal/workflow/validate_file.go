@@ -14,7 +14,7 @@ type ValidateResult struct {
 	Error string
 }
 
-// ValidateFile reads path and runs the real loader (ParseWorkflowText).
+// ValidateFile reads path and runs the real loader, ParseWorkflowText.
 func ValidateFile(path, name, repoRoot string, supplied ...config.Config) ValidateResult {
 	body, err := os.ReadFile(path)
 	if err != nil {

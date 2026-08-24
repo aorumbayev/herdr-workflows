@@ -20,7 +20,7 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/caps"
 )
 
-// BundleEntry is the only data carried by a shared workflow payload.
+// BundleEntry is the only data that a shared workflow payload contains.
 type BundleEntry struct {
 	Name string `json:"name"`
 	YAML string `json:"yaml"`
@@ -121,7 +121,7 @@ func gunzipBounded(encoded string) ([]byte, error) {
 	return data, nil
 }
 
-// DecodePayload validates the canonical bundle without executing workflows.
+// DecodePayload validates the canonical bundle without workflow execution.
 func DecodePayload(payload string) (Bundle, error) {
 	encoded, err := ExtractPayload(payload)
 	if err != nil {
@@ -451,7 +451,7 @@ func journalStale(path string) bool {
 	return err != nil || time.Since(info.ModTime()) >= 10*time.Second
 }
 
-// RecoverInterruptedImport repairs or rolls back an interrupted directory swap.
+// RecoverInterruptedImport repairs an interrupted directory swap or restores the previous directory.
 func RecoverInterruptedImport(dir string, force ...bool) error {
 	path := ImportJournalPath(dir)
 	if !pathExists(path) {

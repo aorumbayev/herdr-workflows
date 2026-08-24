@@ -95,7 +95,7 @@ func ParseDuration(text string) (time.Duration, error) {
 	return time.Duration(n) * time.Hour, nil
 }
 
-// checker collects schema issues while a workflow is loaded.
+// checker collects schema issues while the loader reads a workflow.
 type checker struct {
 	issues issues
 }
@@ -147,7 +147,7 @@ func isString(v any) bool {
 	return ok
 }
 
-// checkString validates a present string field, optionally min-length 1.
+// checkString validates a present string field. The minimum length can be 1.
 func (s *validationScope) checkString(m map[string]any, key string, minLen bool) {
 	v, ok := m[key]
 	if !ok {
@@ -1426,7 +1426,7 @@ func assertActionTemplates(file string, step int, raw map[string]any, keyPrefix 
 			return err
 		}
 	}
-	//nolint:nestif // pane placement has several independently templated fields.
+	//nolint:nestif // pane placement has several independent templated fields.
 	if pane, ok := raw["pane"].(map[string]any); ok {
 		for _, name := range []string{"target", "workspace"} {
 			if value, ok := pane[name].(string); ok {
