@@ -65,7 +65,7 @@ func TestPrepareScreenWiresHooksFromScreenOpts(t *testing.T) {
 		exported string
 	)
 	root := t.TempDir()
-	m, err := PrepareScreen(ScreenOpts{
+	m, err := Prepare(Options{
 		Entries:  []workflow.ListEntry{entry},
 		RepoRoot: root,
 		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
@@ -97,15 +97,15 @@ func TestPrepareScreenWiresHooksFromScreenOpts(t *testing.T) {
 		Env:           func(string) string { return "" },
 	})
 	if err != nil {
-		t.Fatalf("PrepareScreen: %v", err)
+		t.Fatalf("Prepare: %v", err)
 	}
 
 	_ = apply(m, "ctrl+k", "n", "x", "enter")
 	if len(edited) != 1 || edited[0] != "x" {
-		t.Fatalf("EditWorkflow = %v (ScreenOpts hooks not passed)", edited)
+		t.Fatalf("EditWorkflow = %v (Options hooks not passed)", edited)
 	}
 
-	m, err = PrepareScreen(ScreenOpts{
+	m, err = Prepare(Options{
 		Entries:  []workflow.ListEntry{entry},
 		RepoRoot: root,
 		OpenURL:  func(url string) error { opened = url; return nil },
@@ -117,10 +117,10 @@ func TestPrepareScreenWiresHooksFromScreenOpts(t *testing.T) {
 	opened = ""
 	_ = apply(m, "ctrl+k", "e")
 	if opened == "" {
-		t.Fatal("OpenURL not wired from ScreenOpts")
+		t.Fatal("OpenURL not wired from Options")
 	}
 
-	m, err = PrepareScreen(ScreenOpts{
+	m, err = Prepare(Options{
 		Entries:  []workflow.ListEntry{entry},
 		RepoRoot: root,
 		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
@@ -142,13 +142,13 @@ func TestPrepareScreenWiresHooksFromScreenOpts(t *testing.T) {
 	launched = LaunchRunOpts{}
 	m = apply(m, "enter")
 	if launched.RunID != "550e8400-e29b-41d4-a716-446655440099" {
-		t.Fatalf("LaunchRun not wired from ScreenOpts: %#v", launched)
+		t.Fatalf("LaunchRun not wired from Options: %#v", launched)
 	}
 	if !strings.Contains(m.View().Content, "STARTING") {
 		t.Fatalf("expected STARTING after wired launch:\n%s", m.View().Content)
 	}
 
-	m, err = PrepareScreen(ScreenOpts{
+	m, err = Prepare(Options{
 		Entries:       []workflow.ListEntry{entry},
 		RepoRoot:      root,
 		Notify:        func(title string, body ...string) error { notified = append(notified, title); return nil },
@@ -162,6 +162,6 @@ func TestPrepareScreenWiresHooksFromScreenOpts(t *testing.T) {
 	notified = nil
 	_ = apply(m, "ctrl+k", "s")
 	if len(notified) == 0 {
-		t.Fatal("ExportShare/Notify not wired from ScreenOpts")
+		t.Fatal("ExportShare/Notify not wired from Options")
 	}
 }

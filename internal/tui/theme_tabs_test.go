@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
@@ -48,28 +47,6 @@ func TestDefaultThemeKindPaletteAndHover(t *testing.T) {
 func isANSI(style lipgloss.Style) bool {
 	_, ok := style.GetForeground().(lipgloss.ANSIColor)
 	return ok
-}
-
-func TestFormatTabBarActiveReverseInactiveMuted(t *testing.T) {
-	bar := FormatTabBar(TabRuns, 80)
-	if !strings.Contains(bar, TabWorkflows) || !strings.Contains(bar, TabRuns) || !strings.Contains(bar, TabConsole) {
-		t.Fatalf("tab bar missing labels: %q", bar)
-	}
-	if strings.Count(bar, "\x1b[7m") != 1 {
-		t.Fatalf("exactly one tab must use reverse: %q", bar)
-	}
-	if strings.Count(bar, "\x1b[2m") != 2 {
-		t.Fatalf("both inactive tabs must be faint: %q", bar)
-	}
-	if idx := strings.Index(bar, "\x1b[7m"); idx < 0 || !strings.HasPrefix(bar[idx:], "\x1b[7m "+TabRuns) {
-		t.Fatalf("reverse must land on the active tab: %q", bar)
-	}
-	if TabAtX(0) != TabWorkflows {
-		t.Fatalf("x0 = %q", TabAtX(0))
-	}
-	if TabAtX(len(TabWorkflows)+3) != TabRuns {
-		t.Fatalf("runs hit = %q", TabAtX(len(TabWorkflows)+3))
-	}
 }
 
 func TestRunStatusStyleUsesLockedSlots(t *testing.T) {

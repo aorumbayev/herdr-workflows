@@ -2,11 +2,7 @@ package runsbrowser
 
 import (
 	"github.com/aorumbayev/herdr-workflows/internal/history"
-	"github.com/aorumbayev/herdr-workflows/internal/tui"
 )
-
-// ListViewport is the six-row Select height shared with the picker.
-const ListViewport = tui.ListViewport
 
 // Scope is Current vs All checkout filtering.
 type Scope string

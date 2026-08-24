@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -26,10 +27,4 @@ func CopyToClipboard(text string) error {
 	return errNoClipboard
 }
 
-type clipboardError struct{}
-
-func (clipboardError) Error() string {
-	return "no clipboard command (pbcopy, wl-copy, or xclip)"
-}
-
-var errNoClipboard clipboardError
+var errNoClipboard = errors.New("no clipboard command (pbcopy, wl-copy, or xclip)")

@@ -12,10 +12,9 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/console"
 	"github.com/aorumbayev/herdr-workflows/internal/runsbrowser"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
+	"github.com/aorumbayev/herdr-workflows/internal/update"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
-
-const ListViewport = tui.ListViewport
 
 type mode int
 
@@ -36,27 +35,28 @@ const (
 
 // Options construct a picker model.
 type Options struct {
-	Entries        []workflow.ListEntry
-	RepoRoot       string
-	Config         config.Config
-	Width          int
-	Height         int
-	Env            config.Env
-	Chdir          func(string) error
-	LoadWorkflow   func(workflow.ListEntry) (*workflow.Definition, error)
-	CopyClipboard  func(string) error
-	EditWorkflow   func(path, name string) workflow.ValidateResult
-	OpenURL        func(url string) error
-	Notify         func(title string, body ...string) error
-	LaunchRun      func(LaunchRunOpts) LaunchRunHandle
-	AllocateRunID  func() string
-	ExportShare    func(entry workflow.ListEntry) (command string, err error)
-	OpenConsole    func(placement console.Placement) error
-	OpenEditor     func(path, name, placement string) error
-	ReopenPopup    func(state PopupState) error
-	Restore        *PopupState
-	ListAgentPanes func() ([]console.AgentPaneEntry, error)
-	PaneSendText   func(paneID, text string) error
+	Entries            []workflow.ListEntry
+	RepoRoot           string
+	Config             config.Config
+	Width              int
+	Height             int
+	Env                config.Env
+	Chdir              func(string) error
+	LoadWorkflow       func(workflow.ListEntry) (*workflow.Definition, error)
+	CopyClipboard      func(string) error
+	EditWorkflow       func(path, name string) workflow.ValidateResult
+	OpenURL            func(url string) error
+	Notify             func(title string, body ...string) error
+	LaunchRun          func(LaunchRunOpts) LaunchRunHandle
+	AllocateRunID      func() string
+	ExportShare        func(entry workflow.ListEntry) (command string, err error)
+	OpenConsole        func(placement console.Placement) error
+	OpenEditor         func(path, name, placement string) error
+	ReopenPopup        func(state PopupState) error
+	Restore            *PopupState
+	ListAgentPanes     func() ([]console.AgentPaneEntry, error)
+	PaneSendText       func(paneID, text string) error
+	CheckLatestRelease func() (*update.LatestRelease, error)
 }
 
 // Model is the picker Bubble Tea model.
@@ -254,7 +254,7 @@ const listChrome = 9
 
 // listViewport fills the popup with workflow rows above the six-row floor.
 func (m Model) listViewport() int {
-	return tui.FitViewport(m.height, listChrome, ListViewport)
+	return tui.FitViewport(m.height, listChrome, tui.ListViewport)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -704,7 +704,7 @@ func (m *Model) moveChoice(delta int) {
 }
 
 func (m *Model) clampChoice() {
-	m.cursor, m.offset = tui.ClampListWindow(m.cursor, m.offset, len(m.choiceRows()), ListViewport)
+	m.cursor, m.offset = tui.ClampListWindow(m.cursor, m.offset, len(m.choiceRows()), tui.ListViewport)
 }
 
 func (m Model) choiceRows() []string {
