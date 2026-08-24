@@ -20,7 +20,7 @@ Runs defaults to the exact current checkout root. `Ctrl+G` toggles temporary All
 
 Enter opens one scrollable detail view for the selected run. After the final input, a launch opens the same detail in `STARTING`, then attached `RUNNING` once the child claims its snapshot. Terminal results stay visible. Escape returns to the Runs list and leaves an active child running.
 
-A non-terminal run is `RUNNING` while its heartbeat is fresher than fifteen seconds, and `STALE` afterward. Stale is not failure. Detail may show a bounded failure explanation. List rows and search never include that text. Search matches safe step labels from recorded outcomes. History uses only per-run snapshots under private plugin state.
+A non-terminal run is `RUNNING` while its heartbeat is fresher than fifteen seconds, and `STALE` afterward. Stale is not failure. Detail may show a bounded failure explanation. List rows and search never include that text. Search matches safe step labels from recorded outcomes. History reads only the private plugin-state database.
 
 Selecting a workflow shows its description below the list, and its named sensitivity flags before the run starts, so you see what a workflow touches while you can still change your mind.
 

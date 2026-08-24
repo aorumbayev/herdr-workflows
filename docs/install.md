@@ -37,7 +37,7 @@ hwf --version
 herdr plugin install aorumbayev/herdr-workflows
 ```
 
-herdr clones the release tag and runs the manifest build: it downloads the verified archive for that tag's version, checks the SHA-256 entry in `checksums.txt`, extracts `bin/herdr-workflows`, then runs setup. The target host does not need Go. A checksum mismatch or download failure stops the build and leaves any prior install in place.
+herdr clones the release tag and runs the manifest build. It downloads the verified archive for that tag's version, checks the SHA-256 entry in `checksums.txt`, extracts `bin/herdr-workflows`, then runs setup. The target host does not need Go. A checksum mismatch or download failure stops the build and leaves any prior install in place.
 
 There is no npm package. Releases publish GitHub Release notes plus platform archives for Linux and macOS (`amd64` and `arm64`).
 

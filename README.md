@@ -15,7 +15,7 @@
 
 ---
 
-You have a sequence you retype every day: run the tests, read the diff, ask an agent to review it, open a pane to watch the logs. herdr-workflows lets you write that sequence once, as a short YAML file, and start it from a hotkey.
+You have a sequence you retype every day. Run the tests, read the diff, ask an agent to review it, open a pane to watch the logs. herdr-workflows lets you write that sequence once, as a short YAML file, and start it from a hotkey.
 
 It's a plugin for [herdr](https://herdr.dev). A workflow is a list of steps that run in order. Each step does one of four things:
 

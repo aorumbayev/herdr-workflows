@@ -27,7 +27,7 @@ Every step carries exactly one action: `run`, `agent`, `herdr`, or `workflow`. E
 
 | Form   | Behavior                                                             |
 | ------ | -------------------------------------------------------------------- |
-| list   | Argv. Each item accepts templates. See placement behavior below      |
+| list   | Argv. Each item accepts templates. See [Placement](#pane)            |
 | string | Shell source, `sh` unless `shell:` says otherwise. Rejects templates |
 
 Blocking local result: `{stdout, stderr, exit_code, failed}`. A readiness run returns the native wait payload plus pane, tab, and workspace IDs. A background run has no result.
@@ -91,7 +91,14 @@ Other fields: `cwd`, `env`, `pane`, `background`, `timeout`, `expect`.
 
 Other fields: `params`, `retry`.
 
-Nothing is inferred. Every required or behavior-selecting parameter goes in `params:`, using the method's own field name. A method that would otherwise resolve a target from live UI focus is rejected without it. For herdr 0.8.2 that means, among others: `tab.create` needs `workspace_id`, `pane.split` needs `target_pane_id`, `layout.apply` and `layout.set_split_ratio` need exactly one of their paired selectors, and `worktree.list`, `create`, and `open` need exactly one of `workspace_id` or `cwd`. `pane.list` and `tab.list` keep their filters optional.
+Nothing is inferred. Every required or behavior-selecting parameter goes in `params:`, using the method's own field name. A method that would otherwise resolve a target from live UI focus is rejected without it. For herdr 0.8.2 that means:
+
+- `tab.create` needs `workspace_id`
+- `pane.split` needs `target_pane_id`
+- `layout.apply` and `layout.set_split_ratio` need exactly one of their paired selectors
+- `worktree.list`, `create`, and `open` need exactly one of `workspace_id` or `cwd`
+
+`pane.list` and `tab.list` keep their filters optional.
 
 Method names, parameter types, and result paths are checked against the vendored herdr API schema at load time. A denied method fails at load. Success gives you the method's complete result.
 
@@ -135,7 +142,7 @@ herdr decides the effective split, so an extreme `size` may be approximated rath
 
 Foreground panes take focus by default. Background panes don't. An agent step that omits the whole block gets a new tab in the invocation workspace.
 
-`name` names the tab the step creates, at the moment it opens, so a `background: true` step gets a readable tab without a rename step. It takes templates. It is `tab` only, because `beside` and `below` join a tab the step did not create, and a literal `beside` or `below` with `name` fails at load. With a templated `open`, `name` applies only when the resolved placement creates a tab. Omit `name` to keep the step ID as the tab name. A `name` whose templates render to blank text keeps that same default, so the tab stays identifiable.
+`name` names the tab the step creates, at the moment it opens, so a `background: true` step gets a readable tab without a rename step. It takes templates. It is `tab` only, because `beside` and `below` join a tab the step did not create. A literal `beside` or `below` with `name` fails at load. With a templated `open`, `name` applies only when the resolved placement creates a tab. Omit `name` to keep the step ID as the tab name. A `name` whose templates render to blank text keeps that same default, so the tab stays identifiable.
 
 `close` applies only to agent panes this step created. `success` closes after the turn settles and the response is captured. `always` closes after any outcome. Omit it to keep the pane, which is what you want for diagnosis. `close` is invalid on commands and on background steps.
 
@@ -227,7 +234,6 @@ Without `--resolve`, dynamic argv is printed, not run. With it, only active dyna
 | ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `when:`             | One clause or an ordered list. Short-circuit AND. Truthiness, or `==` / `!=`. False means skipped                           |
 | Guarded results     | A conditional step's result may be read only where every one of its clauses is also present                                 |
-| `success_codes`     | Blocking local commands only. Listed exit codes count as success. Default `[0]`                                             |
 | `continue_on_error` | Records and continues. Does not trigger recovery for that failure. A later non-tolerated failure can trigger entry recovery |
 | `retry`             | `attempts` (2 or more, counting the first) plus optional `delay`. Local `run:` and `herdr:` only                            |
 | `on_failure`        | One action, once, after the first non-tolerated failure anywhere in the run                                                 |

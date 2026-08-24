@@ -140,7 +140,7 @@ Templates read from exactly three places:
 | `{{steps.id.field}}` | An earlier step's result               |
 | `{{context.key}}`    | Where and how the workflow was started |
 
-A template that fills a whole YAML value keeps that value's type, so an object stays an object. A template inside a longer string renders as text. Anything else — a typo in a path, a forward reference, a reference to a background step that produces no result — fails when the file loads, not halfway through your run.
+A template that fills a whole YAML value keeps that value's type, so an object stays an object. A template inside a longer string renders as text. Anything else fails when the file loads, not halfway through your run. That includes a typo in a path, a forward reference, or a reference to a background step that produces no result.
 
 Useful context keys: `pane`, `tab`, `workspace`, `worktree`, `cwd`, `agent`, `selection`, `platform`. See [Reference](/reference#context) for all of them.
 
@@ -198,9 +198,9 @@ Without `--resolve`, a dynamic option command is printed instead of run.
   timeout: 30s
 ```
 
-- **`open: beside` or `below`** splits the pane you started from. **`open: tab`** makes a new tab in the workspace you started from. Placement uses the IDs captured at the start, so moving your focus mid-run changes nothing.
-- **A placed command needs to say when it's ready.** Use `ready_when: /regex/` with a `timeout`, which watches the pane's recent output for that pattern, or `background: true` for something you never wait on. The two are mutually exclusive.
-- **`ready_when` watches text, not exit codes.** It succeeds when the pattern shows up and fails when the timeout passes. It can't tell you the process died.
+- **`open: beside` or `below`** splits the pane you started from. **`open: tab`** makes a new tab in the workspace you started from. Placement uses the IDs captured at the start. Moving your focus mid-run changes nothing.
+- **A placed command needs to say when it's ready.** Use `ready_when: /regex/` with a `timeout` to watch the pane's recent output for that pattern. Use `background: true` for something you never wait on. The two are mutually exclusive.
+- **`ready_when` watches text, not exit codes.** It succeeds when the pattern appears and fails when the timeout passes. It can't tell you the process died.
 - **Background processes belong to their pane.** They survive you detaching your client. They don't survive a server restart, and a later failure elsewhere in the workflow won't stop them.
 - **Agents can clean up after themselves** with `close: success` or `close: always`. `close` doesn't apply to commands.
 
@@ -281,7 +281,7 @@ It has to exit 0, print something, finish inside 30 seconds, and produce at most
 - Only the invoking pane. There's no way to read some other agent's history.
 - That pane has to have an agent in it. Launch from a plain shell and there's nothing to extract.
 - `claude` is the only kind supported out of the box, and only with its herdr integration installed. Everything else is on you to write.
-- Failure is total, never partial: no extractor, an empty result, a timeout, or an oversized transcript all stop the run before step 1 rather than handing an agent half a session.
+- Failure is total, never partial. The run stops before step 1 on no extractor, an empty result, a timeout, or an oversized transcript. It never hands an agent half a session.
 
 ## Build with an agent instead
 
