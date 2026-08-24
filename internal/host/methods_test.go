@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// Copy of workflow.IsWholeValueTemplate's shape: host cannot import workflow.
+// Copy of the shape of workflow.IsWholeValueTemplate. The host package cannot import workflow.
 var wholeTemplateRE = regexp.MustCompile(`^\{\{\s*(?:inputs|steps|context)(?:\.[a-zA-Z_][a-zA-Z0-9_]*)+\s*\}\}$`)
 
 func wholeTemplate(text string) bool {

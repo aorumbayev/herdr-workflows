@@ -1,5 +1,5 @@
-// Package caps owns the byte caps and their guards. Crossing a cap fails
-// naming the source and the limit; output is never truncated.
+// Package caps holds the byte caps and their guards. If data is more than a cap,
+// the check fails with the source and the limit. The output is not truncated.
 package caps
 
 import (
@@ -11,22 +11,22 @@ import (
 
 const CaptureByteLimit = 8 * 1024 * 1024
 
-// TranscriptFileByteLimit bounds how large a raw claude session file the
-// built-in extractor will load; the transcript cap applies to extracted text.
+// TranscriptFileByteLimit is the maximum size of a raw claude session file that
+// the built-in extractor loads. The transcript cap applies to extracted text.
 const TranscriptFileByteLimit = 32 * CaptureByteLimit
 
-// TranscriptRecordByteLimit bounds the memory one buffered JSONL record can
-// hold. One record's extracted text can approach the capture cap and JSON
-// escaping plus non-text blocks multiply the raw size, so 4x leaves headroom.
+// TranscriptRecordByteLimit is the maximum memory for one buffered JSONL record.
+// Extracted text of one record can be almost the capture cap. JSON escaping and
+// non-text blocks multiply the raw size, so 4x supplies remaining capacity.
 const TranscriptRecordByteLimit = 4 * CaptureByteLimit
 
 const HwfEnvByteLimit = 24 * 1024
 
-// AgentPromptByteLimit stays under the ~21KB body size herdr agent.prompt
-// silently drops; oversized prompts spill to a run-owned file.
+// AgentPromptByteLimit stays less than the ~21KB body size that herdr
+// agent.prompt discards with no message. Oversized prompts write to a run-owned file.
 const AgentPromptByteLimit = 16 * 1024
 
-// CaptureLimitError reports a source that crossed its byte limit.
+// CaptureLimitError identifies a source that is more than its byte limit.
 type CaptureLimitError struct {
 	Source string
 	Bytes  int
@@ -37,7 +37,7 @@ func (e *CaptureLimitError) Error() string {
 	return fmt.Sprintf("%s exceeded %d byte limit (%d bytes)", e.Source, e.Limit, e.Bytes)
 }
 
-// AssertUnderCaptureCap fails when text crosses the shared capture cap.
+// AssertUnderCaptureCap fails if text is more than the shared capture cap.
 func AssertUnderCaptureCap(source, text string) error {
 	if len(text) > CaptureByteLimit {
 		return &CaptureLimitError{Source: source, Bytes: len(text), Limit: CaptureByteLimit}
@@ -45,8 +45,8 @@ func AssertUnderCaptureCap(source, text string) error {
 	return nil
 }
 
-// formatHwfEnvBlock models the byte size of the generated HWF_* environment
-// block for the cap check only.
+// formatHwfEnvBlock calculates the byte size of the generated HWF_* environment
+// block. The function is only for the cap check.
 func formatHwfEnvBlock(values map[string]string) string {
 	var b strings.Builder
 	for _, name := range slices.Sorted(maps.Keys(values)) {
@@ -55,8 +55,8 @@ func formatHwfEnvBlock(values map[string]string) string {
 	return strings.TrimSuffix(b.String(), "\n")
 }
 
-// AssertHwfEnvValues fails when the generated HWF_* environment block crosses
-// its cap.
+// AssertHwfEnvValues fails if the generated HWF_* environment block is more
+// than its cap.
 func AssertHwfEnvValues(source string, values map[string]string) error {
 	block := formatHwfEnvBlock(values)
 	if len(block) > HwfEnvByteLimit {

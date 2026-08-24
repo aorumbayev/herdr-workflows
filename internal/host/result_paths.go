@@ -11,8 +11,7 @@ func pathAllowed(paths []string, field string) bool {
 	return false
 }
 
-// IsMethodResultDotPath reports whether a field is present in a success
-// variant of the method result.
+// IsMethodResultDotPath is true if a field is in a success variant of the method result.
 func IsMethodResultDotPath(method, field string) bool {
 	for _, variant := range methodResultVariants[method] {
 		if pathAllowed(variant.Paths, field) {
@@ -22,7 +21,7 @@ func IsMethodResultDotPath(method, field string) bool {
 	return false
 }
 
-// IsGlobalResultDotPath reports whether a native result field is known.
+// IsGlobalResultDotPath is true if the field is a known native result field.
 func IsGlobalResultDotPath(field string) bool {
 	return resultDotPaths[field]
 }

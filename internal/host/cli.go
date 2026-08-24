@@ -46,7 +46,7 @@ func PaneClose(paneID string) error {
 	return err
 }
 
-// PluginPaneOpen opens a plugin pane over the socket, the picker hot path.
+// PluginPaneOpen opens a plugin pane on the socket. This is the picker hot path.
 func PluginPaneOpen(entrypoint string, env map[string]string, placement string) error {
 	pluginID := os.Getenv("HERDR_PLUGIN_ID")
 	if pluginID == "" {
@@ -70,7 +70,7 @@ func PluginPaneOpen(entrypoint string, env map[string]string, placement string) 
 }
 
 // PluginPaneOpenPopup opens a popup plugin pane at an explicit size. A size is
-// either terminal cells or a percent string such as 85%.
+// terminal cells or a percent string such as 85%.
 func PluginPaneOpenPopup(entrypoint string, env map[string]string, width, height string) error {
 	pluginID := os.Getenv("HERDR_PLUGIN_ID")
 	if pluginID == "" {
@@ -96,8 +96,8 @@ func PluginPaneOpenPopup(entrypoint string, env map[string]string, width, height
 	return err
 }
 
-// popupSize keeps a cell count an integer and a percent a string, the two
-// shapes PopupSize accepts. Anything else means the manifest default.
+// popupSize keeps a cell count as an integer and a percent as a string. These
+// are the two shapes that PopupSize accepts. Other values use the manifest default.
 func popupSize(value string) any {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -112,7 +112,7 @@ func popupSize(value string) any {
 	return nil
 }
 
-// NotificationShow posts a herdr notification through the CLI.
+// NotificationShow sends a herdr notification with the CLI.
 func NotificationShow(title string, body ...string) error {
 	args := []string{"notification", "show", title}
 	if len(body) > 0 && body[0] != "" {
@@ -174,7 +174,7 @@ func agentGet(target string) (*agentInfo, error) {
 	return parsed.Result.Agent, nil
 }
 
-// AgentStatus reports the connected agent's status string.
+// AgentStatus gives the status string of the connected agent.
 func AgentStatus(target string) (string, error) {
 	info, err := agentGet(target)
 	if err != nil {
@@ -191,7 +191,7 @@ func AgentStatus(target string) (string, error) {
 	return status, nil
 }
 
-// AgentSessionInfo is the native agent session an extractor consumes.
+// AgentSessionInfo is the native agent session that an extractor uses.
 type AgentSessionInfo struct {
 	Agent       string
 	SessionID   string
@@ -199,7 +199,7 @@ type AgentSessionInfo struct {
 	Cwd         string
 }
 
-// GetAgentSessionInfo resolves the agent identity and session for a pane.
+// GetAgentSessionInfo finds the agent identity and session for a pane.
 func GetAgentSessionInfo(paneID string) (AgentSessionInfo, error) {
 	info, err := agentGet(paneID)
 	if err != nil {
@@ -223,8 +223,8 @@ func GetAgentSessionInfo(paneID string) (AgentSessionInfo, error) {
 	return out, nil
 }
 
-// ReportToken publishes a report-metadata token through the CLI. A nil value
-// clears the token; an empty string publishes an empty one.
+// ReportToken publishes a report-metadata token with the CLI. A nil value
+// removes the token. An empty string publishes an empty token.
 func ReportToken(paneID string, value *string) error {
 	args := []string{"pane", "report-metadata", paneID, "--source", "herdr-workflows"}
 	if value == nil {
@@ -247,8 +247,8 @@ var (
 	protocolChecked   bool
 )
 
-// EnsureHerdrProtocol performs the one-shot startup check against the
-// connected herdr, no-oping when no socket is configured.
+// EnsureHerdrProtocol does the one-shot startup check of the connected herdr.
+// If no socket is configured, the function does nothing.
 func EnsureHerdrProtocol() error {
 	protocolCheckedMu.Lock()
 	defer protocolCheckedMu.Unlock()
@@ -270,8 +270,8 @@ func EnsureHerdrProtocol() error {
 	return nil
 }
 
-// ResetProtocolCheck clears the one-shot startup gate so each CLI invocation
-// in-process can observe a fresh ping.
+// ResetProtocolCheck sets the one-shot startup gate to the initial state.
+// Each CLI invocation in the same process can then receive a new ping.
 func ResetProtocolCheck() {
 	protocolCheckedMu.Lock()
 	defer protocolCheckedMu.Unlock()

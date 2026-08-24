@@ -11,16 +11,16 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/host"
 )
 
-// Options carries the invocation context and the host session seam. GetInfo
-// defaults to the real herdr agent-session lookup.
+// Options holds the invocation context and the host session seam. If GetInfo is
+// nil, the default is the real herdr agent-session lookup.
 type Options struct {
 	InvocationCwd string
 	ProjectsBase  string
 	GetInfo       func(paneID string) (host.AgentSessionInfo, error)
 }
 
-// HasTranscriptSupport reports whether an agent kind has a configured
-// extractor or built-in Claude support.
+// HasTranscriptSupport is true if an agent kind has a configured extractor or
+// built-in Claude support.
 func HasTranscriptSupport(agentKind string, transcripts map[string]config.TranscriptExtractor) bool {
 	if _, ok := transcripts[agentKind]; ok {
 		return true
@@ -83,9 +83,8 @@ func runTranscriptCommand(argv []string, paneID string, info host.AgentSessionIn
 	return result.stdout, nil
 }
 
-// Text returns the text transcript for a pane's agent session,
-// either through a configured extractor command or the built-in Claude
-// extractor.
+// Text gives the text transcript for the agent session of a pane. The source
+// is a configured extractor command or the built-in Claude extractor.
 func Text(paneID string, transcripts map[string]config.TranscriptExtractor, opts Options) (string, error) {
 	getInfo := opts.GetInfo
 	if getInfo == nil {

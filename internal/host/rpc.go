@@ -16,10 +16,10 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/caps"
 )
 
-// rpcTimeout is a var so the timeout path is testable without a 10 s wait.
+// rpcTimeout is a variable so that tests can operate the timeout path without a wait of 10 s.
 var rpcTimeout = 10 * time.Second
 
-// HerdrResponse is a single JSON-RPC-style reply from the herdr socket.
+// HerdrResponse is one JSON-RPC-style reply from the herdr socket.
 type HerdrResponse struct {
 	ID     string         `json:"id"`
 	Result map[string]any `json:"result"`
@@ -67,10 +67,10 @@ func randomHex(n int) string {
 	return hex.EncodeToString(b)[:n]
 }
 
-// HerdrRequest performs a raw socket request to the connected herdr. Prefer the
-// CLI wrappers when they exist. The method layout.apply has no CLI surface. The
-// picker calls plugin.pane.open on a hot path, where a CLI subprocess costs
-// about 50 ms per launch.
+// HerdrRequest sends a raw socket request to the connected herdr. The CLI
+// wrappers are the usual interface when they are available. The method
+// layout.apply has no CLI surface. The picker calls plugin.pane.open on a hot
+// path. A CLI subprocess uses 50 ms for each launch.
 func HerdrRequest(method string, params map[string]any) (HerdrResponse, error) {
 	address, err := socketPath()
 	if err != nil {
@@ -127,8 +127,8 @@ func HerdrRequest(method string, params map[string]any) (HerdrResponse, error) {
 	}
 }
 
-// HerdrCall performs a socket request and unwraps the result, mapping a
-// response error to a typed HerdrError.
+// HerdrCall sends a socket request and extracts the result. A response error
+// becomes a typed HerdrError.
 func HerdrCall(method string, params map[string]any) (map[string]any, error) {
 	resp, err := HerdrRequest(method, params)
 	if err != nil {

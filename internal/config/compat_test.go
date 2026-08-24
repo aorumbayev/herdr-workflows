@@ -7,8 +7,8 @@ import (
 	"testing"
 )
 
-// Fixture is a global config.yaml sample from a real install, with the
-// home directory in the extractor argv replaced by a neutral path.
+// Fixture is a global config.yaml sample from a real install. The home directory
+// in the extractor argv is a neutral path.
 func TestRealInstallGlobalConfigParses(t *testing.T) {
 	data, err := os.ReadFile("testdata/global-config.yaml")
 	if err != nil {
@@ -39,8 +39,8 @@ func TestRealInstallGlobalConfigParses(t *testing.T) {
 	}
 }
 
-// The same fixture loaded as the global layer must merge so later layers
-// replace whole profile and transcript entries by name.
+// The same fixture, loaded as the global layer, must merge so that subsequent
+// layers replace full profile and transcript entries by name.
 func TestRealInstallGlobalConfigLayerReplacement(t *testing.T) {
 	plugin := t.TempDir()
 	root := t.TempDir()

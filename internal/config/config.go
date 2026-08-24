@@ -1,6 +1,6 @@
 // Package config loads the layered plugin configuration (profiles,
-// default_profile, transcripts) and resolves the invocation context.
-// The name avoids a collision with the standard library context package.
+// default_profile, transcripts) and finds the invocation context.
+// The name prevents a collision with the standard library context package.
 package config
 
 import (
@@ -24,7 +24,7 @@ import (
 // ProfileNameRE is the identifier rule for profile names and default_profile.
 var ProfileNameRE = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 
-// Profile maps a name to a native herdr agent kind plus optional args.
+// Profile maps a name to a native herdr agent kind and optional args.
 type Profile struct {
 	Kind string
 	Args []string
@@ -36,14 +36,14 @@ type TranscriptExtractor struct {
 }
 
 // Config is the merged view of all configuration layers. An empty
-// DefaultProfile means no layer declared one.
+// DefaultProfile shows that no layer declared one.
 type Config struct {
 	Profiles       map[string]Profile
 	DefaultProfile string
 	Transcripts    map[string]TranscriptExtractor
 }
 
-// LoadError names the file and key behind a configuration failure.
+// LoadError identifies the file and the key of a configuration failure.
 type LoadError struct {
 	msg string
 }
@@ -94,8 +94,7 @@ func decodeError(file string, err error) *LoadError {
 	return &LoadError{msg: strings.Join(msgs, "; ")}
 }
 
-// ParseConfigText validates a config YAML buffer through the same schema
-// LoadConfig uses.
+// ParseConfigText does a check of a config YAML buffer with the same schema as LoadConfig.
 func ParseConfigText(file, text string) (Config, error) {
 	var raw rawConfig
 	dec := yaml.NewDecoder(strings.NewReader(text))
@@ -175,7 +174,7 @@ func loadFile(file string) (Config, bool, error) {
 
 const pluginID = "herdr-workflows"
 
-// Env reads an environment variable; nil means os.Getenv.
+// Env reads an environment variable. A nil Env uses os.Getenv.
 type Env func(string) string
 
 func envOr(getenv Env) Env {
@@ -185,8 +184,8 @@ func envOr(getenv Env) Env {
 	return getenv
 }
 
-// ResolvePluginConfigDir resolves the herdr-owned plugin config directory
-// (never ~/.hwf).
+// ResolvePluginConfigDir finds the herdr-owned plugin config directory.
+// The directory is not ~/.hwf.
 func ResolvePluginConfigDir(getenv Env) (string, error) {
 	env := envOr(getenv)
 	if injected := strings.TrimSpace(env("HERDR_PLUGIN_CONFIG_DIR")); injected != "" {
@@ -241,8 +240,8 @@ func PluginStateDir(getenv Env) (string, error) {
 	return filepath.Join(home, ".hwf", "state"), nil
 }
 
-// HomeDir resolves the invoking user's home directory through the injected
-// environment seam: $HOME when set, else the OS home.
+// HomeDir finds the home directory of the user that invoked the plugin.
+// If $HOME is set, HomeDir uses $HOME. If $HOME is not set, HomeDir uses the OS home.
 func HomeDir(getenv Env) (string, error) {
 	env := envOr(getenv)
 	if home := env("HOME"); home != "" {
@@ -261,7 +260,7 @@ func RepoLocalConfigPath(repoRoot string) string {
 	return filepath.Join(repoRoot, ".hwf", "config.local.yaml")
 }
 
-// EnsureLocalConfigGitignored makes sure .hwf/.gitignore covers local config
+// EnsureLocalConfigGitignored adds .hwf/.gitignore coverage for local config
 // and tmp before the first write.
 func EnsureLocalConfigGitignored(repoRoot string) error {
 	hwfDir := filepath.Join(repoRoot, ".hwf")
@@ -298,8 +297,8 @@ func EnsureLocalConfigGitignored(repoRoot string) error {
 	return nil
 }
 
-// mergeLayer applies layer over into; higher precedence replaces whole
-// entries by name.
+// mergeLayer writes layer onto into. A layer of higher precedence replaces
+// full entries by name.
 func mergeLayer(into *Config, layer Config) {
 	for name, profile := range layer.Profiles {
 		into.Profiles[name] = profile
@@ -312,8 +311,8 @@ func mergeLayer(into *Config, layer Config) {
 	}
 }
 
-// LoadConfig merges global → committed repo → local; higher precedence
-// replaces whole entries by name.
+// LoadConfig merges global, then committed repo, then local. A layer of higher
+// precedence replaces full entries by name.
 func LoadConfig(repoRoot string, getenv Env) (Config, error) {
 	merged := emptyConfig()
 	globalPath, err := GlobalConfigPath(getenv)
@@ -348,23 +347,23 @@ func LoadConfig(repoRoot string, getenv Env) (Config, error) {
 	return merged, nil
 }
 
-// ProfileNames lists merged profile names in deterministic order.
+// ProfileNames gives merged profile names in a stable order.
 func ProfileNames(config Config) []string {
 	return slices.Sorted(maps.Keys(config.Profiles))
 }
 
-// PathsHint is the shared hint naming where configuration was sought.
+// PathsHint is the shared hint that identifies the locations of the configuration search.
 func PathsHint(globalPath, repoPath string) string {
 	return fmt.Sprintf("looked in %s and %s", globalPath, repoPath)
 }
 
-// NoProfilesConfiguredMessage points at init when no profile exists.
+// NoProfilesConfiguredMessage identifies init when there is no profile.
 func NoProfilesConfiguredMessage(globalPath, repoPath string) string {
 	return fmt.Sprintf("no profiles configured (%s); run `hwf init` or `hwf init --global`",
 		PathsHint(globalPath, repoPath))
 }
 
-// ResolveProfile returns the merged profile for name, if any.
+// ResolveProfile gives the merged profile for name, if any.
 func ResolveProfile(config Config, name string) (Profile, bool) {
 	p, ok := config.Profiles[name]
 	return p, ok
