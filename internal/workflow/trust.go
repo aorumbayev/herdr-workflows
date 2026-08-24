@@ -206,15 +206,6 @@ func appendUnique(values []string, value string) []string {
 	return append(values, value)
 }
 
-// AnalyzeYamlTree parses a workflow body and aggregates its sensitivity.
-func AnalyzeYamlTree(file, body, name, repoRoot string) (Sensitivity, error) {
-	raw, err := ParseRaw(file, body)
-	if err != nil {
-		return Sensitivity{}, err
-	}
-	return AnalyzeResolvedSensitivity(raw, name, repoRoot), nil
-}
-
 // ReferencedWorkflowChildren returns unique child names in sorted order.
 func ReferencedWorkflowChildren(raw Document) []string {
 	var names []string

@@ -804,7 +804,7 @@ func (c *checker) checkStep(index int, value any) {
 var recoveryRejected = []string{"id", "when", "continue_on_error", "background", "retry"}
 
 var recoveryAllowedKeys = map[string][]string{
-	"agent":    {"using", "target", "cwd", "env", "pane", "timeout", "expect"},
+	"agent":    {"using", "target", "cwd", "env", "pane", "timeout"},
 	"run":      {"shell", "cwd", "env", "pane", "ready_when", "timeout"},
 	"herdr":    {"params"},
 	"workflow": {"inputs"},
@@ -1680,57 +1680,4 @@ func ParseRaw(file, text string) (Document, error) {
 		raw.Steps = append(raw.Steps, parsed)
 	}
 	return raw, nil
-}
-
-// DocIssue is one structured validation problem for structured document validation.
-type DocIssue struct {
-	Path    []any  `json:"path"`
-	Message string `json:"message"`
-}
-
-func docIssuePath(step int, key string) []any {
-	if step > 0 {
-		path := []any{"steps", step - 1}
-		if key != "" {
-			for _, part := range strings.Split(key, ".") {
-				path = append(path, part)
-			}
-		}
-		return path
-	}
-	if key == "" {
-		return nil
-	}
-	path := make([]any, 0, strings.Count(key, ".")+1)
-	for _, part := range strings.Split(key, ".") {
-		path = append(path, part)
-	}
-	return path
-}
-
-// ValidateDocMap runs schema checks on a parsed workflow document map.
-func ValidateDocMap(doc map[string]any) []DocIssue {
-	c := &checker{}
-	c.checkDoc(doc)
-	out := make([]DocIssue, len(c.issues.list))
-	for i, iss := range c.issues.list {
-		out[i] = DocIssue{Path: docIssuePath(iss.step, iss.key), Message: iss.msg}
-	}
-	return out
-}
-
-// ParseRawWithDoc parses YAML text and returns the document map for structured tooling.
-func ParseRawWithDoc(file, text string) (map[string]any, error) {
-	if _, err := ParseRaw(file, text); err != nil {
-		return nil, err
-	}
-	var data any
-	if err := yaml.Unmarshal([]byte(text), &data); err != nil {
-		return nil, bail(file, 0, "", err.Error())
-	}
-	doc, ok := data.(map[string]any)
-	if !ok || doc == nil {
-		return nil, bail(file, 0, "", "workflow document must be a mapping")
-	}
-	return doc, nil
 }
