@@ -4,7 +4,7 @@ This directory holds local checkouts for agent and developer use. Only this file
 
 Herdr runtime behavior for this plugin comes from the checkout at `.agents/references/herdr/`. Read docs, schema, and code there. Do not invent Herdr API behavior from memory.
 
-Pinned docs path for the current plugin floor: `.agents/references/herdr/docs/next/website/src/content/docs/` with the checkout detached at the release tag (currently `v0.8.2`). `docs/versions/` ships snapshots through `0.8.0` only, so `docs/next/` is the source of record for 0.8.2.
+Pinned docs path for the current plugin floor: `.agents/references/herdr/docs/next/website/src/content/docs/` with the checkout detached at the release tag (currently `v0.8.2`). `docs/versions/` has snapshots through `0.8.0` only, so `docs/next/` is the source of record for 0.8.2.
 
 ## Clone when absent
 
@@ -64,7 +64,7 @@ git -C .agents/references/herdr switch --detach origin/<default-branch>
 git -C .agents/references/herdr pull --ff-only origin <default-branch>
 ```
 
-Never overwrite local changes. If the tree is dirty or local commits would be lost, stop and report. Leave the checkout as it is.
+Never overwrite local changes. If the tree is dirty, or an update can remove local commits, stop and report. Leave the checkout as it is.
 
 ## Inspect upstream for breaks
 
@@ -78,4 +78,4 @@ Always report upcoming upstream changes that can break herdr-workflows compatibi
 - docs under `docs/next/website/src/content/docs/` that diverge from the pinned release-tag tree (currently `v0.8.2`)
 - protocol or minimum-version changes
 
-If nothing relevant changed, say that clearly.
+If nothing relevant changed, say so.

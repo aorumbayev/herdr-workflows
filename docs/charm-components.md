@@ -39,7 +39,7 @@ This cycle does not add `bubbles` or `huh`. Unused modules violate YAGNI.
 | Delete confirm y/n | `huh/v2` Confirm | v2.0.3 | keep-custom | Confirm does not match bare y/n/esc and `DeleteConfirmHint` ASCII chrome. | `TestChromeStringsAreSingleColumnASCII` |
 | Collected-answers truncation | `bubbles/v2` | v2.1.1 | keep-custom | No `chosen: name=value` join truncated with ASCII ellipsis. Uses `tui.Truncate`. | `TestTruncateEllipsisAtMax` |
 | Viewport height pad | `bubbletea/v2` | v2.0.9 | keep-custom | Bubble Tea does not clear unused TTY rows after a shorter frame. `PadHeight` appends blank lines to the prior frame height. | `TestPadHeight` |
-| Runs detail scroll | `bubbles/v2` viewport | v2.1.1 | keep-custom | `viewport.Model` has no scrollbar chrome and keeps `SoftWrap` off by default. Runs detail still scrolls a fixed ASCII window over pre-wrapped lines with clamped offset without importing bubbles. | `TestScrollDetailLines` |
+| Runs detail scroll | `bubbles/v2` viewport | v2.1.1 | keep-custom | `viewport.Model` has no scrollbar chrome and keeps `SoftWrap` off by default. Runs detail still scrolls a fixed ASCII window over pre-wrapped lines with clamped offset and no bubbles import. | `TestScrollDetailLines` |
 | Theme kind palette | `lipgloss/v2` | v2.0.6 | keep-custom | No ready theme for indexed kind colors (agent 6, run 2, herdr 5, workflow 4, default 7), fail 1, faint secondary text, underline hover distinct from reverse, and run status slots. | `TestDefaultThemeKindPaletteAndHover` |
 | Picker tab bar | `bubbles/v2` | v2.1.1 | keep-custom | Bubbles tabs do not render a three-label ASCII bar with reverse active and muted inactive states under picker chrome width rules. Picker owns `FormatTabBar`. | `TestFormatTabBarActiveReverseInactiveMuted` |
 | Picker mouse hover | `bubbletea/v2` | v2.0.9 | keep-custom | Bubble Tea reports mouse cells but does not map hover to a non-reverse row style while reverse remains the keyboard cursor. | `TestPickerHoverStyleIsNotReverse` |
@@ -59,7 +59,7 @@ Machine-readable copy lives in `tui.CharmVerdicts()`.
 
 ### Filter text accumulation
 
-Filter typing must ignore Ctrl+K, Tab, and other mods while still accepting bare printable runes. `textinput` always accumulates printable input unless the host rewrites keys. Keep the hand-written filter string and key switch.
+Filter typing must ignore Ctrl+K, Tab, and other mods while it still accepts bare printable runes. `textinput` always accumulates printable input unless the host rewrites keys. Keep the hand-written filter string and key switch.
 
 ### FilterInput stdin leak drop
 
@@ -67,7 +67,7 @@ After Bubble Tea parses keys, herdr can still leak C0 bytes from the prefix bind
 
 ### Choice list plus custom row
 
-Choice collection appends a tagged `custom...` row that opens free text. `huh.Select` has no matching sentinel under the shared six-row ASCII list. Keep picker choice mode.
+Choice collection appends a tagged `custom...` row that opens free text. `huh.Select` has no sentinel that matches under the shared six-row ASCII list. Keep picker choice mode.
 
 ### Text prompt
 
@@ -79,11 +79,11 @@ The text prompt shares backtrack, collected answers, and ASCII submit hints with
 
 ### Two-line detail wrap
 
-`FormatDetailLines` wraps to two indented lines and truncates only the second. Lip Gloss has no matching helper. Keep the custom formatter.
+`FormatDetailLines` wraps to two indented lines and truncates only the second. Lip Gloss has no helper that matches. Keep the custom formatter.
 
 ### Inset muted horizontal rule
 
-`FormatRule` indents by `RowTextIndent` and fills with ASCII dashes. Lip Gloss has no matching rule. Keep the custom formatter.
+`FormatRule` indents by `RowTextIndent` and fills with ASCII dashes. Lip Gloss has no rule that matches. Keep the custom formatter.
 
 ### Column row layout
 
@@ -123,7 +123,7 @@ After a shorter frame, Bubble Tea leaves prior TTY rows on screen. `PadHeight` a
 
 ### Runs detail scroll
 
-Runs detail scrolls a fixed ASCII window over lines already wrapped for content width. `bubbles/v2` `viewport.Model` has no scrollbar chrome and keeps `SoftWrap` off by default. The product still owns clamped offset scrolling over pre-wrapped lines without importing bubbles. The console diagram consumes wheel the same way, still without a bubbles viewport. Keep `ScrollDetailLines` in the runs browser.
+Runs detail scrolls a fixed ASCII window over lines already wrapped for content width. `bubbles/v2` `viewport.Model` has no scrollbar chrome and keeps `SoftWrap` off by default. The product still owns clamped offset scrolling over pre-wrapped lines with no bubbles import. The console diagram consumes wheel the same way, still without a bubbles viewport. Keep `ScrollDetailLines` in the runs browser.
 
 ### Theme kind palette
 

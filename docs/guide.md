@@ -13,11 +13,11 @@ steps:
   - run: [bun, test]
 ```
 
-Save it in `.hwf/workflows/` for this repo, or `~/.hwf/workflows/` for every repo. Workflow names must match `[a-z0-9][a-z0-9-_]*`. Use `<name>.yaml`. `hwf` does not discover `.yml` files. If both scopes have a `tests.yaml`, the repo one wins.
+Save it in `.hwf/workflows/` for this repo, or `~/.hwf/workflows/` for every repo. Workflow names must match `[a-z0-9][a-z0-9-_]*`. Use `<name>.yaml`. `hwf` does not discover `.yml` files. If both scopes have a `tests.yaml`, the repo one takes precedence.
 
 Run it with `prefix+k` or `hwf run tests`.
 
-Every file needs `version: v1alpha1`. That's the workflow format version, not the plugin version, and the two move independently.
+Every file needs `version: v1alpha1`. That is the workflow format version, not the plugin version, and the two move independently.
 
 ## Name it for the picker
 
@@ -30,11 +30,11 @@ steps:
   - run: [bun, test]
 ```
 
-`title` shows in the picker list, and defaults to the file name in title case. `description` shows below the list when the workflow is selected. `hidden: true` keeps a workflow out of the picker while `hwf run` still works, which is what you want for children other workflows call.
+`title` shows in the picker list, and defaults to the file name in title case. `description` shows below the list when you select the workflow. `hidden: true` removes a workflow from the picker, but `hwf run` still works. That is what you want for children that other workflows call.
 
 ## The four kinds of step
 
-Each step does exactly one of these four things. Mixing two in one step is an error.
+Each step does exactly one of these four things. If you mix two in one step, that is an error.
 
 ### Run a command
 
@@ -45,9 +45,9 @@ steps:
   - run: bun test | tee out.log # string form: runs through sh
 ```
 
-Use the **list form** by default. Each item is one argument, so a branch name with spaces stays one argument and nothing gets word-split. Templates work in list items. Local list-form commands and `pane.open: tab` run without a shell. `beside` and `below` submit one shell-quoted line to the new pane.
+Use the **list form** by default. Each item is one argument, so a branch name with spaces stays one argument and the shell does not split it into words. Templates work in list items. Local list-form commands and `pane.open: tab` run without a shell. `beside` and `below` submit one shell-quoted line to the new pane.
 
-Use the **string form** only when you need shell features like pipes or redirects. The string form rejects templates on purpose, so a value can't be spliced into shell source. Pass values through `env:` instead:
+Use the **string form** only when you need shell features like pipes or redirects. The string form rejects templates on purpose, so you cannot splice a value into shell source. Pass values through `env:` instead:
 
 ```yaml
 - run: git log --oneline "$BASE"..HEAD | head -20
@@ -70,11 +70,11 @@ A blocking local command gives you `stdout`, `stderr`, `exit_code`, and `failed`
     open: beside
 ```
 
-`using:` names a profile from your config and starts a fresh agent for this step. `target:` addresses an agent that's already running, by name or pane ID. Use one or the other, never both.
+`using:` names a profile from your config and starts a fresh agent for this step. `target:` addresses an agent that is already active, by name or pane ID. Use one or the other, never both.
 
-The step waits for the turn to finish and gives you `response`, `agent`, and `pane_id`. A turn waits 30 minutes by default. Starting the agent gets its own 30-second budget.
+The step waits for the turn to finish and gives you `response`, `agent`, and `pane_id`. A turn waits 30 minutes by default. The agent has 30 seconds to start.
 
-A `target:` step needs that agent to be idle or done before it prompts. It fails otherwise, because herdr can't tell one queued turn from another. That also means a workflow can't prompt the agent that started it — the agent you asked to run the workflow is busy with that request.
+A `target:` step needs that agent to be idle or done before it prompts. It fails otherwise, because herdr cannot find the difference between queued turns. That also means a workflow cannot prompt the agent that started it. The agent you asked to run the workflow is busy with that request.
 
 ### Call herdr
 
@@ -85,9 +85,9 @@ A `target:` step needs that agent to be idle or done before it prompts. It fails
     sound: done
 ```
 
-`herdr:` calls one method on the herdr socket API, and `params:` is that method's exact request. You get the method's full result back.
+`herdr:` calls one method on the herdr socket API, and `params:` is that method's exact request. You get the method's full result.
 
-Nothing is filled in for you. If a method needs to know which pane or tab to act on, say so:
+hwf adds nothing for you. If a method needs to know which pane or tab to use, name it:
 
 ```yaml
 - herdr: tab.rename
@@ -96,9 +96,9 @@ Nothing is filled in for you. If a method needs to know which pane or tab to act
     label: review
 ```
 
-That's deliberate. An omitted target would otherwise fall through to whatever pane happens to have focus, which is a different pane by the time the step runs.
+That is deliberate. An omitted target would otherwise go to whatever pane has focus, which is a different pane by the time the step runs.
 
-Methods that could stop the server, rewrite plugin state, or take over agent identity are refused when the file loads. See [the denied list](/reference#trust-and-sharing).
+When the file loads, hwf rejects methods that could stop the server, rewrite plugin state, or take control of agent identity. Refer to [the denied list](/reference#trust-and-sharing).
 
 ### Call another workflow
 
@@ -109,7 +109,7 @@ Methods that could stop the server, rewrite plugin state, or take over agent ide
     branch: "{{inputs.branch}}"
 ```
 
-The child gets its own inputs and its own step results, and can't see yours. To send a value back, the child declares `returns:`:
+The child gets its own inputs and its own step results, and cannot access yours. To return a value, the child declares `returns:`:
 
 ```yaml
 # run-checks.yaml
@@ -117,11 +117,11 @@ returns:
   summary: "{{steps.report.stdout}}"
 ```
 
-The parent then reads `{{steps.checks.summary}}`. A child with no `returns:` has no result, and referencing one is a load error.
+The parent then reads `{{steps.checks.summary}}`. A child with no `returns:` has no result, and a reference to one is a load error.
 
 ## Pass values between steps
 
-Give a step an `id`, then read its result. There's no output binding to declare — results attach on their own.
+Give a step an `id`, then read its result. There is no output binding to declare — results attach on their own.
 
 ```yaml
 steps:
@@ -142,7 +142,7 @@ Templates read from exactly three places:
 
 A template that fills a whole YAML value keeps that value's type, so an object stays an object. A template inside a longer string renders as text. Anything else fails when the file loads, not halfway through your run. That includes a typo in a path, a forward reference, or a reference to a background step that produces no result.
 
-Useful context keys: `pane`, `tab`, `workspace`, `worktree`, `cwd`, `agent`, `selection`, `platform`. See [Reference](/reference#context) for all of them.
+Useful context keys: `pane`, `tab`, `workspace`, `worktree`, `cwd`, `agent`, `selection`, `platform`. Refer to [Reference](/reference#context) for all of them.
 
 ## Ask questions before the run
 
@@ -166,12 +166,12 @@ The picker asks for these in order, before step 1. Only the workflow you started
 
 - **`type: text`** takes any text. **`type: choice`** offers a list. **`type: profile`** offers your profile names.
 - **Options can be a command.** `{run: [...]}` runs from your repo root and turns each output line into an option.
-- **A command can use an earlier answer.** Put `{{inputs.<name>}}` in an argv element to cascade — pick a repository, then pick one of that repository's branches. The reference must point at an input declared before this one, and if that input has a `when:`, this one repeats the same clauses. Change the earlier answer and the later options are looked up again.
-- **`allow_custom: true`** turns the options into suggestions and accepts anything else typed. Select the `custom...` row to get a text field, which starts from the text you typed to filter.
-- **`min_length`** rejects a value that's too short. Use `min_length: 1` to refuse an empty answer.
-- **`when:`** hides an input based on an earlier answer. The example never asks for a branch in `status` mode, and doesn't run the branch-listing command either.
+- **A command can use an earlier answer.** Put `{{inputs.<name>}}` in an argv element to cascade. Pick a repository, then pick one of that repository's branches. The reference must point at an input declared before this one, and if that input has a `when:`, this one repeats the same clauses. Change the earlier answer, and hwf looks up the later options again.
+- **`allow_custom: true`** turns the options into suggestions and accepts any other text that you type. Select the `custom...` row to open a text field. It starts from the text that you typed for the filter.
+- **`min_length`** rejects a value that is too short. Use `min_length: 1` to refuse an empty answer.
+- **`when:`** removes an input from the prompt, based on an earlier answer. The example never asks for a branch in `status` mode, and does not run the branch-listing command either.
 
-Write a `description` for every input. It's the only part of the prompt you control.
+Write a `description` for every input. It is the only part of the prompt you control.
 
 Inputs also reach `run:` steps as environment variables named `HWF_<name>`.
 
@@ -182,11 +182,11 @@ hwf workflow inspect branch-check
 hwf workflow inspect branch-check --input mode=branch --resolve
 ```
 
-Without `--resolve`, a dynamic option command is printed instead of run.
+Without `--resolve`, hwf prints a dynamic option command and does not run it.
 
 ## Put steps somewhere you can see
 
-`run:` and `agent:` steps take a `pane:` block. Without one, an agent gets a new tab and a command runs unseen while the workflow waits for it.
+`run:` and `agent:` steps take a `pane:` block. Without one, an agent opens in a new tab. A command runs unseen, and the workflow waits for it.
 
 ```yaml
 - run: [npm, run, dev]
@@ -198,11 +198,11 @@ Without `--resolve`, a dynamic option command is printed instead of run.
   timeout: 30s
 ```
 
-- **`open: beside` or `below`** splits the pane you started from. **`open: tab`** makes a new tab in the workspace you started from. Placement uses the IDs captured at the start. Moving your focus mid-run changes nothing.
-- **A placed command needs to say when it's ready.** Use `ready_when: /regex/` with a `timeout` to watch the pane's recent output for that pattern. Use `background: true` for something you never wait on. The two are mutually exclusive.
-- **`ready_when` watches text, not exit codes.** It succeeds when the pattern appears and fails when the timeout passes. It can't tell you the process died.
-- **Background processes belong to their pane.** They survive you detaching your client. They don't survive a server restart, and a later failure elsewhere in the workflow won't stop them.
-- **Agents can clean up after themselves** with `close: success` or `close: always`. `close` doesn't apply to commands.
+- **`open: beside` or `below`** splits the pane you started from. **`open: tab`** makes a new tab in the workspace you started from. Placement uses the IDs captured at the start. If you move your focus mid-run, nothing changes.
+- **A placed command needs to say when it is ready.** Use `ready_when: /regex/` with a `timeout` to watch the pane's recent output for that pattern. Use `background: true` for something that you never wait for. The two are mutually exclusive.
+- **`ready_when` watches text, not exit codes.** It succeeds when the pattern appears and fails when the timeout passes. It cannot tell you that the process died.
+- **Background processes belong to their pane.** They survive when you detach your client. They do not survive a server restart, and a later failure elsewhere in the workflow will not stop them.
+- **Agents can close their own pane** with `close: success` or `close: always`. `close` does not apply to commands.
 
 ## Skip, tolerate, and recover
 
@@ -226,31 +226,31 @@ on_failure:
     title: "review failed: {{context.error.message}}"
 ```
 
-- **`when:`** takes one condition or an ordered list of them, joined by AND and evaluated left to right. A condition is either a template read for truthiness or a comparison with `==` or `!=` against a quoted string. Empty string, `0`, `false`, and null are false. There's no OR, no parentheses, and no expressions. A false condition marks the step skipped and moves on.
+- **`when:`** takes one condition or an ordered list of them, joined by AND and evaluated left to right. A condition is either a template read for truthiness or a comparison with `==` or `!=` against a quoted string. Empty string, `0`, `false`, and null are false. There is no OR, no parentheses, and no expressions. A false condition marks the step skipped and continues.
 - **`success_codes:`** lists the exit codes you count as success. Probes that report a fact through their exit code, like `git diff --quiet`, need this.
-- **`continue_on_error: true`** records the failure, keeps going, and does not trigger `on_failure` for that tolerated failure. A later non-tolerated failure can still trigger entry recovery. The run still exits nonzero at the end.
-- **`retry:`** takes `attempts` (2 or more, counting the first) and an optional `delay`. Commands and `herdr:` calls only, never agents.
-- **`on_failure:`** runs one action, once, after the first real failure anywhere in the run, including inside a child. Only the workflow you started gets to recover. `{{context.error}}` tells it what broke: message, workflow, action, step number, and details. The run still counts as failed.
+- **`continue_on_error: true`** records the failure, continues, and does not trigger `on_failure` for that tolerated failure. A later non-tolerated failure can still trigger entry recovery. The run still exits nonzero at the end.
+- **`retry:`** takes `attempts` (2 or more, with the first included) and an optional `delay`. Commands and `herdr:` calls only, never agents.
+- **`on_failure:`** runs one action, once, after the first real failure anywhere in the run, even inside a child. Only the workflow you started can recover. `{{context.error}}` tells it what broke: message, workflow, action, step number, and details. The run still counts as failed.
 
-If the connection to herdr drops mid-step, the run stops, keeps your panes, and skips `on_failure`. It won't retry, because it can't tell whether the step you dispatched finished.
+If the connection to herdr drops mid-step, the run stops, keeps your panes, and skips `on_failure`. It will not retry, because it cannot know whether the step you dispatched finished.
 
 ## Hand your session to an agent
 
-`{{context.transcript}}` and `{{context.transcript_file}}` carry your current session's transcript into a prompt. The [Handoff example](/examples) uses it to brief a fresh agent on everything you've been doing. This is the most sensitive thing a workflow can read, and every review surface marks it.
+`{{context.transcript}}` and `{{context.transcript_file}}` carry your current session's transcript into a prompt. The [Handoff example](/examples) uses it to brief a fresh agent on everything that you did. This is the most sensitive thing a workflow can read, and every review surface marks it.
 
 ### Where the transcript comes from
 
-It's read once, before step 1, from the pane you launched the workflow from, never from an agent the workflow starts. So the agent that matters is the one you're sitting in, not the one in `using:`. If that read fails, the run stops there and no step executes.
+hwf reads it once, before step 1, from the pane you launched the workflow from, never from an agent the workflow starts. So the agent that matters is the one you sit in, not the one in `using:`. If that read fails, the run stops there and no step executes.
 
-Extraction is built in for one kind: `claude`. It needs herdr's Claude integration installed, because that's what reports the session id:
+Extraction is built-in for one kind: `claude`. It needs herdr's Claude integration installed, because that is what reports the session id:
 
 ```bash
 herdr integration install claude
 ```
 
-With that in place, hwf reads the session's `.jsonl` under `~/.claude/projects/` and keeps the user and assistant text, dropping tool traffic.
+With that in place, hwf reads the session's `.jsonl` under `~/.claude/projects/`, keeps the user and assistant text, and drops tool traffic.
 
-Every other kind, including codex, opencode, and cursor, needs an extractor, or the run fails preflight.
+Every other kind, for example codex, opencode, and cursor, needs an extractor, or the run fails preflight.
 
 ### Support another agent kind
 
@@ -273,25 +273,25 @@ hwf runs it in the agent's working directory with these set:
 | `HWF_TRANSCRIPT_SESSION_KIND`  | Session reference type, when herdr reports one |
 | `HWF_TRANSCRIPT_SESSION_VALUE` | Session id or path, when herdr reports one     |
 
-It has to exit 0, print something, finish inside 30 seconds, and produce at most 8 MiB. An entry replaces built-in extraction for that kind, so you can override `claude` too.
+It must exit 0, print something, finish inside 30 seconds, and produce at most 8 MiB. An entry replaces built-in extraction for that kind, so you can override `claude` too.
 
 ### Transcript limitations
 
 - One transcript per run, taken before the first step. Nothing refreshes it mid-run.
-- Only the invoking pane. There's no way to read some other agent's history.
-- That pane has to have an agent in it. Launch from a plain shell and there's nothing to extract.
-- `claude` is the only kind supported out of the box, and only with its herdr integration installed. Everything else is on you to write.
+- Only the invoking pane. There is no way to read another agent's history.
+- That pane must have an agent in it. Launch from a plain shell and there is nothing to extract.
+- `claude` is the only kind supported by default, and only with its herdr integration installed. You must write everything else.
 - Failure is total, never partial. The run stops before step 1 on no extractor, an empty result, a timeout, or an oversized transcript. It never hands an agent half a session.
 
 ## Build with an agent instead
 
-The `herdr-workflow-create` skill interviews you, writes the YAML, and validates the file with `hwf workflow validate` or the bundled `validate.sh` script before saving. It ships inside the CLI — hand its text to your agent:
+The `herdr-workflow-create` skill interviews you, writes the YAML, and validates the file with `hwf workflow validate` or the bundled `validate.sh` script before it saves. It ships inside the CLI. Hand its text to your agent:
 
 ```bash
 hwf skills show herdr-workflow-create
 ```
 
-To bring existing workflows up to date with a newer herdr, the sibling skill walks the version gates and repairs the known breakage classes:
+To update existing workflows to a newer herdr, the sibling skill walks the version gates and repairs the known breakage classes:
 
 ```bash
 hwf skills show herdr-workflow-upgrade

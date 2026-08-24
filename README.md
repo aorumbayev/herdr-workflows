@@ -17,7 +17,7 @@
 
 You have a sequence you retype every day. Run the tests, read the diff, ask an agent to review it, open a pane to watch the logs. herdr-workflows lets you write that sequence once, as a short YAML file, and start it from a hotkey.
 
-It's a plugin for [herdr](https://herdr.dev). A workflow is a list of steps that run in order. Each step does one of four things:
+It is a plugin for [herdr](https://herdr.dev). A workflow is a list of steps that run in order. Each step does one of four things:
 
 | Step        | What it does                                        |
 | ----------- | --------------------------------------------------- |
@@ -45,7 +45,7 @@ steps:
 That workflow reads your diff, then opens Claude in a split pane and asks it to review the diff. It skips the review when the diff is empty. Press `prefix+k` to run it.
 
 > [!IMPORTANT]
-> A workflow file is code you're choosing to run, like a shell script in your repo. There's no sandbox. A `run:` step can do almost anything you can do within herdr manually. Read a workflow before you run it, especially one somebody shared with you.
+> A workflow file is code that you choose to run, like a shell script in your repo. There is no sandbox. A `run:` step can do almost anything that you can do within herdr manually. Read a workflow before you run it, especially a workflow that another person shared with you.
 
 ## Install
 
@@ -59,7 +59,7 @@ hwf init
 
 `hwf init` finds the agents on your `PATH` and writes them into `.hwf/config.yaml` as profiles, so a workflow can say `using: claude`.
 
-For build details, PATH setup, and updates, see [Quick start](https://aorumbayev.github.io/herdr-workflows/#install).
+For build details, PATH setup, and updates, refer to [Quick start](https://aorumbayev.github.io/herdr-workflows/#install).
 
 ## Write your first workflow
 
@@ -80,7 +80,7 @@ Workflows live in `.hwf/workflows/` for one repo, or `~/.hwf/workflows/` for eve
 
 ## Ways to work
 
-| Command or key   | What it's for                                                                          |
+| Command or key   | What it is for                                                                         |
 | ---------------- | -------------------------------------------------------------------------------------- |
 | `prefix+k`       | Pick and run a workflow. `Ctrl+K` opens the actions palette                            |
 | `hwf run <name>` | Run from a terminal or a script, with `--input name=value`                             |
@@ -93,8 +93,8 @@ Run workflows from the picker or with `hwf run`. Runs need real herdr panes. Edi
 
 Two agent skills ship inside the CLI, so there is no separate install step — an agent with `hwf` on `PATH` reads a skill through `hwf skills show`:
 
-- `herdr-workflow-create` — interviews you, writes v1alpha1 YAML, and validates through the real loader before saving
-- `herdr-workflow-upgrade` — brings a repo's existing workflows up to date with the latest herdr, behind version gates and a load oracle
+- `herdr-workflow-create` — interviews you, writes v1alpha1 YAML, and validates through the real loader before it saves
+- `herdr-workflow-upgrade` — updates a repo's existing workflows to the latest herdr, behind version gates and a load oracle
 
 ```bash
 hwf skills list

@@ -7,9 +7,9 @@ pattern, apply the fix, then re-inspect.
 ## 1. Worktree actions: `workspace_id` vs `cwd`
 
 `worktree.create` / `worktree.open` / `worktree.list` take exactly one of `workspace_id` or
-`cwd` — passing both fails to load, passing neither fails at runtime. The trap is
+`cwd`. Both together fail to load. Neither one fails at runtime. The trap is
 `workspace_id`: herdr 0.8.0 resolves it only for worktree-backed workspaces, so a step that
-targets the invoking workspace breaks whenever the workflow runs from an ordinary repo
+targets the invocation's workspace breaks whenever the workflow runs from an ordinary repo
 workspace.
 
 Before — loads, fails at runtime outside a worktree-backed workspace:
@@ -101,9 +101,9 @@ is no `output` field and no bracket indexing, and any other `{{…}}` shape fail
 
 ## 3. `herdr … | jq` pipelines swallow herdr failures
 
-A pipeline's exit status is the last command's, and jq exits 0 even on empty input, so
+A pipeline's exit status is the last command's, and jq exits 0 even on empty input. So
 `herdr worktree list --json | jq …` succeeds when herdr itself failed. `set -e` does not help —
-the failing herdr is not the last command in the pipe.
+the herdr that fails is not the last command in the pipe.
 
 Before:
 
