@@ -304,7 +304,7 @@ const listChrome = 7
 
 // listViewport fills the host with run rows above the six-row floor.
 func (m Model) listViewport() int {
-	return tui.FitViewport(m.height, listChrome, ListViewport)
+	return tui.FitViewport(m.height, listChrome, tui.ListViewport)
 }
 
 // detailRows fills the host with detail lines above the ten-row floor. Only the

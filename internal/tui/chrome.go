@@ -20,6 +20,10 @@ const (
 	CreateNameHint      = "enter create" + ChromeSep + "esc cancel"
 	EmptyCatalogMessage = "Hi there, looks like you got no runnable workflows, start by creating a new one, browsing examples or importing an existing workflow."
 	CursorPrefix        = "> "
+
+	TabWorkflows = "workflows"
+	TabRuns      = "runs"
+	TabConsole   = "console"
 )
 
 // ChromeStrings is every chrome fragment the picker draws. Each glyph must be

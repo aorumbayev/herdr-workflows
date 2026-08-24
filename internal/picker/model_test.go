@@ -119,8 +119,8 @@ func TestPickerViewportShowsSixRowsAndScrolls(t *testing.T) {
 	// Ports picker-presentation: six-row viewport, scroll to keep cursor visible, wrap-around.
 	m := New(Options{Entries: eightEntries(), Width: 62})
 	body := m.View().Content
-	if listRowCount(body) != ListViewport {
-		t.Fatalf("visible rows = %d, want %d\n%s", listRowCount(body), ListViewport, body)
+	if listRowCount(body) != tui.ListViewport {
+		t.Fatalf("visible rows = %d, want %d\n%s", listRowCount(body), tui.ListViewport, body)
 	}
 	if strings.Contains(body, "Golf") || strings.Contains(body, "Hotel") {
 		t.Fatalf("rows beyond viewport leaked:\n%s", body)
@@ -130,7 +130,7 @@ func TestPickerViewportShowsSixRowsAndScrolls(t *testing.T) {
 	if !strings.Contains(body, "Golf") {
 		t.Fatalf("cursor past last visible row must scroll:\n%s", body)
 	}
-	if listRowCount(body) != ListViewport {
+	if listRowCount(body) != tui.ListViewport {
 		t.Fatalf("scrolled rows = %d\n%s", listRowCount(body), body)
 	}
 	m = apply(m, "down", "down")
@@ -310,7 +310,6 @@ func TestShowCurrentDoesNotBlockUpdate(t *testing.T) {
 	}
 	done := make(chan tea.Msg, 1)
 	go func() { done <- cmd() }()
-	time.Sleep(20 * time.Millisecond)
 	next, _ = m.Update(press("esc"))
 	m = next.(Model)
 	if m.mode != modeList {

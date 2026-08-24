@@ -46,7 +46,6 @@ func listenE2EPing(t *testing.T, protocol int, version string) string {
 			}(conn)
 		}
 	}()
-	time.Sleep(10 * time.Millisecond)
 	return sockPath
 }
 

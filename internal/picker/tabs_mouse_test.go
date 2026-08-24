@@ -139,11 +139,11 @@ func TestTabBarClickSwitchesAndObeysTheKeyboardGuard(t *testing.T) {
 
 func tabCellX(name string) int {
 	x := 0
-	for _, n := range []string{tui.TabWorkflows, tui.TabRuns, tui.TabConsole} {
-		if n == name {
+	for _, cell := range tabCells() {
+		if cell.name == name {
 			return x + 1
 		}
-		x += len(n) + 3
+		x += cell.width + 1
 	}
 	return 0
 }
