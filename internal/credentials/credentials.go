@@ -209,8 +209,8 @@ func assertNoForeignACLAccess(path string, o ops) error {
 	return nil
 }
 
-// AssertCredentialStoreSafe ensures stateDir grants no read/write to any
-// principal other than the current user before writing bearer tokens there.
+// AssertCredentialStoreSafe ensures stateDir is private to the current user before
+// writing run-history snapshots (captured command output and transcript text).
 //
 // Mode bits and ACL stripping cover POSIX discretionary access and common ACL
 // inheritance. A filesystem with no permission model (some network mounts)

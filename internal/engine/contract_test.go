@@ -11,12 +11,10 @@ import (
 )
 
 func TestCoordinationError(t *testing.T) {
-	err := NewCoordinationError("agent", "socket closed")
-	if err == nil {
-		t.Fatal("NewCoordinationError returned nil")
-	}
-	if !strings.Contains(err.Error(), "may still be active") {
-		t.Fatalf("error message missing 'may still be active': %q", err.Error())
+	outcome := DispatchFailure("agent", &host.HerdrError{Code: "closed", Msg: "socket closed"})
+	want := "agent: herdr coordination was lost (socket closed) — the action may still be active; panes were preserved and on_failure was skipped"
+	if outcome.Error != want {
+		t.Fatalf("got %q, want %q", outcome.Error, want)
 	}
 }
 

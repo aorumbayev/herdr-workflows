@@ -40,7 +40,7 @@ func writeFakeHerdr(t *testing.T, pluginListJSON string) string {
 	return bin
 }
 
-func captureExecuteUpdate(t *testing.T, deps updateDeps, extraEnv map[string]string) (stdout, stderr string, code int) {
+func captureExecuteUpdate(t *testing.T, deps update.Deps, extraEnv map[string]string) (stdout, stderr string, code int) {
 	t.Helper()
 	var outBuf, errBuf bytes.Buffer
 	run := func() error {
@@ -206,7 +206,7 @@ func TestWorkflowInspectResolveHonorsDependentChoicePrecondition(t *testing.T) {
 
 func TestUpdateNoOpsWhenCurrentOrNewer(t *testing.T) {
 	current := assets.ManifestVersion()
-	stdout, stderr, code := captureExecuteUpdate(t, updateDeps{
+	stdout, stderr, code := captureExecuteUpdate(t, update.Deps{
 		FetchLatest: func() (update.LatestRelease, error) {
 			return update.LatestRelease{Tag: "v" + current, Version: current}, nil
 		},
@@ -221,7 +221,7 @@ func TestUpdateNoOpsWhenCurrentOrNewer(t *testing.T) {
 
 func TestUpdateRefusesLinkedDevelopmentCheckouts(t *testing.T) {
 	herdr := writeFakeHerdr(t, localListJSON())
-	stdout, stderr, code := captureExecuteUpdate(t, updateDeps{
+	stdout, stderr, code := captureExecuteUpdate(t, update.Deps{
 		FetchLatest: func() (update.LatestRelease, error) {
 			return update.LatestRelease{Tag: "v" + updateNewer, Version: updateNewer}, nil
 		},
@@ -245,7 +245,7 @@ func TestUpdateStandaloneUnregisteredReplacesBinary(t *testing.T) {
 		t.Fatal(err)
 	}
 	var calls int
-	stdout, stderr, code := captureExecuteUpdate(t, updateDeps{
+	stdout, stderr, code := captureExecuteUpdate(t, update.Deps{
 		FetchLatest: func() (update.LatestRelease, error) {
 			return update.LatestRelease{Tag: "v" + updateNewer, Version: updateNewer}, nil
 		},
@@ -288,7 +288,7 @@ func TestUpdateLeavesPluginRootAndForwardsInstallFailure(t *testing.T) {
 		args []string
 		cwd  string
 	}
-	stdout, stderr, code := captureExecuteUpdate(t, updateDeps{
+	stdout, stderr, code := captureExecuteUpdate(t, update.Deps{
 		FetchLatest: func() (update.LatestRelease, error) {
 			return update.LatestRelease{Tag: "v" + updateNewer, Version: updateNewer}, nil
 		},
@@ -333,7 +333,7 @@ func TestUpdateSuccessfulManagedInstall(t *testing.T) {
 		args []string
 		cwd  string
 	}
-	stdout, stderr, code := captureExecuteUpdate(t, updateDeps{
+	stdout, stderr, code := captureExecuteUpdate(t, update.Deps{
 		FetchLatest: func() (update.LatestRelease, error) {
 			return update.LatestRelease{Tag: "v" + updateNewer, Version: updateNewer}, nil
 		},
@@ -362,7 +362,7 @@ func TestUpdateSuccessfulManagedInstall(t *testing.T) {
 }
 
 func TestUpdateFetchFailuresStayUpdateCheckErrors(t *testing.T) {
-	stdout, stderr, code := captureExecuteUpdate(t, updateDeps{
+	stdout, stderr, code := captureExecuteUpdate(t, update.Deps{
 		FetchLatest: func() (update.LatestRelease, error) {
 			return update.CheckForUpdate(update.CheckOpts{
 				URL:     "http://127.0.0.1:9",
@@ -387,7 +387,7 @@ func TestUpdateOtherFailuresUseUpdateFailed(t *testing.T) {
 	if err := os.WriteFile(herdr, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	stdout, stderr, code := captureExecuteUpdate(t, updateDeps{
+	stdout, stderr, code := captureExecuteUpdate(t, update.Deps{
 		FetchLatest: func() (update.LatestRelease, error) {
 			return update.LatestRelease{Tag: "v" + updateNewer, Version: updateNewer}, nil
 		},
