@@ -36,7 +36,7 @@ func stdIO(in io.Reader, out, err io.Writer) streams {
 	return s
 }
 
-// Main runs the hwf command tree and returns a process exit code.
+// Main operates the hwf command tree and gives a process exit code.
 func Main(args []string, in io.Reader, out, err io.Writer) int {
 	signal.Ignore(syscall.SIGPIPE)
 	return run(args, stdIO(in, out, err))

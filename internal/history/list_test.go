@@ -59,7 +59,7 @@ func terminalSnapshot(id, workflow, root string, started time.Time, title string
 }
 
 func TestFiltersApplyBeforeFortyResultLimit(t *testing.T) {
-	// Ports test/history/history-store.test.ts "filters apply before forty-result limit".
+	// This case is the same as test/history/history-store.test.ts "filters apply before forty-result limit".
 	_, _, getenv := testWriterEnv(t)
 	now := time.Now()
 	for i := range 45 {
@@ -91,7 +91,7 @@ func TestFiltersApplyBeforeFortyResultLimit(t *testing.T) {
 }
 
 func TestMalformedSnapshotsAreSkipped(t *testing.T) {
-	// Ports test/history/history-store.test.ts "malformed snapshots are skipped".
+	// This case is the same as test/history/history-store.test.ts "malformed snapshots are skipped".
 	_, _, getenv := testWriterEnv(t)
 	writeListedSnapshot(t, getenv, map[string]any{
 		"version": 1, "id": AllocateRunID(), "workflow": "ok", "source": "repo",
@@ -132,7 +132,7 @@ func TestMalformedSnapshotsAreSkipped(t *testing.T) {
 }
 
 func TestPriorSharedLogIsIgnored(t *testing.T) {
-	// Ports test/history/history-store.test.ts "prior shared runs.jsonl is ignored and left unchanged".
+	// This case is the same as test/history/history-store.test.ts "prior shared runs.jsonl is ignored and left unchanged".
 	stateDir, _, getenv := testWriterEnv(t)
 	if err := os.Chmod(stateDir, 0o700); err != nil {
 		t.Fatal(err)
@@ -161,7 +161,7 @@ func TestPriorSharedLogIsIgnored(t *testing.T) {
 }
 
 func TestSearchMatchesSafeLabelsNotExplanations(t *testing.T) {
-	// Ports "search matches completed safe step labels" and "failure explanation is detail-only and not searchable".
+	// These cases are the same as "search matches completed safe step labels" and "failure explanation is detail-only and not searchable".
 	_, checkout, getenv := testWriterEnv(t)
 	w := NewWriter(getenv)
 	defer w.Dispose()
@@ -253,7 +253,7 @@ func TestRetentionCountsOnlyTerminalAndPreservesActive(t *testing.T) {
 }
 
 func TestDeletedCheckoutRemainsListable(t *testing.T) {
-	// Ports "deleted checkout remains listable under soft canonical filter".
+	// This case is the same as "deleted checkout remains listable under soft canonical filter".
 	_, checkout, getenv := testWriterEnv(t)
 	canonical, err := filepath.EvalSymlinks(checkout)
 	if err != nil {
@@ -285,7 +285,7 @@ func TestDeletedCheckoutRemainsListable(t *testing.T) {
 }
 
 func TestUnsafeSnapshotFileACLIsUnavailable(t *testing.T) {
-	// Ports "unsafe snapshot file ACL is unavailable not missing" via ListRuns.
+	// This case is the same as "unsafe snapshot file ACL is unavailable not missing" through ListRuns.
 	if runtime.GOOS == "windows" {
 		t.Skip("posix modes")
 	}

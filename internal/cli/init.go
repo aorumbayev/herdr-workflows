@@ -15,7 +15,7 @@ import (
 	"golang.org/x/term"
 )
 
-// HerdrAgentKinds lists kinds herdr agent start --kind accepts (herdr 0.8.0).
+// HerdrAgentKinds lists types that herdr agent start --kind accepts (herdr 0.8.0).
 var HerdrAgentKinds = []string{
 	"pi", "claude", "codex", "gemini", "cursor", "devin", "agy", "cline", "omp",
 	"mastracode", "opencode", "copilot", "kimi", "kiro", "droid", "amp", "grok",
@@ -53,14 +53,14 @@ func detectProfiles(lookup lookPath) map[string]config.Profile {
 	return profiles
 }
 
-// ProfilesYAMLInput is the shape written by FormatProfilesYaml.
+// ProfilesYAMLInput is the data that FormatProfilesYaml writes.
 type ProfilesYAMLInput struct {
 	Profiles       map[string]config.Profile
 	DefaultProfile string
 	Transcripts    map[string]config.TranscriptExtractor
 }
 
-// FormatProfilesYaml renders profiles/default_profile/transcripts config YAML.
+// FormatProfilesYaml writes profiles/default_profile/transcripts config YAML.
 func FormatProfilesYaml(in ProfilesYAMLInput) string {
 	lines := []string{"profiles:"}
 	names := slices.Sorted(maps.Keys(in.Profiles))
@@ -103,7 +103,7 @@ func jsonString(s string) string {
 	return string(b)
 }
 
-// InitSeams exposes init helpers for tests without widening the CLI surface.
+// InitSeams gives tests the init helpers. It does not increase the CLI surface.
 var InitSeams = struct {
 	HerdrAgentKinds    []string
 	DetectProfiles     func() map[string]config.Profile
@@ -114,7 +114,7 @@ var InitSeams = struct {
 	FormatProfilesYaml: FormatProfilesYaml,
 }
 
-// InitOpts configures RunInit.
+// InitOpts sets the options for RunInit.
 type InitOpts struct {
 	Force    bool
 	Global   bool
@@ -123,14 +123,14 @@ type InitOpts struct {
 	LookPath lookPath
 }
 
-// InitResult reports what RunInit did.
+// InitResult reports the result of RunInit.
 type InitResult struct {
 	Kind     string // wrote, exists, overwritten
 	Path     string
 	Profiles []string
 }
 
-// RunInit writes repo or global plugin config with detected profiles.
+// RunInit writes repo or global plugin config. It uses the profiles that it finds.
 func RunInit(repoRoot string, opts InitOpts) (InitResult, error) {
 	getenv := opts.Env
 	if getenv == nil {

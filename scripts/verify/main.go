@@ -1,4 +1,4 @@
-// Command verify runs repository checks for `go tool verify`.
+// Command verify operates the repository checks for `go tool verify`.
 //
 //	go run ./scripts/verify [-fast]
 package main
@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-// Config controls a verify run. Tests inject LookPath and Command.
+// Config controls a verify operation. Tests put LookPath and Command into Config.
 type Config struct {
 	Fast     bool
 	Dir      string
@@ -28,8 +28,8 @@ type check struct {
 	run  func(cfg Config) error
 }
 
-// Run executes independent checks, continues after failures, and returns
-// non-zero when any check failed.
+// Run does independent checks. After a check fails, Run continues. Run gives a
+// value that is not zero when one or more checks fail.
 func Run(cfg Config, stdout, stderr io.Writer) int {
 	if cfg.Dir == "" {
 		dir, err := findRepoRoot()
@@ -255,7 +255,7 @@ func findRepoRoot() (string, error) {
 
 var errHelp = fmt.Errorf("help")
 
-// ParseArgs parses verify CLI flags. Full mode is the default.
+// ParseArgs reads verify CLI flags. Full mode is the default.
 func ParseArgs(args []string) (fast bool, err error) {
 	for _, a := range args {
 		switch a {
@@ -270,7 +270,7 @@ func ParseArgs(args []string) (fast bool, err error) {
 	return fast, nil
 }
 
-// Execute is the public CLI entry point for `go tool verify`.
+// Execute is the public CLI start for `go tool verify`.
 func Execute(args []string, stdout, stderr io.Writer) int {
 	fast, err := ParseArgs(args)
 	if err == errHelp {

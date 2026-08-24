@@ -27,7 +27,7 @@ func testWriterEnv(t *testing.T) (stateDir, checkout string, getenv func(string)
 }
 
 func TestClaimRejectsReusedIdentity(t *testing.T) {
-	// Ports test/history/history-store.test.ts "exclusive claims reject reused identity".
+	// This case is the same as test/history/history-store.test.ts "exclusive claims reject reused identity".
 	_, checkout, getenv := testWriterEnv(t)
 	id := AllocateRunID()
 	a := NewWriter(getenv)
@@ -45,7 +45,7 @@ func TestClaimRejectsReusedIdentity(t *testing.T) {
 }
 
 func TestConcurrentClaimsOwnDifferentSnapshots(t *testing.T) {
-	// Ports test/history/history-store.test.ts "concurrent runs own different snapshots".
+	// This case is the same as test/history/history-store.test.ts "concurrent runs own different snapshots".
 	_, checkout, getenv := testWriterEnv(t)
 	a := NewWriter(getenv)
 	b := NewWriter(getenv)
@@ -62,7 +62,7 @@ func TestConcurrentClaimsOwnDifferentSnapshots(t *testing.T) {
 }
 
 func TestUnresolvableClaimCheckoutIsUnavailable(t *testing.T) {
-	// Ports test/history/history-store.test.ts "unresolvable claim checkout is unavailable".
+	// This case is the same as test/history/history-store.test.ts "unresolvable claim checkout is unavailable".
 	_, _, getenv := testWriterEnv(t)
 	w := NewWriter(getenv)
 	defer w.Dispose()
@@ -74,7 +74,7 @@ func TestUnresolvableClaimCheckoutIsUnavailable(t *testing.T) {
 }
 
 func TestClaimStoresRealpathCanonicalRoot(t *testing.T) {
-	// Ports the writer half of "checkout root is realpath-canonicalized".
+	// This case is the same as the writer half of "checkout root is realpath-canonicalized".
 	_, checkout, getenv := testWriterEnv(t)
 	canonical, err := filepath.EvalSymlinks(checkout)
 	if err != nil {

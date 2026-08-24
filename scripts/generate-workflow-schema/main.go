@@ -1,11 +1,11 @@
 // Command generate-workflow-schema writes docs/workflow.schema.json and the
-// embed/workflow.schema.json copy from the Go schema model. Run it from the
+// embed/workflow.schema.json copy from the Go schema model. Start this command from the
 // repository root with:
 //
 //	go run ./scripts/generate-workflow-schema
 //
-// Cross-field workflow rules stay in internal/workflow's loader and are not
-// represented in this JSON schema.
+// Cross-field workflow rules stay in the loader of internal/workflow. This JSON schema
+// does not contain those rules.
 package main
 
 import (

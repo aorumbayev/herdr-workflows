@@ -11,7 +11,7 @@ import (
 )
 
 func TestEmptyPermissiveStateRootIsTightenedAndClaimable(t *testing.T) {
-	// Ports test/history/history-store.test.ts "empty permissive state root is tightened and claimable".
+	// This case is the same as test/history/history-store.test.ts "empty permissive state root is tightened and claimable".
 	if runtime.GOOS == "windows" {
 		t.Skip("posix modes")
 	}
@@ -42,7 +42,7 @@ func TestEmptyPermissiveStateRootIsTightenedAndClaimable(t *testing.T) {
 }
 
 func TestNonEmptyPermissiveStateRootMakesHistoryUnavailable(t *testing.T) {
-	// Ports test/history/history-store.test.ts "non-empty permissive state root makes history unavailable".
+	// This case is the same as test/history/history-store.test.ts "non-empty permissive state root makes history unavailable".
 	if runtime.GOOS == "windows" {
 		t.Skip("posix modes")
 	}
@@ -76,7 +76,7 @@ func TestNonEmptyPermissiveStateRootMakesHistoryUnavailable(t *testing.T) {
 }
 
 func TestHistoryACLRefusesForeignGrantsWithoutStripping(t *testing.T) {
-	// Ports test/history/history-store.test.ts "history ACL validation refuses foreign grants without stripping".
+	// This case is the same as test/history/history-store.test.ts "history ACL validation refuses foreign grants without stripping".
 	dir := t.TempDir()
 	target := filepath.Join(dir, "inner")
 	if err := os.Mkdir(target, 0o700); err != nil {

@@ -11,7 +11,7 @@ import (
 )
 
 func TestLaterWriteRecoversCompleteStateAfterMissedIntermediate(t *testing.T) {
-	// Ports test/history/history-store.test.ts "later write recovers complete state after missed intermediate".
+	// This case is the same as test/history/history-store.test.ts "later write recovers complete state after missed intermediate".
 	_, checkout, getenv := testWriterEnv(t)
 	w := NewWriter(getenv)
 	defer w.Dispose()
@@ -49,7 +49,7 @@ func TestLaterWriteRecoversCompleteStateAfterMissedIntermediate(t *testing.T) {
 }
 
 func TestQueuedPersistsDrainBeforeFinalizeWins(t *testing.T) {
-	// Ports test/history/history-store.test.ts "queued persists drain before finalize wins".
+	// This case is the same as test/history/history-store.test.ts "queued persists drain before finalize wins".
 	_, checkout, getenv := testWriterEnv(t)
 	w := NewWriter(getenv)
 	defer w.Dispose()

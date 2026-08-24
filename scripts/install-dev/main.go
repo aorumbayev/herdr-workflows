@@ -1,5 +1,5 @@
-// Command install-dev builds the working tree, links it as a Herdr plugin, runs
-// native setup, and reloads Herdr config. Portable — no shell redirects.
+// Command install-dev compiles the working tree, connects it as a Herdr plugin, operates
+// native setup, and reloads Herdr config. The command is portable. It does not use shell redirects.
 //
 // Usage: go run ./scripts/install-dev
 package main
@@ -28,7 +28,7 @@ func run() error {
 		herdr = "herdr"
 	}
 
-	// Unlink fails when no link exists yet, which is the normal first run.
+	// Unlink fails when no link is there yet. That result is the usual first operation.
 	runCmdIgnoringFailure(root, herdr, []string{"plugin", "unlink", "herdr-workflows"})
 	if err := runCmd(root, "build", "go", []string{"build", "-o", "bin/herdr-workflows", "."}); err != nil {
 		return err
@@ -40,7 +40,7 @@ func run() error {
 	if err := runCmd(root, "setup", binary, []string{"setup"}); err != nil {
 		return err
 	}
-	// Reload fails when no Herdr server is running, and the link is already installed.
+	// Reload fails when no Herdr server operates. The link is already installed.
 	runCmdIgnoringFailure(root, herdr, []string{"server", "reload-config"})
 	return nil
 }

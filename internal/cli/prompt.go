@@ -38,7 +38,7 @@ func hasBareEsc(raw string) bool {
 	return false
 }
 
-// SanitizePromptInput strips leaked C0 controls (keeps tab, CR, LF, ESC).
+// SanitizePromptInput removes unintended C0 controls. It keeps tab, CR, LF, and ESC.
 func SanitizePromptInput(raw string) string {
 	return promptControlRE.ReplaceAllString(raw, "")
 }
@@ -60,7 +60,7 @@ func stdinBufio() *bufio.Reader {
 	return stdinReader
 }
 
-// ReadLine reads one line from stdin, honoring bare-ESC cancel.
+// ReadLine reads one line from stdin. A bare ESC is a cancel signal.
 func ReadLine() (PromptResult, error) {
 	return readLineFrom(stdinBufio())
 }
@@ -79,7 +79,7 @@ func readLineFrom(r *bufio.Reader) (PromptResult, error) {
 	return interpretLine(line), nil
 }
 
-// ReleaseStdinReader drops the shared stdin reader so short-lived commands can exit.
+// ReleaseStdinReader releases the shared stdin reader. Then short-lived commands can exit.
 func ReleaseStdinReader() {
 	stdinReaderMu.Lock()
 	defer stdinReaderMu.Unlock()

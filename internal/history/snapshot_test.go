@@ -36,7 +36,7 @@ func validLiveSnapshot() map[string]any {
 }
 
 func TestIsSnapshotRejectsMalformedNestedStepFields(t *testing.T) {
-	// Ports test/history/history-types.test.ts "malformed nested step fields are rejected by guard".
+	// This case is the same as test/history/history-types.test.ts "malformed nested step fields are rejected by guard".
 	cases := []struct {
 		name string
 		snap map[string]any
@@ -199,7 +199,7 @@ func TestIsSnapshotRejectsProgressAndProjectionVocabulary(t *testing.T) {
 }
 
 func TestIsSnapshotTruncatedOnlyLiteralTrue(t *testing.T) {
-	// Ports test/history/history-types.test.ts "truncated step fact is accepted only as literal true".
+	// This case is the same as test/history/history-types.test.ts "truncated step fact is accepted only as literal true".
 	withTruncated := func(truncated any) map[string]any {
 		s := validLiveSnapshot()
 		s["id"] = validRunID

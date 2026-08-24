@@ -1,6 +1,6 @@
-// Command prepare-release writes the next plugin version into herdr-plugin.toml and,
-// for the default manifest path, regenerates docs/workflow.schema.json so its $id
-// tracks the release tag.
+// Command prepare-release writes the next plugin version into herdr-plugin.toml.
+// For the default manifest path, it writes docs/workflow.schema.json again so that $id
+// equals the release tag.
 //
 // Usage: go run ./scripts/prepare-release <x.y.z> [tomlPath]
 package main
