@@ -1,8 +1,9 @@
 package host
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 )
 
 // AgentPane is one live agent pane from agent.list.
@@ -44,17 +45,7 @@ func ParseAgentPanes(result map[string]any) ([]AgentPane, error) {
 		}
 		out = append(out, AgentPane{PaneID: paneID, Name: name, Title: title})
 	}
-	sort.Slice(out, func(i, j int) bool {
-		li := out[i].Title
-		if li == "" {
-			li = out[i].Name
-		}
-		rj := out[j].Title
-		if rj == "" {
-			rj = out[j].Name
-		}
-		return li < rj
-	})
+	slices.SortFunc(out, func(a, b AgentPane) int { return cmp.Compare(a.Title, b.Title) })
 	return out, nil
 }
 
