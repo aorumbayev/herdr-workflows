@@ -323,7 +323,7 @@ func failureOf(opts StepRunOpts, step workflow.Step, stepIndex int, outcome Step
 	}
 }
 
-// errorContextOf shapes StepFailure for {{context.error.*}} template walks.
+// errorContextOf shapes StepFailure for {{context.error.*}} template resolution.
 func errorContextOf(failure *StepFailure) map[string]any {
 	details := maps.Clone(failure.Details)
 	if details == nil {
@@ -709,7 +709,8 @@ func stringInputsToAny(values map[string]string) map[string]any {
 	return out
 }
 
-// RunWorkflow loads (or uses) a workflow, collects inputs, runs steps, and finalizes.
+// RunWorkflow loads a workflow or uses one that the caller supplies.
+// It collects inputs, runs steps, and completes the run.
 func RunWorkflow(opts RunOptions) (StepsResult, error) {
 	if opts.Recorder == nil {
 		return StepsResult{}, fmt.Errorf("recorder is required")

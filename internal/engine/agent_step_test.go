@@ -1274,7 +1274,7 @@ func TestAgentStepProcessExitedBeforeInteractive(t *testing.T) {
 	}
 }
 
-// Ports the preparedResponsePath rm behind runner.test.ts
+// Ports the preparedResponsePath rm for runner.test.ts
 // "a parent step's managed response cannot stand in for a child step's turn".
 func TestAgentStepLeftoverManagedFileDeletedBeforeTurn(t *testing.T) {
 	repo := t.TempDir()

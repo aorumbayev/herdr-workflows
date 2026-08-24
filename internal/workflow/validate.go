@@ -752,8 +752,8 @@ func assertWorkflowReferences(file string, workflow Definition, childReturns map
 	return producers, nil
 }
 
-// assertChildInputContract checks a workflow invocation without claiming to
-// know values that will only exist after the parent runs.
+// assertChildInputContract examines a workflow invocation.
+// It does not assume values that exist only after the parent runs.
 func assertChildInputContract(file string, step int, passed map[string]string, child Definition, producers map[string]stepProducer, parentInputs []InputSpec, profiles map[string]bool, proven []WhenSpec) error {
 	declared := map[string]InputSpec{}
 	for _, input := range child.Inputs {

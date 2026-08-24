@@ -400,7 +400,7 @@ func TestResolvePaneOpen(t *testing.T) {
 	}
 }
 
-// Helper functions
+// Test helpers.
 func contains(s, substr string) bool {
 	for i := 0; i < len(s)-len(substr)+1; i++ {
 		if s[i:i+len(substr)] == substr {

@@ -112,7 +112,7 @@ type Recorder interface {
 	Dispose()
 }
 
-// ProgressOutcome is CLI progress mapping only — not execution lifecycle vocabulary.
+// ProgressOutcome is CLI progress mapping only. It is not execution lifecycle vocabulary.
 type ProgressOutcome string
 
 const (

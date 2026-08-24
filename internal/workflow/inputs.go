@@ -686,7 +686,7 @@ func validateInputValue(input InputSpec, value string, options []string) error {
 }
 
 // Current resolves the next prompt. A later call or CancelPending invalidates
-// an in-flight dynamic choice resolution.
+// a dynamic choice resolution that is still in progress.
 func (s *InputSession) Current(ctx context.Context) CurrentResult {
 	s.mu.Lock()
 	if s.cancel != nil {
@@ -733,7 +733,7 @@ func (s *InputSession) Current(ctx context.Context) CurrentResult {
 	return CurrentResult{Prompt: s.pending}
 }
 
-// Answer accepts the current input and invalidates later answers/domains.
+// Answer accepts the current input and invalidates later answers and domains.
 func (s *InputSession) Answer(value string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -814,7 +814,7 @@ func (s *InputSession) Result() (CollectedInputs, error) {
 	return CollectedInputs{Values: cloneStrings(s.values), Domains: cloneStringSlices(s.domains)}, nil
 }
 
-// CompleteFromProvided drives the session without prompting.
+// CompleteFromProvided runs the session without a prompt.
 func (s *InputSession) CompleteFromProvided(ctx context.Context, provided map[string]string) (CollectedInputs, error) {
 	declared := map[string]bool{}
 	for _, input := range s.opts.Specs {
@@ -1091,7 +1091,8 @@ func configFor(repoRoot string, supplied []config.Config) (config.Config, error)
 	return config.LoadConfig(repoRoot, nil)
 }
 
-// ParseWorkflowText parses and validates a workflow body without filesystem resolution for the entry.
+// ParseWorkflowText parses and validates a workflow body.
+// It does not resolve the entry from the filesystem.
 func ParseWorkflowText(name, text string, cfg config.Config, repoRoot string, file ...string) (*Definition, error) {
 	entryFile := name + ".yaml"
 	if len(file) > 0 && file[0] != "" {
@@ -1161,7 +1162,7 @@ func yamlWorkflowNames(dir string) []string {
 	return names
 }
 
-// ListWorkflows returns repo-over-global workflow metadata without dynamic execution.
+// ListWorkflows returns repo-over-global workflow metadata. It does not run dynamic commands.
 func ListWorkflows(repoRoot string, supplied ...config.Config) ([]ListEntry, error) {
 	cfg, err := configFor(repoRoot, supplied)
 	if err != nil {
@@ -1209,7 +1210,7 @@ func ListWorkflows(repoRoot string, supplied ...config.Config) ([]ListEntry, err
 	return result, nil
 }
 
-// CompleteWorkflowInputs drives entry or child input collection.
+// CompleteWorkflowInputs runs input collection for the entry or a child.
 func CompleteWorkflowInputs(ctx context.Context, workflow *Definition, opts InputSessionOptions, provided map[string]string) (CollectedInputs, error) {
 	opts.Specs, opts.File = workflow.Inputs, workflow.File
 	return NewInputSession(opts).CompleteFromProvided(ctx, provided)

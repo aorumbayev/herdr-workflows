@@ -85,7 +85,7 @@ func TestGenerateAgentName(t *testing.T) {
 				t.Errorf("GenerateAgentName(%q, %d, %q) = %q, want %q", tc.stepID, tc.ordinal, tc.suffix, got, tc.expectedName)
 			}
 
-			// For the long prefix case, verify it ends with the suffix
+			// For the long prefix, make sure that the name ends with the suffix
 			if strings.Repeat("a", 40) == tc.stepID {
 				if !strings.HasSuffix(got, "-ff00ff") {
 					t.Errorf("GenerateAgentName with long prefix should end with -ff00ff, got %q", got)
@@ -185,7 +185,7 @@ func TestReadManagedResponseSuccess(t *testing.T) {
 		t.Fatalf("ReadManagedResponse failed: %v", err)
 	}
 
-	// Content is returned verbatim, including surrounding whitespace
+	// The function returns the content verbatim, with surrounding whitespace
 	if got != content {
 		t.Errorf("ReadManagedResponse returned %q, want %q", got, content)
 	}
@@ -216,17 +216,17 @@ func TestPromptCompositionWithExpect(t *testing.T) {
 
 	composed := AppendResponseInstruction(originalPrompt, responsePath, &expect)
 
-	// Should contain the tokens
+	// The text must contain the tokens
 	if !strings.Contains(composed, "APPROVE, REJECT") {
 		t.Errorf("composed prompt should contain 'APPROVE, REJECT'")
 	}
 
-	// Should mention the final-line rule
+	// The text must mention the final-line rule
 	if !strings.Contains(composed, "final non-empty line") {
 		t.Errorf("composed prompt should contain 'final non-empty line'")
 	}
 
-	// Should have the response check command with the exact pattern
+	// The text must include the response check command with the exact pattern
 	pattern := regexp.MustCompile(`hwf response check \S+ --one-of APPROVE,REJECT`)
 	if !pattern.MatchString(composed) {
 		t.Errorf("composed prompt does not match pattern for response check command")
@@ -418,7 +418,7 @@ func TestApplyVerdict(t *testing.T) {
 	})
 }
 
-// Helper functions
+// Test helpers.
 
 func isHerdrError(err error, target **host.HerdrError) bool {
 	if err == nil {

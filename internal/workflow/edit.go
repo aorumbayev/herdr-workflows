@@ -87,8 +87,8 @@ func EditAndValidate(opts EditOpts) ValidateResult {
 	return ValidateFile(opts.Path, opts.Name, opts.RepoRoot)
 }
 
-// editorArgv splits a configured editor command (EDITOR may carry flags, as
-// in "code --wait") into argv and appends the file path.
+// editorArgv splits a configured editor command into argv and appends the file
+// path. EDITOR can include flags, for example "code --wait".
 func editorArgv(editor, path string) []string {
 	return append(strings.Fields(editor), path)
 }
