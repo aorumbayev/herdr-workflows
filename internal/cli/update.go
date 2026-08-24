@@ -22,17 +22,6 @@ type exitCodeError struct {
 func (e *exitCodeError) Error() string { return e.msg }
 func (e *exitCodeError) ExitCode() int { return e.code }
 
-type updateDeps struct {
-	FetchLatest    func() (update.LatestRelease, error)
-	RunInstall     func(args []string, cwd string) (int, error)
-	ListSource     func() (update.PluginSourceInfo, error)
-	PluginRoot     string
-	Version        string
-	Getenv         func(string) string
-	Executable     func() (string, error)
-	InstallRelease func(update.InstallOpts) error
-}
-
 var pluginListMissingRE = regexp.MustCompile(`(?i)not found|no such|unknown plugin`)
 
 func resolvePluginSource(getenv func(string) string) (update.PluginSourceInfo, error) {
@@ -94,20 +83,6 @@ func pluginRootFor(getenv func(string) string) string {
 	return resolvePluginRoot(getenv, execPath, cwd)
 }
 
-func defaultUpdateDeps() updateDeps {
-	getenv := os.Getenv
-	return updateDeps{
-		FetchLatest:    func() (update.LatestRelease, error) { return update.CheckForUpdate(update.CheckOpts{}) },
-		RunInstall:     defaultHerdrInstall(getenv),
-		ListSource:     func() (update.PluginSourceInfo, error) { return resolvePluginSource(getenv) },
-		PluginRoot:     pluginRootFor(getenv),
-		Version:        assets.ManifestVersion(),
-		Getenv:         getenv,
-		Executable:     os.Executable,
-		InstallRelease: update.InstallRelease,
-	}
-}
-
 func refVersionFromInstallArgs(args []string) string {
 	for i := 0; i < len(args)-1; i++ {
 		if args[i] == "--ref" {
@@ -118,7 +93,7 @@ func refVersionFromInstallArgs(args []string) string {
 	return ""
 }
 
-func executeUpdate(deps updateDeps, stdout, stderr io.Writer) error {
+func executeUpdate(deps update.Deps, stdout, stderr io.Writer) error {
 	if deps.Getenv == nil {
 		deps.Getenv = os.Getenv
 	}
@@ -144,6 +119,7 @@ func executeUpdate(deps updateDeps, stdout, stderr io.Writer) error {
 	if current == "" {
 		current = assets.ManifestVersion()
 	}
+	deps.Version = current
 	origInstall := deps.RunInstall
 	deps.RunInstall = func(args []string, cwd string) (int, error) {
 		to := refVersionFromInstallArgs(args)
@@ -162,16 +138,7 @@ func executeUpdate(deps updateDeps, stdout, stderr io.Writer) error {
 		}
 		return origStandalone(opts)
 	}
-	result, err := update.Plugin(update.Deps{
-		FetchLatest:    deps.FetchLatest,
-		RunInstall:     deps.RunInstall,
-		ListSource:     deps.ListSource,
-		PluginRoot:     deps.PluginRoot,
-		Version:        current,
-		Getenv:         deps.Getenv,
-		Executable:     deps.Executable,
-		InstallRelease: deps.InstallRelease,
-	})
+	result, err := update.Plugin(deps)
 	if err != nil {
 		msg := err.Error()
 		var checkErr *update.ReleaseCheckError

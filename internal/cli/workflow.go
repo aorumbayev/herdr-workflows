@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
+	"github.com/aorumbayev/herdr-workflows/internal/update"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -206,7 +207,7 @@ func runWorkflowInspect(cmd *cobra.Command, args []string) error {
 }
 
 func runUpdate(cmd *cobra.Command, _ []string) error {
-	return executeUpdate(defaultUpdateDeps(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+	return executeUpdate(update.Deps{}, cmd.OutOrStdout(), cmd.ErrOrStderr())
 }
 
 func importPrompts(in io.Reader, out io.Writer, repoRoot string) *workflow.ImportPrompts {
