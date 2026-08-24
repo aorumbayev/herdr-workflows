@@ -13,7 +13,8 @@ needs quoted command output: run the command, never assert a version or a change
 memory.
 
 Full v1alpha1 syntax is the sibling skill's job — `hwf skills show herdr-workflow-create` prints
-it. This skill owns the version gates and the herdr 0.8.0 breakage classes.
+it. This skill owns the version gates and the three herdr breakage classes introduced at 0.8.0
+(current plugin floor is 0.8.2).
 
 ## Workflow
 
@@ -87,7 +88,8 @@ are in. When the host cannot answer mid-session, stop after asking.
 
 ### 4. Scan and refine
 
-Read every in-scope YAML. The three herdr 0.8.0 breakage classes, with before/after pairs:
+Read every in-scope YAML. The three herdr breakage classes introduced at 0.8.0 (still required
+on the current 0.8.2 floor), with before/after pairs:
 
 **[reference/herdr-0.8.0.md](reference/herdr-0.8.0.md)**
 
