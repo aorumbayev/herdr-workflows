@@ -9,10 +9,6 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 )
 
-// ScreenOpts is a temporary alias so internal/cli keeps compiling until it
-// constructs Options directly. Remove after cli migrates.
-type ScreenOpts = Options
-
 // RunScreen mounts the picker with Prepare, FilterInput, and a background update check.
 func RunScreen(opts Options) (int, error) {
 	check := opts.CheckLatestRelease

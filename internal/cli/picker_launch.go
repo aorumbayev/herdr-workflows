@@ -57,7 +57,7 @@ func runPicker(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	opts := buildPickerScreenOpts(app, entries)
+	opts := buildPickerOptions(app, entries)
 	opts.Restore = picker.ParsePopupState(os.Getenv(picker.PopupStateEnv))
 	opts.ReopenPopup = spawnPopupReopen
 	code, err := picker.RunScreen(opts)
@@ -70,12 +70,12 @@ func runPicker(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func buildPickerScreenOpts(app config.AppContext, entries []workflow.ListEntry) picker.ScreenOpts {
+func buildPickerOptions(app config.AppContext, entries []workflow.ListEntry) picker.Options {
 	execPath, _ := os.Executable()
 	repoRoot := app.RepoRoot
 	cfg := app.Config
 	ctx := app.Ctx
-	return picker.ScreenOpts{
+	return picker.Options{
 		Entries:  entries,
 		RepoRoot: repoRoot,
 		Config:   cfg,

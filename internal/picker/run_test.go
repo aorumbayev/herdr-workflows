@@ -55,7 +55,7 @@ func TestBeginLaunchListenCmdDeliversAckAndSettled(t *testing.T) {
 	}
 }
 
-func TestPrepareScreenWiresHooksFromScreenOpts(t *testing.T) {
+func TestPrepareWiresHooksFromOptions(t *testing.T) {
 	entry := workflow.ListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml", Title: "Plain"}
 	var (
 		edited   []string

@@ -6,10 +6,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// ScreenOpts is a temporary alias so internal/cli keeps compiling until it
-// constructs Options directly. Remove after cli migrates.
-type ScreenOpts = Options
-
 // RunScreen mounts the console TUI.
 func RunScreen(opts Options) (int, error) {
 	model := New(opts)

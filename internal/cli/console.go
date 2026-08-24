@@ -38,7 +38,7 @@ func runConsole(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	code, err := console.RunScreen(console.ScreenOpts{
+	code, err := console.RunScreen(console.Options{
 		Entries:  entries,
 		RepoRoot: app.RepoRoot,
 		Config:   app.Config,
