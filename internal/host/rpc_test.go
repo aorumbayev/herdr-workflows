@@ -15,9 +15,9 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/caps"
 )
 
-// listen binds a unix socket and hands each connection to serve. macOS caps
-// unix socket paths around 104 bytes, so bind under /tmp rather than
-// t.TempDir().
+// listen binds a unix socket and gives each connection to serve. The maximum
+// length of a unix socket path on macOS is 104 bytes, so the test binds in /tmp.
+// Paths from t.TempDir() are often too long.
 func listen(t *testing.T, name string, serve func(net.Conn)) string {
 	t.Helper()
 	sockPath := filepath.Join("/tmp", fmt.Sprintf("hwf-rpc-%s-%d-%d.sock", name, os.Getpid(), time.Now().UnixNano()))
@@ -36,7 +36,7 @@ func listen(t *testing.T, name string, serve func(net.Conn)) string {
 				return
 			}
 			serve(conn)
-			// Drain the peer's request so closing cannot break its pipe mid-write.
+			// Read remaining request bytes so that a close does not break the pipe during a write.
 			_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 			_, _ = io.Copy(io.Discard, conn)
 			_ = conn.Close()
@@ -57,7 +57,7 @@ func readRequest(t *testing.T, conn net.Conn) map[string]any {
 	return req
 }
 
-// wantHerdrCode asserts the code and returns the message for further checks.
+// wantHerdrCode makes sure that the error code is correct and gives the message for more checks.
 func wantHerdrCode(t *testing.T, err error, code string) string {
 	t.Helper()
 	if err == nil {

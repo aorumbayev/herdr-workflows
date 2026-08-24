@@ -13,7 +13,7 @@ type AgentPane struct {
 	Title  string
 }
 
-// ListAgentPanes returns agent panes from the herdr socket.
+// ListAgentPanes gives agent panes from the herdr socket.
 func ListAgentPanes() ([]AgentPane, error) {
 	result, err := HerdrCall("agent.list", map[string]any{})
 	if err != nil {
@@ -49,7 +49,7 @@ func ParseAgentPanes(result map[string]any) ([]AgentPane, error) {
 	return out, nil
 }
 
-// PaneSendText types text into a pane input without submitting it.
+// PaneSendText writes text into a pane input and does not submit the text.
 func PaneSendText(paneID, text string) error {
 	_, err := HerdrCall("pane.send_text", map[string]any{
 		"pane_id": paneID,

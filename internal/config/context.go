@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 )
 
-// InvocationContext carries the pane identity herdr injected for this run.
+// InvocationContext holds the pane identity that herdr injected for this run.
 type InvocationContext struct {
 	WorkspaceID  string
 	TabID        string
@@ -64,8 +64,8 @@ func readInvocationContext(getenv Env) InvocationContext {
 	}
 }
 
-// ResolveRepoRoot walks up from start looking for .git, or .hwf outside the
-// home directory, where .hwf is the plugin's own global directory.
+// ResolveRepoRoot finds .git in parent directories from start, or .hwf that is
+// not in the home directory. .hwf is the global directory of the plugin.
 func ResolveRepoRoot(start string) string {
 	home, _ := HomeDir(nil)
 	dir := start
@@ -93,7 +93,7 @@ type AppContext struct {
 	Ctx      InvocationContext
 }
 
-// LoadOptions tune LoadContext.
+// LoadOptions holds parameters for LoadContext.
 type LoadOptions struct {
 	Start          string
 	RepoRoot       string
@@ -101,7 +101,7 @@ type LoadOptions struct {
 	Env            Env
 }
 
-// LoadContext resolves config layers, repo root, and invocation context once.
+// LoadContext finds config layers, repo root, and invocation context one time.
 func LoadContext(opts LoadOptions) (AppContext, error) {
 	env := envOr(opts.Env)
 	invocation := readInvocationContext(env)
