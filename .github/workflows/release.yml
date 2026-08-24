@@ -39,6 +39,7 @@ jobs:
           github-token: ${{ steps.app-token.outputs.token }}
           allow-initial-development-versions: true
           dry: true
+          changelog-file: ${{ runner.temp }}/changelog.md
 
       - name: Stop when no commit needs a release
         if: steps.dry.outputs.version == ''
