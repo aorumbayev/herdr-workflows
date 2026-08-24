@@ -92,8 +92,8 @@ func isIntegral(v any) bool {
 	return ok && f == math.Trunc(f)
 }
 
-// validateMethodParams reports an unknown or denied method, or params that
-// violate the generated schema. nil means valid.
+// validateMethodParams finds an unknown or denied method, or params that do not
+// match the generated schema. A nil error is a correct result.
 func validateMethodParams(method string, params map[string]any, isWholeTemplate func(string) bool) error {
 	entry, ok := herdrMethods[method]
 	if !ok {
@@ -120,7 +120,7 @@ func validateMethodParams(method string, params map[string]any, isWholeTemplate 
 			}
 			continue
 		}
-		// Whole-value templates defer parameter shape checks until substitution.
+		// Whole-value templates do not do parameter shape checks until substitution.
 		if text, isString := value.(string); isString && isWholeTemplate != nil && isWholeTemplate(text) {
 			continue
 		}
@@ -169,9 +169,9 @@ func movePolicy(method string, params map[string]any) error {
 	return nil
 }
 
-// assertFocusPolicy enforces the explicit-target policy: omitted selectors
-// must never reach live UI focus. Classification comes from the generated
-// table; an unclassified method is rejected.
+// assertFocusPolicy applies the explicit-target policy. Omitted selectors must
+// not use live UI focus. The generated table supplies the class. The function
+// rejects an unclassified method.
 func assertFocusPolicy(method string, params map[string]any) error {
 	policy, ok := herdrFocusPolicy[method]
 	if !ok {
@@ -208,8 +208,8 @@ func assertFocusPolicy(method string, params map[string]any) error {
 	return nil
 }
 
-// ValidateHerdrInvocation is the Herdr Adapter gate for raw `herdr:` actions:
-// generated params checks, then explicit-target policy (no live-focus autofill).
+// ValidateHerdrInvocation is the Herdr Adapter gate for raw `herdr:` actions.
+// It does generated params checks, then the explicit-target policy. It does not fill live-focus targets.
 func ValidateHerdrInvocation(method string, params map[string]any, isWholeTemplate func(string) bool) error {
 	if err := validateMethodParams(method, params, isWholeTemplate); err != nil {
 		return err
@@ -217,8 +217,8 @@ func ValidateHerdrInvocation(method string, params map[string]any, isWholeTempla
 	return assertFocusPolicy(method, params)
 }
 
-// MethodDeniedReason reports the invariant a denied method protects. The
-// denylist is an accidental-misuse rail, not a sandbox.
+// MethodDeniedReason gives the invariant that a denied method protects. The
+// denylist is a rail for accidental misuse. It is not a sandbox.
 func MethodDeniedReason(method string) (string, bool) {
 	entry, ok := herdrMethods[method]
 	if !ok || entry.denied == "" {

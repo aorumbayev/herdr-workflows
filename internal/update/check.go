@@ -12,8 +12,7 @@ import (
 )
 
 const (
-	releaseRepo      = "aorumbayev/herdr-workflows"
-	latestReleaseURL = "https://api.github.com/repos/" + releaseRepo + "/releases/latest"
+	latestReleaseURL = "https://api.github.com/repos/" + ReleaseRepo + "/releases/latest"
 	defaultTimeout   = 8 * time.Second
 )
 

@@ -64,7 +64,7 @@ func parseParts(version string) ([3]int, error) {
 	if err != nil || n != 2 || !strings.HasPrefix(version, "0.") {
 		return [3]int{}, releaseErr(fmt.Sprintf("expected 0.x.y version, got %q", version))
 	}
-	// reject extra suffix like 0.2.3-beta by requiring exact round-trip
+	// The parsed text must equal 0.x.y. An extra suffix such as 0.2.3-beta fails.
 	if fmt.Sprintf("0.%d.%d", minor, patch) != version {
 		return [3]int{}, releaseErr(fmt.Sprintf("expected 0.x.y version, got %q", version))
 	}

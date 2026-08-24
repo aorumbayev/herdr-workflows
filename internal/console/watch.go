@@ -11,8 +11,8 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-// watchTickMsg carries the epoch of the diagram that armed it, so a tick left
-// over from an earlier diagram dies instead of doubling the poll rate.
+// watchTickMsg holds the epoch of the diagram that armed it. A tick from an
+// earlier diagram does not run, so it does not double the poll rate.
 type watchTickMsg struct{ epoch int }
 
 func watchTick(epoch int) tea.Cmd {
@@ -122,8 +122,8 @@ func nodeIDAt(d workflow.Diagram, i int) string {
 	return d.Nodes[i].ID
 }
 
-// reresolveFocus keeps the focus on the same declared step across a reload. A
-// positional focus has no stable name, so it returns to the first card.
+// reresolveFocus keeps the focus on the same declared step after a reload. A
+// positional focus has no stable name, so it goes to the first card.
 func reresolveFocus(focus railFocus, prev, next workflow.Diagram) railFocus {
 	id := nodeIDAt(prev, focus.Index)
 	if id == "" {

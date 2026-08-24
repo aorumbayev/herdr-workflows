@@ -69,8 +69,8 @@ func applyMsg(m Model, msg tea.Msg) Model {
 	return runCmd(m, cmd)
 }
 
-// runCmd drains a command chain. The embedded console re-arms its file-watch
-// tick forever, so the pump stops after a bounded number of rounds.
+// runCmd drains a command chain. The embedded console arms its file-watch
+// tick again each time, so the pump stops after a bounded number of rounds.
 func runCmd(m Model, cmd tea.Cmd) Model {
 	for round := 0; cmd != nil && round < 2; round++ {
 		msg := cmd()
@@ -116,11 +116,11 @@ func visibleLine(line string) string {
 }
 
 func TestPickerViewportShowsSixRowsAndScrolls(t *testing.T) {
-	// Ports picker-presentation: six-row viewport, scroll to keep cursor visible, wrap-around.
+	// This test copies picker-presentation: six-row viewport, scroll to keep cursor visible, wrap-around.
 	m := New(Options{Entries: eightEntries(), Width: 62})
 	body := m.View().Content
-	if listRowCount(body) != ListViewport {
-		t.Fatalf("visible rows = %d, want %d\n%s", listRowCount(body), ListViewport, body)
+	if listRowCount(body) != tui.ListViewport {
+		t.Fatalf("visible rows = %d, want %d\n%s", listRowCount(body), tui.ListViewport, body)
 	}
 	if strings.Contains(body, "Golf") || strings.Contains(body, "Hotel") {
 		t.Fatalf("rows beyond viewport leaked:\n%s", body)
@@ -130,7 +130,7 @@ func TestPickerViewportShowsSixRowsAndScrolls(t *testing.T) {
 	if !strings.Contains(body, "Golf") {
 		t.Fatalf("cursor past last visible row must scroll:\n%s", body)
 	}
-	if listRowCount(body) != ListViewport {
+	if listRowCount(body) != tui.ListViewport {
 		t.Fatalf("scrolled rows = %d\n%s", listRowCount(body), body)
 	}
 	m = apply(m, "down", "down")
@@ -310,7 +310,6 @@ func TestShowCurrentDoesNotBlockUpdate(t *testing.T) {
 	}
 	done := make(chan tea.Msg, 1)
 	go func() { done <- cmd() }()
-	time.Sleep(20 * time.Millisecond)
 	next, _ = m.Update(press("esc"))
 	m = next.(Model)
 	if m.mode != modeList {
@@ -416,7 +415,7 @@ func (stopErr) Error() string { return "stop-after-chdir" }
 var errStop stopErr
 
 func TestPickerViewportGrowsWithPopupHeight(t *testing.T) {
-	// openspec picker-presentation: rows fill the popup above the six-row floor.
+	// openspec picker-presentation: rows fill the popup above the six-row minimum.
 	m := New(Options{Entries: eightEntries(), Width: 62, Height: 30})
 	body := m.View().Content
 	for _, name := range []string{"Golf", "Hotel"} {
@@ -431,7 +430,7 @@ func TestPickerViewportGrowsWithPopupHeight(t *testing.T) {
 }
 
 func TestPaletteBodyUsesSharedRowChrome(t *testing.T) {
-	// openspec picker-editor-actions: the palette draws with the list chrome.
+	// openspec picker-editor-actions: the palette shows with the list chrome.
 	m := New(Options{Entries: eightEntries(), Width: 62, Height: 24})
 	m = applyMsg(m, tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
 	if m.mode != modePalette {

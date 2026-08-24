@@ -38,7 +38,7 @@ truth about behavior, `docs/` describes the contract to users. When they disagre
 name **which one is wrong**, not merely that they differ.
 
 **6. herdr runtime behavior comes from the reference checkout.** Any claim about herdr must cite a
-path under `.agents/references/herdr/website/src/content/docs/`. Recalled herdr behavior is not
+path under `.agents/references/herdr/docs/next/website/src/content/docs/`. Recalled herdr behavior is not
 evidence. If the checkout is absent, follow `.agents/references/AGENTS.md` first.
 
 **7. File count is a cost, not a virtue.** This repository has been over-split before. Splitting a
@@ -101,8 +101,8 @@ under a "Not measured" heading. Never infer the result.
 
 | Invocation | Scope                                                                                   |
 | ---------- | --------------------------------------------------------------------------------------- |
-| bare       | whole repository. Group C stops after section 6, which is where the diff sections start |
-| `branch`   | `git diff origin/<default>...HEAD`. Group C runs all eleven sections                    |
+| bare       | whole repository. Group C stops after section 5, which is where the diff sections start |
+| `branch`   | `git diff origin/<default>...HEAD`. Group C runs all ten sections                       |
 
 Any other words in the invocation narrow the review rather than changing it. Pass them verbatim to
 all three agents. Narrowing never removes an agent — a group with nothing to say returns nothing,
@@ -137,7 +137,7 @@ Exit: every group has returned findings.
 | ----- | ------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | A     | Code & Tests        | [criteria-code.md](criteria-code.md)   | over-splitting, dead abstractions, duplication, dead code, comments, test power, mock abuse              |
 | B     | Truth & Enforcement | [criteria-truth.md](criteria-truth.md) | specs against code against docs, generated artifacts, herdr claims, prose style, gate honesty, CI parity |
-| C     | Risk & Regression   | [criteria-risk.md](criteria-risk.md)   | trust boundaries, caps, secrets, web surface, install path, and on a branch the copout patterns          |
+| C     | Risk & Regression   | [criteria-risk.md](criteria-risk.md)   | trust boundaries, caps, secrets, install path, and on a branch the copout patterns                       |
 
 Each group's brief is wide on purpose. Three review agents is the cap, so coverage comes from depth
 inside a brief rather than from more briefs. Tell each agent to work its sections in order and not

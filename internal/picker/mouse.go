@@ -24,7 +24,7 @@ func (m Model) handleMouse(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	x, y := mouseContentXY(msg.X, msg.Y)
 	if y == 0 && m.tabBarLive() {
-		if tab := tui.TabAtX(x); tab != "" {
+		if tab := TabAtX(x); tab != "" {
 			return m.switchToTab(tab)
 		}
 	}
@@ -88,8 +88,8 @@ func (m Model) listIndexAt(y int) (int, bool) {
 	return row, true
 }
 
-// tabBarLive reports whether Tab would cycle root browsers, so a pointer never
-// leaves a screen the keyboard cannot.
+// tabBarLive is true when Tab can cycle root browsers. A pointer must not
+// leave a screen that the keyboard cannot leave.
 func (m Model) tabBarLive() bool {
 	switch m.mode {
 	case modeList:

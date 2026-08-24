@@ -22,7 +22,7 @@ func UpdateAvailable(embedded, latest string) bool {
 	return cmp < 0
 }
 
-// FormatFilterUpdateHint hides the indicator when the filter field would be cramped.
+// FormatFilterUpdateHint does not show the indicator when the filter field has no space.
 func FormatFilterUpdateHint(contentWidth int) string {
 	if contentWidth < filterRowOverhead+minFilterField+len(UpdateIndicator) {
 		return ""
@@ -30,7 +30,7 @@ func FormatFilterUpdateHint(contentWidth int) string {
 	return UpdateIndicator
 }
 
-// FormatListFilterRow paints the typed filter or placeholder, plus an update hint.
+// FormatListFilterRow shows the typed filter or the placeholder, plus an update hint.
 func FormatListFilterRow(filter string, contentWidth int, updateHint string) string {
 	label := filter
 	if label == "" {
@@ -46,14 +46,14 @@ func FormatListFilterRow(filter string, contentWidth int, updateHint string) str
 	return tui.PadColumns(tui.Truncate(label, room), room) + " " + updateHint
 }
 
-// UpdateCheck is a fire-and-forget latest-release probe.
+// UpdateCheck is a latest-release probe that does not wait for the caller.
 type UpdateCheck struct {
 	Check           func() (*update.LatestRelease, error)
 	EmbeddedVersion string
 	OnNewer         func(version string)
 }
 
-// DefaultPickerReleaseCheck returns the GitHub latest-release probe used by the picker.
+// DefaultPickerReleaseCheck gives the GitHub latest-release probe that the picker uses.
 func DefaultPickerReleaseCheck() func() (*update.LatestRelease, error) {
 	return func() (*update.LatestRelease, error) {
 		latest, err := update.CheckForUpdate(update.CheckOpts{})
@@ -64,7 +64,7 @@ func DefaultPickerReleaseCheck() func() (*update.LatestRelease, error) {
 	}
 }
 
-// StartUpdateCheck never blocks the caller and swallows check failures.
+// StartUpdateCheck does not wait. It discards check failures.
 func StartUpdateCheck(opts UpdateCheck) {
 	go func() {
 		latest, err := opts.Check()

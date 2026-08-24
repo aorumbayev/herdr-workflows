@@ -45,8 +45,8 @@ func versionAtLeast(live, minimum string) bool {
 	return lp >= mp
 }
 
-// StartupResult is the outcome of comparing a live herdr ping against the
-// pinned protocol and manifest minimum.
+// StartupResult is the result of a comparison of a live herdr ping with the
+// pinned protocol and the minimum version in the manifest.
 type StartupResult struct {
 	Ok       bool
 	Protocol int
@@ -76,8 +76,8 @@ func formatProtocol(p float64) string {
 	return strconv.FormatFloat(p, 'f', -1, 64)
 }
 
-// CheckHerdrStartup compares a live ping's protocol and version against the
-// pinned protocol and manifest minimum.
+// CheckHerdrStartup compares the protocol and version from a live ping with the
+// pinned protocol and the minimum version in the manifest.
 func CheckHerdrStartup(protocol any, version any) StartupResult {
 	installed := "missing"
 	versionStr, versionIsString := version.(string)

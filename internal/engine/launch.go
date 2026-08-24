@@ -30,7 +30,7 @@ type LaunchPayload struct {
 	RunID   string              `json:"runId,omitempty"`
 }
 
-// SpawnOpts configures the injectable process seam used by detached launchers.
+// SpawnOpts configures the process seam for detached launchers.
 type SpawnOpts struct {
 	Env    map[string]string
 	Stdin  string
@@ -54,7 +54,7 @@ type DetachedRunResult struct {
 	Detail string
 }
 
-// DetachedRunHandle observes a detached run; Detach settles early like Bun unref.
+// DetachedRunHandle observes a detached run. Detach settles early, like Bun unref.
 type DetachedRunHandle struct {
 	Result chan DetachedRunResult
 	Detach func()
@@ -425,7 +425,7 @@ func resolveSpawn(spawn func(argv []string, opts SpawnOpts) (*Spawned, error)) f
 	return defaultSpawn
 }
 
-// LaunchDetachedRun spawns a detached run child and observes stdout progress/history lines.
+// LaunchDetachedRun spawns a detached run child and observes stdout progress and history lines.
 func LaunchDetachedRun(req LaunchRunRequest) DetachedRunHandle {
 	spawn := resolveSpawn(req.Spawn)
 	argv := selfArgv(req.Executable, "run", req.Name, "--launch-payload")

@@ -1,6 +1,6 @@
 # Install
 
-Get the plugin onto your machine, then tell it which agents you have.
+Install the plugin on your machine, then tell it which agents you have.
 
 ## Requirements
 
@@ -9,7 +9,7 @@ Get the plugin onto your machine, then tell it which agents you have.
 | [herdr](https://herdr.dev) | 0.8.2 or later |
 | Linux or macOS             | Any            |
 
-On Windows, install herdr **and** this plugin inside WSL2. WSL2 uses the Linux release archive. A native Windows herdr can't talk to `hwf` running in WSL, because they're separate servers with separate sockets. Native Windows installs are refused.
+On Windows, install herdr **and** this plugin inside WSL2. WSL2 uses the Linux release archive. A native Windows herdr cannot connect to `hwf` that runs in WSL, because they are separate servers with separate sockets. This plugin refuses a native Windows install.
 
 ### WSL2 smoke
 
@@ -22,14 +22,14 @@ Repeatable check that a Windows host uses the Linux archive inside WSL2, not a n
 herdr plugin install aorumbayev/herdr-workflows
 ```
 
-3. Confirm the shell reports Linux (`uname -s` prints `Linux`). The release archive is then `linux_amd64` or `linux_arm64` from `uname -m`.
-4. Confirm the plugin binary:
+3. Make sure that the shell reports Linux (`uname -s` prints `Linux`). The release archive is then `linux_amd64` or `linux_arm64` from `uname -m`.
+4. Make sure that the plugin binary runs:
 
 ```bash
 hwf --version
 ```
 
-5. Confirm native Windows platforms are refused. A native Windows install path errors and does not use a Windows archive. Do not install a second herdr in your live control workspace for this check.
+5. Make sure that this plugin refuses native Windows platforms. A native Windows install path errors and does not use a Windows archive. Do not install a second herdr in your live control workspace for this check.
 
 ## Install the plugin
 
@@ -37,11 +37,11 @@ hwf --version
 herdr plugin install aorumbayev/herdr-workflows
 ```
 
-herdr clones the release tag and runs the manifest build: it downloads the verified archive for that tag's version, checks the SHA-256 entry in `checksums.txt`, extracts `bin/herdr-workflows`, then runs setup. The target host does not need Go. A checksum mismatch or download failure stops the build and leaves any prior install in place.
+herdr clones the release tag and runs the manifest build. It downloads the verified archive for that tag's version, checks the SHA-256 entry in `checksums.txt`, extracts `bin/herdr-workflows`, then runs setup. The target host does not need Go. A checksum mismatch or download failure stops the build and leaves any prior install in place.
 
 There is no npm package. Releases publish GitHub Release notes plus platform archives for Linux and macOS (`amd64` and `arm64`).
 
-Setup then links two commands, `hwf` and `herdr-workflows`, into `~/.local/bin` (or `$XDG_BIN_HOME`), and adds the `prefix+k` keybinding to your herdr config. Both steps are optional. If one is skipped, setup prints why and carries on. If setup says your bin directory isn't on `PATH`, add it.
+Setup then links two commands, `hwf` and `herdr-workflows`, into `~/.local/bin` (or `$XDG_BIN_HOME`), and adds the `prefix+k` keybinding to your herdr config. Both steps are optional. If you skip one, setup prints why and continues. If setup says your bin directory is not on `PATH`, add it.
 
 Check the result:
 
@@ -56,11 +56,11 @@ herdr config check
 hwf update
 ```
 
-`hwf update` compares your installed version against the latest published GitHub Release, ignoring drafts. If a newer one exists, a Herdr-managed install reinstalls through herdr, and a standalone or copied binary downloads the matching archive, verifies it, and replaces itself. If you're already current, it says so and changes nothing.
+`hwf update` compares your installed version against the latest published GitHub Release and ignores drafts. If a newer one exists, a herdr-managed install reinstalls through herdr. A standalone or copied binary downloads the matching archive, verifies it, and replaces itself. If you are already current, it says so and changes nothing.
 
 The picker also tells you: when a newer release exists, list mode shows a `run hwf update` hint in the filter row. The hint never blocks you, and a failed check shows nothing at all.
 
-Cases where `hwf update` won't run:
+Cases where `hwf update` will not run:
 
 - **Your install predates the command.** Run `herdr plugin install aorumbayev/herdr-workflows` once more to get it. After that, `hwf update` works.
 - **You linked a development checkout.** Use `go run ./scripts/install-dev`, which compiles your working tree and relinks it.
@@ -74,15 +74,15 @@ hwf init            # for this repo, shared with your team
 hwf init --global   # for you, on this machine
 ```
 
-Both commands look for `claude`, `codex`, `cursor`, `opencode`, `grok`, and `agy` on your `PATH`. Each one found becomes a profile with the same name. The first name alphabetically becomes `default_profile`.
+Both commands search for `claude`, `codex`, `cursor`, `opencode`, `grok`, and `agy` on your `PATH`. Each one found becomes a profile with the same name. The first name alphabetically becomes `default_profile`.
 
-Without `--global`, `hwf init` also creates `.hwf/workflows/` and writes a `.hwf/.gitignore` covering `config.local.yaml` and `tmp/`. Running either form again asks before it overwrites, or use `--force` to skip the question. Existing `transcripts:` entries survive an overwrite.
+Without `--global`, `hwf init` also creates `.hwf/workflows/` and writes a `.hwf/.gitignore` that covers `config.local.yaml` and `tmp/`. If you run either form again, it asks before it overwrites. Use `--force` to skip the question. Existing `transcripts:` entries survive an overwrite.
 
-Use the repo form when your team shares profiles in git. Use `--global` when you keep your workflows in `~/.hwf/workflows` and don't want to touch the repo.
+Use the repo form when your team shares profiles in git. Use `--global` when you keep your workflows in `~/.hwf/workflows` and do not want to touch the repo.
 
 ## Profiles
 
-A profile is a nickname for one way of starting an agent. Your workflow says `using: deep-review`, and the profile says what that launches.
+A profile is a nickname for one way to start an agent. Your workflow says `using: deep-review`, and the profile says what that launches.
 
 ```yaml
 # .hwf/config.yaml
@@ -98,17 +98,17 @@ default_profile: claude
 A profile has two fields, and never anything else:
 
 - **`kind`** is which agent herdr starts. A kind name, not a path and not a command line.
-- **`args`** are its startup flags. This is how one kind gives you several roles, like `deep-review` above.
+- **`args`** are its startup flags. This is how one kind gives you several roles, like the `deep-review` profile.
 
-How a step ends up with one:
+How a step gets one:
 
-1. `using:` names a profile. Templates work here, so `using: "{{inputs.target}}"` lets whoever runs it pick.
-2. No `using:`, and the step falls back to `default_profile`.
+1. `using:` names a profile. Templates work here, so `using: "{{inputs.target}}"` lets the person who runs it choose.
+2. No `using:`, and the step uses `default_profile` instead.
 3. Neither exists, and the run stops before step 1.
 
-A `using:` name that isn't in your config fails when the file loads. A name that arrives through a template can only be checked when the step runs.
+A `using:` name that is not in your config fails when the file loads. hwf can check a name that arrives through a template only when the step runs.
 
-`target:` is the alternative, and it ignores profiles completely: it prompts an agent that's already running, by name or pane ID.
+`target:` is the alternative, and it ignores profiles completely: it prompts an agent that is already active, by name or pane ID.
 
 `hwf init` writes one profile per kind it found on your `PATH`. Role names and `args` are yours to add.
 
@@ -125,19 +125,25 @@ profiles:
     args: ["--full-auto"]
 ```
 
-As of herdr 0.8.2 the kinds are `pi`, `claude`, `codex`, `gemini`, `cursor`, `devin`, `agy`, `cline`, `omp`, `mastracode`, `opencode`, `copilot`, `kimi`, `kiro`, `droid`, `amp`, `grok`, `hermes`, `kilo`, `qodercli`, `qwen`, and `maki`. herdr owns that list and a newer herdr may accept more, so check your version's docs rather than this page. A kind herdr doesn't accept fails when the step tries to start it, and nothing else launches in its place.
+As of herdr 0.8.2 the kinds are `pi`, `claude`, `codex`, `gemini`, `cursor`, `devin`, `agy`, `cline`, `omp`, `mastracode`, `opencode`, `copilot`, `kimi`, `kiro`, `droid`, `amp`, `grok`, `hermes`, `kilo`, `qodercli`, `qwen`, and `maki`. herdr owns that list and a newer herdr may accept more, so check your version's docs rather than this page. A kind herdr does not accept fails when the step tries to start it, and nothing else launches in its place.
 
-### Agents herdr doesn't support
+### Agents herdr does not support
 
-An `agent:` step can't reach them. herdr identifies agents by their process and their screen, and both live inside the herdr binary, so a brand-new harness needs a herdr release. No config file adds one.
+An `agent:` step cannot reach them. herdr identifies agents by their process and their screen, and both live inside the herdr binary, so a brand-new harness needs a herdr release. No config file adds one.
 
-What still works is treating it as a plain command:
+You can still treat it as a plain command:
 
 ```yaml
 - run: [my-agent, --prompt, "{{inputs.task}}"]
 ```
 
-You get its output and exit code. You don't get a turn: no waiting for it to go idle, no `response` to pass along, no notification when it asks you something. Good enough for a tool that answers and exits. Not enough for a live conversation.
+You get its output and exit code. You do not get a turn, which means:
+
+- hwf does not wait for the tool to become idle
+- You get no `response` to pass to later steps
+- You get no notification when the tool asks you something
+
+This is good enough for a tool that answers and exits. It is not enough for a live conversation.
 
 ## Where config comes from
 
@@ -147,9 +153,9 @@ Three files merge, in this order:
 2. `.hwf/config.yaml`, committed and shared.
 3. `.hwf/config.local.yaml`, gitignored and yours alone.
 
-A later layer replaces a whole named entry, never part of one. So `config.local.yaml` can repoint `deep-review` at Codex on your laptop while the team keeps Claude, but it can't change only that profile's `args`.
+A later layer replaces a whole named entry, never part of one. So `config.local.yaml` can repoint `deep-review` at Codex on your laptop, but the team keeps Claude. It cannot change only that profile's `args`.
 
-Config accepts three keys: `profiles`, `default_profile`, and `transcripts`. Nothing else. See [Reference](/reference#config).
+Config accepts three keys and nothing else: `profiles`, `default_profile`, and `transcripts`. Refer to [Reference](/reference#config).
 
 Edit both files in your editor, or run `hwf init` to regenerate profile entries from the agents on your `PATH`.
 

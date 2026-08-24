@@ -65,7 +65,7 @@ func (r *recorder) persistEntryYAML(path string) {
 	_ = WriteDebugArtifacts(r.runID, DebugArtifacts{EntryYAML: string(body)}, r.getenv)
 }
 
-// RecordTranscript stores the run's captured transcript for console debug views.
+// RecordTranscript keeps the captured transcript of the run for console debug views.
 func (r *recorder) RecordTranscript(text string) {
 	if r.writer == nil || text == "" {
 		return

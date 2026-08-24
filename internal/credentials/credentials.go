@@ -1,5 +1,5 @@
-// Package credentials guards the private credential store: permission-bits
-// checks plus best-effort ACL stripping and inspection.
+// Package credentials does permission-bits checks of the private credential store
+// and best-effort ACL removal and inspection.
 package credentials
 
 import (
@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-// StoreError reports a credential store that cannot be proven private.
+// StoreError identifies a credential store that is not shown to be private.
 type StoreError struct {
 	msg string
 }
@@ -27,7 +27,7 @@ type ACLGrant struct {
 	Allow     bool
 }
 
-// Options inject seams for tests; nil fields use the real filesystem and OS.
+// Options inject seams for tests. Nil fields use the real filesystem and OS.
 type Options struct {
 	Chmod    func(string, os.FileMode) error
 	Stat     func(string) (os.FileMode, error)
@@ -112,8 +112,8 @@ func stripExtendedACLs(path string) {
 
 var darwinAclRE = regexp.MustCompile(`^\s*\d+:\s+(\S+)(?:\s+inherited)?\s+(allow|deny)\s+`)
 
-// ParseDarwinACLListing parses macOS `/bin/ls -lde` / `-le` numbered ACE
-// lines into grants.
+// ParseDarwinACLListing parses numbered ACE lines from macOS `/bin/ls -lde` /
+// `-le` into grants.
 func ParseDarwinACLListing(stdout string) []ACLGrant {
 	var grants []ACLGrant
 	for line := range strings.Lines(stdout) {
@@ -128,8 +128,8 @@ func ParseDarwinACLListing(stdout string) []ACLGrant {
 
 var linuxAclRE = regexp.MustCompile(`^(user|group|other|mask):([^:]*):([rwx-]+)`)
 
-// ParseLinuxACLListing parses `getfacl -cp` named entries; owning user:/group:
-// blanks are mode bits, not ACEs.
+// ParseLinuxACLListing parses named entries from `getfacl -cp`. Blank owning
+// user: and group: fields are mode bits, not ACEs.
 func ParseLinuxACLListing(stdout string) []ACLGrant {
 	var grants []ACLGrant
 	for line := range strings.Lines(stdout) {
@@ -153,7 +153,7 @@ func ParseLinuxACLListing(stdout string) []ACLGrant {
 	return grants
 }
 
-// readExtendedACLs returns nil when the platform cannot report ACLs.
+// readExtendedACLs gives nil if the platform cannot give ACL data.
 func readExtendedACLs(path string) []ACLGrant {
 	switch runtime.GOOS {
 	case "darwin":
@@ -209,12 +209,12 @@ func assertNoForeignACLAccess(path string, o ops) error {
 	return nil
 }
 
-// AssertCredentialStoreSafe ensures stateDir grants no read/write to any
-// principal other than the current user before writing bearer tokens there.
+// AssertCredentialStoreSafe makes sure that stateDir is private to the current user.
+// The check occurs before a write of run-history snapshots (captured command output and transcript text).
 //
-// Mode bits and ACL stripping cover POSIX discretionary access and common ACL
-// inheritance. A filesystem with no permission model (some network mounts)
-// still cannot be proven safe — we refuse only what the platform can observe.
+// Mode bits and ACL removal are for POSIX discretionary access and usual ACL inheritance.
+// A filesystem with no permission model (some network mounts) has no proof of safety.
+// The function rejects only the conditions that the platform can observe.
 func AssertCredentialStoreSafe(stateDir string, opts *Options) error {
 	o := resolve(opts)
 	if err := o.mkdirAll(stateDir, 0o700); err != nil {
@@ -233,8 +233,8 @@ func AssertCredentialStoreSafe(stateDir string, opts *Options) error {
 	return assertNoForeignACLAccess(stateDir, o)
 }
 
-// AssertPrivateCredentialFile tightens and verifies a credential file is
-// private to the current user.
+// AssertPrivateCredentialFile tightens the mode of a credential file and makes
+// sure that the file is private to the current user.
 func AssertPrivateCredentialFile(path string, opts *Options) error {
 	o := resolve(opts)
 	if err := o.chmod(path, 0o600); err != nil {

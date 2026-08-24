@@ -96,10 +96,10 @@ examples stay unchanged.
 
 ### How to measure
 
-- The reference checkout is `.agents/references/herdr/website/src/content/docs/`, detached at the
+- The reference checkout is `.agents/references/herdr/docs/next/website/src/content/docs/`, detached at the
   pinned release tag. If absent, follow `.agents/references/AGENTS.md` to clone it. If it still
   cannot be read, report "Not measured" and stop this section. Do not infer from memory
-- `rg -n "<method name>" .agents/references/herdr/website/src/content/docs/` for each method in
+- `rg -n "<method name>" .agents/references/herdr/docs/next/website/src/content/docs/` for each method in
   `schemas/herdr-api.schema.json` and `internal/host/`
 - `rg -n "0\.7\.[0-9]+" AGENTS.md CONTRIBUTING.md README.md herdr-plugin.toml docs/*.md`
 

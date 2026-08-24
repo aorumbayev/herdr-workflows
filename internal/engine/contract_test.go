@@ -11,12 +11,10 @@ import (
 )
 
 func TestCoordinationError(t *testing.T) {
-	err := NewCoordinationError("agent", "socket closed")
-	if err == nil {
-		t.Fatal("NewCoordinationError returned nil")
-	}
-	if !strings.Contains(err.Error(), "may still be active") {
-		t.Fatalf("error message missing 'may still be active': %q", err.Error())
+	outcome := DispatchFailure("agent", &host.HerdrError{Code: "closed", Msg: "socket closed"})
+	want := "agent: herdr coordination was lost (socket closed) — the action may still be active; panes were preserved and on_failure was skipped"
+	if outcome.Error != want {
+		t.Fatalf("got %q, want %q", outcome.Error, want)
 	}
 }
 
@@ -196,7 +194,7 @@ func TestEnsureRunScratchDir(t *testing.T) {
 			t.Fatalf("returned dir = %q, want %q", dir, expected)
 		}
 
-		// Check that directory exists and has correct permissions
+		// Make sure that the directory exists and that the mode is correct
 		info, err := os.Stat(dir)
 		if err != nil {
 			t.Fatalf("directory does not exist: %v", err)
@@ -223,7 +221,7 @@ func TestEnsureRunScratchDir(t *testing.T) {
 			t.Fatalf("setup failed: %v", err)
 		}
 
-		// Call EnsureRunScratchDir which should repair the mode
+		// Call EnsureRunScratchDir to repair the mode
 		result, err := EnsureRunScratchDir(repoRoot, dir)
 		if err != nil {
 			t.Fatalf("EnsureRunScratchDir failed: %v", err)
@@ -233,7 +231,7 @@ func TestEnsureRunScratchDir(t *testing.T) {
 			t.Fatalf("returned dir = %q, want %q", result, dir)
 		}
 
-		// Check that mode was repaired to 0700
+		// Make sure that the mode is 0700
 		info, err := os.Stat(dir)
 		if err != nil {
 			t.Fatalf("failed to stat directory: %v", err)

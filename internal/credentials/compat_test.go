@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// Fixtures under testdata/ are endpoint-record and session.lock samples,
-// mode 0600, with secrets redacted to zero UUIDs.
+// Fixtures in testdata/ are endpoint-record and session.lock samples.
+// Mode is 0600. Secrets are redacted to zero UUIDs.
 func TestRealInstallCredentialFilesPassPrivacyChecks(t *testing.T) {
 	store := t.TempDir()
 	if err := AssertCredentialStoreSafe(store, nil); err != nil {

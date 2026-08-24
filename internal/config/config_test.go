@@ -8,8 +8,8 @@ import (
 	"testing"
 )
 
-// fixture returns a plugin config dir and a repo root, both under t.TempDir,
-// with HERDR_PLUGIN_CONFIG_DIR pointing at the plugin dir.
+// fixture makes a plugin config dir and a repo root, both in t.TempDir.
+// The function sets HERDR_PLUGIN_CONFIG_DIR to the plugin dir.
 func fixture(t *testing.T) (plugin, root string) {
 	t.Helper()
 	plugin = t.TempDir()

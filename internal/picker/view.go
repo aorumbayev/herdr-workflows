@@ -47,7 +47,7 @@ func (m Model) render() string {
 }
 
 func (m Model) withTabBar(active, body string) string {
-	return tui.FormatTabBar(active, m.contentWidth()) + "\n" + body
+	return FormatTabBar(active, m.contentWidth()) + "\n" + body
 }
 
 func (m Model) consoleBody() string {
@@ -142,11 +142,11 @@ func (m Model) renderChoice() string {
 	rows := m.choiceRows()
 	w := m.contentWidth()
 	var lines []string
-	end := min(m.offset+ListViewport, len(rows))
+	end := min(m.offset+tui.ListViewport, len(rows))
 	for i := m.offset; i < end; i++ {
 		lines = append(lines, FormatPickerRowName(rows[i], "", false, w, i == m.cursor))
 	}
-	for len(lines) < ListViewport {
+	for len(lines) < tui.ListViewport {
 		lines = append(lines, "")
 	}
 	prompt := ""

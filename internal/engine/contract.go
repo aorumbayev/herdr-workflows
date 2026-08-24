@@ -112,7 +112,7 @@ type Recorder interface {
 	Dispose()
 }
 
-// ProgressOutcome is CLI progress mapping only — not execution lifecycle vocabulary.
+// ProgressOutcome is CLI progress mapping only. It is not execution lifecycle vocabulary.
 type ProgressOutcome string
 
 const (
@@ -160,19 +160,6 @@ type StepRunOpts struct {
 	Env                  []string
 }
 
-type CoordinationError struct {
-	message string
-}
-
-func (e *CoordinationError) Error() string {
-	return e.message
-}
-
-func NewCoordinationError(action, detail string) *CoordinationError {
-	msg := fmt.Sprintf("%s: herdr coordination was lost (%s) — the action may still be active; panes were preserved and on_failure was skipped", action, detail)
-	return &CoordinationError{message: msg}
-}
-
 func IsCoordinationError(err error) bool {
 	return host.IsTransportLoss(err)
 }
@@ -204,7 +191,7 @@ func DispatchFailure(action string, err error) StepOutcome {
 	if IsCoordinationError(err) {
 		return StepOutcome{
 			OK:               false,
-			Error:            NewCoordinationError(action, ErrorText(err)).Error(),
+			Error:            fmt.Sprintf("%s: herdr coordination was lost (%s) — the action may still be active; panes were preserved and on_failure was skipped", action, ErrorText(err)),
 			CoordinationLost: true,
 		}
 	}

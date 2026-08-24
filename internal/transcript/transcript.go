@@ -1,6 +1,5 @@
 // Package transcript reads agent transcripts. It has a built-in Claude
-// .jsonl extractor and, for other agent kinds, runs a configured extractor
-// command.
+// .jsonl extractor. For other agent kinds, it runs a configured extractor command.
 package transcript
 
 import (
@@ -19,8 +18,8 @@ import (
 
 var nonAlnumRE = regexp.MustCompile(`[^a-zA-Z0-9]`)
 
-// Slug must reproduce the project directory name Claude Code writes, which
-// comes from a JavaScript `String.replace` over UTF-16 code units: an astral
+// Slug must reproduce the project directory name that Claude Code writes. The
+// name is the result of a JavaScript `String.replace` on UTF-16 code units. An astral
 // rune is two units and becomes two dashes.
 func Slug(cwd string) string {
 	return nonAlnumRE.ReplaceAllStringFunc(cwd, func(match string) string {
@@ -103,8 +102,8 @@ func consumeLine(line []byte, entries *[]string, transcriptBytes *int) error {
 	return nil
 }
 
-// consumeChunk drains every complete line out of pending and returns the
-// unterminated remainder.
+// consumeChunk removes each complete line from pending and gives the remainder
+// that has no line terminator.
 func consumeChunk(pending []byte, entries *[]string, transcriptBytes *int) ([]byte, error) {
 	for {
 		i := bytes.IndexByte(pending, '\n')
@@ -155,8 +154,8 @@ func readStream(r io.Reader) (string, error) {
 	return strings.Join(entries, "\n\n"), nil
 }
 
-// ReadClaudeTranscript loads a Claude session .jsonl and returns the extracted
-// user/assistant text. base is the projects directory the session lives under.
+// ReadClaudeTranscript loads a Claude session .jsonl and gives the extracted
+// user/assistant text. base is the projects directory that contains the session.
 func ReadClaudeTranscript(cwd, sessionID, base string) (string, error) {
 	path := filepath.Join(base, Slug(cwd), sessionID+".jsonl")
 	f, err := os.Open(path)

@@ -1,4 +1,5 @@
-// Package history is Run Observation: it stores and presents Run Snapshot, Summary, and Detail without inventing state or exposing private execution data.
+// Package history is Run Observation. It keeps and shows Run Snapshot, Summary, and Detail.
+// It does not invent state. It does not show private execution data.
 package history
 
 import (

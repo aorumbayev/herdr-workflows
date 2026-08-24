@@ -10,8 +10,8 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 )
 
-// runsSendbackStatus reports through a notification, because the runs tab draws
-// the browser body in place of the picker status row.
+// runsSendbackStatus sends a notification. The runs tab shows the browser body
+// where the picker status row would be.
 func (m *Model) runsSendbackStatus(text string) {
 	m.status = text
 	if m.notify != nil {

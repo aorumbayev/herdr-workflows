@@ -5,15 +5,16 @@ description: Updates a repo's existing .hwf/workflows/*.yaml for the latest herd
 
 # Upgrade herdr-workflows workflows
 
-Repairs existing v1alpha1 workflows against the running herdr. Gates run in a strict order —
-herdr version, plugin compatibility, interview, YAML — and a failed gate ends the session on
-the spot: report the gate's outcome and stop. While a gate is failing, do not read the breakage
+Repairs existing v1alpha1 workflows against the current herdr. Gates run in a strict order —
+herdr version, plugin compatibility, interview, YAML — and a failed gate ends the session
+immediately: report the gate's outcome and stop. While a gate fails, do not read the breakage
 reference, do not interview, and do not open or edit any workflow file. Every version claim
 needs quoted command output: run the command, never assert a version or a changelog entry from
 memory.
 
 Full v1alpha1 syntax is the sibling skill's job — `hwf skills show herdr-workflow-create` prints
-it. This skill owns the version gates and the herdr 0.8.0 breakage classes.
+it. This skill owns the version gates and the three herdr breakage classes introduced at 0.8.0
+(current plugin floor is 0.8.2).
 
 ## Workflow
 
@@ -40,16 +41,16 @@ to update through their install method:
 - Homebrew: `brew upgrade herdr`
 - mise: `mise upgrade herdr`
 
-The running server must restart before the new version serves, and a restart exits its pane
-processes, so the timing is the user's: `herdr server stop`, then start herdr again. Do not run
+The current server must restart before the new version serves. A restart exits its pane
+processes, so the user controls the timing: `herdr server stop`, then start herdr again. Do not run
 the restart for them. The final message is the update instruction plus the restart warning —
 no interview, no workflow reads, no edits.
 
 ### 2. Plugin compatibility gate
 
-On the latest herdr, exercise the plugin with a command that runs the version and protocol
+On the latest herdr, run a command that runs the version and protocol
 preflight: `hwf run <name>` on any existing workflow, or `hwf picker`. `hwf workflow inspect`
-never contacts herdr, so it cannot surface the refusal. A refusal names the installed and
+never contacts herdr, so it cannot report the refusal. A refusal names the installed and
 required versions and both protocols, in this shape:
 
 ```
@@ -57,7 +58,7 @@ herdr protocol mismatch: connected=21, pinned=20 (installed=0.9.0, required≥0.
 ```
 
 Refused → check whether a compatible plugin release exists. The refusal is a build
-incompatibility between the plugin and the running herdr, never a workflow-authoring problem:
+incompatibility between the plugin and the current herdr, never a problem with the workflow YAML:
 workflow YAML declares no herdr version or protocol, so old YAML cannot cause it and no YAML
 edit can resolve it.
 
@@ -67,9 +68,9 @@ hwf update
 
 - It updates → verify with `hwf run <name>` or `hwf picker`, then continue to the interview.
 - Already on the latest plugin release and still refused → the session ends here. Tell the user
-  to open an issue on `aorumbayev/herdr-workflows` quoting the exact installed/required
-  versions and both protocol numbers. Never patch the plugin and never edit workflows to route
-  around a protocol refusal. No interview, no workflow reads, no edits.
+  to open an issue on `aorumbayev/herdr-workflows` that quotes the exact installed/required
+  versions and both protocol numbers. Never patch the plugin and never edit workflows to avoid
+  a protocol refusal. No interview, no workflow reads, no edits.
 
 ### 3. Interview — before any edit
 
@@ -83,11 +84,12 @@ when available. Otherwise ask conversationally:
 - **Apply policy** — apply param and name changes automatically, or confirm each edit first?
 
 No Edit/Write on any file under `.hwf/workflows/` or `~/.hwf/workflows/` before these answers
-are in. When the host cannot answer mid-session, stop after asking.
+are in. When the host cannot answer mid-session, stop after you ask.
 
 ### 4. Scan and refine
 
-Read every in-scope YAML. The three herdr 0.8.0 breakage classes, with before/after pairs:
+Read every in-scope YAML. The three herdr breakage classes introduced at 0.8.0 (still required
+on the current 0.8.2 floor), with before/after pairs:
 
 **[reference/herdr-0.8.0.md](reference/herdr-0.8.0.md)**
 

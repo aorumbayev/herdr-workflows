@@ -64,7 +64,7 @@ func Path(scope, repoRoot, name string) (string, error) {
 }
 
 // ResolvedWorkflowFile identifies the repository or global definition that
-// won name resolution.
+// name resolution returns.
 type ResolvedWorkflowFile struct {
 	File   string
 	Source string
@@ -156,7 +156,7 @@ func analyzeWorkflowSensitivity(raw Document) Sensitivity {
 }
 
 // AnalyzeResolvedSensitivity includes sensitivity from reachable child
-// workflows and records children that cannot be loaded.
+// workflows and records children that fail to load.
 func AnalyzeResolvedSensitivity(raw Document, name, repoRoot string) Sensitivity {
 	return analyzeResolvedSensitivity(raw, name, repoRoot, nil)
 }
@@ -204,15 +204,6 @@ func appendUnique(values []string, value string) []string {
 		return values
 	}
 	return append(values, value)
-}
-
-// AnalyzeYamlTree parses a workflow body and aggregates its sensitivity.
-func AnalyzeYamlTree(file, body, name, repoRoot string) (Sensitivity, error) {
-	raw, err := ParseRaw(file, body)
-	if err != nil {
-		return Sensitivity{}, err
-	}
-	return AnalyzeResolvedSensitivity(raw, name, repoRoot), nil
 }
 
 // ReferencedWorkflowChildren returns unique child names in sorted order.
@@ -266,7 +257,7 @@ func DisplayTitle(name, title string) string {
 	return HumanizeWorkflowName(name)
 }
 
-// SensitivityLabels returns the compact trust labels used by the UI.
+// SensitivityLabels returns the compact trust labels that the UI uses.
 func SensitivityLabels(flags Sensitivity) []string {
 	labels := make([]string, 0, 2+len(flags.SensitiveMethods)+len(flags.UnresolvedChildren))
 	if flags.HasCommands {
@@ -284,8 +275,8 @@ func SensitivityLabels(flags Sensitivity) []string {
 	return labels
 }
 
-// FormatSensitivityBanner formats a visible trust banner, or empty text for
-// a workflow with no flagged surface.
+// FormatSensitivityBanner formats a visible trust banner.
+// It returns empty text for a workflow with no flagged surface.
 func FormatSensitivityBanner(flags Sensitivity, labelArgs ...string) string {
 	labels := SensitivityLabels(flags)
 	if len(labels) == 0 {

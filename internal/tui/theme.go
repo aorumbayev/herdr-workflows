@@ -6,8 +6,8 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// Indexed ANSI slots. Every one is a slot the user's own terminal theme fills,
-// and every color here repeats something the text already says.
+// Indexed ANSI slots. Each value is a slot that the terminal theme of the user fills.
+// Each color here repeats something that the text already says.
 const (
 	FailIndex         = 1
 	KindRunIndex      = 2
@@ -19,8 +19,8 @@ const (
 )
 
 // Theme is indexed ANSI colors plus reverse-video selection (ticket 04 GAP 1).
-// Secondary text is faint rather than a palette slot: faint derives from the
-// user's own foreground, and a terminal that drops it leaves readable text.
+// Secondary text is faint, not a palette slot. Faint uses the foreground of the user.
+// A terminal that does not show faint still shows readable text.
 type Theme struct {
 	Plain        lipgloss.Style
 	Warn         lipgloss.Style
@@ -63,7 +63,7 @@ func DefaultTheme() Theme {
 	}
 }
 
-// RunStatusStyle maps a run status token to its locked ANSI slot.
+// RunStatusStyle gives the locked ANSI slot for a run status token.
 func (t Theme) RunStatusStyle(status string) lipgloss.Style {
 	switch status {
 	case "succeeded":
@@ -81,7 +81,7 @@ func (t Theme) RunStatusStyle(status string) lipgloss.Style {
 	}
 }
 
-// KindStyle maps a workflow step kind onto the locked kind palette.
+// KindStyle gives the locked kind palette for a workflow step kind.
 func (t Theme) KindStyle(kind string) lipgloss.Style {
 	switch kind {
 	case "agent":
@@ -97,7 +97,7 @@ func (t Theme) KindStyle(kind string) lipgloss.Style {
 	}
 }
 
-// MuteChrome paints secondary chrome faint. Content never passes through here.
+// MuteChrome shows secondary chrome faint. Content never uses this function.
 func MuteChrome(text string) string {
 	if text == "" {
 		return ""

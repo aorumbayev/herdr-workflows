@@ -28,7 +28,7 @@ func TestRunsListSinglePositionCounter(t *testing.T) {
 }
 
 func TestRunsViewPadsToWindowHeight(t *testing.T) {
-	// The runs pane has the same leftover-line problem as the picker palette and input views.
+	// The runs pane has the same prior-frame row problem as the picker palette and the input views.
 	const height = 24
 	checkout := t.TempDir()
 	m, _ := modelWithRuns(t, checkout, "alpha", "bravo")

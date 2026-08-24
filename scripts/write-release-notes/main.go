@@ -1,4 +1,4 @@
-// Command write-release-notes writes GitHub release notes from CHANGELOG plus the
+// Command write-release-notes writes GitHub release notes from CHANGELOG and the
 // verified-archive install footer for remote Herdr installs.
 //
 // Usage: CHANGELOG_JSON=… go run ./scripts/write-release-notes <dest>

@@ -1,6 +1,6 @@
 package console
 
-// ParitySurface names one console scenario and its Go coverage.
+// ParitySurface names one console scenario and the Go coverage for it.
 type ParitySurface struct {
 	Spec         string
 	Requirement  string
@@ -14,10 +14,10 @@ type ParitySurface struct {
 func ParityBaseline() []ParitySurface {
 	const presentation = "console-presentation"
 	return []ParitySurface{
-		{Spec: presentation, Requirement: "Console opens at tab, beside, or below", Scenario: "Default beside from the overlay", Kind: "transition", GoSurface: "picker.beginConsolePlacement", CoveringTest: "TestPaletteConsoleOpensPlacementChooser"},
+		{Spec: presentation, Requirement: "Console opens at tab, beside, or below", Scenario: "Default beside from the overlay", Kind: "transition", GoSurface: "picker.beginConsolePlacement", CoveringTest: "picker.TestPaletteConsoleOpensPlacementChooser"},
 		{Spec: presentation, Requirement: "Chrome uses one-cell horizontal padding", Scenario: "Console content inset", Kind: "view", GoSurface: "tui.PadContent", CoveringTest: "tui.TestPadContentAddsHorizontalPadding"},
 		{Spec: presentation, Requirement: "Detail block reserves two rows under the list", Scenario: "Workflows and runs list detail", Kind: "view", GoSurface: "tui.FormatDetailBlock", CoveringTest: "tui.TestFormatDetailBlockReservesTwoRows"},
-		{Spec: presentation, Requirement: "Console opens at tab, beside, or below", Scenario: "Invalid CLI placement", Kind: "action", GoSurface: "cli.runConsole/ParsePlacement", CoveringTest: "TestConsoleRejectsInvalidPlacement"},
+		{Spec: presentation, Requirement: "Console opens at tab, beside, or below", Scenario: "Invalid CLI placement", Kind: "action", GoSurface: "cli.runConsole/ParsePlacement", CoveringTest: "cli.TestConsoleRejectsInvalidPlacement"},
 		{Spec: presentation, Requirement: "Run detail exposes log, transcript, and yaml-at-run", Scenario: "Switch debug tabs", Kind: "view", GoSurface: "Model.handleDetailKey/FormatDebugBody", CoveringTest: "TestModelRunDetailDebugTabsAndRetryCopy"},
 		{Spec: presentation, Requirement: "Run detail exposes log, transcript, and yaml-at-run", Scenario: "Retry-copy", Kind: "action", GoSurface: "FormatRetryCommand", CoveringTest: "TestModelRunDetailDebugTabsAndRetryCopy"},
 		{Spec: presentation, Requirement: "Workflow diagram projects the parsed definition", Scenario: "Open diagram from the workflows list", Kind: "view", GoSurface: "Model.openSelectedDiagram/tui.RenderRail", CoveringTest: "TestModelWorkflowDiagramScreen"},

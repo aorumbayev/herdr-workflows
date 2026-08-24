@@ -54,7 +54,7 @@ func TestPickerFrameFitsPopupHeight(t *testing.T) {
 
 func TestStatusLineDoesNotChangeFrameHeight(t *testing.T) {
 	// A frame that changes line count makes bubbletea erase and redraw the
-	// whole inline frame, which reads as a blink.
+	// whole inline frame. That looks like a blink.
 	m := New(Options{Entries: []workflow.ListEntry{{Name: "alpha", Title: "Alpha", Source: "repo"}}, Width: 64, Height: 15})
 	quiet := strings.Count(m.View().Content, "\n")
 	m.status = "validated alpha"

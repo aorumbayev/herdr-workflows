@@ -7,6 +7,15 @@ import (
 	"testing"
 )
 
+func shouldSkipDir(name string) bool {
+	switch name {
+	case ".git", "node_modules":
+		return true
+	default:
+		return false
+	}
+}
+
 func readRepoFile(t *testing.T, rel string) string {
 	t.Helper()
 	root := repoRoot(t)
@@ -87,7 +96,7 @@ func TestGoModHasNoEsbuild(t *testing.T) {
 
 func TestPluginSourceHasNoRuntimeTypeScriptTransform(t *testing.T) {
 	root := repoRoot(t)
-	// Concatenate so this test file does not contain the forbidden literals.
+	// Concatenate these strings so that this test file does not contain the forbidden literals.
 	forbidden := []string{
 		"api." + "Transform",
 		"Loader" + "TS",
@@ -439,7 +448,7 @@ func TestProductImprovementDoesNotHideParityGap(t *testing.T) {
 		}
 	}
 
-	// Explicit rule: Product Improvement must not hide a missing comparison or verdict.
+	// Product Improvement must not hide a missing comparison or verdict.
 	hasRule := strings.Contains(agents, "must not hide a missing Parity Baseline") ||
 		strings.Contains(agents, "must not hide a missing Parity Baseline comparison or Charm verdict") ||
 		strings.Contains(surfaces, "must not hide a missing Parity Baseline") ||
@@ -452,7 +461,7 @@ func TestProductImprovementDoesNotHideParityGap(t *testing.T) {
 		t.Fatal("AGENTS.md or docs/surfaces.md must state that a Product Improvement must not hide a missing Parity Baseline comparison or Charm verdict")
 	}
 
-	// Reject wording that treats UX redesign as a substitute for the matrix.
+	// This test fails wording that treats a UX redesign as a replacement for the matrix.
 	forbidden := []string{
 		"UX redesign substitutes for the Parity Baseline",
 		"Product Improvement replaces the Parity Baseline",

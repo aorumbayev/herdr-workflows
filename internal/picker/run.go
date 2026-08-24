@@ -6,70 +6,17 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
-	"github.com/aorumbayev/herdr-workflows/internal/console"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
-	"github.com/aorumbayev/herdr-workflows/internal/update"
-	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-// ScreenOpts configures the picker TUI entrypoint.
-type ScreenOpts struct {
-	Entries            []workflow.ListEntry
-	RepoRoot           string
-	Config             config.Config
-	Env                config.Env
-	CheckLatestRelease func() (*update.LatestRelease, error)
-	LoadWorkflow       func(workflow.ListEntry) (*workflow.Definition, error)
-	Chdir              func(string) error
-	CopyClipboard      func(string) error
-	EditWorkflow       func(path, name string) workflow.ValidateResult
-	OpenURL            func(url string) error
-	Notify             func(title string, body ...string) error
-	LaunchRun          func(LaunchRunOpts) LaunchRunHandle
-	AllocateRunID      func() string
-	ExportShare        func(entry workflow.ListEntry) (command string, err error)
-	OpenConsole        func(placement console.Placement) error
-	OpenEditor         func(path, name, placement string) error
-	ReopenPopup        func(state PopupState) error
-	Restore            *PopupState
-	ListAgentPanes     func() ([]console.AgentPaneEntry, error)
-	PaneSendText       func(paneID, text string) error
-}
-
-// PrepareScreen changes the working directory and builds a picker model from ScreenOpts hooks.
-func PrepareScreen(opts ScreenOpts) (Model, error) {
-	copyFn := opts.CopyClipboard
-	if copyFn == nil {
-		copyFn = tui.CopyToClipboard
-	}
-	return Prepare(Options{
-		Entries:        opts.Entries,
-		RepoRoot:       opts.RepoRoot,
-		Config:         opts.Config,
-		Env:            opts.Env,
-		LoadWorkflow:   opts.LoadWorkflow,
-		CopyClipboard:  copyFn,
-		Chdir:          opts.Chdir,
-		EditWorkflow:   opts.EditWorkflow,
-		OpenURL:        opts.OpenURL,
-		Notify:         opts.Notify,
-		LaunchRun:      opts.LaunchRun,
-		AllocateRunID:  opts.AllocateRunID,
-		ExportShare:    opts.ExportShare,
-		OpenConsole:    opts.OpenConsole,
-		OpenEditor:     opts.OpenEditor,
-		ReopenPopup:    opts.ReopenPopup,
-		Restore:        opts.Restore,
-		ListAgentPanes: opts.ListAgentPanes,
-		PaneSendText:   opts.PaneSendText,
-	})
-}
-
-// RunScreen mounts the picker with PrepareScreen, FilterInput, and a background update check.
-func RunScreen(opts ScreenOpts) (int, error) {
+// RunScreen starts the picker with Prepare, FilterInput, and a background update check.
+func RunScreen(opts Options) (int, error) {
 	check := opts.CheckLatestRelease
 	if check == nil {
 		check = DefaultPickerReleaseCheck()
+	}
+	if opts.CopyClipboard == nil {
+		opts.CopyClipboard = tui.CopyToClipboard
 	}
 
 	var program *tea.Program
@@ -87,7 +34,7 @@ func RunScreen(opts ScreenOpts) (int, error) {
 		OnNewer:         onNewer,
 	})
 
-	model, err := PrepareScreen(opts)
+	model, err := Prepare(opts)
 	if err != nil {
 		return 1, err
 	}
@@ -96,12 +43,9 @@ func RunScreen(opts ScreenOpts) (int, error) {
 	if pendingNewer {
 		program.Send(NewerReleaseMsg{})
 	}
-	final, err := program.Run()
+	_, err = program.Run()
 	if err != nil {
 		return 1, fmt.Errorf("picker: %w", err)
-	}
-	if m, ok := final.(Model); ok && m.quit {
-		return 0, nil
 	}
 	return 0, nil
 }

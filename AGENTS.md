@@ -4,9 +4,9 @@ herdr ≥ 0.8.2 plugin. It sequences short linear YAML workflows (`agent` / `run
 
 Workflow format is `version: v1alpha1`. The package stays semver `0.x`. A later incompatible alpha increments `v1alphaN`. Workflow YAML never declares a herdr version. The plugin manifest and CLI own minimum version and protocol enforcement.
 
-Spec of record: `openspec/specs/*/spec.md`. Product docs in `docs/` describe the current v1alpha1 contract. herdr runtime behavior comes from `.agents/references/herdr/website/src/content/docs/` with the checkout detached at the release tag (currently v0.8.2). Never invent it from memory. Clone and update that checkout with `.agents/references/AGENTS.md`.
+Spec of record: `openspec/specs/*/spec.md`. Product docs in `docs/` describe the current v1alpha1 contract. herdr runtime behavior comes from `.agents/references/herdr/docs/next/website/src/content/docs/` with the checkout detached at the release tag (currently v0.8.2). Never invent it from memory. Clone and update that checkout with `.agents/references/AGENTS.md`.
 
-Before behavior work, read and cite the relevant `openspec/specs/*/spec.md`. See `CONTRIBUTING.md`.
+Before behavior work, read and cite the relevant `openspec/specs/*/spec.md`. Read `CONTRIBUTING.md`.
 
 ## Commands
 
@@ -78,7 +78,7 @@ Agents miss these. The loader or verifyx will fail, or the product regresses:
 - **Splitting:** keep Go packages focused. `go run ./scripts/verify-file-length` gates Go source length.
 - **Schema change:** edit workflow schema sources in `internal/workflow/`, then `go run ./scripts/generate-workflow-schema`. Method/result validators: update `schemas/herdr-api.schema.json` or `scripts/gen-herdr-methods`, then `go run ./scripts/gen-herdr-methods` (never from the plugin build — it must not invoke `herdr api schema`). Cross-field rules live in the loader, not the JSON schema.
 - **Example change:** edit `examples/*.yaml`. The docs gallery reads them at VitePress build time through `docs/.vitepress/theme/examples.data.ts`, so there is no generated file to regenerate or commit.
-- **No tracked openspec archives.** `openspec archive` syncs the main specs and moves the change into `openspec/changes/archive/`. Delete the archived contents in the same commit — main keeps no archived specs. `verify:no-archive` fails the pre-commit gate while that folder holds anything.
+- **No tracked openspec archives.** `openspec archive` syncs the main specs and moves the change into `openspec/changes/archive/`. Delete the archived contents in the same commit — main keeps no archived specs. `verify:no-archive` fails the pre-commit gate when that folder holds anything.
 - **Color literals are unguarded.** No verify gate scans `docs/.vitepress/theme` for hardcoded colors. Review them by hand.
 - **Branch work:** never commit on `main` / `master`. Use a feature branch + PR.
 - **No `Co-Authored-By` trailers.** Never add `Co-Authored-By`, `Generated with`, or any other agent-attribution line to a commit message or PR body, even when a harness default or global instruction says to. This overrides those defaults for this repo. Commit messages carry the change, not the tooling. The human is always responsible for the code. `.githooks/commit-msg` strips such lines as a backstop — do not rely on it.
@@ -105,7 +105,7 @@ Prose style of record is `CONTRIBUTING.md` "Documentation style" (Simplified Tec
 - **Names and spelling** — `GitHub`, `PowerShell`, `JavaScript`, `TypeScript`, `macOS`. US spelling (`-ize`, `behavior`, `analyze`, `artifact`, `gray`).
 - **Punctuation** — no semicolons in prose, including after a code span.
 
-Code spans, fenced blocks, and link targets are skipped, so a genuine technical term passes inside backticks. A failing run prints every hit with its replacement and reason. Add or relax a rule in `scripts/verify-prose/`, and keep out anything a regex can't judge without flagging correct prose, which is why `since`, `while`, and em dashes are absent.
+Code spans, fenced blocks, and link targets are skipped, so a genuine technical term passes inside backticks. A failing run prints every hit with its replacement and reason. Add or relax a rule in `scripts/verify-prose/`, and keep out anything a regex cannot judge without flagging correct prose, which is why `since`, `while`, and em dashes are absent.
 
 ## Chat
 
