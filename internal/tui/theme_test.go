@@ -7,7 +7,7 @@ import (
 )
 
 func TestDefaultThemeUsesIndexedWarnMutedAndReverse(t *testing.T) {
-	// Ports test/picker/theme.test.ts against ticket 04 GAP 1: no OSC 4 palette query.
+	// This test copies test/picker/theme.test.ts against ticket 04 GAP 1: no OSC 4 palette query.
 	theme := DefaultTheme()
 	warn, ok := theme.Warn.GetForeground().(lipgloss.ANSIColor)
 	if !ok || warn != WarnIndex {

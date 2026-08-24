@@ -51,7 +51,7 @@ func coveringTestExists(name string, own map[string]struct{}, external map[strin
 	return ok
 }
 
-// Spec scenarios owned by runsbrowser.ParityBaseline (picker-presentation Runs requirements).
+// Spec scenarios that runsbrowser.ParityBaseline owns (picker-presentation Runs requirements).
 // openspec/specs/picker-presentation/spec.md
 var requiredRunsParityScenarios = []string{
 	"More than six runs",
@@ -143,7 +143,7 @@ func TestParityMoreThanSixRunsScrollsViewport(t *testing.T) {
 		t.Fatalf("scrolled visible = %d\n%s", listViewportRows(body), body)
 	}
 	if !strings.Contains(body, "| g |") && !strings.Contains(body, " g ") {
-		// workflow field is the name; status | name | elapsed
+		// Workflow field is the name. Layout is status | name | elapsed.
 		if !strings.Contains(body, "g |") {
 			t.Fatalf("cursor past viewport must reveal later run:\n%s", body)
 		}
@@ -266,7 +266,7 @@ func TestParityWindowSizeRecomputesRunsWidth(t *testing.T) {
 }
 
 func TestRunsViewportGrowsWithHostHeight(t *testing.T) {
-	// openspec picker-presentation: run rows fill the host above the six-row floor.
+	// openspec picker-presentation: run rows fill the host above the six-row minimum.
 	checkout := t.TempDir()
 	m, _ := modelWithRuns(t, checkout, "a", "b", "c", "d", "e", "f", "g", "h")
 	if m.listViewport() != tui.ListViewport {

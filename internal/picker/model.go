@@ -33,7 +33,7 @@ const (
 	modeRunsAgentPick
 )
 
-// Options construct a picker model.
+// Options is the input for a picker model.
 type Options struct {
 	Entries            []workflow.ListEntry
 	RepoRoot           string
@@ -140,7 +140,7 @@ type editorDoneMsg struct {
 // NewerReleaseMsg marks the filter row with the hwf update hint.
 type NewerReleaseMsg struct{}
 
-// Prepare chdirs into the repo root, then returns a model ready to run.
+// Prepare sets the process directory to the repo root, then gives a model that is ready to run.
 func Prepare(opts Options) (Model, error) {
 	chdir := opts.Chdir
 	if chdir == nil {
@@ -154,7 +154,7 @@ func Prepare(opts Options) (Model, error) {
 	return New(opts), nil
 }
 
-// New builds a list-mode picker. It never issues pane.report_metadata.
+// New makes a list-mode picker. It never calls pane.report_metadata.
 func New(opts Options) Model {
 	width := opts.Width
 	if width <= 0 {
@@ -189,7 +189,7 @@ func New(opts Options) Model {
 	return m
 }
 
-// restore reseats a respawned picker on the tab, filter, and row it left.
+// restore puts a respawned picker on the tab, filter, and row that it had before.
 func (m *Model) restore(state *PopupState) {
 	if state == nil {
 		return
@@ -207,12 +207,12 @@ func (m *Model) restore(state *PopupState) {
 	}
 }
 
-// restoreTabMsg reseats a respawned picker on its tab through the normal mount
-// path, so the tab's own commands still run.
+// restoreTabMsg puts a respawned picker on its tab with the usual mount path.
+// The commands of that tab still run.
 type restoreTabMsg struct{ tab string }
 
-// restoreEditMsg starts the editor the respawn was opened for, after the popup
-// has a renderer to hand to tea.ExecProcess.
+// restoreEditMsg starts the editor that the respawn opened, after the popup
+// has a renderer that tea.ExecProcess can use.
 type restoreEditMsg struct{}
 
 func (m Model) Init() tea.Cmd {
@@ -252,7 +252,7 @@ func (m *Model) clampCursor() {
 // status row, the rule, and the footer.
 const listChrome = 9
 
-// listViewport fills the popup with workflow rows above the six-row floor.
+// listViewport fills the popup with workflow rows above the six-row minimum.
 func (m Model) listViewport() int {
 	return tui.FitViewport(m.height, listChrome, tui.ListViewport)
 }
@@ -405,8 +405,8 @@ func (m Model) handleRunsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m.forwardRuns(msg)
 }
 
-// handleConsoleKey keeps tab and esc owned by the picker while the embedded
-// console is not composing, so neither key dies inside a browse screen.
+// handleConsoleKey lets the picker own tab and esc when the embedded console
+// is not in compose mode. Those keys do not stay in a browse screen.
 func (m Model) handleConsoleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.console.BlocksPopOut() {
 		return m.forwardConsole(msg)
@@ -526,7 +526,7 @@ func (m Model) beginEdit(path, name string) tea.Cmd {
 	})
 }
 
-// startRestoredEdit runs the edit this larger popup was opened for.
+// startRestoredEdit runs the edit that this larger popup opened.
 func (m Model) startRestoredEdit() (tea.Model, tea.Cmd) {
 	state := m.restoreEdit
 	m.restoreEdit = nil
@@ -918,7 +918,7 @@ func indexOf(items []string, want string) int {
 	return 0
 }
 
-// FilterInput drops leaked C0 prefix-key bytes after Bubble Tea parses them.
+// FilterInput removes leaked C0 prefix-key bytes after Bubble Tea parses them.
 func FilterInput(_ tea.Model, msg tea.Msg) tea.Msg {
 	k, ok := msg.(tea.KeyPressMsg)
 	if !ok {

@@ -7,7 +7,7 @@ import (
 )
 
 func TestTruncateEllipsisAtMax(t *testing.T) {
-	// Ports test/picker/picker.test.ts "ellipsis at max".
+	// This test copies test/picker/picker.test.ts "ellipsis at max".
 	if got := Truncate("abcdefghij", 5); got != "ab..." {
 		t.Fatalf("Truncate(%q, 5) = %q", "abcdefghij", got)
 	}
@@ -79,7 +79,7 @@ func TestTruncateUsesColumnsNotBytes(t *testing.T) {
 		t.Fatalf("Truncate emoji = %q want %q", gotEmoji, "😀...")
 	}
 
-	// A 1-byte slice of the first CJK rune is invalid UTF-8; column cut must not.
+	// A 1-byte slice of the first CJK rune is invalid UTF-8. Column cut must not split it.
 	raw := "世界"
 	byteCut := raw[:1]
 	if utf8.ValidString(byteCut) {

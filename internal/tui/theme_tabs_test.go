@@ -43,7 +43,7 @@ func TestDefaultThemeKindPaletteAndHover(t *testing.T) {
 	}
 }
 
-// isANSI reports a style that pins one of the terminal palette slots.
+// isANSI is true for a style that pins one of the terminal palette slots.
 func isANSI(style lipgloss.Style) bool {
 	_, ok := style.GetForeground().(lipgloss.ANSIColor)
 	return ok

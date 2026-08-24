@@ -18,7 +18,7 @@ const (
 	screenDetail
 )
 
-// Options construct a runs browser model.
+// Options is the input for a runs browser model.
 type Options struct {
 	RepoRoot   string
 	Width      int
@@ -50,7 +50,7 @@ type Model struct {
 	selectedID   string
 }
 
-// SwitchToWorkflowsMsg tells the picker to return to the workflow list.
+// SwitchToWorkflowsMsg tells the picker to show the workflow list.
 type SwitchToWorkflowsMsg struct{}
 
 type listLoadedMsg struct {
@@ -66,7 +66,7 @@ type detailLoadedMsg struct {
 	view DetailView
 }
 
-// New builds a list-mode runs browser.
+// New makes a list-mode runs browser.
 func New(opts Options) Model {
 	width := opts.Width
 	if width <= 0 {
@@ -302,13 +302,13 @@ func (m *Model) clampCursor() {
 // listChrome is the filter, two blanks, detail rows, rule, and footer.
 const listChrome = 7
 
-// listViewport fills the host with run rows above the six-row floor.
+// listViewport fills the host with run rows above the six-row minimum.
 func (m Model) listViewport() int {
 	return tui.FitViewport(m.height, listChrome, tui.ListViewport)
 }
 
-// detailRows fills the host with detail lines above the ten-row floor. Only the
-// rule and the footer sit under them.
+// detailRows fills the host with detail lines above the ten-row minimum. Only the
+// rule and the footer are below them.
 func (m Model) detailRows() int {
 	return tui.FitViewport(m.height, 2, detailViewport)
 }
@@ -350,7 +350,7 @@ func (m Model) OpenLocalDetail(view DetailView) Model {
 	return m
 }
 
-// ApplyLocalDetail updates the open detail without leaving detail mode.
+// ApplyLocalDetail updates the open detail and stays in detail mode.
 func (m Model) ApplyLocalDetail(view DetailView) Model {
 	if view.ID == "" {
 		view.ID = m.activeRunID
@@ -364,13 +364,13 @@ func (m Model) ApplyLocalDetail(view DetailView) Model {
 	return m
 }
 
-// IsList reports list screen (not detail).
+// IsList is true on the list screen, not the detail screen.
 func (m Model) IsList() bool { return m.screen == screenList }
 
 // ActiveRunID is the detail identity when detail is open.
 func (m Model) ActiveRunID() string { return m.activeRunID }
 
-// SelectedID is the list selection (or last detail id after return).
+// SelectedID is the list selection, or the last detail id after the list shows again.
 func (m Model) SelectedID() string { return m.state.SelectedID }
 
 // DetailWorkflow is the workflow title on the open detail view.

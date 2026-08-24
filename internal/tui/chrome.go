@@ -26,7 +26,7 @@ const (
 	TabConsole   = "console"
 )
 
-// ChromeStrings is every chrome fragment the picker draws. Each glyph must be
+// ChromeStrings is every chrome fragment that the picker shows. Each glyph must be
 // unambiguous single-column ASCII.
 var ChromeStrings = []string{
 	ListHint,

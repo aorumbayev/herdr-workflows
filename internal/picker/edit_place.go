@@ -93,8 +93,8 @@ func (m Model) handleEditPlace(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// respawnForEdit trades the compact popup for a console-sized one, because a
-// 64x15 popup is not room for $EDITOR. Validation respawns it compact.
+// respawnForEdit opens a console-sized popup, because a 64x15 popup is not
+// large enough for $EDITOR. Validation then opens a compact popup.
 func (m Model) respawnForEdit(entry workflow.ListEntry) (tea.Model, tea.Cmd) {
 	return m.respawn(m.popupStateForEdit(entry))
 }

@@ -26,7 +26,7 @@ func TestPaletteConsoleOpensPlacementChooser(t *testing.T) {
 	if !strings.Contains(body, "beside") || !strings.Contains(body, "tab") || !strings.Contains(body, "below") {
 		t.Fatalf("chooser missing placements:\n%s", body)
 	}
-	// default beside — Enter opens beside
+	// Default beside. Enter opens beside.
 	m = apply(m, "enter")
 	if opened != console.PlacementBeside {
 		t.Fatalf("opened = %q, want beside", opened)
@@ -48,9 +48,9 @@ func TestConsolePlacementRemembersSessionDefault(t *testing.T) {
 	})
 	m = apply(m, "ctrl+k")
 	m = apply(m, "c")
-	m = apply(m, "down") // beside -> below (order: beside, tab, below? or tab, beside, below)
-	// Use explicit selection: we'll document order as tab, beside, below with default cursor on last/remembered
-	// First open: pick tab via keys from default beside
+	m = apply(m, "down") // beside to below (order: beside, tab, below, or tab, beside, below)
+	// Explicit selection. Documented order is tab, beside, below. Default cursor is last or remembered.
+	// First open: pick tab with keys from default beside.
 	m = apply(m, "esc") // cancel first
 	if m.mode != modeList {
 		t.Fatalf("cancel mode = %v", m.mode)

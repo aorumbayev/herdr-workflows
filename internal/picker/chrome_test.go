@@ -12,7 +12,7 @@ import (
 )
 
 func TestBuildInvalidOptionsStripsFilePrefix(t *testing.T) {
-	// Ports test/picker/picker.test.ts "invalid entries join the option list with stripped errors".
+	// This test copies test/picker/picker.test.ts "invalid entries join the option list with stripped errors".
 	_, invalid := FilterWorkflowEntries(catalogEntries(), "").Valid, FilterWorkflowEntries(catalogEntries(), "").Invalid
 	options := BuildInvalidOptions(invalid, 60)
 	want0 := FormatPickerRowName("Broken", "invalid", false, 60, false)
@@ -35,7 +35,7 @@ func TestBuildInvalidOptionsStripsFilePrefix(t *testing.T) {
 }
 
 func TestHumanizedTitleDefault(t *testing.T) {
-	// Ports test/picker/picker.test.ts "humanized title default and provenance badges".
+	// This test copies test/picker/picker.test.ts "humanized title default and provenance badges".
 	got := FilterWorkflowEntries(catalogEntries(), "")
 	options := BuildPickerOptions(got.Valid, 60)
 	if options[0].Name != "  "+" "+padEndJS("Chat handoff", 42)+"  "+"!"+"  "+padStartJS("repo", 7)+"   " {

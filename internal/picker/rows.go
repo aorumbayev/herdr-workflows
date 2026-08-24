@@ -14,7 +14,7 @@ type ChromeOption struct {
 	Entry       workflow.ListEntry
 }
 
-// EntrySensitivity returns the compact trust labels for a catalog row.
+// EntrySensitivity gives the compact trust labels for a catalog row.
 func EntrySensitivity(entry workflow.ListEntry) []string {
 	return workflow.SensitivityLabels(workflow.Sensitivity{
 		HasCommands:        entry.HasCommands,
@@ -33,7 +33,7 @@ func FormatConsentLine(entry workflow.ListEntry) string {
 	return workflow.DisplayTitle(entry.Name, entry.Title) + tui.ChromeSep + entry.Source + tui.ChromeSep + strings.Join(flags, tui.ChromeSep)
 }
 
-// FormatPickerRowName lays out cursor, title, warning, and location columns.
+// FormatPickerRowName arranges the cursor, title, warning, and location columns.
 func FormatPickerRowName(title, location string, warned bool, rowWidth int, selected bool) string {
 	return tui.FormatRow(title, location, warned, rowWidth, selected)
 }

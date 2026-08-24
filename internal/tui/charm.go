@@ -1,6 +1,6 @@
 package tui
 
-// CharmVerdict records one hand-written TUI mechanism against a Charm candidate.
+// CharmVerdict records one hand-written TUI mechanism and one Charm candidate.
 type CharmVerdict struct {
 	Mechanism         string
 	CandidateModule   string

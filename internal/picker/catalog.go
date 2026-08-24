@@ -6,14 +6,14 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-// FilteredEntries splits a catalog into loadable workflows and load failures.
+// FilteredEntries divides a catalog into loadable workflows and load failures.
 type FilteredEntries struct {
 	Valid   []workflow.ListEntry
 	Invalid []workflow.ListEntry
 }
 
-// FilterWorkflowEntries hides `hidden: true` entries, then splits the rest by
-// load error. A non-empty filter matches displayed title or name, case-insensitively.
+// FilterWorkflowEntries omits `hidden: true` entries, then divides the rest by load error.
+// A non-empty filter matches displayed title or name and ignores letter case.
 func FilterWorkflowEntries(entries []workflow.ListEntry, filter string) FilteredEntries {
 	needle := strings.ToLower(filter)
 	var matched []workflow.ListEntry
@@ -40,7 +40,7 @@ func FilterWorkflowEntries(entries []workflow.ListEntry, filter string) Filtered
 	return out
 }
 
-// HasVisibleEntries reports whether any catalog entry would appear in the picker.
+// HasVisibleEntries is true when any catalog entry can show in the picker.
 func HasVisibleEntries(entries []workflow.ListEntry) bool {
 	for _, e := range entries {
 		if !e.Hidden {

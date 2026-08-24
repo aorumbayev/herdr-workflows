@@ -88,8 +88,8 @@ func (m Model) listIndexAt(y int) (int, bool) {
 	return row, true
 }
 
-// tabBarLive reports whether Tab would cycle root browsers, so a pointer never
-// leaves a screen the keyboard cannot.
+// tabBarLive is true when Tab can cycle root browsers. A pointer must not
+// leave a screen that the keyboard cannot leave.
 func (m Model) tabBarLive() bool {
 	switch m.mode {
 	case modeList:

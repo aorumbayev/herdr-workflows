@@ -9,18 +9,18 @@ import (
 // RowRightGutter is the inset between the location column and the content edge.
 const RowRightGutter = RowTextIndent
 
-// FormatRow lays out cursor, title, warning, and location columns.
+// FormatRow arranges the cursor, title, warning, and location columns.
 func FormatRow(title, location string, warned bool, rowWidth int, selected bool) string {
 	return assembleRow(title, location, warned, rowWidth, selected, false, false)
 }
 
-// FormatStyledRow paints kind, warn, muted location, reverse cursor, and hover underline.
+// FormatStyledRow shows kind, warn, muted location, reverse cursor, and hover underline.
 func FormatStyledRow(title, location string, warned bool, rowWidth int, selected, hover bool) string {
 	return assembleRow(title, location, warned, rowWidth, selected, hover, true)
 }
 
-// RowBase carries the cursor or hover attribute into every cell, because an
-// inner SGR reset would end it if the row were wrapped once.
+// RowBase puts the cursor or hover attribute on every cell. An inner SGR reset
+// would end that attribute if the row wraps one time.
 func RowBase(selected, hover bool) lipgloss.Style {
 	base := DefaultTheme().Plain
 	if selected {
@@ -38,8 +38,8 @@ func assembleRow(title, location string, warned bool, rowWidth int, selected, ho
 		prefix = CursorPrefix
 	}
 	base := RowBase(selected, hover)
-	// The title keeps the terminal's own foreground. Every workflow is the same
-	// kind, so a color there would rank rows without saying anything.
+	// The title keeps the terminal foreground. Every workflow is the same
+	// kind, so a color there would rank rows with no extra meaning.
 	cell := func(text string, style lipgloss.Style) string {
 		if !color {
 			return text
@@ -47,8 +47,8 @@ func assembleRow(title, location string, warned bool, rowWidth int, selected, ho
 		return style.Render(text)
 	}
 	plain := base
-	// Faint only off the cursor row: the reverse block already ranks it, and
-	// faint inside reverse is the one combination that loses contrast.
+	// Faint is only on rows that are not the cursor row. The reverse block already ranks it.
+	// Faint inside reverse is the one combination that loses contrast.
 	muted := base.Faint(!selected)
 	warn := base.Foreground(lipgloss.ANSIColor(WarnIndex))
 	gutter := strings.Repeat(" ", ColumnGutter)

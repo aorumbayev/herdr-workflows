@@ -16,19 +16,19 @@ const (
 	DebugTabYAML
 )
 
-// DebugContent feeds FormatDebugBody.
+// DebugContent is the input for FormatDebugBody.
 type DebugContent struct {
 	LogLines   []string
 	EntryYAML  string
 	Transcript string
 }
 
-// FormatRetryCommand is the clipboard payload for retry-copy.
+// FormatRetryCommand is the clipboard text for retry-copy.
 func FormatRetryCommand(workflow string) string {
 	return "hwf run " + strings.TrimSpace(workflow)
 }
 
-// FormatDebugBody renders one debug tab's body text.
+// FormatDebugBody shows the body text of one debug tab.
 func FormatDebugBody(tab DebugTab, content DebugContent) string {
 	switch tab {
 	case DebugTabTranscript:

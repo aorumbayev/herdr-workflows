@@ -54,7 +54,7 @@ func coveringTestExists(name string, own map[string]struct{}, external map[strin
 	return ok
 }
 
-// Spec scenarios owned by picker.ParityBaseline (picker-presentation + picker-editor-actions).
+// Spec scenarios that picker.ParityBaseline owns (picker-presentation + picker-editor-actions).
 // openspec/specs/picker-presentation/spec.md
 // openspec/specs/picker-editor-actions/spec.md
 var requiredPickerParityScenarios = []string{

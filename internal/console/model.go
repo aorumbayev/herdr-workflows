@@ -27,7 +27,7 @@ const (
 	screenDiagram
 )
 
-// Options construct a console model.
+// Options is the input for a console model.
 type Options struct {
 	Entries        []workflow.ListEntry
 	RepoRoot       string
@@ -94,7 +94,7 @@ type Model struct {
 	quit                bool
 }
 
-// New builds a workflows-first console model.
+// New makes a workflows-first console model.
 func New(opts Options) Model {
 	width := opts.Width
 	if width <= 0 {
@@ -331,8 +331,8 @@ func (m Model) openSelectedDiagram() (tea.Model, tea.Cmd) {
 	return m, watchTick(m.watchEpoch)
 }
 
-// OpenDiagram opens one workflow's diagram without the console's own list. The
-// picker tab is already a workflow list, so it enters the diagram directly.
+// OpenDiagram opens one workflow diagram with no console list. The picker tab
+// is already a workflow list, so it opens the diagram directly.
 func (m Model) OpenDiagram(entry workflow.ListEntry) (Model, tea.Cmd) {
 	for i, e := range m.entries {
 		if e.Name == entry.Name && e.File == entry.File {
@@ -424,8 +424,8 @@ func (m *Model) clampRunWindow() {
 	}
 }
 
-// clampAgentWindow keeps the send-back chooser cursor visible; the rendered
-// list reserves one row of the viewport for its header.
+// clampAgentWindow keeps the send-back chooser cursor visible. The shown
+// list keeps one row of the viewport for its header.
 func (m *Model) clampAgentWindow() {
 	vp := max(1, m.scrollViewport()-1)
 	if m.agentCursor < m.agentOffset {

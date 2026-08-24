@@ -4,7 +4,7 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/history"
 )
 
-// Scope is Current vs All checkout filtering.
+// Scope is Current or All checkout filtering.
 type Scope string
 
 const (
@@ -12,7 +12,7 @@ const (
 	ScopeAll     Scope = "all"
 )
 
-// State is the list payload load produces.
+// State is the list payload that Load makes.
 type State struct {
 	Scope          Scope
 	Filter         string
@@ -22,7 +22,7 @@ type State struct {
 	Unavailable    bool
 }
 
-// DetailView is one painted detail screen.
+// DetailView is one shown detail screen.
 type DetailView struct {
 	Kind     string
 	ID       string

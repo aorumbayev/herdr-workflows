@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// CopyToClipboard writes text via pbcopy, wl-copy, or xclip. OSC 52 is not used
+// CopyToClipboard writes text with pbcopy, wl-copy, or xclip. OSC 52 is not used
 // because a silent multiplexer no-op would claim success (picker-editor-actions).
 func CopyToClipboard(text string) error {
 	try := func(name string, args ...string) bool {
