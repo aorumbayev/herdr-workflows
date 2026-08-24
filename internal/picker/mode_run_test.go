@@ -47,12 +47,12 @@ func TestNoCustomChoiceValueResidue(t *testing.T) {
 }
 
 func TestAcceptLaunchNeverLeavesModeRun(t *testing.T) {
-	entry := workflow.WorkflowListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml", Title: "Plain"}
+	entry := workflow.ListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml", Title: "Plain"}
 	m := New(Options{
-		Entries:  []workflow.WorkflowListEntry{entry},
+		Entries:  []workflow.ListEntry{entry},
 		Width:    80,
 		RepoRoot: t.TempDir(),
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
 				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},

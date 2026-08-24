@@ -20,10 +20,11 @@ const (
 
 // Options construct a runs browser model.
 type Options struct {
-	RepoRoot string
-	Width    int
-	Height   int
-	Env      config.Env
+	RepoRoot   string
+	Width      int
+	Height     int
+	Env        config.Env
+	SelectedID string
 }
 
 // Model is the runs browser Bubble Tea model.
@@ -41,8 +42,12 @@ type Model struct {
 	activeRunID  string
 	detailView   DetailView
 	detailScroll int
+	yamlScroll   int
+	yamlChunks   []string
+	stepFocus    int
 	detailGen    *config.Generation
 	refreshGen   *config.Generation
+	selectedID   string
 }
 
 // SwitchToWorkflowsMsg tells the picker to return to the workflow list.
@@ -80,11 +85,12 @@ func New(opts Options) Model {
 		scope:      ScopeCurrent,
 		detailGen:  &config.Generation{},
 		refreshGen: &config.Generation{},
+		selectedID: opts.SelectedID,
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return m.refreshCmd("")
+	return m.refreshCmd(m.selectedID)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -139,7 +145,7 @@ func (m Model) handleListKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "enter":
 		if item := m.selectedItem(); item != nil {
-			return m.openDetail(item.ID)
+			return m.OpenDetail(item.ID)
 		}
 		return m, nil
 	case "esc":
@@ -170,14 +176,35 @@ func (m Model) handleDetailKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.screen = screenList
 		m.detailView = DetailView{}
 		m.detailScroll = 0
+		m.yamlScroll = 0
+		m.yamlChunks = nil
+		m.stepFocus = 0
 		m.activeRunID = ""
 		return m, m.refreshCmd(preserve)
 	case "up":
+		if stepCount(m.detailView.Detail) > 0 {
+			m.moveStepFocus(-1)
+			return m, nil
+		}
 		m.detailScroll = max(0, m.detailScroll-1)
 		return m, nil
 	case "down":
+		if stepCount(m.detailView.Detail) > 0 {
+			m.moveStepFocus(1)
+			return m, nil
+		}
 		lines := DetailLines(m.detailView, m.contentWidth())
-		_, m.detailScroll = ScrollDetailLines(lines, m.detailScroll+1, detailViewport)
+		_, m.detailScroll = ScrollDetailLines(lines, m.detailScroll+1, m.detailRows())
+		return m, nil
+	case "pgup":
+		m.yamlScroll = max(0, m.yamlScroll-1)
+		return m, nil
+	case "pgdown":
+		if step, ok := focusedStep(m.detailView.Detail, m.stepFocus); ok {
+			_, rightW := tui.RailSplit(m.contentWidth())
+			lines := detailPaneLines(m.detailView.Detail, step, m.yamlChunks, rightW)
+			_, m.yamlScroll = ScrollDetailLines(lines, m.yamlScroll+1, m.detailRows())
+		}
 		return m, nil
 	case "tab":
 		return m, nil
@@ -185,10 +212,12 @@ func (m Model) handleDetailKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) openDetail(id string) (Model, tea.Cmd) {
+func (m Model) OpenDetail(id string) (Model, tea.Cmd) {
 	m.screen = screenDetail
 	m.activeRunID = id
 	m.detailScroll = 0
+	m.yamlScroll = 0
+	m.stepFocus = 0
 	gen := m.detailGen.Begin()
 	getenv := m.getenv
 	return m, func() tea.Msg {
@@ -238,6 +267,10 @@ func (m Model) applyDetailLoaded(msg detailLoadedMsg) (Model, tea.Cmd) {
 	}
 	m.detailView = msg.view
 	m.detailScroll = 0
+	m.yamlScroll = 0
+	m.stepFocus = defaultStepFocus(msg.view.Detail)
+	arts, _ := history.LoadDebugArtifacts(msg.id, m.getenv)
+	m.yamlChunks = tui.SplitStepYAML(arts.EntryYAML)
 	return m, nil
 }
 
@@ -263,7 +296,21 @@ func (m *Model) moveCursor(delta int) {
 }
 
 func (m *Model) clampCursor() {
-	m.cursor, m.offset = tui.ClampListWindow(m.cursor, m.offset, len(m.state.Items), ListViewport)
+	m.cursor, m.offset = tui.ClampListWindow(m.cursor, m.offset, len(m.state.Items), m.listViewport())
+}
+
+// listChrome is the filter, two blanks, detail rows, rule, and footer.
+const listChrome = 7
+
+// listViewport fills the host with run rows above the six-row floor.
+func (m Model) listViewport() int {
+	return tui.FitViewport(m.height, listChrome, ListViewport)
+}
+
+// detailRows fills the host with detail lines above the ten-row floor. Only the
+// rule and the footer sit under them.
+func (m Model) detailRows() int {
+	return tui.FitViewport(m.height, 2, detailViewport)
 }
 
 func (m *Model) syncSelectedID() {
@@ -296,6 +343,9 @@ func (m Model) OpenLocalDetail(view DetailView) Model {
 	m.activeRunID = view.ID
 	m.detailView = view
 	m.detailScroll = 0
+	m.yamlScroll = 0
+	m.yamlChunks = nil
+	m.stepFocus = defaultStepFocus(view.Detail)
 	m.state.SelectedID = view.ID
 	return m
 }
@@ -309,6 +359,8 @@ func (m Model) ApplyLocalDetail(view DetailView) Model {
 	m.activeRunID = view.ID
 	m.state.SelectedID = view.ID
 	m.detailScroll = 0
+	m.yamlScroll = 0
+	m.stepFocus = defaultStepFocus(view.Detail)
 	return m
 }
 
@@ -326,3 +378,29 @@ func (m Model) DetailWorkflow() string { return m.detailView.Workflow }
 
 // DetailKind is the open detail view kind.
 func (m Model) DetailKind() string { return m.detailView.Kind }
+
+func (m *Model) moveStepFocus(delta int) {
+	n := stepCount(m.detailView.Detail)
+	if n == 0 {
+		return
+	}
+	m.stepFocus = min(max(m.stepFocus+delta, 0), n-1)
+	m.yamlScroll = 0
+	leftW, _ := tui.RailSplit(m.contentWidth())
+	m.detailScroll = tui.RailScrollIntoView(detailCards(m.detailView.Detail, m.stepFocus), m.stepFocus, leftW, m.detailRows(), m.detailScroll)
+}
+
+func (m Model) FocusedFailure() (history.Detail, history.DetailStep, string, bool) {
+	if m.screen != screenDetail {
+		return history.Detail{}, history.DetailStep{}, "", false
+	}
+	d := m.detailView.Detail
+	if d.Status != "failed" && d.Status != "interrupted" {
+		return history.Detail{}, history.DetailStep{}, "", false
+	}
+	step, ok := focusedStep(d, m.stepFocus)
+	if !ok {
+		return history.Detail{}, history.DetailStep{}, "", false
+	}
+	return d, step, stepSource(m.yamlChunks, step), true
+}

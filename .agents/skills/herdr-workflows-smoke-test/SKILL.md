@@ -77,12 +77,31 @@ Report the sandbox status. Wait for the user to name what to smoke test. Do not 
 
 For YAML syntax, load errors, and the Herdr method allowlist, use the `herdr-workflow-create` skill in `skills/herdr-workflow-create/`. Do not re-derive the DSL.
 
+## Teardown after testing
+
+When the smoke test is done — including when the user stops mid-test, says they
+are finished, or you have reported the findings — run `down` before ending the
+session:
+
+```bash
+repo_root=$(git rev-parse --show-toplevel)
+bash "$repo_root/.agents/skills/herdr-workflows-smoke-test/scripts/sandbox.sh" down
+```
+
+`down` stops the server, kills the `hwf-sandbox` tmux session, and removes
+`/tmp/hwf-sandbox`. Do not leave the sandbox running: `up` rebuilt the shared
+`bin/herdr-workflows`, and a lingering server, tmux session, or partial
+`/tmp/hwf-sandbox` (no ownership sentinel) is stale state that blocks or
+confuses the next run.
+
 ## Gotchas seen for real
 
 - Herdr refuses to launch inside a Herdr-managed pane. The sandbox config sets `[experimental] allow_nested = true`. That is why `up` must not overwrite an existing `config.toml`.
 - `hwf run` needs the sandbox repo as cwd. Workflow lookup is repo-rooted.
 - `herdr server reload-config` needs the sandbox server already up. Never run the Go build and `setup` before `sandbox.sh up` has started it.
 - For a cold start over a leftover owned sandbox, run `down` first — `up` reuses an owned `/tmp/hwf-sandbox` as-is.
+- `hsb` does not sandbox `$HOME`, so `hwf`'s global-workflow discovery still reads the user's real `~/.hwf/workflows`. The picker will list those global workflows next to the sandbox repo's. Only act on the sandbox repo workflows (`repo` source). Never run, edit, share, or delete a `global` row.
+- A leftover `/tmp/hwf-sandbox` without the `.hwf-sandbox-owned` sentinel (for example from a crashed `up`) is refused by both `up` and `down`. Remove it by hand only after confirming it holds no real work, then run `up`.
 
 ## Picker visual compare (Go vs last pre-Go TypeScript)
 

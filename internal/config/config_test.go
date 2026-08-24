@@ -333,6 +333,66 @@ func TestResolveRepoRootWalksUp(t *testing.T) {
 	}
 }
 
+func TestResolveRepoRootIgnoresHomeHwf(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, ".hwf", "workflows"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := ResolveRepoRoot(home); got != home {
+		t.Fatalf("home must fall through to start: got %q, want %q", got, home)
+	}
+	nested := filepath.Join(home, "Downloads")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := ResolveRepoRoot(nested); got != nested {
+		t.Fatalf("global .hwf must not claim a non-repo dir: got %q, want %q", got, nested)
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := ResolveRepoRoot(nested); got != home {
+		t.Fatalf(".git at home is still a root: got %q, want %q", got, home)
+	}
+}
+
+func TestReadInvocationContextUsesHerdrFields(t *testing.T) {
+	t.Setenv("HERDR_PLUGIN_CONTEXT_JSON", `{"workspace_cwd":"/ws","focused_pane_cwd":"/pane","worktree":{"checkout_path":"/wt"}}`)
+	ctx := readInvocationContext(nil)
+	if ctx.WorktreePath != "/wt" {
+		t.Fatalf("worktree path = %q", ctx.WorktreePath)
+	}
+	if ctx.Cwd != "/wt" {
+		t.Fatalf("worktree checkout_path must win: cwd = %q", ctx.Cwd)
+	}
+
+	t.Setenv("HERDR_PLUGIN_CONTEXT_JSON", `{"workspace_cwd":"/ws","focused_pane_cwd":"/pane"}`)
+	if ctx := readInvocationContext(nil); ctx.Cwd != "/pane" {
+		t.Fatalf("focused_pane_cwd must win over workspace_cwd: cwd = %q", ctx.Cwd)
+	}
+
+	t.Setenv("HERDR_PLUGIN_CONTEXT_JSON", `{"workspace_cwd":"/ws"}`)
+	if ctx := readInvocationContext(nil); ctx.Cwd != "/ws" {
+		t.Fatalf("workspace_cwd must be the last injected fallback: cwd = %q", ctx.Cwd)
+	}
+
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("HERDR_PLUGIN_CONTEXT_JSON", `{"selected_text":"x"}`)
+	got, err := filepath.EvalSymlinks(readInvocationContext(nil).Cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("no injected cwd must fall back to getwd: got %q, want %q", got, want)
+	}
+}
+
 func TestLatestWinsToken(t *testing.T) {
 	var g Generation
 	first := g.Begin()

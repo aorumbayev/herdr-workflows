@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -16,7 +17,7 @@ type cliResult struct {
 	exitCode int
 }
 
-func herdrCli(args []string) (cliResult, error) {
+func herdrCLI(args []string) (cliResult, error) {
 	bin := BinPath(os.Getenv)
 	cmd := exec.Command(bin, args...)
 	var stdout, stderr bytes.Buffer
@@ -68,13 +69,56 @@ func PluginPaneOpen(entrypoint string, env map[string]string, placement string) 
 	return err
 }
 
+// PluginPaneOpenPopup opens a popup plugin pane at an explicit size. A size is
+// either terminal cells or a percent string such as 85%.
+func PluginPaneOpenPopup(entrypoint string, env map[string]string, width, height string) error {
+	pluginID := os.Getenv("HERDR_PLUGIN_ID")
+	if pluginID == "" {
+		pluginID = "herdr-workflows"
+	}
+	if env == nil {
+		env = map[string]string{}
+	}
+	call := map[string]any{
+		"plugin_id":  pluginID,
+		"entrypoint": entrypoint,
+		"placement":  "popup",
+		"focus":      true,
+		"env":        env,
+	}
+	if v := popupSize(width); v != nil {
+		call["width"] = v
+	}
+	if v := popupSize(height); v != nil {
+		call["height"] = v
+	}
+	_, err := HerdrCall("plugin.pane.open", call)
+	return err
+}
+
+// popupSize keeps a cell count an integer and a percent a string, the two
+// shapes PopupSize accepts. Anything else means the manifest default.
+func popupSize(value string) any {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	if cells, err := strconv.Atoi(value); err == nil {
+		return cells
+	}
+	if strings.HasSuffix(value, "%") {
+		return value
+	}
+	return nil
+}
+
 // NotificationShow posts a herdr notification through the CLI.
 func NotificationShow(title string, body ...string) error {
 	args := []string{"notification", "show", title}
 	if len(body) > 0 && body[0] != "" {
 		args = append(args, "--body", body[0])
 	}
-	res, err := herdrCli(args)
+	res, err := herdrCLI(args)
 	if err != nil {
 		return err
 	}
@@ -105,7 +149,7 @@ type agentInfo struct {
 }
 
 func agentGet(target string) (*agentInfo, error) {
-	res, err := herdrCli([]string{"agent", "get", target})
+	res, err := herdrCLI([]string{"agent", "get", target})
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +232,7 @@ func ReportToken(paneID string, value *string) error {
 	} else {
 		args = append(args, "--token", "herdr-workflows="+*value, "--ttl-ms", "600000")
 	}
-	res, err := herdrCli(args)
+	res, err := herdrCLI(args)
 	if err != nil {
 		return err
 	}
@@ -234,9 +278,8 @@ func ResetProtocolCheck() {
 	protocolChecked = false
 }
 
-// PluginPaneOpenConsole opens the console entrypoint at tab, beside, or below.
-// beside maps to split/right; below maps to split/down.
-func PluginPaneOpenConsole(env map[string]string, open string) error {
+// PluginPaneOpenPlaced opens a plugin entrypoint at tab, beside, or below.
+func PluginPaneOpenPlaced(entrypoint, open string, env map[string]string) error {
 	params, err := consoleOpenParams(open)
 	if err != nil {
 		return err
@@ -250,7 +293,7 @@ func PluginPaneOpenConsole(env map[string]string, open string) error {
 	}
 	call := map[string]any{
 		"plugin_id":  pluginID,
-		"entrypoint": "console",
+		"entrypoint": entrypoint,
 		"placement":  params.placement,
 		"focus":      true,
 		"env":        env,

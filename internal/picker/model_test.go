@@ -8,17 +8,18 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-func eightEntries() []workflow.WorkflowListEntry {
+func eightEntries() []workflow.ListEntry {
 	names := []string{"alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel"}
-	out := make([]workflow.WorkflowListEntry, len(names))
+	out := make([]workflow.ListEntry, len(names))
 	for i, name := range names {
-		out[i] = workflow.WorkflowListEntry{Name: name, Source: "repo", File: "/r/" + name + ".yaml", Title: strings.ToUpper(name[:1]) + name[1:]}
+		out[i] = workflow.ListEntry{Name: name, Source: "repo", File: "/r/" + name + ".yaml", Title: strings.ToUpper(name[:1]) + name[1:]}
 	}
 	return out
 }
@@ -68,8 +69,10 @@ func applyMsg(m Model, msg tea.Msg) Model {
 	return runCmd(m, cmd)
 }
 
+// runCmd drains a command chain. The embedded console re-arms its file-watch
+// tick forever, so the pump stops after a bounded number of rounds.
 func runCmd(m Model, cmd tea.Cmd) Model {
-	for cmd != nil {
+	for round := 0; cmd != nil && round < 2; round++ {
 		msg := cmd()
 		if msg == nil {
 			return m
@@ -84,19 +87,19 @@ func runCmd(m Model, cmd tea.Cmd) Model {
 func listRowCount(view string) int {
 	lines := strings.Split(view, "\n")
 	i := 0
-	for i < len(lines) && tui.StripContentPadding(lines[i]) == "" {
-		i++
+	skipBlank := func() {
+		for i < len(lines) && visibleLine(lines[i]) == "" {
+			i++
+		}
 	}
-	if i >= len(lines) {
-		return 0
-	}
+	skipBlank()
 	i++
-	for i < len(lines) && tui.StripContentPadding(lines[i]) == "" {
-		i++
-	}
+	skipBlank()
+	i++
+	skipBlank()
 	n := 0
 	for j := 0; j < tui.ListViewport && i < len(lines); j++ {
-		line := tui.StripContentPadding(lines[i])
+		line := visibleLine(lines[i])
 		if strings.Contains(line, "----") {
 			break
 		}
@@ -106,6 +109,10 @@ func listRowCount(view string) int {
 		i++
 	}
 	return n
+}
+
+func visibleLine(line string) string {
+	return ansi.Strip(tui.StripContentPadding(line))
 }
 
 func TestPickerViewportShowsSixRowsAndScrolls(t *testing.T) {
@@ -151,7 +158,7 @@ func TestPickerFilterAndPaletteRestore(t *testing.T) {
 		t.Fatalf("filter = %q", m.filter)
 	}
 	body := m.View().Content
-	if got := tui.StripContentPadding(strings.Split(body, "\n")[0]); got != "dep" {
+	if got := visibleLine(strings.Split(body, "\n")[1]); got != "dep" {
 		t.Fatalf("filter row = %q", got)
 	}
 	if !strings.Contains(body, "Deploy") || strings.Contains(body, "Chat handoff") {
@@ -188,12 +195,12 @@ func TestPrepareChdirsToRepoRoot(t *testing.T) {
 }
 
 func TestCustomChoiceInputAdvances(t *testing.T) {
-	entry := workflow.WorkflowListEntry{Name: "place", Source: "global", File: "/global/place.yaml"}
+	entry := workflow.ListEntry{Name: "place", Source: "global", File: "/global/place.yaml"}
 	m := New(Options{
-		Entries: []workflow.WorkflowListEntry{entry},
+		Entries: []workflow.ListEntry{entry},
 		Width:   80,
 		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format,
 				Inputs: []workflow.InputSpec{
@@ -224,12 +231,12 @@ func TestCustomChoiceInputAdvances(t *testing.T) {
 }
 
 func TestInputFailureScreen(t *testing.T) {
-	entry := workflow.WorkflowListEntry{Name: "place", Source: "global", File: "/g.yaml"}
+	entry := workflow.ListEntry{Name: "place", Source: "global", File: "/g.yaml"}
 	m := New(Options{
-		Entries: []workflow.WorkflowListEntry{entry},
+		Entries: []workflow.ListEntry{entry},
 		Width:   80,
 		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format,
 				Inputs: []workflow.InputSpec{
@@ -255,12 +262,12 @@ func TestInputFailureScreen(t *testing.T) {
 
 func TestListFilterMissKeepsFilterRow(t *testing.T) {
 	m := New(Options{Entries: catalogEntries(), Width: 80})
-	if got := tui.StripContentPadding(strings.Split(m.View().Content, "\n")[0]); got != tui.FilterWorkflows {
+	if got := tui.StripContentPadding(strings.Split(m.View().Content, "\n")[1]); got != tui.FilterWorkflows {
 		t.Fatalf("empty filter row = %q", got)
 	}
 	m = apply(m, "z", "z", "z")
 	body := m.View().Content
-	if got := tui.StripContentPadding(strings.Split(body, "\n")[0]); got != "zzz" {
+	if got := tui.StripContentPadding(strings.Split(body, "\n")[1]); got != "zzz" {
 		t.Fatalf("miss filter row = %q", got)
 	}
 	if !strings.Contains(body, "No workflows matching zzz") {
@@ -281,11 +288,11 @@ func TestShowCurrentDoesNotBlockUpdate(t *testing.T) {
 	if err := os.WriteFile(script, []byte("#!/bin/sh\nsleep 30\necho one\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	entry := workflow.WorkflowListEntry{Name: "dyn", Source: "repo", File: filepath.Join(root, "w.yaml")}
+	entry := workflow.ListEntry{Name: "dyn", Source: "repo", File: filepath.Join(root, "w.yaml")}
 	m := New(Options{
-		Entries: []workflow.WorkflowListEntry{entry},
+		Entries: []workflow.ListEntry{entry},
 		Width:   80,
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format,
 				Inputs: []workflow.InputSpec{{
@@ -321,12 +328,12 @@ func TestShowCurrentDoesNotBlockUpdate(t *testing.T) {
 }
 
 func TestInputBackRestoresCollectedValue(t *testing.T) {
-	entry := workflow.WorkflowListEntry{Name: "place", Source: "global", File: "/global/place.yaml"}
+	entry := workflow.ListEntry{Name: "place", Source: "global", File: "/global/place.yaml"}
 	m := New(Options{
-		Entries: []workflow.WorkflowListEntry{entry},
+		Entries: []workflow.ListEntry{entry},
 		Width:   80,
 		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format,
 				Inputs: []workflow.InputSpec{
@@ -357,14 +364,14 @@ func TestInputBackRestoresCollectedValue(t *testing.T) {
 }
 
 func TestAcceptCurrentPresentsSensitivityNames(t *testing.T) {
-	entry := workflow.WorkflowListEntry{
+	entry := workflow.ListEntry{
 		Name: "deploy", Source: "global", File: "/g/deploy.yaml", Title: "Deploy",
 		HasCommands: true, NeedsTranscript: true,
 	}
 	m := New(Options{
-		Entries: []workflow.WorkflowListEntry{entry},
+		Entries: []workflow.ListEntry{entry},
 		Width:   80,
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Deploy",
 				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
@@ -387,9 +394,9 @@ func TestConfirmedDeleteRemovesFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte("name: deploy\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	keep := workflow.WorkflowListEntry{Name: "keep", Source: "repo", File: filepath.Join(dir, "keep.yaml"), Title: "Keep"}
-	entry := workflow.WorkflowListEntry{Name: "deploy", Source: "repo", File: path, Title: "Deploy"}
-	m := New(Options{Entries: []workflow.WorkflowListEntry{entry, keep}, Width: 80})
+	keep := workflow.ListEntry{Name: "keep", Source: "repo", File: filepath.Join(dir, "keep.yaml"), Title: "Keep"}
+	entry := workflow.ListEntry{Name: "deploy", Source: "repo", File: path, Title: "Deploy"}
+	m := New(Options{Entries: []workflow.ListEntry{entry, keep}, Width: 80})
 	m = apply(m, "ctrl+k", "d", "y")
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("file remained: %v", err)
@@ -407,3 +414,41 @@ type stopErr struct{}
 func (stopErr) Error() string { return "stop-after-chdir" }
 
 var errStop stopErr
+
+func TestPickerViewportGrowsWithPopupHeight(t *testing.T) {
+	// openspec picker-presentation: rows fill the popup above the six-row floor.
+	m := New(Options{Entries: eightEntries(), Width: 62, Height: 30})
+	body := m.View().Content
+	for _, name := range []string{"Golf", "Hotel"} {
+		if !strings.Contains(body, name) {
+			t.Fatalf("tall popup must show %s without scrolling:\n%s", name, body)
+		}
+	}
+	short := New(Options{Entries: eightEntries(), Width: 62, Height: 14})
+	if strings.Contains(short.View().Content, "Golf") {
+		t.Fatalf("short popup must keep the six-row floor:\n%s", short.View().Content)
+	}
+}
+
+func TestPaletteBodyUsesSharedRowChrome(t *testing.T) {
+	// openspec picker-editor-actions: the palette draws with the list chrome.
+	m := New(Options{Entries: eightEntries(), Width: 62, Height: 24})
+	m = applyMsg(m, tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
+	if m.mode != modePalette {
+		t.Fatalf("mode = %v, want palette", m.mode)
+	}
+	body := m.View().Content
+	plain := ansi.Strip(body)
+	if !strings.Contains(plain, "   n  new") {
+		t.Fatalf("palette rows must use the shared row indent:\n%s", plain)
+	}
+	if !strings.Contains(plain, "----") {
+		t.Fatalf("palette must draw the rule:\n%s", plain)
+	}
+	if !strings.Contains(plain, tui.PaletteHint) {
+		t.Fatalf("palette must keep its footer hint:\n%s", plain)
+	}
+	if !strings.Contains(body, "\x1b[") {
+		t.Fatalf("palette must paint through the theme:\n%q", body)
+	}
+}

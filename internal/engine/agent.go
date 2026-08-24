@@ -369,7 +369,7 @@ func chooseProfile(frame *StepFrame, action *workflow.AgentAction) profileChoice
 	}
 	if name == "" {
 		global, _ := config.GlobalConfigPath(nil)
-		hint := config.ConfigPathsHint(global, config.RepoConfigPath(frame.Opts.RepoRoot))
+		hint := config.PathsHint(global, config.RepoConfigPath(frame.Opts.RepoRoot))
 		return profileChoice{
 			error: fmt.Sprintf(
 				"agent: no using: profile and no default_profile is configured (%s); run `hwf init` or `hwf init --global`",
@@ -735,7 +735,7 @@ func placeNewAgentPane(frame *StepFrame, action *workflow.AgentAction) (string, 
 	if action.Cwd != "" {
 		cwd = workflow.SubstituteText(action.Cwd, frame.Values)
 	}
-	env := map[string]string{}
+	env := runContextEnv(frame.Opts)
 	for k, v := range action.Env {
 		env[k] = workflow.SubstituteText(v, frame.Values)
 	}

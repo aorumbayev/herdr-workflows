@@ -10,18 +10,26 @@ import (
 )
 
 func (m Model) View() tea.View {
-	return tea.NewView(tui.PadHeight(tui.PadContent(m.render(), m.contentWidth()), m.height))
+	v := tea.NewView(tui.PadHeight(tui.PadContent(m.render(), m.contentWidth()), m.height))
+	v.MouseMode = tea.MouseModeAllMotion
+	return v
 }
 
 func (m Model) render() string {
 	var body string
 	switch m.mode {
 	case modeRuns:
-		body = m.runs.Body()
+		body = m.withTabBar(tui.TabRuns, m.runs.Body())
+	case modeConsole:
+		body = m.withTabBar(tui.TabConsole, m.consoleBody())
 	case modePalette:
 		body = m.renderPalette()
 	case modeConsolePlace:
 		body = m.renderConsolePlace()
+	case modeEditPlace:
+		body = m.renderEditPlace()
+	case modeRunsAgentPick:
+		body = m.renderRunsAgentPick()
 	case modeDelete:
 		body = "Delete " + m.deleteLabel() + "?\n" + tui.DeleteConfirmHint
 	case modeFail:
@@ -33,9 +41,20 @@ func (m Model) render() string {
 	case modeInput:
 		body = m.renderChoice()
 	default:
-		body = m.renderList()
+		body = m.withTabBar(tui.TabWorkflows, m.renderList())
 	}
 	return body
+}
+
+func (m Model) withTabBar(active, body string) string {
+	return tui.FormatTabBar(active, m.contentWidth()) + "\n" + body
+}
+
+func (m Model) consoleBody() string {
+	if !m.consoleReady {
+		return ""
+	}
+	return m.console.Body()
 }
 
 func (m Model) renderNewName() string {
@@ -56,7 +75,9 @@ func (m Model) deleteLabel() string {
 }
 
 func (m Model) renderPalette() string {
-	return FormatPaletteBody(m.selectedEntry()) + "\n" + tui.PaletteHint
+	w := m.contentWidth()
+	body := FormatPaletteBody(m.selectedEntry(), w)
+	return body + "\n" + tui.FormatRule(w) + "\n" + tui.MuteChrome(tui.FormatListFooter(w, 0, 0, tui.PaletteHint))
 }
 
 func (m Model) renderList() string {
@@ -67,14 +88,15 @@ func (m Model) renderList() string {
 		if m.status != "" {
 			parts = append(parts, tui.Truncate(m.status, w))
 		}
-		parts = append(parts, tui.FormatRule(w), tui.FormatListFooter(w, 0, 0, tui.EmptyListHint))
+		parts = append(parts, tui.FormatRule(w), tui.MuteChrome(tui.FormatListFooter(w, 0, 0, tui.EmptyListHint)))
 		return strings.Join(parts, "\n")
 	}
 	filter := m.listFilterRow(w)
 	if len(opts) == 0 {
-		return filter + "\n\n" + tui.FormatDetailBlock("No workflows matching "+m.filter, w) + "\n" + tui.FormatRule(w) + "\n" + tui.FormatListFooter(w, 0, 0, tui.ListHint)
+		return filter + "\n\n" + tui.FormatDetailBlock("No workflows matching "+m.filter, w) + "\n" + tui.FormatRule(w) + "\n" + tui.MuteChrome(tui.FormatListFooter(w, 0, 0, tui.ListHint))
 	}
-	end := min(m.offset+ListViewport, len(opts))
+	vp := m.listViewport()
+	end := min(m.offset+vp, len(opts))
 	var rows []string
 	for i := m.offset; i < end; i++ {
 		entry := opts[i].Entry
@@ -82,25 +104,22 @@ func (m Model) renderList() string {
 		if entry.Error == "" {
 			loc = rowLocation(entry)
 		}
-		rows = append(rows, FormatPickerRowName(
-			workflow.WorkflowDisplayTitle(entry.Name, entry.Title),
+		rows = append(rows, tui.FormatStyledRow(
+			workflow.DisplayTitle(entry.Name, entry.Title),
 			loc,
 			len(EntrySensitivity(entry)) > 0,
 			w,
 			i == m.cursor,
+			i == m.hoverRow && i != m.cursor,
 		))
 	}
-	for len(rows) < ListViewport {
+	for len(rows) < vp {
 		rows = append(rows, "")
 	}
 	sel := opts[m.cursor]
 	detail := tui.FormatDetailBlock(sel.Description, w)
-	footer := tui.FormatListFooter(w, m.cursor, len(opts), tui.ListHint)
-	parts := []string{filter, "", strings.Join(rows, "\n"), "", detail}
-	if m.status != "" {
-		parts = append(parts, tui.Truncate(m.status, w))
-	}
-	parts = append(parts, tui.FormatRule(w), footer)
+	footer := tui.MuteChrome(tui.FormatListFooter(w, m.cursor, len(opts), tui.ListHint))
+	parts := []string{filter, "", strings.Join(rows, "\n"), "", detail, tui.Truncate(m.status, w), tui.FormatRule(w), footer}
 	return strings.Join(parts, "\n")
 }
 
@@ -140,7 +159,7 @@ func (m Model) renderChoice() string {
 	if m.custom {
 		hint = tui.CustomChoiceHint
 	}
-	footer := tui.FormatListFooter(w, m.cursor, len(rows), hint)
+	footer := tui.MuteChrome(tui.FormatListFooter(w, m.cursor, len(rows), hint))
 	parts := []string{"", strings.Join(lines, "\n"), ""}
 	if line := m.consentLine(); line != "" {
 		parts = append(parts, line)

@@ -197,13 +197,13 @@ func TestAssertFocusPolicy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := assertFocusPolicy(tc.method, tc.params)
 			if tc.want == "" {
-				if got != "" {
-					t.Fatalf("assertFocusPolicy(%q) = %q, want no error", tc.method, got)
+				if got != nil {
+					t.Fatalf("assertFocusPolicy(%q) = %v, want no error", tc.method, got)
 				}
 				return
 			}
-			if !strings.Contains(got, tc.want) {
-				t.Fatalf("assertFocusPolicy(%q) = %q, want substring %q", tc.method, got, tc.want)
+			if got == nil || !strings.Contains(got.Error(), tc.want) {
+				t.Fatalf("assertFocusPolicy(%q) = %v, want substring %q", tc.method, got, tc.want)
 			}
 		})
 	}

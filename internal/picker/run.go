@@ -14,12 +14,12 @@ import (
 
 // ScreenOpts configures the picker TUI entrypoint.
 type ScreenOpts struct {
-	Entries            []workflow.WorkflowListEntry
+	Entries            []workflow.ListEntry
 	RepoRoot           string
 	Config             config.Config
 	Env                config.Env
 	CheckLatestRelease func() (*update.LatestRelease, error)
-	LoadWorkflow       func(workflow.WorkflowListEntry) (*workflow.Definition, error)
+	LoadWorkflow       func(workflow.ListEntry) (*workflow.Definition, error)
 	Chdir              func(string) error
 	CopyClipboard      func(string) error
 	EditWorkflow       func(path, name string) workflow.ValidateResult
@@ -27,8 +27,13 @@ type ScreenOpts struct {
 	Notify             func(title string, body ...string) error
 	LaunchRun          func(LaunchRunOpts) LaunchRunHandle
 	AllocateRunID      func() string
-	ExportShare        func(entry workflow.WorkflowListEntry) (command string, err error)
+	ExportShare        func(entry workflow.ListEntry) (command string, err error)
 	OpenConsole        func(placement console.Placement) error
+	OpenEditor         func(path, name, placement string) error
+	ReopenPopup        func(state PopupState) error
+	Restore            *PopupState
+	ListAgentPanes     func() ([]console.AgentPaneEntry, error)
+	PaneSendText       func(paneID, text string) error
 }
 
 // PrepareScreen changes the working directory and builds a picker model from ScreenOpts hooks.
@@ -38,20 +43,25 @@ func PrepareScreen(opts ScreenOpts) (Model, error) {
 		copyFn = tui.CopyToClipboard
 	}
 	return Prepare(Options{
-		Entries:       opts.Entries,
-		RepoRoot:      opts.RepoRoot,
-		Config:        opts.Config,
-		Env:           opts.Env,
-		LoadWorkflow:  opts.LoadWorkflow,
-		CopyClipboard: copyFn,
-		Chdir:         opts.Chdir,
-		EditWorkflow:  opts.EditWorkflow,
-		OpenURL:       opts.OpenURL,
-		Notify:        opts.Notify,
-		LaunchRun:     opts.LaunchRun,
-		AllocateRunID: opts.AllocateRunID,
-		ExportShare:   opts.ExportShare,
-		OpenConsole:   opts.OpenConsole,
+		Entries:        opts.Entries,
+		RepoRoot:       opts.RepoRoot,
+		Config:         opts.Config,
+		Env:            opts.Env,
+		LoadWorkflow:   opts.LoadWorkflow,
+		CopyClipboard:  copyFn,
+		Chdir:          opts.Chdir,
+		EditWorkflow:   opts.EditWorkflow,
+		OpenURL:        opts.OpenURL,
+		Notify:         opts.Notify,
+		LaunchRun:      opts.LaunchRun,
+		AllocateRunID:  opts.AllocateRunID,
+		ExportShare:    opts.ExportShare,
+		OpenConsole:    opts.OpenConsole,
+		OpenEditor:     opts.OpenEditor,
+		ReopenPopup:    opts.ReopenPopup,
+		Restore:        opts.Restore,
+		ListAgentPanes: opts.ListAgentPanes,
+		PaneSendText:   opts.PaneSendText,
 	})
 }
 

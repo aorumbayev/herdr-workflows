@@ -100,23 +100,23 @@ func TestFormatRunRowNarrowTruncation(t *testing.T) {
 func TestRunsFooterASCII(t *testing.T) {
 	// Ports test/picker/update-indicator.test.ts ASCII checks for runsFooter.
 	for _, s := range []string{
-		RunsFooter(ScopeCurrent, 0, 3),
-		RunsFooter(ScopeAll, 0, 0),
+		RunsFooter(ScopeCurrent),
+		RunsFooter(ScopeAll),
 	} {
 		if !isASCII(s) {
 			t.Fatalf("non-ASCII footer: %q", s)
 		}
 	}
-	if !strings.Contains(RunsFooter(ScopeCurrent, 0, 3), "Current") {
+	if !strings.Contains(RunsFooter(ScopeCurrent), "Current") {
 		t.Fatal("current scope label")
 	}
-	if !strings.Contains(RunsFooter(ScopeAll, 0, 0), "All") {
+	if !strings.Contains(RunsFooter(ScopeAll), "All") {
 		t.Fatal("all scope label")
 	}
-	if strings.Contains(RunsFooter(ScopeCurrent, 0, 0), "0/0") {
+	if strings.Contains(RunsFooter(ScopeCurrent), "0/0") {
 		t.Fatal("RunsFooter must not embed 0/0")
 	}
-	if got := RunsFooter(ScopeCurrent, 2, 5); strings.HasSuffix(got, "3/5") {
+	if got := RunsFooter(ScopeCurrent); strings.HasSuffix(got, "3/5") {
 		t.Fatalf("RunsFooter must not embed position: %q", got)
 	}
 }
@@ -126,7 +126,7 @@ func TestRunDetailFooterASCII(t *testing.T) {
 	if !isASCII(got) {
 		t.Fatalf("non-ASCII footer: %q", got)
 	}
-	if !strings.Contains(got, "esc back") || strings.Contains(got, "workbench") {
+	if !strings.Contains(got, "esc back") || !strings.Contains(got, "s send") || strings.Contains(got, "workbench") {
 		t.Fatalf("footer = %q", got)
 	}
 }
@@ -294,7 +294,7 @@ func TestDetailLinesDetailWithProgress(t *testing.T) {
 }
 
 func TestRunsFooterJoinsWithChromeSep(t *testing.T) {
-	parts := strings.Split(RunsFooter(ScopeCurrent, 0, 3), tui.ChromeSep)
+	parts := strings.Split(RunsFooter(ScopeCurrent), tui.ChromeSep)
 	if len(parts) != 4 {
 		t.Fatalf("parts = %v", parts)
 	}

@@ -10,7 +10,7 @@ import (
 
 func TestBuildPickerOptionsTitleProvenanceAndSensitivity(t *testing.T) {
 	// Ports test/picker/picker.test.ts "title, provenance, inputs, and sensitivity flags".
-	entry := workflow.WorkflowListEntry{
+	entry := workflow.ListEntry{
 		Name:             "handover",
 		Source:           "repo",
 		File:             "/r/handover.yaml",
@@ -21,7 +21,7 @@ func TestBuildPickerOptionsTitleProvenanceAndSensitivity(t *testing.T) {
 		NeedsTranscript:  true,
 		SensitiveMethods: []string{"pane.close"},
 	}
-	options := BuildPickerOptions([]workflow.WorkflowListEntry{entry}, 60)
+	options := BuildPickerOptions([]workflow.ListEntry{entry}, 60)
 	want := "  " + " " + padEndJS("Handover", 42) + "  " + "!" + "  " + padStartJS("repo", 7) + "   "
 	if options[0].Name != want {
 		t.Fatalf("row = %q, want %q", options[0].Name, want)
@@ -80,7 +80,7 @@ func TestFormatPickerRowWarningAndLocationColumns(t *testing.T) {
 
 func TestEntrySensitivityAggregatesFlags(t *testing.T) {
 	// Ports test/picker/picker.test.ts "aggregates command transcript and sensitive methods".
-	got := EntrySensitivity(workflow.WorkflowListEntry{
+	got := EntrySensitivity(workflow.ListEntry{
 		Name:               "x",
 		Source:             "repo",
 		File:               "/x",
@@ -93,13 +93,13 @@ func TestEntrySensitivityAggregatesFlags(t *testing.T) {
 	if !stringSlicesEqual(got, want) {
 		t.Fatalf("got %v want %v", got, want)
 	}
-	line := FormatConsentLine(workflow.WorkflowListEntry{
+	line := FormatConsentLine(workflow.ListEntry{
 		Name: "deploy", Source: "global", Title: "Deploy", HasCommands: true, NeedsTranscript: true,
 	})
 	if line != "Deploy | global | commands | transcript" {
 		t.Fatalf("consent = %q", line)
 	}
-	if FormatConsentLine(workflow.WorkflowListEntry{Name: "plain", Source: "repo"}) != "" {
+	if FormatConsentLine(workflow.ListEntry{Name: "plain", Source: "repo"}) != "" {
 		t.Fatal("plain workflow must omit consent")
 	}
 }

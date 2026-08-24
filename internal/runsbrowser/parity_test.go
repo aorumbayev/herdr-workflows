@@ -14,6 +14,8 @@ import (
 // openspec/specs/picker-presentation/spec.md
 var requiredRunsParityScenarios = []string{
 	"More than six runs",
+	"Tall host shows more runs",
+	"Run detail fills the host",
 	"Narrow popup",
 	"Interrupted run",
 	"Toggle all worktrees",
@@ -21,7 +23,10 @@ var requiredRunsParityScenarios = []string{
 	"Search a short displayed ID",
 	"Inspect a successful run",
 	"Inspect an active run",
+	"Inspect a failed run",
 	"Inspect a tolerated failure",
+	"Send back the failed step",
+	"Choose an agent pane",
 	"Return from detail",
 	"No current runs",
 	"No machine runs",
@@ -209,5 +214,22 @@ func TestParityWindowSizeRecomputesRunsWidth(t *testing.T) {
 		if tui.Columns(line) > 40 {
 			t.Fatalf("line wider than width: %q", line)
 		}
+	}
+}
+
+func TestRunsViewportGrowsWithHostHeight(t *testing.T) {
+	// openspec picker-presentation: run rows fill the host above the six-row floor.
+	checkout := t.TempDir()
+	m, _ := modelWithRuns(t, checkout, "a", "b", "c", "d", "e", "f", "g", "h")
+	if m.listViewport() != ListViewport {
+		t.Fatalf("unknown height viewport = %d, want the floor %d", m.listViewport(), ListViewport)
+	}
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	m = next.(Model)
+	if m.listViewport() <= ListViewport {
+		t.Fatalf("tall host viewport = %d, want more than %d", m.listViewport(), ListViewport)
+	}
+	if !strings.Contains(m.View().Content, "h |") {
+		t.Fatalf("tall host must show every run without scrolling:\n%s", m.View().Content)
 	}
 }

@@ -53,7 +53,7 @@ func TestBuildPickerScreenOptsExportShareCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	opts := buildPickerScreenOpts(config.AppContext{RepoRoot: root}, nil)
-	cmd, err := opts.ExportShare(workflow.WorkflowListEntry{Name: "demo", Source: "repo"})
+	cmd, err := opts.ExportShare(workflow.ListEntry{Name: "demo", Source: "repo"})
 	if err != nil {
 		t.Fatalf("ExportShare: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestCompiledBinaryPickerServesWithoutTSRuntime(t *testing.T) {
 	for _, want := range []string{
 		"picker requires a tty",
 		"Open the workflow picker popup",
-		"tab runs | enter run | ctrl+k | esc",
+		"tab | enter run | ctrl+k | esc",
 		"filter workflows...",
 	} {
 		if !strings.Contains(body, want) {

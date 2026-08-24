@@ -8,9 +8,11 @@ Runs happen in the picker or `hwf run`, because a run needs real herdr panes. In
 
 Press `prefix+k`.
 
-Tab switches the Workflow browser and the Runs browser. The pane title stays static. The Workflow footer starts with `tab runs`. The Runs footer starts with `tab workflows`. The filter placeholders are `filter workflows...` and `filter runs...`. Filter rows use flush-left ASCII without a `/ ` prefix or indent.
+Tab cycles the Workflow, Runs, and Console browsers. A tab bar names the three browsers and marks the active one. The pane title stays static. Workflow and Runs footers start with `tab`. The Console tab footer includes `p pop out` to open the console in a herdr pane. The filter placeholders are `filter workflows...` and `filter runs...`. Filter rows use flush-left ASCII without a `/ ` prefix or indent.
 
-One line per workflow, six at a time. Each line shows the title on the left, a warning marker in the middle when the workflow does something sensitive, and `repo`, `global`, or `invalid` on the right. Type to filter, which matches both the title you see and the file name. The counter on the right of the footer tells you where you are in the filtered list.
+The popup opens compact at 64 by 15 cells for the Workflow and Runs browsers. The Console browser needs more room, so switching to it closes the popup and opens it again at 85% by 80%, with the tab, filter, and cursor carried across. Switching back returns the compact size. herdr has no resize for a popup that is already open. Workflow titles and the description keep the terminal's own foreground, because a fixed palette slot can land unreadable on your theme. Secondary text such as the location column, the footer hints, and the rule is faint, which derives from that same foreground. `invalid` and the sensitivity `!` marker use warn. The selected row uses reverse video. Pointer hover uses underline, not reverse. Pointer gestures also have keyboard keys.
+
+One line per workflow. The list fills the popup rows above a floor of six. Each line shows the title on the left, a warning marker in the middle when the workflow does something sensitive, and `repo`, `global`, or `invalid` on the right. Type to filter, which matches both the title you see and the file name. The counter on the right of the footer tells you where you are in the filtered list.
 
 ### Runs browser
 
@@ -67,6 +69,10 @@ The console is a full-screen Charm TUI. Tab switches the workflows list and the 
 | `hwf update`                    | Installs the latest published release                                    |
 | `hwf skills list`               | Lists the bundled agent skills                                           |
 | `hwf skills show <name>`        | Prints one bundled skill with its reference files                        |
+| `hwf scratch get <key>`         | Prints a scratch value from the global history database                  |
+| `hwf scratch set <key> <value>` | Writes a scratch value                                                   |
+| `hwf scratch list`              | Lists scratch keys                                                       |
+| `hwf scratch delete <key>`      | Deletes a scratch key                                                    |
 | `hwf response check <file>`     | Checks a response file's verdict. `--one-of TOKEN,TOKEN`                 |
 | `hwf help [command]`            | Shows help for one command or all of them                                |
 | `hwf --version`                 | Prints the installed plugin version                                      |

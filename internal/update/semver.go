@@ -7,11 +7,18 @@ import (
 
 type ReleaseCheckError struct {
 	msg string
+	err error
 }
 
 func (e *ReleaseCheckError) Error() string { return e.msg }
 
+func (e *ReleaseCheckError) Unwrap() error { return e.err }
+
 func releaseErr(msg string) error { return &ReleaseCheckError{msg: msg} }
+
+func releaseWrap(msg string, err error) error {
+	return &ReleaseCheckError{msg: msg + ": " + err.Error(), err: err}
+}
 
 type LatestRelease struct {
 	Tag     string
@@ -52,7 +59,7 @@ func CompareSemver(a, b string) (int, error) {
 
 func parseParts(version string) ([3]int, error) {
 	version = strings.TrimSpace(version)
-	var major, minor, patch int
+	var minor, patch int
 	n, err := fmt.Sscanf(version, "0.%d.%d", &minor, &patch)
 	if err != nil || n != 2 || !strings.HasPrefix(version, "0.") {
 		return [3]int{}, releaseErr(fmt.Sprintf("expected 0.x.y version, got %q", version))
@@ -61,6 +68,5 @@ func parseParts(version string) ([3]int, error) {
 	if fmt.Sprintf("0.%d.%d", minor, patch) != version {
 		return [3]int{}, releaseErr(fmt.Sprintf("expected 0.x.y version, got %q", version))
 	}
-	_ = major
 	return [3]int{0, minor, patch}, nil
 }

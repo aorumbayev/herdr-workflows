@@ -37,8 +37,8 @@ type OwnershipRegistry struct {
 	Entries map[string]OwnershipEntry `json:"entries"`
 }
 
-// CliInstallResult reports install messages from InstallCliCommands.
-type CliInstallResult struct {
+// InstallResult reports install messages from InstallCliCommands.
+type InstallResult struct {
 	Messages []string
 }
 
@@ -286,7 +286,7 @@ func copyFile(src, dst string) error {
 }
 
 // InstallCliCommands installs herdr-workflows and hwf into binDir.
-func InstallCliCommands(binDir, binary string, ephemeral bool) CliInstallResult {
+func InstallCliCommands(binDir, binary string, ephemeral bool) InstallResult {
 	messages := []string{}
 	_ = os.MkdirAll(binDir, 0o755)
 	registry := ReadOwnership(binDir)
@@ -308,7 +308,7 @@ func InstallCliCommands(binDir, binary string, ephemeral bool) CliInstallResult 
 	installPosixName(binDir, "hwf", hwfSource, hwfKind, &registry, &messages)
 
 	_ = writeOwnership(binDir, registry)
-	return CliInstallResult{Messages: messages}
+	return InstallResult{Messages: messages}
 }
 
 var deadActions = map[string]struct{}{

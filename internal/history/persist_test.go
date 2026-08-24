@@ -2,9 +2,12 @@ package history
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/aorumbayev/herdr-workflows/internal/config"
 )
 
 func TestLaterWriteRecoversCompleteStateAfterMissedIntermediate(t *testing.T) {
@@ -25,9 +28,6 @@ func TestLaterWriteRecoversCompleteStateAfterMissedIntermediate(t *testing.T) {
 		},
 		StartedAt: started,
 	})
-	if err := os.WriteFile(SnapshotPath(id, getenv), []byte("{"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	w.RecordStep(StepRecord{
 		StepIdentity: StepIdentity{
 			Phase: "main", Workflow: "demo", WorkflowPath: []string{"demo"},
@@ -94,8 +94,7 @@ func TestQueuedPersistsDrainBeforeFinalizeWins(t *testing.T) {
 	}
 }
 
-func TestFailedAtomicReplacementRemovesTemporarySnapshot(t *testing.T) {
-	// Ports test/history/history-store.test.ts "failed atomic replacement removes temporary snapshot".
+func TestHeartbeatUpdatesColumnWithoutRewritingSnapshotBlob(t *testing.T) {
 	_, checkout, getenv := testWriterEnv(t)
 	w := NewWriter(getenv)
 	defer w.Dispose()
@@ -104,23 +103,138 @@ func TestFailedAtomicReplacementRemovesTemporarySnapshot(t *testing.T) {
 		t.Fatalf("claim = %+v", claimed)
 	}
 	id := claimed.ID
-	path := SnapshotPath(id, getenv)
-	if err := os.Remove(path); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir(path, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	before := snapshotBlob(t, id, getenv)
+	time.Sleep(2 * time.Millisecond)
 	w.Touch()
-	entries, err := os.ReadDir(RunsDir(getenv))
+	after := snapshotBlob(t, id, getenv)
+	if before != after {
+		t.Fatal("heartbeat rewrote snapshot blob")
+	}
+	hb := heartbeatColumn(t, id, getenv)
+	if hb == "" {
+		t.Fatal("heartbeat_at empty")
+	}
+}
+
+func snapshotBlob(t *testing.T, id string, getenv config.Env) string {
+	t.Helper()
+	db, err := openHistory(getenv)
 	if err != nil {
 		t.Fatal(err)
 	}
-	prefix := "." + id + "."
-	for _, e := range entries {
-		if strings.HasPrefix(e.Name(), prefix) && strings.HasSuffix(e.Name(), ".tmp") {
-			t.Fatalf("leftover tmp %s", e.Name())
-		}
+	var blob string
+	if err := db.QueryRow(`SELECT snapshot FROM runs WHERE id=?`, id).Scan(&blob); err != nil {
+		t.Fatal(err)
 	}
-	_ = os.RemoveAll(path)
+	return blob
+}
+
+func heartbeatColumn(t *testing.T, id string, getenv config.Env) string {
+	t.Helper()
+	db, err := openHistory(getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var at string
+	if err := db.QueryRow(`SELECT heartbeat_at FROM runs WHERE id=?`, id).Scan(&at); err != nil {
+		t.Fatal(err)
+	}
+	return at
+}
+
+func TestHistoryDSNEscapesURIDelimiters(t *testing.T) {
+	dsn := historyDSN("/tmp/a?b#c%d/history.db")
+	if !strings.HasPrefix(dsn, "file:/tmp/a%3Fb%23c%25d/history.db?") {
+		t.Fatalf("dsn = %q", dsn)
+	}
+}
+
+func TestHistoryDSNSetsBusyTimeoutBeforeWAL(t *testing.T) {
+	dsn := historyDSN("/tmp/history.db")
+	busy := strings.Index(dsn, "busy_timeout")
+	wal := strings.Index(dsn, "journal_mode")
+	if busy < 0 || wal < 0 || busy > wal {
+		t.Fatalf("dsn = %q, want busy_timeout before journal_mode", dsn)
+	}
+}
+
+func TestFailedMigrationLeavesNoOpenTransaction(t *testing.T) {
+	_, _, getenv := testWriterEnv(t)
+	db, err := openHistory(getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateSchema(db, "SELECT no_such_column;"); err == nil {
+		t.Fatal("broken migration succeeded")
+	}
+	if err := migrateSchema(db, schemaSQL); err != nil {
+		t.Fatalf("retry after a failed migration: %v", err)
+	}
+	if err := ScratchSet("k", "v", getenv); err != nil {
+		t.Fatalf("write after a failed migration: %v", err)
+	}
+}
+
+func TestPersistRestoresARowThatVanished(t *testing.T) {
+	_, checkout, getenv := testWriterEnv(t)
+	w := NewWriter(getenv)
+	defer w.Dispose()
+	if w.Claim(ClaimMeta{Workflow: "demo", Source: "repo", CheckoutRoot: checkout}).State != "claimed" {
+		t.Fatal("claim")
+	}
+	db, err := openHistory(getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`DELETE FROM runs WHERE id=?`, w.ID()); err != nil {
+		t.Fatal(err)
+	}
+	w.Finalize("succeeded", FinalizeOpts{})
+	snap, err := ReadSnapshot(w.ID(), getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap == nil || snap.Status != "succeeded" {
+		t.Fatalf("snapshot = %+v", snap)
+	}
+}
+
+func TestExpiredRunIsNotResurrectedByALateWrite(t *testing.T) {
+	_, checkout, getenv := testWriterEnv(t)
+	w := NewWriter(getenv)
+	defer w.Dispose()
+	if w.Claim(ClaimMeta{Workflow: "demo", Source: "repo", CheckoutRoot: checkout}).State != "claimed" {
+		t.Fatal("claim")
+	}
+	db, err := openHistory(getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := expireRun(db, w.ID()); err != nil {
+		t.Fatal(err)
+	}
+	w.Finalize("succeeded", FinalizeOpts{})
+	loaded, err := loadSnapshot(w.ID(), getenv)
+	if err != nil || !loaded.Expired {
+		t.Fatalf("loaded = %+v err=%v", loaded, err)
+	}
+}
+
+func TestHistoryOpensUnderURIDelimiterPath(t *testing.T) {
+	stateDir := filepath.Join(t.TempDir(), "st?ate#1%2f")
+	if err := os.MkdirAll(stateDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	getenv := func(key string) string {
+		if key == "HERDR_PLUGIN_STATE_DIR" {
+			return stateDir
+		}
+		return os.Getenv(key)
+	}
+	if err := ScratchSet("k", "v", getenv); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, "history.db")); err != nil {
+		t.Fatalf("database was not created inside the state directory: %v", err)
+	}
 }

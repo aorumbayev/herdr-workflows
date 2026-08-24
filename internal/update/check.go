@@ -36,7 +36,7 @@ func CheckForUpdate(opts CheckOpts) (LatestRelease, error) {
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return LatestRelease{}, releaseErr("latest release request failed: " + err.Error())
+		return LatestRelease{}, releaseWrap("latest release request failed", err)
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "herdr-workflows")
@@ -48,9 +48,12 @@ func CheckForUpdate(opts CheckOpts) (LatestRelease, error) {
 	res, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
-			return LatestRelease{}, releaseErr(fmt.Sprintf("latest release request timed out after %dms", timeout.Milliseconds()))
+			return LatestRelease{}, &ReleaseCheckError{
+				msg: fmt.Sprintf("latest release request timed out after %dms", timeout.Milliseconds()),
+				err: err,
+			}
 		}
-		return LatestRelease{}, releaseErr("latest release request failed: " + err.Error())
+		return LatestRelease{}, releaseWrap("latest release request failed", err)
 	}
 	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
@@ -58,7 +61,7 @@ func CheckForUpdate(opts CheckOpts) (LatestRelease, error) {
 	}
 	body, err := io.ReadAll(io.LimitReader(res.Body, int64(caps.CaptureByteLimit)+1))
 	if err != nil {
-		return LatestRelease{}, releaseErr("latest release request failed: " + err.Error())
+		return LatestRelease{}, releaseWrap("latest release request failed", err)
 	}
 	if len(body) > caps.CaptureByteLimit {
 		return LatestRelease{}, &caps.CaptureLimitError{Source: "latest release body", Bytes: len(body), Limit: caps.CaptureByteLimit}

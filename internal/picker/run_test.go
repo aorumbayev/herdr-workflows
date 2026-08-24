@@ -8,14 +8,14 @@ import (
 )
 
 func TestBeginLaunchListenCmdDeliversAckAndSettled(t *testing.T) {
-	entry := workflow.WorkflowListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml", Title: "Plain"}
+	entry := workflow.ListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml", Title: "Plain"}
 	acks := make(chan string, 1)
 	settled := make(chan LaunchSettled, 1)
 	m := New(Options{
-		Entries:  []workflow.WorkflowListEntry{entry},
+		Entries:  []workflow.ListEntry{entry},
 		Width:    80,
 		RepoRoot: t.TempDir(),
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
 				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
@@ -56,7 +56,7 @@ func TestBeginLaunchListenCmdDeliversAckAndSettled(t *testing.T) {
 }
 
 func TestPrepareScreenWiresHooksFromScreenOpts(t *testing.T) {
-	entry := workflow.WorkflowListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml", Title: "Plain"}
+	entry := workflow.ListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml", Title: "Plain"}
 	var (
 		edited   []string
 		opened   string
@@ -66,9 +66,9 @@ func TestPrepareScreenWiresHooksFromScreenOpts(t *testing.T) {
 	)
 	root := t.TempDir()
 	m, err := PrepareScreen(ScreenOpts{
-		Entries:  []workflow.WorkflowListEntry{entry},
+		Entries:  []workflow.ListEntry{entry},
 		RepoRoot: root,
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
 				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
@@ -88,7 +88,7 @@ func TestPrepareScreenWiresHooksFromScreenOpts(t *testing.T) {
 			return LaunchRunHandle{Detach: func() {}}
 		},
 		AllocateRunID: func() string { return "550e8400-e29b-41d4-a716-446655440099" },
-		ExportShare: func(e workflow.WorkflowListEntry) (string, error) {
+		ExportShare: func(e workflow.ListEntry) (string, error) {
 			exported = "hwf workflow import \"bundle-" + e.Name + "\""
 			return exported, nil
 		},
@@ -106,7 +106,7 @@ func TestPrepareScreenWiresHooksFromScreenOpts(t *testing.T) {
 	}
 
 	m, err = PrepareScreen(ScreenOpts{
-		Entries:  []workflow.WorkflowListEntry{entry},
+		Entries:  []workflow.ListEntry{entry},
 		RepoRoot: root,
 		OpenURL:  func(url string) error { opened = url; return nil },
 		Chdir:    func(string) error { return nil },
@@ -121,9 +121,9 @@ func TestPrepareScreenWiresHooksFromScreenOpts(t *testing.T) {
 	}
 
 	m, err = PrepareScreen(ScreenOpts{
-		Entries:  []workflow.WorkflowListEntry{entry},
+		Entries:  []workflow.ListEntry{entry},
 		RepoRoot: root,
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
 				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
@@ -149,10 +149,10 @@ func TestPrepareScreenWiresHooksFromScreenOpts(t *testing.T) {
 	}
 
 	m, err = PrepareScreen(ScreenOpts{
-		Entries:       []workflow.WorkflowListEntry{entry},
+		Entries:       []workflow.ListEntry{entry},
 		RepoRoot:      root,
 		Notify:        func(title string, body ...string) error { notified = append(notified, title); return nil },
-		ExportShare:   func(e workflow.WorkflowListEntry) (string, error) { return "hwf workflow import \"x\"", nil },
+		ExportShare:   func(e workflow.ListEntry) (string, error) { return "hwf workflow import \"x\"", nil },
 		CopyClipboard: func(string) error { return nil },
 		Chdir:         func(string) error { return nil },
 	})

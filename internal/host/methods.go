@@ -42,8 +42,8 @@ func present(params map[string]any, key string) bool {
 	return v != nil && v != ""
 }
 
-func explicit(method, detail string) string {
-	return method + ": " + detail + " — raw herdr calls never fall back to live herdr focus"
+func explicit(method, detail string) error {
+	return errors.New(method + ": " + detail + " — raw herdr calls never fall back to live herdr focus")
 }
 
 func runtimeKind(v any) string {
@@ -93,14 +93,14 @@ func isIntegral(v any) bool {
 }
 
 // validateMethodParams reports an unknown or denied method, or params that
-// violate the generated schema. Empty string means valid.
-func validateMethodParams(method string, params map[string]any, isWholeTemplate func(string) bool) string {
+// violate the generated schema. nil means valid.
+func validateMethodParams(method string, params map[string]any, isWholeTemplate func(string) bool) error {
 	entry, ok := herdrMethods[method]
 	if !ok {
-		return fmt.Sprintf("unknown herdr method '%s'", method)
+		return fmt.Errorf("unknown herdr method '%s'", method)
 	}
 	if entry.denied != "" {
-		return method + ": " + entry.denied
+		return errors.New(method + ": " + entry.denied)
 	}
 	obj := params
 	if obj == nil {
@@ -108,7 +108,7 @@ func validateMethodParams(method string, params map[string]any, isWholeTemplate 
 	}
 	for _, key := range entry.params.required {
 		if v, ok := obj[key]; !ok || v == nil {
-			return fmt.Sprintf("%s: missing required param '%s'", method, key)
+			return fmt.Errorf("%s: missing required param '%s'", method, key)
 		}
 	}
 	for _, key := range slices.Sorted(maps.Keys(obj)) {
@@ -116,7 +116,7 @@ func validateMethodParams(method string, params map[string]any, isWholeTemplate 
 		prop, ok := entry.params.properties[key]
 		if !ok {
 			if !entry.params.additionalProperties {
-				return fmt.Sprintf("%s: unknown param '%s'", method, key)
+				return fmt.Errorf("%s: unknown param '%s'", method, key)
 			}
 			continue
 		}
@@ -125,17 +125,17 @@ func validateMethodParams(method string, params map[string]any, isWholeTemplate 
 			continue
 		}
 		if len(prop.enumValues) > 0 && !slices.Contains(prop.enumValues, value) && (value != nil || !prop.nullable) {
-			return fmt.Sprintf("%s: param '%s' must be one of %s", method, key, joinEnumValues(prop.enumValues))
+			return fmt.Errorf("%s: param '%s' must be one of %s", method, key, joinEnumValues(prop.enumValues))
 		}
 		if !kindsMatch(prop, value) {
 			kinds := prop.kinds
 			if prop.nullable {
 				kinds = append(slices.Clone(kinds), "null")
 			}
-			return fmt.Sprintf("%s: param '%s' expects %s", method, key, strings.Join(kinds, "|"))
+			return fmt.Errorf("%s: param '%s' expects %s", method, key, strings.Join(kinds, "|"))
 		}
 	}
-	return ""
+	return nil
 }
 
 func joinEnumValues(values []any) string {
@@ -146,19 +146,19 @@ func joinEnumValues(values []any) string {
 	return strings.Join(parts, ", ")
 }
 
-func swapPolicy(method string, params map[string]any) string {
+func swapPolicy(method string, params map[string]any) error {
 	direction := present(params, "direction") && present(params, "pane_id")
 	pair := present(params, "source_pane_id") && present(params, "target_pane_id")
 	if direction || pair {
-		return ""
+		return nil
 	}
 	return explicit(method, "needs direction with pane_id, or both source_pane_id and target_pane_id")
 }
 
-func movePolicy(method string, params map[string]any) string {
+func movePolicy(method string, params map[string]any) error {
 	dest, ok := params["destination"].(map[string]any)
 	if !ok {
-		return method + ": destination must be an object"
+		return errors.New(method + ": destination must be an object")
 	}
 	if dest["type"] == "tab" && !present(dest, "target_pane_id") {
 		return explicit(method, "destination type 'tab' needs destination.target_pane_id")
@@ -166,20 +166,20 @@ func movePolicy(method string, params map[string]any) string {
 	if dest["type"] == "new_tab" && !present(dest, "workspace_id") {
 		return explicit(method, "destination type 'new_tab' needs destination.workspace_id")
 	}
-	return ""
+	return nil
 }
 
 // assertFocusPolicy enforces the explicit-target policy: omitted selectors
 // must never reach live UI focus. Classification comes from the generated
 // table; an unclassified method is rejected.
-func assertFocusPolicy(method string, params map[string]any) string {
+func assertFocusPolicy(method string, params map[string]any) error {
 	policy, ok := herdrFocusPolicy[method]
 	if !ok {
 		return explicit(method, "needs an explicit target selector (unclassified method)")
 	}
 	switch policy.kind {
 	case "none", "filter":
-		return ""
+		return nil
 	case "require":
 		if !present(params, policy.field) {
 			return explicit(method, "params."+policy.field+" is required")
@@ -205,19 +205,16 @@ func assertFocusPolicy(method string, params map[string]any) string {
 	case "move":
 		return movePolicy(method, params)
 	}
-	return ""
+	return nil
 }
 
 // ValidateHerdrInvocation is the Herdr Adapter gate for raw `herdr:` actions:
 // generated params checks, then explicit-target policy (no live-focus autofill).
 func ValidateHerdrInvocation(method string, params map[string]any, isWholeTemplate func(string) bool) error {
-	if msg := validateMethodParams(method, params, isWholeTemplate); msg != "" {
-		return errors.New(msg)
+	if err := validateMethodParams(method, params, isWholeTemplate); err != nil {
+		return err
 	}
-	if msg := assertFocusPolicy(method, params); msg != "" {
-		return errors.New(msg)
-	}
-	return nil
+	return assertFocusPolicy(method, params)
 }
 
 // MethodDeniedReason reports the invariant a denied method protects. The

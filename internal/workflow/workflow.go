@@ -244,8 +244,8 @@ func (d Definition) SourceKind() string {
 	return "global"
 }
 
-// WorkflowListEntry is the picker-facing metadata for one workflow file.
-type WorkflowListEntry struct {
+// ListEntry is the picker-facing metadata for one workflow file.
+type ListEntry struct {
 	Name               string
 	Source             string
 	File               string

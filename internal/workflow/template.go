@@ -273,9 +273,9 @@ func isSensitiveContextPath(path TemplatePath) bool {
 	return path.Root == "context" && len(path.Segments) > 0 && sensitiveContextKeys[path.Segments[0]]
 }
 
-// WorkflowTemplateRefs lists every template a workflow's steps, returns,
+// TemplateRefs lists every template a workflow's steps, returns,
 // and recovery action reference.
-func WorkflowTemplateRefs(steps []Step, returns *ReturnsSpec, onFailure Action) []TemplatePath {
+func TemplateRefs(steps []Step, returns *ReturnsSpec, onFailure Action) []TemplatePath {
 	var refs []TemplatePath
 	for _, step := range steps {
 		refs = append(refs, stepTemplates(step)...)
@@ -294,10 +294,10 @@ func WorkflowTemplateRefs(steps []Step, returns *ReturnsSpec, onFailure Action) 
 	return refs
 }
 
-// WorkflowNeedsTranscript reports whether any reference reaches transcript
+// NeedsTranscript reports whether any reference reaches transcript
 // context.
-func WorkflowNeedsTranscript(steps []Step, returns *ReturnsSpec) bool {
-	for _, ref := range WorkflowTemplateRefs(steps, returns, nil) {
+func NeedsTranscript(steps []Step, returns *ReturnsSpec) bool {
+	for _, ref := range TemplateRefs(steps, returns, nil) {
 		if isSensitiveContextPath(ref) {
 			return true
 		}

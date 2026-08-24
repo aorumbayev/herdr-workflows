@@ -8,21 +8,21 @@ import (
 
 // FilteredEntries splits a catalog into loadable workflows and load failures.
 type FilteredEntries struct {
-	Valid   []workflow.WorkflowListEntry
-	Invalid []workflow.WorkflowListEntry
+	Valid   []workflow.ListEntry
+	Invalid []workflow.ListEntry
 }
 
 // FilterWorkflowEntries hides `hidden: true` entries, then splits the rest by
 // load error. A non-empty filter matches displayed title or name, case-insensitively.
-func FilterWorkflowEntries(entries []workflow.WorkflowListEntry, filter string) FilteredEntries {
+func FilterWorkflowEntries(entries []workflow.ListEntry, filter string) FilteredEntries {
 	needle := strings.ToLower(filter)
-	var matched []workflow.WorkflowListEntry
+	var matched []workflow.ListEntry
 	for _, e := range entries {
 		if e.Hidden {
 			continue
 		}
 		if filter != "" {
-			title := strings.ToLower(workflow.WorkflowDisplayTitle(e.Name, e.Title))
+			title := strings.ToLower(workflow.DisplayTitle(e.Name, e.Title))
 			if !strings.Contains(title, needle) && !strings.Contains(strings.ToLower(e.Name), needle) {
 				continue
 			}
@@ -41,7 +41,7 @@ func FilterWorkflowEntries(entries []workflow.WorkflowListEntry, filter string) 
 }
 
 // HasVisibleEntries reports whether any catalog entry would appear in the picker.
-func HasVisibleEntries(entries []workflow.WorkflowListEntry) bool {
+func HasVisibleEntries(entries []workflow.ListEntry) bool {
 	for _, e := range entries {
 		if !e.Hidden {
 			return true

@@ -42,7 +42,7 @@ func referencedContextKeys(wf *workflow.Definition, stack []string) map[string]s
 		return keys
 	}
 	next := append(append([]string(nil), stack...), wf.Name)
-	for _, ref := range workflow.WorkflowTemplateRefs(wf.Steps, wf.Returns, wf.OnFailure) {
+	for _, ref := range workflow.TemplateRefs(wf.Steps, wf.Returns, wf.OnFailure) {
 		if ref.Root == "context" && len(ref.Segments) > 0 {
 			keys[ref.Segments[0]] = struct{}{}
 		}

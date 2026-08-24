@@ -51,7 +51,7 @@ func TestDebugTabBodies(t *testing.T) {
 
 func TestModelWorkflowsListAndTabToRuns(t *testing.T) {
 	m := New(Options{
-		Entries: []workflow.WorkflowListEntry{
+		Entries: []workflow.ListEntry{
 			{Name: "alpha", Title: "Alpha", Source: "repo"},
 			{Name: "beta", Title: "Beta", Source: "global"},
 		},

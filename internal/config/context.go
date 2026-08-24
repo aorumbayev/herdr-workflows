@@ -23,13 +23,12 @@ type ctxJSON struct {
 	FocusedPaneCwd string `json:"focused_pane_cwd"`
 	PaneID         string `json:"pane_id"`
 	SelectedText   string `json:"selected_text"`
-	Cwd            string `json:"cwd"`
+	WorkspaceCwd   string `json:"workspace_cwd"`
 	Worktree       struct {
-		Path string `json:"path"`
+		CheckoutPath string `json:"checkout_path"`
 	} `json:"worktree"`
 	Workspace struct {
 		WorkspaceID string `json:"workspace_id"`
-		Cwd         string `json:"cwd"`
 	} `json:"workspace"`
 	Tab struct {
 		TabID string `json:"tab_id"`
@@ -59,21 +58,25 @@ func readInvocationContext(getenv Env) InvocationContext {
 		WorkspaceID:  firstNonEmpty(env("HERDR_WORKSPACE_ID"), injected.WorkspaceID, injected.Workspace.WorkspaceID),
 		TabID:        firstNonEmpty(env("HERDR_TAB_ID"), injected.TabID, injected.Tab.TabID),
 		PaneID:       firstNonEmpty(env("HERDR_PANE_ID"), injected.FocusedPaneID, injected.PaneID, injected.Pane.PaneID),
-		WorktreePath: injected.Worktree.Path,
+		WorktreePath: injected.Worktree.CheckoutPath,
 		Selection:    injected.SelectedText,
-		Cwd:          firstNonEmpty(injected.Worktree.Path, injected.FocusedPaneCwd, injected.Cwd, injected.Workspace.Cwd, cwd),
+		Cwd:          firstNonEmpty(injected.Worktree.CheckoutPath, injected.FocusedPaneCwd, injected.WorkspaceCwd, cwd),
 	}
 }
 
-// ResolveRepoRoot walks up from start looking for .git or .hwf.
+// ResolveRepoRoot walks up from start looking for .git, or .hwf outside the
+// home directory, where .hwf is the plugin's own global directory.
 func ResolveRepoRoot(start string) string {
+	home, _ := HomeDir(nil)
 	dir := start
 	for {
 		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
 			return dir
 		}
-		if _, err := os.Stat(filepath.Join(dir, ".hwf")); err == nil {
-			return dir
+		if dir != home {
+			if _, err := os.Stat(filepath.Join(dir, ".hwf")); err == nil {
+				return dir
+			}
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {

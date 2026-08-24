@@ -13,7 +13,7 @@ type ProgressLine struct {
 	Outcome string
 }
 
-type HistoryAck struct {
+type Ack struct {
 	State string
 	ID    string
 	Error string
@@ -32,7 +32,7 @@ func FormatProgressLine(progress ProgressLine) string {
 	return head + " " + progress.Outcome
 }
 
-func FormatHistoryAck(ack HistoryAck) string {
+func FormatHistoryAck(ack Ack) string {
 	switch ack.State {
 	case "claimed":
 		return "@hwf-history:claimed " + ack.ID
@@ -49,7 +49,7 @@ func FormatHistoryAck(ack HistoryAck) string {
 	}
 }
 
-func ParseHistoryAck(line string) *HistoryAck {
+func ParseHistoryAck(line string) *Ack {
 	m := ackRE.FindStringSubmatch(strings.TrimSpace(line))
 	if m == nil {
 		return nil
@@ -60,16 +60,16 @@ func ParseHistoryAck(line string) *HistoryAck {
 		if second == "" {
 			return nil
 		}
-		return &HistoryAck{State: state, ID: strings.ToLower(second)}
+		return &Ack{State: state, ID: strings.ToLower(second)}
 	case "unavailable":
-		ack := HistoryAck{State: state}
+		ack := Ack{State: state}
 		if second != "" {
 			ack.ID = strings.ToLower(second)
 		}
 		return &ack
 	default:
 		if second != "" && rest != "" {
-			return &HistoryAck{State: "rejected", ID: strings.ToLower(second), Error: rest}
+			return &Ack{State: "rejected", ID: strings.ToLower(second), Error: rest}
 		}
 		err := second
 		if err == "" {
@@ -78,6 +78,6 @@ func ParseHistoryAck(line string) *HistoryAck {
 		if err == "" {
 			err = "launch rejected"
 		}
-		return &HistoryAck{State: "rejected", Error: err}
+		return &Ack{State: "rejected", Error: err}
 	}
 }

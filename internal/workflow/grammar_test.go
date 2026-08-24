@@ -76,6 +76,7 @@ func TestParseRawGrammar(t *testing.T) {
 		{"on failure background", "version: v1alpha1\non_failure:\n  run: \"true\"\n  background: true\n  pane: {open: tab}\nsteps:\n  - run: \"true\"\n", "on_failure rejects background"},
 		{"on failure retry", "version: v1alpha1\non_failure:\n  run: \"true\"\n  retry: {attempts: 2}\nsteps:\n  - run: \"true\"\n", "on_failure rejects retry"},
 		{"unknown template root", "version: v1alpha1\nsteps:\n  - agent: 'see {{foo.bar}}'\n", "invalid template '{{foo.bar}}'"},
+		{"scratch template root", "version: v1alpha1\nsteps:\n  - agent: 'see {{scratch.x}}'\n", "invalid template '{{scratch.x}}'"},
 		{"near miss root", "version: v1alpha1\nsteps:\n  - run: [echo, '{{input.base}}']\n", "invalid template '{{input.base}}'"},
 		{"bare root", "version: v1alpha1\nsteps:\n  - agent: '{{steps}}'\n", "invalid template '{{steps}}'"},
 		{"unclosed template", "version: v1alpha1\nsteps:\n  - agent: 'see {{inputs.base'\n", "invalid template '{{inputs.base'"},

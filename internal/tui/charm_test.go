@@ -10,7 +10,7 @@ import (
 
 func TestCharmVerdicts(t *testing.T) {
 	required := []string{
-		"fixed-six-row-viewport",
+		"height-fitted-list-viewport",
 		"filter-text-accumulation",
 		"filter-input-stdin-leak-drop",
 		"choice-list-custom-row",
@@ -30,6 +30,14 @@ func TestCharmVerdicts(t *testing.T) {
 		"collected-answers-truncation",
 		"viewport-height-pad",
 		"runs-detail-scroll",
+		"theme-kind-palette",
+		"picker-tab-bar",
+		"picker-mouse-hover",
+		"console-hit-zones",
+		"console-mouse-reporting",
+		"card-rail",
+		"edit-placement",
+		"failed-run-sendback",
 	}
 	got := map[string]CharmVerdict{}
 	for _, v := range CharmVerdicts() {

@@ -2,10 +2,12 @@ package update
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -81,10 +83,32 @@ func TestCheckForUpdateValidatesJSONAndTimeout(t *testing.T) {
 		time.Sleep(200 * time.Millisecond)
 	}))
 	defer hang.Close()
-	if _, err := CheckForUpdate(CheckOpts{URL: hang.URL, Client: hang.Client(), Timeout: 20 * time.Millisecond}); err == nil {
+	_, timeoutErr := CheckForUpdate(CheckOpts{URL: hang.URL, Client: hang.Client(), Timeout: 20 * time.Millisecond})
+	if timeoutErr == nil {
 		t.Fatal("expected timeout")
-	} else if _, ok := err.(*ReleaseCheckError); !ok {
-		t.Fatalf("timeout type %T %v", err, err)
+	}
+	checkErr, ok := timeoutErr.(*ReleaseCheckError)
+	if !ok {
+		t.Fatalf("timeout type %T %v", timeoutErr, timeoutErr)
+	}
+	if !errors.Is(timeoutErr, context.DeadlineExceeded) {
+		t.Fatalf("timeout unwrap: %v", checkErr.Unwrap())
+	}
+	var urlErr *url.Error
+	if !errors.As(timeoutErr, &urlErr) {
+		t.Fatalf("timeout missing transport cause: %v", timeoutErr)
+	}
+}
+
+func TestReleaseCheckErrorUnwrapsTransport(t *testing.T) {
+	cause := errors.New("dns lookup failed")
+	err := releaseWrap("latest release request failed", cause)
+	if !errors.Is(err, cause) {
+		t.Fatalf("errors.Is failed for %v", err)
+	}
+	var checkErr *ReleaseCheckError
+	if !errors.As(err, &checkErr) || checkErr.Error() != "latest release request failed: dns lookup failed" {
+		t.Fatalf("As/Error = %v", err)
 	}
 }
 
@@ -129,17 +153,17 @@ func TestLeavePluginRootOutsideCheckout(t *testing.T) {
 	}
 }
 
-func TestUpdatePluginOutcomes(t *testing.T) {
+func TestPluginOutcomes(t *testing.T) {
 	current := "0.1.0"
 	newer := "0.999.0"
-	up, err := UpdatePlugin(Deps{
+	up, err := Plugin(Deps{
 		Version:     current,
 		FetchLatest: func() (LatestRelease, error) { return LatestRelease{Tag: "v" + current, Version: current}, nil },
 	})
 	if err != nil || up.Kind != "up_to_date" || up.Current != current {
 		t.Fatalf("%+v %v", up, err)
 	}
-	local, err := UpdatePlugin(Deps{
+	local, err := Plugin(Deps{
 		Version:     current,
 		FetchLatest: func() (LatestRelease, error) { return LatestRelease{Tag: "v" + newer, Version: newer}, nil },
 		ListSource:  func() (PluginSourceInfo, error) { src, _ := ParsePluginListSource(localListJSON()); return src, nil },
@@ -153,7 +177,7 @@ func TestUpdatePluginOutcomes(t *testing.T) {
 		t.Fatal(err)
 	}
 	var standaloneCalls int
-	unreg, err := UpdatePlugin(Deps{
+	unreg, err := Plugin(Deps{
 		Version:     current,
 		FetchLatest: func() (LatestRelease, error) { return LatestRelease{Tag: "v" + newer, Version: newer}, nil },
 		ListSource:  func() (PluginSourceInfo, error) { src, _ := ParsePluginListSource(emptyListJSON()); return src, nil },
@@ -177,7 +201,7 @@ func TestUpdatePluginOutcomes(t *testing.T) {
 		args []string
 		cwd  string
 	}
-	fail, err := UpdatePlugin(Deps{
+	fail, err := Plugin(Deps{
 		Version:     current,
 		PluginRoot:  pluginRoot,
 		FetchLatest: func() (LatestRelease, error) { return LatestRelease{Tag: "v" + newer, Version: newer}, nil },
@@ -206,7 +230,7 @@ func TestUpdatePluginOutcomes(t *testing.T) {
 			t.Fatalf("args %v", installs[0].args)
 		}
 	}
-	ok, err := UpdatePlugin(Deps{
+	ok, err := Plugin(Deps{
 		Version:     current,
 		PluginRoot:  pluginRoot,
 		FetchLatest: func() (LatestRelease, error) { return LatestRelease{Tag: "v" + newer, Version: newer}, nil },

@@ -18,12 +18,12 @@ func TestModelDiagramSendbackSingleAgent(t *testing.T) {
 	var sentPane, sentText string
 	m := New(Options{
 		RepoRoot: t.TempDir(),
-		Entries: []workflow.WorkflowListEntry{
+		Entries: []workflow.ListEntry{
 			{Name: "handoff", Title: "Handoff", Source: "repo"},
 		},
 		Width:  80,
 		Height: 24,
-		LoadWorkflow: func(entry workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(entry workflow.ListEntry) (*workflow.Definition, error) {
 			return def, nil
 		},
 		ListAgentPanes: func() ([]AgentPaneEntry, error) {
@@ -37,11 +37,6 @@ func TestModelDiagramSendbackSingleAgent(t *testing.T) {
 	})
 	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = next.(Model)
-	next, _ = m.Update(keyRune('v'))
-	m = next.(Model)
-	if m.diagramMode != diagramModeSelect {
-		t.Fatalf("mode = %d, want select", m.diagramMode)
-	}
 	next, _ = m.Update(keyRune('v'))
 	m = next.(Model)
 	if !m.diagramSelected["brief"] {
@@ -63,7 +58,7 @@ func TestModelDiagramSendbackSingleAgent(t *testing.T) {
 	if sentPane != "agent-1" {
 		t.Fatalf("sent pane = %q", sentPane)
 	}
-	for _, want := range []string{"Selected steps: brief", "id: brief", "--- instruction ---", "fix"} {
+	for _, want := range []string{"Focus steps: brief", "Skill: hwf skills show herdr-workflow-create", "--- instruction ---", "fix"} {
 		if !strings.Contains(sentText, want) {
 			t.Fatalf("sent text missing %q:\n%s", want, sentText)
 		}
@@ -82,12 +77,12 @@ func TestModelDiagramSendbackAgentChooser(t *testing.T) {
 	var sentPane string
 	m := New(Options{
 		RepoRoot: t.TempDir(),
-		Entries: []workflow.WorkflowListEntry{
+		Entries: []workflow.ListEntry{
 			{Name: "handoff", Title: "Handoff", Source: "repo"},
 		},
 		Width:  80,
 		Height: 24,
-		LoadWorkflow: func(entry workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(entry workflow.ListEntry) (*workflow.Definition, error) {
 			return def, nil
 		},
 		ListAgentPanes: func() ([]AgentPaneEntry, error) {
@@ -102,8 +97,6 @@ func TestModelDiagramSendbackAgentChooser(t *testing.T) {
 		},
 	})
 	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	m = next.(Model)
-	next, _ = m.Update(keyRune('v'))
 	m = next.(Model)
 	next, _ = m.Update(keyRune('v'))
 	m = next.(Model)
@@ -130,12 +123,11 @@ func TestModelDiagramSendbackAgentChooser(t *testing.T) {
 func TestFormatDiagramMarksSelection(t *testing.T) {
 	def := handoffDefinition(t)
 	d := workflow.ProjectDiagram(*def)
-	text := FormatDiagramWithMarks(d, DiagramMarks{
-		SelectMode: true,
-		FocusIndex: 0,
-		Selected:   map[string]bool{"brief": true},
-	}, 80)
-	if !strings.Contains(text, "> [x] brief") {
+	text, _ := renderRailYAML(d, nil, DiagramMarks{
+		Focus:    railFocus{},
+		Selected: map[string]bool{"brief": true},
+	}, 80, 60, 0)
+	if !strings.Contains(text, "[x]") || !strings.Contains(text, "brief") {
 		t.Fatalf("marked diagram = %q", text)
 	}
 }
@@ -148,20 +140,18 @@ func TestModelDiagramSendbackChooserScrollsWindow(t *testing.T) {
 	}
 	m := New(Options{
 		RepoRoot: t.TempDir(),
-		Entries: []workflow.WorkflowListEntry{
+		Entries: []workflow.ListEntry{
 			{Name: "handoff", Title: "Handoff", Source: "repo"},
 		},
 		Width:  80,
 		Height: 10,
-		LoadWorkflow: func(entry workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(entry workflow.ListEntry) (*workflow.Definition, error) {
 			return def, nil
 		},
 		ListAgentPanes: func() ([]AgentPaneEntry, error) { return panes, nil },
 		PaneSendText:   func(paneID, text string) error { return nil },
 	})
 	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	m = next.(Model)
-	next, _ = m.Update(keyRune('v'))
 	m = next.(Model)
 	next, _ = m.Update(keyRune('v'))
 	m = next.(Model)
@@ -201,12 +191,12 @@ func TestModelDiagramSendbackCancelRemovesSpill(t *testing.T) {
 	spillFn, spill := spillOption(t)
 	m := New(Options{
 		RepoRoot: t.TempDir(),
-		Entries: []workflow.WorkflowListEntry{
+		Entries: []workflow.ListEntry{
 			{Name: "handoff", Title: "Handoff", Source: "repo"},
 		},
 		Width:  80,
 		Height: 24,
-		LoadWorkflow: func(entry workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(entry workflow.ListEntry) (*workflow.Definition, error) {
 			return def, nil
 		},
 		ListAgentPanes: func() ([]AgentPaneEntry, error) {
@@ -216,8 +206,6 @@ func TestModelDiagramSendbackCancelRemovesSpill(t *testing.T) {
 		SpillSendback: spillFn,
 	})
 	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	m = next.(Model)
-	next, _ = m.Update(keyRune('v'))
 	m = next.(Model)
 	next, _ = m.Update(keyRune('v'))
 	m = next.(Model)
@@ -240,12 +228,12 @@ func TestModelDiagramSendbackFailureRemovesSpill(t *testing.T) {
 	spillFn, spill := spillOption(t)
 	m := New(Options{
 		RepoRoot: t.TempDir(),
-		Entries: []workflow.WorkflowListEntry{
+		Entries: []workflow.ListEntry{
 			{Name: "handoff", Title: "Handoff", Source: "repo"},
 		},
 		Width:  80,
 		Height: 24,
-		LoadWorkflow: func(entry workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(entry workflow.ListEntry) (*workflow.Definition, error) {
 			return def, nil
 		},
 		ListAgentPanes: func() ([]AgentPaneEntry, error) {
@@ -255,8 +243,6 @@ func TestModelDiagramSendbackFailureRemovesSpill(t *testing.T) {
 		SpillSendback: spillFn,
 	})
 	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	m = next.(Model)
-	next, _ = m.Update(keyRune('v'))
 	m = next.(Model)
 	next, _ = m.Update(keyRune('v'))
 	m = next.(Model)
@@ -277,12 +263,12 @@ func TestModelDiagramSendbackSuccessKeepsSpill(t *testing.T) {
 	spillFn, spill := spillOption(t)
 	m := New(Options{
 		RepoRoot: t.TempDir(),
-		Entries: []workflow.WorkflowListEntry{
+		Entries: []workflow.ListEntry{
 			{Name: "handoff", Title: "Handoff", Source: "repo"},
 		},
 		Width:  80,
 		Height: 24,
-		LoadWorkflow: func(entry workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(entry workflow.ListEntry) (*workflow.Definition, error) {
 			return def, nil
 		},
 		ListAgentPanes: func() ([]AgentPaneEntry, error) {
@@ -292,8 +278,6 @@ func TestModelDiagramSendbackSuccessKeepsSpill(t *testing.T) {
 		SpillSendback: spillFn,
 	})
 	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	m = next.(Model)
-	next, _ = m.Update(keyRune('v'))
 	m = next.(Model)
 	next, _ = m.Update(keyRune('v'))
 	m = next.(Model)

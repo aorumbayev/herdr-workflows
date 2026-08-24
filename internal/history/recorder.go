@@ -2,6 +2,7 @@ package history
 
 import (
 	"os"
+	"strings"
 
 	"github.com/aorumbayev/herdr-workflows/internal/engine"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
@@ -38,16 +39,16 @@ func CreateRunRecorder(opts CreateRecorderOpts) (engine.Recorder, error) {
 	})
 	scope := engine.RecorderScope{Name: opts.Workflow.Name, WorkflowPath: []string{opts.Workflow.Name}}
 	if !claim.OK {
-		emitAck(opts.OnAck, FormatHistoryAck(HistoryAck{State: "rejected", ID: claim.ID, Error: claim.Error}))
+		emitAck(opts.OnAck, FormatHistoryAck(Ack{State: "rejected", ID: claim.ID, Error: claim.Error}))
 		w.Dispose()
 		return nil, errClaim(claim.Error)
 	}
 	if claim.State == "unavailable" {
-		emitAck(opts.OnAck, FormatHistoryAck(HistoryAck{State: "unavailable", ID: claim.ID}))
+		emitAck(opts.OnAck, FormatHistoryAck(Ack{State: "unavailable", ID: claim.ID}))
 		w.Dispose()
 		return &recorder{runID: claim.ID, scope: scope, state: &recorderState{}, getenv: opts.Getenv}, nil
 	}
-	emitAck(opts.OnAck, FormatHistoryAck(HistoryAck{State: "claimed", ID: claim.ID}))
+	emitAck(opts.OnAck, FormatHistoryAck(Ack{State: "claimed", ID: claim.ID}))
 	rec := &recorder{writer: w, runID: claim.ID, scope: scope, state: &recorderState{}, getenv: opts.Getenv}
 	rec.persistEntryYAML(opts.Workflow.File)
 	return rec, nil
@@ -191,6 +192,10 @@ func failureFact(step workflow.Step, outcome *engine.RecorderOutcome) *FailureFa
 				fact.ExitCode = &i
 			}
 		}
+		if s, ok := outcome.Details["verdict"].(string); ok {
+			fact.Verdict = s
+		}
+		fact.Stream = streamName(outcome.Details)
 	}
 	if kind == "herdr" {
 		switch a := step.Action.(type) {
@@ -207,4 +212,17 @@ func failureFact(step workflow.Step, outcome *engine.RecorderOutcome) *FailureFa
 		fact.StepID = step.ID
 	}
 	return fact
+}
+
+func streamName(details map[string]any) string {
+	if s, ok := details["stream"].(string); ok && s != "" {
+		return s
+	}
+	if s, ok := details["stderr"].(string); ok && strings.TrimSpace(s) != "" {
+		return "stderr"
+	}
+	if s, ok := details["stdout"].(string); ok && strings.TrimSpace(s) != "" {
+		return "stdout"
+	}
+	return ""
 }

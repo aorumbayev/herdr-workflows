@@ -93,8 +93,10 @@ func newRoot() *cobra.Command {
 		newLaunchCmd(),
 		newPickerCmd(),
 		newConsoleCmd(),
+		newEditorCmd(),
 		newUpdateCmd(),
 		newSkillsCmd(),
+		newScratchCmd(),
 		newResponseCmd(),
 		newSetupCmd(),
 	)

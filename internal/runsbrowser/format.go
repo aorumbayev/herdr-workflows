@@ -63,9 +63,14 @@ func abbreviateStatus(status string, width int) string {
 	}
 }
 
+// rowStatusToken is the status text FormatRunRow puts at the head of a row.
+func rowStatusToken(item history.Summary, width int) string {
+	return abbreviateStatus(item.Status, min(12, max(3, width)))
+}
+
 // FormatRunRow lays out one list row: status, workflow, progress, elapsed, optional location.
 func FormatRunRow(item history.Summary, width int, opts FormatRunRowOpts) string {
-	status := abbreviateStatus(item.Status, min(12, max(3, width)))
+	status := rowStatusToken(item, width)
 	progress := ""
 	if item.Progress != nil {
 		progress = strconv.Itoa(item.Progress.Done) + "/" + strconv.Itoa(item.Progress.Total)
@@ -140,15 +145,13 @@ func FormatRunListEmpty(opts RunListEmptyOpts) string {
 
 // RunsFooter is the list-mode footer hint plus the scope label.
 // tui.FormatListFooter renders the position once. Do not embed the position here.
-func RunsFooter(scope Scope, index, total int) string {
+func RunsFooter(scope Scope) string {
 	scopeLabel := "Current"
 	if scope == ScopeAll {
 		scopeLabel = "All"
 	}
-	_ = index
-	_ = total
 	return strings.Join([]string{
-		"tab workflows",
+		"tab",
 		"ctrl+g " + scopeLabel,
 		"enter detail",
 		"esc quit",
@@ -157,7 +160,7 @@ func RunsFooter(scope Scope, index, total int) string {
 
 // RunDetailFooter is the detail-mode footer hint.
 func RunDetailFooter() string {
-	return strings.Join([]string{"esc back", "up/down scroll"}, tui.ChromeSep)
+	return strings.Join([]string{"esc back", "s send", "up/down step"}, tui.ChromeSep)
 }
 
 // DetailLines renders a detail view into single-width lines.

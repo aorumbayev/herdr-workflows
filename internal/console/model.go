@@ -29,7 +29,7 @@ const (
 
 // Options construct a console model.
 type Options struct {
-	Entries        []workflow.WorkflowListEntry
+	Entries        []workflow.ListEntry
 	RepoRoot       string
 	Width          int
 	Height         int
@@ -37,8 +37,9 @@ type Options struct {
 	Config         config.Config
 	LoadRuns       func() []history.Summary
 	LoadDetail     func(runID string) DetailPayload
-	LoadWorkflow   func(workflow.WorkflowListEntry) (*workflow.Definition, error)
+	LoadWorkflow   func(workflow.ListEntry) (*workflow.Definition, error)
 	CopyClipboard  func(string) error
+	Embedded       bool
 	ListAgentPanes func() ([]AgentPaneEntry, error)
 	PaneSendText   func(paneID, text string) error
 	SpillSendback  func(repoRoot, text string) (string, string, error)
@@ -46,7 +47,7 @@ type Options struct {
 
 // Model is the full-screen console Bubble Tea model.
 type Model struct {
-	entries             []workflow.WorkflowListEntry
+	entries             []workflow.ListEntry
 	repoRoot            string
 	width               int
 	height              int
@@ -59,12 +60,12 @@ type Model struct {
 	runs                []history.Summary
 	loadRuns            func() []history.Summary
 	loadDetail          func(runID string) DetailPayload
-	loadWorkflow        func(workflow.WorkflowListEntry) (*workflow.Definition, error)
+	loadWorkflow        func(workflow.ListEntry) (*workflow.Definition, error)
 	copyText            func(string) error
 	definition          *workflow.Definition
 	diagramMode         diagramMode
 	diagramSelected     map[string]bool
-	diagramNodeCursor   int
+	insertAt            insertSide
 	instructionDraft    string
 	sendbackInstruction string
 	pendingSendText     string
@@ -75,10 +76,18 @@ type Model struct {
 	listAgentPanes      func() ([]AgentPaneEntry, error)
 	paneSendText        func(paneID, text string) error
 	spillSendback       func(repoRoot, text string) (string, string, error)
+	embedded            bool
+	cfg                 config.Config
 	detail              DetailPayload
 	diagram             workflow.Diagram
 	diagramTitle        string
+	diagramFile         string
+	diagramYAML         []string
+	diagramStamp        diagramFileStamp
+	diagramFocus        railFocus
 	diagramScroll       int
+	diagramYAMLScroll   int
+	watchEpoch          int
 	debugTab            DebugTab
 	detailScroll        int
 	status              string
@@ -113,7 +122,7 @@ func New(opts Options) Model {
 	if loadWorkflow == nil && opts.RepoRoot != "" {
 		repoRoot := opts.RepoRoot
 		cfg := opts.Config
-		loadWorkflow = func(entry workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		loadWorkflow = func(entry workflow.ListEntry) (*workflow.Definition, error) {
 			return workflow.LoadWorkflowEntry(entry, repoRoot, cfg)
 		}
 	}
@@ -128,7 +137,7 @@ func New(opts Options) Model {
 			if err != nil {
 				return nil, err
 			}
-			return agentPaneEntriesFromHost(panes), nil
+			return AgentPaneEntriesFromHost(panes), nil
 		}
 	}
 	paneSend := opts.PaneSendText
@@ -153,6 +162,8 @@ func New(opts Options) Model {
 		listAgentPanes: listAgents,
 		paneSendText:   paneSend,
 		spillSendback:  spillFn,
+		embedded:       opts.Embedded,
+		cfg:            opts.Config,
 	}
 }
 
@@ -184,6 +195,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
+	case tea.MouseClickMsg, tea.MouseWheelMsg:
+		return m.handleMouse(msg)
+	case watchTickMsg:
+		return m.handleWatchTick(msg.epoch)
 	}
 	return m, nil
 }
@@ -297,14 +312,37 @@ func (m Model) openSelectedDiagram() (tea.Model, tea.Cmd) {
 	m.diagram = workflow.ProjectDiagram(*def)
 	m.definition = def
 	m.diagramTitle = title
+	m.diagramFile = entry.File
+	m.diagramYAML = loadDiagramYAML(entry.File)
+	m.diagramStamp, _ = fileStamp(entry.File)
 	m.diagramScroll = 0
+	m.diagramYAMLScroll = 0
 	m.diagramMode = diagramModeView
 	m.diagramSelected = nil
-	m.diagramNodeCursor = 0
+	m.insertAt = ""
+	m.diagramFocus = railFocus{}
+	m.watchEpoch++
 	m.resetDiagramSendback()
 	m.screen = screenDiagram
 	m.status = ""
-	return m, nil
+	if m.diagramFile == "" {
+		return m, nil
+	}
+	return m, watchTick(m.watchEpoch)
+}
+
+// OpenDiagram opens one workflow's diagram without the console's own list. The
+// picker tab is already a workflow list, so it enters the diagram directly.
+func (m Model) OpenDiagram(entry workflow.ListEntry) (Model, tea.Cmd) {
+	for i, e := range m.entries {
+		if e.Name == entry.Name && e.File == entry.File {
+			m.wfCursor = i
+			m.clampWorkflowWindow()
+			break
+		}
+	}
+	next, cmd := m.openSelectedDiagram()
+	return next.(Model), cmd
 }
 
 func (m Model) handleDetailKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -420,4 +458,16 @@ func asciiLines(text string, width int) []string {
 		out = append(out, tui.Truncate(line, width))
 	}
 	return out
+}
+
+func (m Model) Body() string {
+	return m.render()
+}
+
+func (m Model) AtRoot() bool {
+	return m.screen == screenWorkflows || m.screen == screenRuns
+}
+
+func (m Model) BlocksPopOut() bool {
+	return m.screen == screenDiagram && (m.diagramMode == diagramModeInstruction || m.diagramMode == diagramModeAgentPick)
 }

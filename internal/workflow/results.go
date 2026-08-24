@@ -106,7 +106,7 @@ func VerdictNotRequiredMessage(verdict string, required []string) string {
 
 // ParseVerdictTokens decodes the CLI comma-separated verdict option.
 func ParseVerdictTokens(raw string) ([]string, error) {
-	tokens := make([]string, 0)
+	var tokens []string
 	for _, token := range strings.Split(raw, ",") {
 		token = strings.TrimSpace(token)
 		if token == "" {

@@ -90,3 +90,15 @@ func TestTruncateUsesColumnsNotBytes(t *testing.T) {
 		t.Fatalf("column cut = %q cols %d", colCut, Columns(colCut))
 	}
 }
+
+func TestFitViewportFloorAndGrowth(t *testing.T) {
+	if got := FitViewport(0, 8, ListViewport); got != ListViewport {
+		t.Fatalf("unknown height = %d, want %d", got, ListViewport)
+	}
+	if got := FitViewport(12, 8, ListViewport); got != ListViewport {
+		t.Fatalf("short host = %d, want the floor %d", got, ListViewport)
+	}
+	if got := FitViewport(30, 8, ListViewport); got != 22 {
+		t.Fatalf("tall host = %d, want 22", got)
+	}
+}

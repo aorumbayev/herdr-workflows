@@ -70,8 +70,17 @@ func PadHeight(s string, height int) string {
 	return s + strings.Repeat("\n", height-n)
 }
 
-// ListViewport is the fixed six-row Select height shared by picker and runs browser.
+// ListViewport is the six-row floor shared by picker and runs browser.
 const ListViewport = 6
+
+// FitViewport gives a scrolling body the rows chrome leaves unused, never
+// fewer than min. An unknown height falls back to min.
+func FitViewport(height, chrome, min int) int {
+	if height <= 0 {
+		return min
+	}
+	return max(min, height-chrome)
+}
 
 // ContentWidth is the inner chrome width for a popup of the given terminal columns.
 func ContentWidth(width int) int {

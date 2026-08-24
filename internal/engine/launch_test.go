@@ -322,8 +322,8 @@ func TestLaunchDetachedRunPinsCallerEnv(t *testing.T) {
 	if !ok {
 		t.Fatalf("worktree = %#v, want object", ctxJSON["worktree"])
 	}
-	if worktree["path"] != "/repo/.wt" {
-		t.Fatalf("worktree.path = %#v, want /repo/.wt", worktree["path"])
+	if worktree["checkout_path"] != "/repo/.wt" {
+		t.Fatalf("worktree.checkout_path = %#v, want /repo/.wt", worktree["checkout_path"])
 	}
 }
 

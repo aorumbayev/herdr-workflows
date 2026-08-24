@@ -58,7 +58,7 @@ func (m Model) beginLaunch(def *workflow.Definition, values map[string]string, d
 	}
 	runID := alloc()
 	name := def.Name
-	title := workflow.WorkflowDisplayTitle(def.Name, def.Title)
+	title := workflow.DisplayTitle(def.Name, def.Title)
 	if title == "" {
 		title = name
 	}

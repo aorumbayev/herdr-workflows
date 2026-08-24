@@ -7,18 +7,29 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/aorumbayev/herdr-workflows/internal/host"
-	"github.com/aorumbayev/herdr-workflows/internal/runsbrowser"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
-	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
+
+// noStepIDStatus explains a mark slot the console cannot fill: selection
+// anchors on a declared id, and a positional title cannot name a step.
+const noStepIDStatus = "step declares no id" + tui.ChromeSep + "add id: to select it"
 
 type diagramMode int
 
 const (
 	diagramModeView diagramMode = iota
-	diagramModeSelect
+	diagramModeInsertSide
 	diagramModeInstruction
 	diagramModeAgentPick
+)
+
+// insertSide names which side of the focused card a new step goes on. The rail
+// has no gap cursor, so `a` asks.
+type insertSide string
+
+const (
+	insertBefore insertSide = "before"
+	insertAfter  insertSide = "after"
 )
 
 // AgentPaneEntry is one selectable agent pane for send-back.
@@ -28,7 +39,7 @@ type AgentPaneEntry struct {
 	Title  string
 }
 
-func agentPaneEntriesFromHost(panes []host.AgentPane) []AgentPaneEntry {
+func AgentPaneEntriesFromHost(panes []host.AgentPane) []AgentPaneEntry {
 	out := make([]AgentPaneEntry, len(panes))
 	for i, pane := range panes {
 		out[i] = AgentPaneEntry{PaneID: pane.PaneID, Name: pane.Name, Title: pane.Title}
@@ -38,12 +49,12 @@ func agentPaneEntriesFromHost(panes []host.AgentPane) []AgentPaneEntry {
 
 func (m Model) handleDiagramKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch m.diagramMode {
+	case diagramModeInsertSide:
+		return m.handleDiagramInsertSideKey(msg)
 	case diagramModeInstruction:
 		return m.handleDiagramInstructionKey(msg)
 	case diagramModeAgentPick:
 		return m.handleDiagramAgentPickKey(msg)
-	case diagramModeSelect:
-		return m.handleDiagramSelectKey(msg)
 	default:
 		return m.handleDiagramViewKey(msg)
 	}
@@ -57,59 +68,103 @@ func (m Model) handleDiagramViewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.resetDiagramSendback()
 		return m, nil
 	case "up":
-		w := m.contentWidth()
-		vp := m.scrollViewport()
-		m.diagramScroll = runsbrowser.ClampDetailScroll(m.diagramScrollLines(w), m.diagramScroll-1, vp)
-		return m, nil
+		return m.moveDiagramFocus(-1)
 	case "down":
-		w := m.contentWidth()
-		vp := m.scrollViewport()
-		m.diagramScroll = runsbrowser.ClampDetailScroll(m.diagramScrollLines(w), m.diagramScroll+1, vp)
+		return m.moveDiagramFocus(1)
+	case "pgup":
+		m.scrollDiagramYAML(-1)
+		return m, nil
+	case "pgdown":
+		m.scrollDiagramYAML(1)
 		return m, nil
 	case "v":
-		m.diagramMode = diagramModeSelect
-		m.diagramNodeCursor = 0
-		m.status = ""
+		m.toggleFocusedCard()
 		return m, nil
+	case "a":
+		return m.seedInsertInstruction()
+	case "d":
+		return m.seedDeleteInstruction()
 	case "s":
-		return m.beginDiagramInstruction()
+		return m.beginDiagramInstruction("")
 	}
 	return m, nil
 }
 
-func (m Model) handleDiagramSelectKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m Model) moveDiagramFocus(delta int) (tea.Model, tea.Cmd) {
+	m.diagramFocus = moveRailFocus(m.diagramFocus, len(m.diagram.Nodes), delta)
+	m.status = ""
+	m.diagramYAMLScroll = 0
+	m.diagramScroll = railScrollIntoView(m.diagram, m.diagramMarks(), m.contentWidth(), m.scrollViewport(), m.diagramScroll)
+	return m, nil
+}
+
+func (m *Model) toggleFocusedCard() {
+	if m.diagramFocus.Index < 0 || m.diagramFocus.Index >= len(m.diagram.Nodes) {
+		return
+	}
+	id := m.diagram.Nodes[m.diagramFocus.Index].ID
+	if id == "" {
+		m.status = noStepIDStatus
+		return
+	}
+	if m.diagramSelected == nil {
+		m.diagramSelected = map[string]bool{}
+	}
+	m.diagramSelected[id] = !m.diagramSelected[id]
+}
+
+// seedInsertInstruction asks which side of the focused card the new step goes
+// on before it opens the composer. An empty diagram has no side to pick.
+func (m Model) seedInsertInstruction() (tea.Model, tea.Cmd) {
+	if len(m.diagram.Nodes) == 0 {
+		m.insertAt = ""
+		return m.beginDiagramInstruction(insertSeed("", ""))
+	}
+	m.diagramMode = diagramModeInsertSide
+	m.insertAt = insertAfter
+	m.status = ""
+	return m, nil
+}
+
+func (m Model) handleDiagramInsertSideKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.diagramMode = diagramModeView
-		m.status = ""
+		m.insertAt = ""
 		return m, nil
-	case "up":
-		if m.diagramNodeCursor > 0 {
-			m.diagramNodeCursor--
-		}
+	case "up", "left":
+		m.insertAt = insertBefore
 		return m, nil
-	case "down":
-		if m.diagramNodeCursor+1 < len(m.diagram.Nodes) {
-			m.diagramNodeCursor++
-		}
+	case "down", "right":
+		m.insertAt = insertAfter
 		return m, nil
-	case "v":
-		if len(m.diagram.Nodes) == 0 {
-			return m, nil
-		}
-		id := m.diagram.Nodes[m.diagramNodeCursor].ID
-		if id == "" {
-			return m, nil
-		}
-		if m.diagramSelected == nil {
-			m.diagramSelected = map[string]bool{}
-		}
-		m.diagramSelected[id] = !m.diagramSelected[id]
+	case "b":
+		m.insertAt = insertBefore
+	case "a":
+		m.insertAt = insertAfter
+	case "enter":
+	default:
 		return m, nil
-	case "s":
-		return m.beginDiagramInstruction()
 	}
-	return m, nil
+	return m.beginDiagramInstruction(insertSeed(m.focusedTitle(), m.insertAt))
+}
+
+// focusedTitle names the focused step the way its card does, so a seeded
+// instruction still points at a step that declares no id.
+func (m Model) focusedTitle() string {
+	if m.diagramFocus.Index < 0 || m.diagramFocus.Index >= len(m.diagram.Nodes) {
+		return ""
+	}
+	title, _ := railTitle(m.diagram.Nodes[m.diagramFocus.Index])
+	return title
+}
+
+func (m Model) seedDeleteInstruction() (tea.Model, tea.Cmd) {
+	if len(m.diagram.Nodes) == 0 {
+		m.status = "d needs a card"
+		return m, nil
+	}
+	return m.beginDiagramInstruction(deleteSeed(m.focusedTitle()))
 }
 
 func (m Model) handleDiagramInstructionKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -166,31 +221,16 @@ func (m Model) handleDiagramAgentPickKey(msg tea.KeyPressMsg) (tea.Model, tea.Cm
 	return m, nil
 }
 
-func (m Model) beginDiagramInstruction() (tea.Model, tea.Cmd) {
-	if len(m.selectedDiagramIDs()) == 0 {
-		m.status = "select steps first"
-		return m, nil
-	}
+func (m Model) beginDiagramInstruction(seed string) (tea.Model, tea.Cmd) {
 	m.diagramMode = diagramModeInstruction
-	m.instructionDraft = ""
+	m.instructionDraft = seed
 	m.status = ""
 	return m, nil
 }
 
 func (m Model) finishSendback() (tea.Model, tea.Cmd) {
 	ids := m.selectedDiagramIDs()
-	if m.definition == nil {
-		m.status = "send-back failed" + tui.ChromeSep + "workflow definition missing"
-		m.diagramMode = diagramModeView
-		return m, nil
-	}
-	fragments, err := workflow.StepYAMLFragments(*m.definition, ids)
-	if err != nil {
-		m.status = "send-back failed" + tui.ChromeSep + err.Error()
-		m.diagramMode = diagramModeView
-		return m, nil
-	}
-	bundle := FormatAnnotationBundle(m.diagramTitle, ids, fragments, m.sendbackInstruction)
+	bundle := FormatAnnotationBundle(m.annotationBundle(ids))
 	text, spillPath, err := m.spillSendback(m.repoRoot, bundle)
 	if err != nil {
 		m.status = "send-back failed" + tui.ChromeSep + err.Error()
@@ -247,9 +287,7 @@ func (m Model) deliverSendback(paneID string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// abandonSendback drops a pending send-back, removing a spilled bundle file
-// nobody will submit. A delivered bundle keeps its spill: the pane holds
-// typed-but-unsubmitted text that points the agent at the file.
+// abandonSendback removes an undelivered spill file.
 func (m *Model) abandonSendback() {
 	if m.pendingSpillPath != "" {
 		_ = os.Remove(m.pendingSpillPath)
@@ -258,6 +296,7 @@ func (m *Model) abandonSendback() {
 }
 
 func (m *Model) resetDiagramSendback() {
+	m.insertAt = ""
 	m.pendingSendText = ""
 	m.pendingSpillPath = ""
 	m.agentPanes = nil
@@ -280,11 +319,34 @@ func (m Model) selectedDiagramIDs() []string {
 	return ids
 }
 
+func (m Model) annotationBundle(ids []string) AnnotationBundle {
+	b := AnnotationBundle{
+		Title:       m.diagramTitle,
+		File:        m.diagramFile,
+		Focus:       ids,
+		AnchorKind:  "workflow",
+		Instruction: m.sendbackInstruction,
+	}
+	if m.diagramFocus.Index < 0 || m.diagramFocus.Index >= len(m.diagram.Nodes) {
+		return b
+	}
+	id := m.diagram.Nodes[m.diagramFocus.Index].ID
+	if id == "" {
+		return b
+	}
+	b.AnchorID = id
+	b.AnchorKind = "step"
+	if m.insertAt != "" {
+		b.AnchorKind = string(m.insertAt)
+	}
+	return b
+}
+
 func (m Model) diagramMarks() DiagramMarks {
 	return DiagramMarks{
-		SelectMode: m.diagramMode == diagramModeSelect,
-		FocusIndex: m.diagramNodeCursor,
+		Focus:      m.diagramFocus,
 		Selected:   m.diagramSelected,
+		YAMLScroll: m.diagramYAMLScroll,
 	}
 }
 

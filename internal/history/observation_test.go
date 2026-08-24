@@ -2,11 +2,11 @@ package history
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/aorumbayev/herdr-workflows/internal/config"
 )
 
 func TestSummaryIsPrivacyFilteredListProjection(t *testing.T) {
@@ -78,12 +78,8 @@ func TestToDetailReportsRemainingWithoutInventedIdentities(t *testing.T) {
 func TestUnknownSnapshotVersionIsReportedAndLeftUntouched(t *testing.T) {
 	_, _, getenv := testWriterEnv(t)
 	id := AllocateRunID()
-	body := []byte(`{"version":99,"id":"` + id + `","workflow":"old","source":"repo","checkout_root":"/repo/a","started_at":"2026-08-20T12:00:00.000Z","heartbeat_at":"2026-08-20T12:00:00.000Z","steps":[]}` + "\n")
-	path := SnapshotPath(id, getenv)
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, body, 0o600); err != nil {
+	blob := `{"version":99,"id":"` + id + `","workflow":"old","source":"repo","checkout_root":"/repo/a","started_at":"2026-08-20T12:00:00.000Z","heartbeat_at":"2026-08-20T12:00:00.000Z","steps":[]}`
+	if err := insertIncompatibleForTest(id, 99, blob, getenv); err != nil {
 		t.Fatal(err)
 	}
 	listed := ListRuns(ListFilter{}, getenv)
@@ -98,12 +94,17 @@ func TestUnknownSnapshotVersionIsReportedAndLeftUntouched(t *testing.T) {
 	if len(listed.Incompatible) != 1 || listed.Incompatible[0].ID != id || listed.Incompatible[0].Version != 99 {
 		t.Fatalf("incompatible = %+v", listed.Incompatible)
 	}
-	got, err := os.ReadFile(path)
+	db, err := openHistory(getenv)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != string(body) {
-		t.Fatal("incompatible snapshot file was mutated")
+	var version int
+	var stored string
+	if err := db.QueryRow(`SELECT version, snapshot FROM runs WHERE id=?`, id).Scan(&version, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if version != 99 || stored != blob {
+		t.Fatalf("row mutated version=%d blob=%q", version, stored)
 	}
 	presented := RunDetail(id, getenv, time.Time{})
 	if presented.Detail.Kind != "incompatible" {
@@ -112,4 +113,14 @@ func TestUnknownSnapshotVersionIsReportedAndLeftUntouched(t *testing.T) {
 	if !strings.Contains(presented.Detail.Message, "incompatible") {
 		t.Fatalf("detail message = %q", presented.Detail.Message)
 	}
+}
+
+func insertIncompatibleForTest(id string, version int, blob string, getenv config.Env) error {
+	db, err := openHistory(getenv)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`INSERT INTO runs (id, version, expired, workflow, title, source, checkout_root, status, started_at, heartbeat_at, snapshot)
+		VALUES (?, ?, 0, 'old', '', 'repo', '/repo/a', '', '2026-08-20T12:00:00.000Z', '2026-08-20T12:00:00.000Z', ?)`, id, version, blob)
+	return err
 }

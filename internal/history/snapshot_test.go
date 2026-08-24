@@ -227,3 +227,20 @@ func TestIsSnapshotTruncatedOnlyLiteralTrue(t *testing.T) {
 		t.Fatal(`truncated: "yes" must be rejected`)
 	}
 }
+
+func TestParseFailureFactVerdictAndStreamOptional(t *testing.T) {
+	base := func() FailureFact {
+		fact, ok := parseFailureFact(map[string]any{"action": "agent", "verdict": "REJECT", "stream": "response"})
+		if !ok {
+			t.Fatal("parse")
+		}
+		return fact
+	}()
+	if base.Verdict != "REJECT" || base.Stream != "response" {
+		t.Fatalf("%+v", base)
+	}
+	legacy, ok := parseFailureFact(map[string]any{"action": "run", "exit_code": 1})
+	if !ok || legacy.Verdict != "" || legacy.Stream != "" || legacy.ExitCode == nil || *legacy.ExitCode != 1 {
+		t.Fatalf("v1 compatible %+v", legacy)
+	}
+}

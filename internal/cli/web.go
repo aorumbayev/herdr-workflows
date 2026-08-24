@@ -43,6 +43,9 @@ func runPicker(cmd *cobra.Command, _ []string) error {
 	if err := host.EnsureHerdrProtocol(); err != nil {
 		return err
 	}
+	if reopen, _ := cmd.Flags().GetBool("reopen"); reopen {
+		return runPopupReopen()
+	}
 	if !cmdHasTTY(cmd) {
 		return fmt.Errorf("picker requires a tty")
 	}
@@ -54,7 +57,10 @@ func runPicker(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	code, err := picker.RunScreen(buildPickerScreenOpts(app, entries))
+	opts := buildPickerScreenOpts(app, entries)
+	opts.Restore = picker.ParsePopupState(os.Getenv(picker.PopupStateEnv))
+	opts.ReopenPopup = spawnPopupReopen
+	code, err := picker.RunScreen(opts)
 	if err != nil {
 		return err
 	}
@@ -64,7 +70,7 @@ func runPicker(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func buildPickerScreenOpts(app config.AppContext, entries []workflow.WorkflowListEntry) picker.ScreenOpts {
+func buildPickerScreenOpts(app config.AppContext, entries []workflow.ListEntry) picker.ScreenOpts {
 	execPath, _ := os.Executable()
 	repoRoot := app.RepoRoot
 	cfg := app.Config
@@ -74,7 +80,7 @@ func buildPickerScreenOpts(app config.AppContext, entries []workflow.WorkflowLis
 		RepoRoot: repoRoot,
 		Config:   cfg,
 		Env:      os.Getenv,
-		LoadWorkflow: func(entry workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(entry workflow.ListEntry) (*workflow.Definition, error) {
 			return workflow.LoadWorkflowEntry(entry, repoRoot, cfg)
 		},
 		OpenURL: func(url string) error {
@@ -83,7 +89,7 @@ func buildPickerScreenOpts(app config.AppContext, entries []workflow.WorkflowLis
 		},
 		Notify:        host.NotificationShow,
 		AllocateRunID: history.AllocateRunID,
-		ExportShare: func(entry workflow.WorkflowListEntry) (string, error) {
+		ExportShare: func(entry workflow.ListEntry) (string, error) {
 			exported, err := workflow.ExportWorkflowBundle(entry.Name, entry.Source, repoRoot)
 			if err != nil {
 				return "", err
@@ -131,8 +137,27 @@ func buildPickerScreenOpts(app config.AppContext, entries []workflow.WorkflowLis
 			if v := os.Getenv("HERDR_PLUGIN_CONTEXT_JSON"); v != "" {
 				env["HERDR_PLUGIN_CONTEXT_JSON"] = v
 			}
-			return host.PluginPaneOpenConsole(env, string(placement))
+			return host.PluginPaneOpenPlaced("console", string(placement), env)
 		},
+		OpenEditor: func(path, name, placement string) error {
+			env := map[string]string{
+				"HERDR_WORKFLOWS_REPO_ROOT": repoRoot,
+				picker.EditorFileEnv:        path,
+				picker.EditorNameEnv:        name,
+			}
+			if v := os.Getenv("HERDR_PLUGIN_CONTEXT_JSON"); v != "" {
+				env["HERDR_PLUGIN_CONTEXT_JSON"] = v
+			}
+			return host.PluginPaneOpenPlaced("editor", placement, env)
+		},
+		ListAgentPanes: func() ([]console.AgentPaneEntry, error) {
+			panes, err := host.ListAgentPanes()
+			if err != nil {
+				return nil, err
+			}
+			return console.AgentPaneEntriesFromHost(panes), nil
+		},
+		PaneSendText: host.PaneSendText,
 	}
 }
 

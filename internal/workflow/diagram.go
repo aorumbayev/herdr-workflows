@@ -1,5 +1,7 @@
 package workflow
 
+import "strings"
+
 // DiagramPlacement is one step's pane target on the workflow diagram.
 type DiagramPlacement struct {
 	Open       string
@@ -49,6 +51,13 @@ func diagramActionLabel(action Action) string {
 		return value.Method
 	case WorkflowAction:
 		return value.Name
+	case RunAction:
+		if !value.Payload.IsArgv() {
+			return ""
+		}
+		return truncateDiagramLabel(strings.Join(value.Payload.Argv, " "), 24)
+	case AgentAction:
+		return truncateDiagramLabel(firstNonEmptyLine(value.Prompt), 24)
 	default:
 		return ""
 	}
@@ -82,4 +91,28 @@ func diagramPlacementOf(pane *PaneSpec, action Action) *DiagramPlacement {
 		out.Background = value.Background
 	}
 	return out
+}
+
+func firstNonEmptyLine(s string) string {
+	for _, line := range strings.Split(s, "\n") {
+		if t := strings.TrimSpace(line); t != "" {
+			return t
+		}
+	}
+	return ""
+}
+
+func truncateDiagramLabel(s string, max int) string {
+	s = strings.TrimSpace(s)
+	if max <= 0 || s == "" {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	if max <= 3 {
+		return string(runes[:max])
+	}
+	return string(runes[:max-3]) + "..."
 }

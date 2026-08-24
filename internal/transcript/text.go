@@ -83,10 +83,10 @@ func runTranscriptCommand(argv []string, paneID string, info host.AgentSessionIn
 	return result.stdout, nil
 }
 
-// TranscriptText returns the text transcript for a pane's agent session,
+// Text returns the text transcript for a pane's agent session,
 // either through a configured extractor command or the built-in Claude
 // extractor.
-func TranscriptText(paneID string, transcripts map[string]config.TranscriptExtractor, opts Options) (string, error) {
+func Text(paneID string, transcripts map[string]config.TranscriptExtractor, opts Options) (string, error) {
 	getInfo := opts.GetInfo
 	if getInfo == nil {
 		getInfo = host.GetAgentSessionInfo

@@ -90,9 +90,9 @@ func BuildExamples(dir string) ([]ExampleCard, error) {
 		if err != nil {
 			return nil, err
 		}
-		bundle := make(workflow.WorkflowBundle, len(order))
+		bundle := make(workflow.Bundle, len(order))
 		for i, entry := range order {
-			bundle[i] = workflow.WorkflowBundleEntry{Name: entry, YAML: sources[entry].body}
+			bundle[i] = workflow.BundleEntry{Name: entry, YAML: sources[entry].body}
 		}
 		payload, err := workflow.EncodePayload(bundle)
 		if err != nil {

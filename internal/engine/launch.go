@@ -198,7 +198,7 @@ func selfArgv(executable, command string, args ...string) []string {
 func buildInvocationEnv(ctx config.InvocationContext, repoRoot string) map[string]string {
 	jsonObj := map[string]any{
 		"selected_text": ctx.Selection,
-		"cwd":           ctx.Cwd,
+		"workspace_cwd": ctx.Cwd,
 	}
 	if ctx.PaneID != "" {
 		jsonObj["focused_pane_id"] = ctx.PaneID
@@ -210,7 +210,7 @@ func buildInvocationEnv(ctx config.InvocationContext, repoRoot string) map[strin
 		jsonObj["workspace_id"] = ctx.WorkspaceID
 	}
 	if ctx.WorktreePath != "" {
-		jsonObj["worktree"] = map[string]any{"path": ctx.WorktreePath}
+		jsonObj["worktree"] = map[string]any{"checkout_path": ctx.WorktreePath}
 	}
 	raw, _ := json.Marshal(jsonObj)
 	env := map[string]string{
@@ -430,7 +430,7 @@ func LaunchDetachedRun(req LaunchRunRequest) DetachedRunHandle {
 	spawn := resolveSpawn(req.Spawn)
 	argv := selfArgv(req.Executable, "run", req.Name, "--launch-payload")
 	payload := buildLaunchPayload(req.Name, req.Inputs, req.Domains, req.RunID)
-	payloadBytes, _ := json.Marshal(payload)
+	payloadBytes, marshalErr := json.Marshal(payload)
 	env := mergeEnv(environMap(), req.Env, buildInvocationEnv(req.Ctx, req.RepoRoot))
 
 	resultCh := make(chan DetachedRunResult, 1)
@@ -458,6 +458,10 @@ func LaunchDetachedRun(req LaunchRunRequest) DetachedRunHandle {
 	}
 
 	handle := DetachedRunHandle{Result: resultCh, Detach: detach}
+	if marshalErr != nil {
+		settleOnce(DetachedRunResult{OK: false, Detail: marshalErr.Error()})
+		return handle
+	}
 
 	spawned, err := spawn(argv, SpawnOpts{
 		Env:    env,

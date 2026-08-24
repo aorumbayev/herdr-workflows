@@ -23,6 +23,9 @@ var requiredPickerParityScenarios = []string{
 	"More workflows than the viewport",
 	"Cursor moves beyond the viewport",
 	"Fewer matches than the viewport",
+	"Tall popup shows more rows",
+	"Pointer hit rows follow the viewport",
+	"Status row is reserved",
 	"Sensitive workflow",
 	"Unbounded flag list does not widen the row",
 	"Overlong title",
@@ -66,7 +69,24 @@ var requiredPickerParityScenarios = []string{
 	"No matches for filter",
 	"Workflow filter has text",
 	"Input collection",
+	"Cycle past runs",
 	"Return to workflows",
+	"Tab bar shows the active browser",
+	"Manifest uses percent size",
+	"Pop-out from the console tab",
+	"Confirmed pop-out quits the picker",
+	"Canceled pop-out keeps the workflow filter",
+	"Console tab follows the popup size and catalog",
+	"Hover differs from the cursor",
+	"Wheel has a keyboard twin",
+	"Pointer tab select obeys the keyboard guard",
+	"Pointer select on the active tab changes nothing",
+	"Reverse wins on the hovered cursor row",
+	"Pointer in the embedded diagram focuses a card",
+	"Invalid location uses warn",
+	"Sensitivity marker uses warn",
+	"Runs status uses indexed slots",
+	"Content keeps the terminal foreground",
 	"Child acknowledges start",
 	"Child cannot record history",
 	"Child fails before claim",
@@ -78,11 +98,23 @@ var requiredPickerParityScenarios = []string{
 	"Open palette",
 	"Printable k filters",
 	"Escape closes palette",
+	"Palette uses the shared chrome",
+	"Manifest uses the compact size",
+	"Console tab respawns the popup",
+	"Same-size switch stays in place",
+	"Restored picker does not respawn",
+	"Run detail expands the popup",
+	"Leave run detail respawns compact",
 	"New from empty catalog",
 	"Import from empty catalog",
 	"Browse examples",
-	"Open repo workflow",
+	"Open repo workflow in the popup",
+	"Open in a new tab",
 	"Open without selection",
+	"Empty catalog palette",
+	"Selected workflow palette",
+	"Open uses ExecProcess",
+	"Missing editor is a hard error",
 	"Share copies command",
 	"Share stays in picker",
 	"Confirmed delete",
@@ -230,12 +262,12 @@ func TestParityWidthChangeRecomputesTruncation(t *testing.T) {
 
 func TestParityModeChangeDiscardsLaterAnswers(t *testing.T) {
 	// openspec/specs/picker-presentation/spec.md "Mode change alters active inputs"
-	entry := workflow.WorkflowListEntry{Name: "gated", Source: "repo", File: "/r/gated.yaml"}
+	entry := workflow.ListEntry{Name: "gated", Source: "repo", File: "/r/gated.yaml"}
 	m := New(Options{
-		Entries: []workflow.WorkflowListEntry{entry},
+		Entries: []workflow.ListEntry{entry},
 		Width:   80,
 		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format,
 				Inputs: []workflow.InputSpec{
@@ -278,12 +310,12 @@ func whenEq(path, value string) []workflow.WhenSpec {
 
 func TestParityFailedRunEscapeReturnsToRunsRoot(t *testing.T) {
 	// openspec/specs/picker-presentation/spec.md "Failed run navigation"
-	entry := workflow.WorkflowListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml", Title: "Plain"}
+	entry := workflow.ListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml", Title: "Plain"}
 	var detached bool
 	m := New(Options{
-		Entries: []workflow.WorkflowListEntry{entry},
+		Entries: []workflow.ListEntry{entry},
 		Width:   80,
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
 				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
@@ -334,14 +366,14 @@ func TestParityFormatInputPromptReportsOrdinal(t *testing.T) {
 func TestParityInputTitleRowKeepsSensitivityFlags(t *testing.T) {
 	// Product Improvement: the title row keeps sensitivity names. The prompt line shows the ordinal.
 	// openspec/specs/picker-presentation/spec.md "Title row keeps named sensitivity flags"
-	entry := workflow.WorkflowListEntry{
+	entry := workflow.ListEntry{
 		Name: "branchy", Source: "repo", File: "/r/b.yaml", Title: "Branch check", HasCommands: true,
 	}
 	m := New(Options{
-		Entries: []workflow.WorkflowListEntry{entry},
+		Entries: []workflow.ListEntry{entry},
 		Width:   80,
 		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Branch check",
 				Inputs: []workflow.InputSpec{
@@ -368,12 +400,12 @@ func TestParityInputTitleRowKeepsSensitivityFlags(t *testing.T) {
 func TestParityChoiceRowsUseASCIICursor(t *testing.T) {
 	// Product Improvement: ASCII ">" cursor and a location column on choice rows. No box or arrow glyphs.
 	// openspec/specs/picker-presentation/spec.md "ASCII greater-than cursor on choice option rows"
-	entry := workflow.WorkflowListEntry{Name: "branchy", Source: "repo", File: "/r/b.yaml", Title: "Branch check"}
+	entry := workflow.ListEntry{Name: "branchy", Source: "repo", File: "/r/b.yaml", Title: "Branch check"}
 	m := New(Options{
-		Entries: []workflow.WorkflowListEntry{entry},
+		Entries: []workflow.ListEntry{entry},
 		Width:   80,
 		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format,
 				Inputs: []workflow.InputSpec{
@@ -413,12 +445,12 @@ func TestParityChoiceRowsUseASCIICursor(t *testing.T) {
 
 func TestParityCollectedAnswersVisibleDuringInput(t *testing.T) {
 	// openspec/specs/picker-presentation/spec.md collected answers scenarios
-	entry := workflow.WorkflowListEntry{Name: "gated", Source: "repo", File: "/r/gated.yaml"}
+	entry := workflow.ListEntry{Name: "gated", Source: "repo", File: "/r/gated.yaml"}
 	m := New(Options{
-		Entries: []workflow.WorkflowListEntry{entry},
+		Entries: []workflow.ListEntry{entry},
 		Width:   80,
 		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format,
 				Inputs: []workflow.InputSpec{
@@ -467,7 +499,7 @@ func TestParityEmptyCatalogFooterAndMessage(t *testing.T) {
 	if strings.Contains(body, tui.FilterWorkflows) {
 		t.Fatal("filter must be hidden")
 	}
-	if !strings.Contains(body, "tab runs") || !strings.Contains(body, "ctrl+k") || !strings.Contains(body, "esc") {
+	if !strings.Contains(body, "tab") || !strings.Contains(body, "ctrl+k") || !strings.Contains(body, "esc") {
 		t.Fatalf("empty footer:\n%s", body)
 	}
 	if strings.Contains(body, "enter run") {
@@ -507,13 +539,13 @@ func TestParityCursorMovesChangesDetailOnly(t *testing.T) {
 
 func TestParityConsentUsesWarnWithoutDim(t *testing.T) {
 	// openspec/specs/picker-presentation/spec.md "Warnings are not the least legible element"
-	entry := workflow.WorkflowListEntry{
+	entry := workflow.ListEntry{
 		Name: "deploy", Source: "global", File: "/g/deploy.yaml", Title: "Deploy", HasCommands: true,
 	}
 	m := New(Options{
-		Entries: []workflow.WorkflowListEntry{entry},
+		Entries: []workflow.ListEntry{entry},
 		Width:   80,
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format,
 				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
@@ -533,16 +565,16 @@ func TestParityConsentUsesWarnWithoutDim(t *testing.T) {
 
 func TestParityLaunchOpensStartingRunningLifecycle(t *testing.T) {
 	// openspec/specs/picker-presentation/spec.md "A launched workflow opens matching run detail"
-	entry := workflow.WorkflowListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml", Title: "Plain"}
+	entry := workflow.ListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml", Title: "Plain"}
 	var (
 		launched LaunchRunOpts
 		detached bool
 	)
 	m := New(Options{
-		Entries:  []workflow.WorkflowListEntry{entry},
+		Entries:  []workflow.ListEntry{entry},
 		Width:    80,
 		RepoRoot: t.TempDir(),
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
 				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
@@ -578,9 +610,9 @@ func TestParityLaunchOpensStartingRunningLifecycle(t *testing.T) {
 	}
 
 	m2 := New(Options{
-		Entries: []workflow.WorkflowListEntry{entry},
+		Entries: []workflow.ListEntry{entry},
 		Width:   80,
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
 				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
@@ -598,9 +630,9 @@ func TestParityLaunchOpensStartingRunningLifecycle(t *testing.T) {
 	}
 
 	m3 := New(Options{
-		Entries: []workflow.WorkflowListEntry{entry},
+		Entries: []workflow.ListEntry{entry},
 		Width:   80,
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
 				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
@@ -647,11 +679,11 @@ func TestParityLaunchOpensStartingRunningLifecycle(t *testing.T) {
 	w.Finalize("succeeded", history.FinalizeOpts{})
 
 	m4 := New(Options{
-		Entries:  []workflow.WorkflowListEntry{entry},
+		Entries:  []workflow.ListEntry{entry},
 		Width:    80,
 		RepoRoot: checkout,
 		Env:      getenv,
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
 				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
@@ -706,11 +738,11 @@ func TestParityLaunchOpensStartingRunningLifecycle(t *testing.T) {
 	fw.Finalize("failed", history.FinalizeOpts{})
 
 	mFail := New(Options{
-		Entries:  []workflow.WorkflowListEntry{entry},
+		Entries:  []workflow.ListEntry{entry},
 		Width:    80,
 		RepoRoot: checkout,
 		Env:      getenv,
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
 				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
@@ -740,9 +772,9 @@ func TestParityLaunchOpensStartingRunningLifecycle(t *testing.T) {
 
 	detached = false
 	m5 := New(Options{
-		Entries: []workflow.WorkflowListEntry{entry},
+		Entries: []workflow.ListEntry{entry},
 		Width:   80,
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
 				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
@@ -782,7 +814,7 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 	if err := os.WriteFile(deployPath, []byte("version: v1alpha1\nsteps:\n  - run: [echo, hi]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	entries := []workflow.WorkflowListEntry{
+	entries := []workflow.ListEntry{
 		{Name: "build", Source: "repo", File: root + "/build.yaml", Title: "Build"},
 		{Name: "deploy", Source: "repo", File: deployPath, Title: "Deploy"},
 	}
@@ -807,7 +839,7 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 			notified = append(notified, title+"|"+strings.Join(body, " "))
 			return nil
 		},
-		ExportShare: func(entry workflow.WorkflowListEntry) (string, error) {
+		ExportShare: func(entry workflow.ListEntry) (string, error) {
 			return `hwf workflow import "bundle-` + entry.Name + `"`, nil
 		},
 	})
@@ -862,7 +894,7 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 		RepoRoot:     root,
 		EditWorkflow: edit,
 	})
-	m = apply(m, "down", "ctrl+k", "o")
+	m = apply(m, "down", "ctrl+k", "o", "enter")
 	if m.quit || m.mode != modeList {
 		t.Fatalf("open must stay on list, quit=%v mode=%v", m.quit, m.mode)
 	}
@@ -881,7 +913,7 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 			notified = append(notified, strings.Join(append([]string{title}, body...), "|"))
 			return nil
 		},
-		ExportShare: func(entry workflow.WorkflowListEntry) (string, error) {
+		ExportShare: func(entry workflow.ListEntry) (string, error) {
 			return `hwf workflow import "bundle-` + entry.Name + `"`, nil
 		},
 	})
@@ -910,8 +942,8 @@ func TestParityCancelDeleteKeepsFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte("name: deploy\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	entry := workflow.WorkflowListEntry{Name: "deploy", Source: "repo", File: path, Title: "Deploy"}
-	m := New(Options{Entries: []workflow.WorkflowListEntry{entry}, Width: 80})
+	entry := workflow.ListEntry{Name: "deploy", Source: "repo", File: path, Title: "Deploy"}
+	m := New(Options{Entries: []workflow.ListEntry{entry}, Width: 80})
 	m = apply(m, "ctrl+k", "d", "n")
 	if m.mode != modeList {
 		t.Fatalf("mode = %v", m.mode)

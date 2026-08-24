@@ -92,7 +92,7 @@ func TestWorkflowImportRejectsInvalidTo(t *testing.T) {
 func TestWorkflowImportAcceptsToRepoWithYes(t *testing.T) {
 	root := t.TempDir()
 	yaml := "version: v1alpha1\nsteps:\n  - run: \"printf ok\"\n"
-	payload, err := workflow.EncodePayload(workflow.WorkflowBundle{{Name: "imported", YAML: yaml}})
+	payload, err := workflow.EncodePayload(workflow.Bundle{{Name: "imported", YAML: yaml}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -22,10 +22,18 @@ command = ["bin/herdr-workflows", "launch"]
 [[panes]]
 id = "picker"
 title = "Herdr Workflows"
+# Compact default: the workflows and runs tabs hug their content. The console
+# tab needs more, so it respawns the popup at its own size.
 placement = "popup"
 width = 64
 height = 15
 command = ["./bin/herdr-workflows", "picker"]
+
+[[panes]]
+id = "editor"
+title = "Edit workflow"
+placement = "split"
+command = ["./bin/herdr-workflows", "editor"]
 
 [[panes]]
 id = "console"

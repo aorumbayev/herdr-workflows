@@ -353,15 +353,15 @@ func ProfileNames(config Config) []string {
 	return slices.Sorted(maps.Keys(config.Profiles))
 }
 
-// ConfigPathsHint is the shared hint naming where configuration was sought.
-func ConfigPathsHint(globalPath, repoPath string) string {
+// PathsHint is the shared hint naming where configuration was sought.
+func PathsHint(globalPath, repoPath string) string {
 	return fmt.Sprintf("looked in %s and %s", globalPath, repoPath)
 }
 
 // NoProfilesConfiguredMessage points at init when no profile exists.
 func NoProfilesConfiguredMessage(globalPath, repoPath string) string {
 	return fmt.Sprintf("no profiles configured (%s); run `hwf init` or `hwf init --global`",
-		ConfigPathsHint(globalPath, repoPath))
+		PathsHint(globalPath, repoPath))
 }
 
 // ResolveProfile returns the merged profile for name, if any.

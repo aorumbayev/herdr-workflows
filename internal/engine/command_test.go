@@ -454,6 +454,18 @@ func TestArgvStepOptsExtended(t *testing.T) {
 	})
 }
 
+func TestRunContextEnv(t *testing.T) {
+	got := runContextEnv(StepRunOpts{RunID: "run-1", Name: "ship", RepoRoot: "/repo"})
+	want := map[string]string{
+		"HWF_RUN_ID":        "run-1",
+		"HWF_WORKFLOW":      "ship",
+		"HWF_CHECKOUT_ROOT": "/repo",
+	}
+	if !maps.Equal(got, want) {
+		t.Fatalf("runContextEnv = %v, want %v", got, want)
+	}
+}
+
 func TestBuildHwfEnv(t *testing.T) {
 	inputs := map[string]any{
 		"branch": "main",

@@ -4,8 +4,9 @@ const (
 	// ChromeSep joins chrome fragments.
 	ChromeSep = " | "
 
-	ListHint            = "tab runs" + ChromeSep + "enter run" + ChromeSep + "ctrl+k" + ChromeSep + "esc"
-	EmptyListHint       = "tab runs | ctrl+k | esc"
+	ListHint            = "tab" + ChromeSep + "enter run" + ChromeSep + "ctrl+k" + ChromeSep + "esc"
+	EmptyListHint       = "tab" + ChromeSep + "ctrl+k" + ChromeSep + "esc"
+	ConsoleHint         = "tab" + ChromeSep + "enter diagram" + ChromeSep + "p pop out" + ChromeSep + "esc"
 	PaletteHint         = "letter fires | esc back"
 	DeleteConfirmHint   = "y delete | n cancel | esc"
 	ChoiceHint          = "type filter" + ChromeSep + "up/down move" + ChromeSep + "enter select" + ChromeSep + "esc back"
@@ -26,6 +27,10 @@ const (
 var ChromeStrings = []string{
 	ListHint,
 	EmptyListHint,
+	ConsoleHint,
+	TabWorkflows,
+	TabRuns,
+	TabConsole,
 	PaletteHint,
 	DeleteConfirmHint,
 	ChoiceHint,

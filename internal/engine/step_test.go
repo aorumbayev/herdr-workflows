@@ -559,3 +559,51 @@ func findCall(calls []herdrCallRecord, method string) *herdrCallRecord {
 	}
 	return nil
 }
+
+func TestShellStepPlacedPaneCarriesRunContextEnv(t *testing.T) {
+	fake := &fakeHerdrCall{}
+	frame := StepFrame{
+		Step: workflow.Step{
+			ID: "boot",
+			Action: &workflow.RunAction{
+				Payload:    workflow.RunPayload{Argv: []string{"sh", "-c", "echo hi"}},
+				Pane:       &workflow.PaneSpec{Open: "beside", Anchor: "w1:pM"},
+				Background: true,
+			},
+		},
+		Values: workflow.TemplateNamespace{Inputs: map[string]any{}},
+		Opts: StepRunOpts{
+			RunID:    "5da1aa28-f1c3-410f-9cfc-e6ecd75c356e",
+			Name:     "ship",
+			RepoRoot: "/repo/a",
+			Ctx: config.InvocationContext{
+				PaneID: "w1:p1", TabID: "w1:t1", WorkspaceID: "w1", Cwd: t.TempDir(),
+			},
+			Deps: RunnerDeps{HerdrCall: fake.call},
+		},
+	}
+	if _, err := ShellStep(frame); err != nil {
+		t.Fatalf("ShellStep returned error: %v", err)
+	}
+	want := map[string]string{
+		"HWF_RUN_ID":        "5da1aa28-f1c3-410f-9cfc-e6ecd75c356e",
+		"HWF_WORKFLOW":      "ship",
+		"HWF_CHECKOUT_ROOT": "/repo/a",
+	}
+	found := false
+	for _, call := range fake.calls {
+		env, ok := call.params["env"].(map[string]string)
+		if !ok {
+			continue
+		}
+		found = true
+		for key, value := range want {
+			if env[key] != value {
+				t.Fatalf("%s env[%s] = %q, want %q", call.method, key, env[key], value)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("no placement call carried an env map: %+v", fake.calls)
+	}
+}

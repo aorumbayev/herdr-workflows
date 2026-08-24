@@ -11,7 +11,7 @@ import (
 
 // ScreenOpts configures the console TUI entrypoint.
 type ScreenOpts struct {
-	Entries  []workflow.WorkflowListEntry
+	Entries  []workflow.ListEntry
 	RepoRoot string
 	Config   config.Config
 	Env      config.Env

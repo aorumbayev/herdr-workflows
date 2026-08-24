@@ -13,7 +13,7 @@ import (
 
 func TestTabSwitchesBetweenWorkflowAndRunsBrowsers(t *testing.T) {
 	m := New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: t.TempDir()})
-	if got := tui.StripContentPadding(strings.Split(m.View().Content, "\n")[0]); got != tui.FilterWorkflows {
+	if got := tui.StripContentPadding(strings.Split(m.View().Content, "\n")[1]); got != tui.FilterWorkflows {
 		t.Fatalf("workflows filter = %q", got)
 	}
 	m = apply(m, "tab")
@@ -25,10 +25,14 @@ func TestTabSwitchesBetweenWorkflowAndRunsBrowsers(t *testing.T) {
 		t.Fatalf("runs filter missing:\n%s", body)
 	}
 	m = apply(m, "tab")
+	if m.mode != modeConsole {
+		t.Fatalf("mode after second tab = %v", m.mode)
+	}
+	m = apply(m, "tab")
 	if m.mode != modeList {
 		t.Fatalf("mode after return = %v", m.mode)
 	}
-	if got := tui.StripContentPadding(strings.Split(m.View().Content, "\n")[0]); got != tui.FilterWorkflows {
+	if got := tui.StripContentPadding(strings.Split(m.View().Content, "\n")[1]); got != tui.FilterWorkflows {
 		t.Fatalf("workflows filter not restored = %q", got)
 	}
 }
@@ -59,13 +63,13 @@ func TestTabLoadsCurrentCheckoutRuns(t *testing.T) {
 }
 
 func TestTabDoesNotSwitchDuringInputCollection(t *testing.T) {
-	entry := workflow.WorkflowListEntry{Name: "place", Source: "global", File: "/global/place.yaml"}
+	entry := workflow.ListEntry{Name: "place", Source: "global", File: "/global/place.yaml"}
 	m := New(Options{
-		Entries:  []workflow.WorkflowListEntry{entry},
+		Entries:  []workflow.ListEntry{entry},
 		Width:    80,
 		RepoRoot: t.TempDir(),
 		Config:   config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
-		LoadWorkflow: func(e workflow.WorkflowListEntry) (*workflow.Definition, error) {
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format,
 				Inputs: []workflow.InputSpec{

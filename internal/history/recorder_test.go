@@ -100,3 +100,25 @@ func TestRecorderFailureBeforeStepAndIdempotentFinish(t *testing.T) {
 		t.Fatalf("blocks %+v", presented.Blocks)
 	}
 }
+
+func TestFailureFactReadsVerdictAndStream(t *testing.T) {
+	step := workflow.Step{ID: "brief", Action: workflow.AgentAction{}}
+	fact := failureFact(step, &engine.RecorderOutcome{
+		Details: map[string]any{"verdict": "REJECT", "stream": "response"},
+	})
+	if fact.Verdict != "REJECT" || fact.Stream != "response" || fact.StepID != "brief" {
+		t.Fatalf("%+v", fact)
+	}
+	run := failureFact(workflow.Step{Action: workflow.RunAction{}}, &engine.RecorderOutcome{
+		Details: map[string]any{"exit_code": 2, "stderr": "boom", "stdout": ""},
+	})
+	if run.Stream != "stderr" || run.ExitCode == nil || *run.ExitCode != 2 {
+		t.Fatalf("%+v", run)
+	}
+	silent := failureFact(workflow.Step{Action: workflow.RunAction{}}, &engine.RecorderOutcome{
+		Details: map[string]any{"exit_code": 1, "stdout": "", "stderr": ""},
+	})
+	if silent.Stream != "" {
+		t.Fatalf("empty capture names no stream: %+v", silent)
+	}
+}

@@ -10,9 +10,9 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/host"
 )
 
-func TestTranscriptTextConfiguredCommand(t *testing.T) {
+func TestTextConfiguredCommand(t *testing.T) {
 	cwd := t.TempDir()
-	out, err := TranscriptText("pane-1", map[string]config.TranscriptExtractor{
+	out, err := Text("pane-1", map[string]config.TranscriptExtractor{
 		"claude": {Command: []string{"sh", "-c", `printf 'pane=%s kind=%s cwd=%s sk=%s sv=%s' "$HWF_TRANSCRIPT_PANE_ID" "$HWF_TRANSCRIPT_AGENT_KIND" "$HWF_TRANSCRIPT_CWD" "$HWF_TRANSCRIPT_SESSION_KIND" "$HWF_TRANSCRIPT_SESSION_VALUE"`}},
 	}, Options{
 		InvocationCwd: "/fallback",
@@ -29,9 +29,9 @@ func TestTranscriptTextConfiguredCommand(t *testing.T) {
 	}
 }
 
-func TestTranscriptTextCwdFallback(t *testing.T) {
+func TestTextCwdFallback(t *testing.T) {
 	invocationCwd := t.TempDir()
-	out, err := TranscriptText("pane-2", map[string]config.TranscriptExtractor{
+	out, err := Text("pane-2", map[string]config.TranscriptExtractor{
 		"codex": {Command: []string{"sh", "-c", `printf '%s' "$HWF_TRANSCRIPT_CWD"`}},
 	}, Options{
 		InvocationCwd: invocationCwd,
@@ -47,8 +47,8 @@ func TestTranscriptTextCwdFallback(t *testing.T) {
 	}
 }
 
-func TestTranscriptTextNonzeroExit(t *testing.T) {
-	_, err := TranscriptText("p", map[string]config.TranscriptExtractor{
+func TestTextNonzeroExit(t *testing.T) {
+	_, err := Text("p", map[string]config.TranscriptExtractor{
 		"codex": {Command: []string{"sh", "-c", "echo boom >&2; exit 2"}},
 	}, Options{
 		InvocationCwd: t.TempDir(),
@@ -61,8 +61,8 @@ func TestTranscriptTextNonzeroExit(t *testing.T) {
 	}
 }
 
-func TestTranscriptTextEmptyStdout(t *testing.T) {
-	_, err := TranscriptText("p", map[string]config.TranscriptExtractor{
+func TestTextEmptyStdout(t *testing.T) {
+	_, err := Text("p", map[string]config.TranscriptExtractor{
 		"codex": {Command: []string{"sh", "-c", "true"}},
 	}, Options{
 		InvocationCwd: t.TempDir(),
@@ -75,7 +75,7 @@ func TestTranscriptTextEmptyStdout(t *testing.T) {
 	}
 }
 
-func TestTranscriptTextBuiltinClaude(t *testing.T) {
+func TestTextBuiltinClaude(t *testing.T) {
 	base := t.TempDir()
 	cwd := "/Users/x/y"
 	sessionID := "abc123"
@@ -84,7 +84,7 @@ func TestTranscriptTextBuiltinClaude(t *testing.T) {
 		j(map[string]any{"type": "assistant", "message": map[string]any{"content": []any{map[string]any{"type": "tool_use"}}}}),
 		j(map[string]any{"type": "user", "message": map[string]any{"content": "builtin"}}),
 	}, "\n"))
-	out, err := TranscriptText("p", map[string]config.TranscriptExtractor{}, Options{
+	out, err := Text("p", map[string]config.TranscriptExtractor{}, Options{
 		InvocationCwd: cwd,
 		ProjectsBase:  base,
 		GetInfo: func(string) (host.AgentSessionInfo, error) {
@@ -99,8 +99,8 @@ func TestTranscriptTextBuiltinClaude(t *testing.T) {
 	}
 }
 
-func TestTranscriptTextUnsupportedKind(t *testing.T) {
-	_, err := TranscriptText("p", map[string]config.TranscriptExtractor{}, Options{
+func TestTextUnsupportedKind(t *testing.T) {
+	_, err := Text("p", map[string]config.TranscriptExtractor{}, Options{
 		InvocationCwd: t.TempDir(),
 		GetInfo: func(string) (host.AgentSessionInfo, error) {
 			return host.AgentSessionInfo{Agent: "codex", SessionID: "s"}, nil
@@ -111,8 +111,8 @@ func TestTranscriptTextUnsupportedKind(t *testing.T) {
 	}
 }
 
-func TestTranscriptTextCaptureCap(t *testing.T) {
-	_, err := TranscriptText("p", map[string]config.TranscriptExtractor{
+func TestTextCaptureCap(t *testing.T) {
+	_, err := Text("p", map[string]config.TranscriptExtractor{
 		"claude": {Command: []string{"sh", "-c", fmt.Sprintf("head -c %d /dev/zero", caps.CaptureByteLimit+1)}},
 	}, Options{
 		InvocationCwd: t.TempDir(),

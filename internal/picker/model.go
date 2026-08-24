@@ -28,37 +28,45 @@ const (
 	modeNewName
 	modeFail
 	modeRuns
+	modeConsole
 	modeConsolePlace
+	modeEditPlace
+	modeRunsAgentPick
 )
 
 // Options construct a picker model.
 type Options struct {
-	Entries       []workflow.WorkflowListEntry
-	RepoRoot      string
-	Config        config.Config
-	Width         int
-	Height        int
-	Env           config.Env
-	Chdir         func(string) error
-	LoadWorkflow  func(workflow.WorkflowListEntry) (*workflow.Definition, error)
-	CopyClipboard func(string) error
-	EditWorkflow  func(path, name string) workflow.ValidateResult
-	OpenURL       func(url string) error
-	Notify        func(title string, body ...string) error
-	LaunchRun     func(LaunchRunOpts) LaunchRunHandle
-	AllocateRunID func() string
-	ExportShare   func(entry workflow.WorkflowListEntry) (command string, err error)
-	OpenConsole   func(placement console.Placement) error
+	Entries        []workflow.ListEntry
+	RepoRoot       string
+	Config         config.Config
+	Width          int
+	Height         int
+	Env            config.Env
+	Chdir          func(string) error
+	LoadWorkflow   func(workflow.ListEntry) (*workflow.Definition, error)
+	CopyClipboard  func(string) error
+	EditWorkflow   func(path, name string) workflow.ValidateResult
+	OpenURL        func(url string) error
+	Notify         func(title string, body ...string) error
+	LaunchRun      func(LaunchRunOpts) LaunchRunHandle
+	AllocateRunID  func() string
+	ExportShare    func(entry workflow.ListEntry) (command string, err error)
+	OpenConsole    func(placement console.Placement) error
+	OpenEditor     func(path, name, placement string) error
+	ReopenPopup    func(state PopupState) error
+	Restore        *PopupState
+	ListAgentPanes func() ([]console.AgentPaneEntry, error)
+	PaneSendText   func(paneID, text string) error
 }
 
 // Model is the picker Bubble Tea model.
 type Model struct {
-	entries              []workflow.WorkflowListEntry
+	entries              []workflow.ListEntry
 	repoRoot             string
 	config               config.Config
 	width                int
 	height               int
-	load                 func(workflow.WorkflowListEntry) (*workflow.Definition, error)
+	load                 func(workflow.ListEntry) (*workflow.Definition, error)
 	copyText             func(string) error
 	env                  config.Env
 	editWorkflow         func(path, name string) workflow.ValidateResult
@@ -66,7 +74,7 @@ type Model struct {
 	notify               func(title string, body ...string) error
 	launchRun            func(LaunchRunOpts) LaunchRunHandle
 	allocateRunID        func() string
-	exportShare          func(entry workflow.WorkflowListEntry) (command string, err error)
+	exportShare          func(entry workflow.ListEntry) (command string, err error)
 	mode                 mode
 	filter               string
 	cursor               int
@@ -93,8 +101,30 @@ type Model struct {
 	launchProgress       <-chan string
 	pendingDef           *workflow.Definition
 	openConsole          func(console.Placement) error
+	openEditor           func(path, name, placement string) error
 	lastConsolePlacement console.Placement
 	consolePlaceCursor   int
+	editTarget           *workflow.ListEntry
+	editPlaceCursor      int
+	console              console.Model
+	consoleReady         bool
+	entriesRev           int
+	consoleEntriesRev    int
+	placeBack            mode
+	hoverRow             int
+	reopenPopup          func(PopupState) error
+	popupWidth           string
+	popupHeight          string
+	restoreTab           string
+	restoreEdit          *PopupState
+	restoreRunID         string
+	restoreDetail        bool
+	listAgentPanes       func() ([]console.AgentPaneEntry, error)
+	paneSendText         func(paneID, text string) error
+	agentPanes           []console.AgentPaneEntry
+	agentCursor          int
+	pendingSendText      string
+	editRespawn          bool
 }
 
 type currentResolvedMsg struct {
@@ -130,26 +160,71 @@ func New(opts Options) Model {
 	if width <= 0 {
 		width = 80
 	}
-	return Model{
-		entries:       opts.Entries,
-		repoRoot:      opts.RepoRoot,
-		config:        opts.Config,
-		width:         width,
-		height:        opts.Height,
-		load:          opts.LoadWorkflow,
-		copyText:      opts.CopyClipboard,
-		env:           opts.Env,
-		editWorkflow:  opts.EditWorkflow,
-		openURL:       opts.OpenURL,
-		notify:        opts.Notify,
-		launchRun:     opts.LaunchRun,
-		allocateRunID: opts.AllocateRunID,
-		exportShare:   opts.ExportShare,
-		openConsole:   opts.OpenConsole,
+	popupW, popupH := PopupGeometry(tui.TabWorkflows)
+	m := Model{
+		entries:        opts.Entries,
+		repoRoot:       opts.RepoRoot,
+		config:         opts.Config,
+		width:          width,
+		height:         opts.Height,
+		load:           opts.LoadWorkflow,
+		copyText:       opts.CopyClipboard,
+		env:            opts.Env,
+		editWorkflow:   opts.EditWorkflow,
+		openURL:        opts.OpenURL,
+		notify:         opts.Notify,
+		launchRun:      opts.LaunchRun,
+		allocateRunID:  opts.AllocateRunID,
+		exportShare:    opts.ExportShare,
+		openConsole:    opts.OpenConsole,
+		openEditor:     opts.OpenEditor,
+		reopenPopup:    opts.ReopenPopup,
+		popupWidth:     popupW,
+		popupHeight:    popupH,
+		hoverRow:       -1,
+		listAgentPanes: opts.ListAgentPanes,
+		paneSendText:   opts.PaneSendText,
+	}
+	m.restore(opts.Restore)
+	return m
+}
+
+// restore reseats a respawned picker on the tab, filter, and row it left.
+func (m *Model) restore(state *PopupState) {
+	if state == nil {
+		return
+	}
+	m.popupWidth, m.popupHeight = state.Width, state.Height
+	m.filter = state.Filter
+	m.cursor = state.Cursor
+	m.offset = state.Offset
+	m.clampCursor()
+	m.restoreTab = state.Tab
+	m.restoreRunID = state.RunID
+	m.restoreDetail = state.Detail
+	if state.EditFile != "" {
+		m.restoreEdit = state
 	}
 }
 
-func (m Model) Init() tea.Cmd { return nil }
+// restoreTabMsg reseats a respawned picker on its tab through the normal mount
+// path, so the tab's own commands still run.
+type restoreTabMsg struct{ tab string }
+
+// restoreEditMsg starts the editor the respawn was opened for, after the popup
+// has a renderer to hand to tea.ExecProcess.
+type restoreEditMsg struct{}
+
+func (m Model) Init() tea.Cmd {
+	if m.restoreEdit != nil {
+		return func() tea.Msg { return restoreEditMsg{} }
+	}
+	if m.restoreTab == "" || m.restoreTab == tui.TabWorkflows {
+		return nil
+	}
+	tab := m.restoreTab
+	return func() tea.Msg { return restoreTabMsg{tab: tab} }
+}
 
 func (m Model) contentWidth() int {
 	return tui.ContentWidth(m.width)
@@ -160,7 +235,7 @@ func (m Model) matched() []ChromeOption {
 	return append(BuildPickerOptions(split.Valid, m.contentWidth()), BuildInvalidOptions(split.Invalid, m.contentWidth())...)
 }
 
-func (m Model) selectedEntry() *workflow.WorkflowListEntry {
+func (m Model) selectedEntry() *workflow.ListEntry {
 	opts := m.matched()
 	if len(opts) == 0 || m.cursor < 0 || m.cursor >= len(opts) {
 		return nil
@@ -170,7 +245,16 @@ func (m Model) selectedEntry() *workflow.WorkflowListEntry {
 }
 
 func (m *Model) clampCursor() {
-	m.cursor, m.offset = tui.ClampListWindow(m.cursor, m.offset, len(m.matched()), ListViewport)
+	m.cursor, m.offset = tui.ClampListWindow(m.cursor, m.offset, len(m.matched()), m.listViewport())
+}
+
+// listChrome is the tab bar, filter, two blanks, detail rows, the reserved
+// status row, the rule, and the footer.
+const listChrome = 9
+
+// listViewport fills the popup with workflow rows above the six-row floor.
+func (m Model) listViewport() int {
+	return tui.FitViewport(m.height, listChrome, ListViewport)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -178,10 +262,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		sized := msg
+		sized.Height = m.tabBodyHeight()
 		if m.mode == modeRuns {
-			return m.forwardRuns(msg)
+			return m.forwardRuns(sized)
+		}
+		if m.mode == modeConsole && m.consoleReady {
+			return m.forwardConsole(sized)
 		}
 		return m, nil
+	case restoreTabMsg:
+		return m.mountTab(msg.tab)
+	case restoreEditMsg:
+		return m.startRestoredEdit()
 	case currentResolvedMsg:
 		return m.applyCurrent(msg)
 	case editorDoneMsg:
@@ -206,9 +299,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
+	case tea.MouseClickMsg, tea.MouseWheelMsg, tea.MouseMotionMsg:
+		return m.handleMouse(msg)
 	default:
 		if m.mode == modeRuns {
 			return m.forwardRuns(msg)
+		}
+		if m.mode == modeConsole && m.consoleReady {
+			return m.forwardConsole(msg)
 		}
 	}
 	return m, nil
@@ -224,6 +322,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch m.mode {
 	case modeRuns:
 		return m.handleRunsKey(msg)
+	case modeConsole:
+		return m.handleConsoleKey(msg)
 	case modePalette:
 		return m.handlePalette(msg)
 	case modeDelete:
@@ -236,6 +336,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleInput(msg)
 	case modeConsolePlace:
 		return m.handleConsolePlace(msg)
+	case modeEditPlace:
+		return m.handleEditPlace(msg)
+	case modeRunsAgentPick:
+		return m.handleRunsAgentPick(msg)
 	case modeFail:
 		if key == "enter" || key == "esc" {
 			m.mode = modeList
@@ -260,18 +364,7 @@ func (m Model) handleList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.savedFilter = m.filter
 		m.mode = modePalette
 	case "tab":
-		getenv := m.env
-		if getenv == nil {
-			getenv = os.Getenv
-		}
-		m.runs = runsbrowser.New(runsbrowser.Options{
-			RepoRoot: m.repoRoot,
-			Width:    m.width,
-			Height:   m.height,
-			Env:      getenv,
-		})
-		m.mode = modeRuns
-		return m, m.runs.Init()
+		return m.cycleRootTab()
 	case "esc":
 		m.quit = true
 		return m, tea.Quit
@@ -291,10 +384,49 @@ func (m Model) handleList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleRunsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == "esc" && !m.runs.IsList() {
+	key := msg.String()
+	if key == "tab" && m.runs.IsList() {
+		return m.cycleRootTab()
+	}
+	if key == "enter" && m.runs.IsList() {
+		if id := m.runs.SelectedID(); id != "" && m.reopenPopup != nil && m.needsRespawn(tui.TabConsole) {
+			return m.respawn(m.popupStateForRunsDetail(id))
+		}
+	}
+	if key == "esc" && !m.runs.IsList() {
 		m.detachLaunch()
+		if m.reopenPopup != nil && m.needsRespawn(tui.TabRuns) {
+			return m.respawnInto(tui.TabRuns)
+		}
+	}
+	if key == "s" && !m.runs.IsList() {
+		return m.beginRunsSendback()
 	}
 	return m.forwardRuns(msg)
+}
+
+// handleConsoleKey keeps tab and esc owned by the picker while the embedded
+// console is not composing, so neither key dies inside a browse screen.
+func (m Model) handleConsoleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.console.BlocksPopOut() {
+		return m.forwardConsole(msg)
+	}
+	switch msg.String() {
+	case "tab":
+		return m.cycleRootTab()
+	case "esc":
+		m.mode = modeList
+		return m, nil
+	case "p":
+		return m.beginConsolePlacement()
+	}
+	return m.forwardConsole(msg)
+}
+
+func (m Model) forwardConsole(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.console.Update(msg)
+	m.console = next.(console.Model)
+	return m, cmd
 }
 
 func (m Model) forwardRuns(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -350,7 +482,7 @@ func (m Model) applyPaletteAction(action *PaletteAction) (tea.Model, tea.Cmd) {
 		m.status = `import with: hwf workflow import "..."`
 		return m, nil
 	case "open":
-		return m.applyEditAction(action.Entry)
+		return m.beginEditPlacement(action.Entry)
 	case "examples":
 		if m.openURL != nil {
 			_ = m.openURL(config.ExamplesURL)
@@ -367,15 +499,6 @@ func (m Model) applyPaletteAction(action *PaletteAction) (tea.Model, tea.Cmd) {
 		m.filter = m.savedFilter
 		return m, nil
 	}
-}
-
-func (m Model) applyEditAction(entry *workflow.WorkflowListEntry) (tea.Model, tea.Cmd) {
-	m.mode = modeList
-	m.filter = m.savedFilter
-	if entry == nil {
-		return m, nil
-	}
-	return m, m.beginEdit(entry.File, entry.Name)
 }
 
 func (m Model) beginEdit(path, name string) tea.Cmd {
@@ -403,11 +526,26 @@ func (m Model) beginEdit(path, name string) tea.Cmd {
 	})
 }
 
+// startRestoredEdit runs the edit this larger popup was opened for.
+func (m Model) startRestoredEdit() (tea.Model, tea.Cmd) {
+	state := m.restoreEdit
+	m.restoreEdit = nil
+	m.editRespawn = true
+	return m, m.beginEdit(state.EditFile, state.EditName)
+}
+
 func (m Model) applyEditorDone(msg editorDoneMsg) (tea.Model, tea.Cmd) {
 	if msg.result.OK {
 		m.status = "validated " + msg.name
 	} else {
 		m.status = "validate failed" + tui.ChromeSep + msg.result.Error
+	}
+	if m.editRespawn {
+		m.editRespawn = false
+		if m.notify != nil {
+			_ = m.notify("herdr-workflows", m.status)
+		}
+		return m.respawnInto(tui.TabWorkflows)
 	}
 	return m, nil
 }
@@ -426,8 +564,9 @@ func (m Model) handleNewName(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeList
 			return m, nil
 		}
-		entry := workflow.WorkflowListEntry{Name: name, Source: "repo", File: path}
+		entry := workflow.ListEntry{Name: name, Source: "repo", File: path}
 		m.entries = append(m.entries, entry)
+		m.entriesRev++
 		m.mode = modeList
 		m.promptValue = ""
 		return m, m.beginEdit(path, name)
@@ -449,7 +588,7 @@ func (m Model) handleNewName(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) applyShareAction(entry *workflow.WorkflowListEntry) (tea.Model, tea.Cmd) {
+func (m Model) applyShareAction(entry *workflow.ListEntry) (tea.Model, tea.Cmd) {
 	m.mode = modeList
 	m.filter = m.savedFilter
 	if entry == nil {
@@ -505,6 +644,7 @@ func (m Model) handleDelete(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.entries = dropListEntry(m.entries, *entry)
+		m.entriesRev++
 		m.clampCursor()
 	case "n", "esc":
 		m.delete = DeleteState{}
@@ -513,8 +653,8 @@ func (m Model) handleDelete(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func dropListEntry(entries []workflow.WorkflowListEntry, gone workflow.WorkflowListEntry) []workflow.WorkflowListEntry {
-	out := make([]workflow.WorkflowListEntry, 0, len(entries))
+func dropListEntry(entries []workflow.ListEntry, gone workflow.ListEntry) []workflow.ListEntry {
+	out := make([]workflow.ListEntry, 0, len(entries))
 	for _, entry := range entries {
 		if entry.File == gone.File && entry.Name == gone.Name && entry.Source == gone.Source {
 			continue

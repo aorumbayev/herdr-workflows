@@ -10,7 +10,9 @@ import (
 )
 
 func (m Model) View() tea.View {
-	return tea.NewView(tui.PadHeight(tui.PadContent(m.render(), m.contentWidth()), m.height))
+	v := tea.NewView(tui.PadHeight(tui.PadContent(m.render(), m.contentWidth()), m.height))
+	v.MouseMode = tea.MouseModeAllMotion
+	return v
 }
 
 func (m Model) render() string {
@@ -50,7 +52,11 @@ func (m Model) renderWorkflows() string {
 	if len(m.entries) > 0 && m.wfCursor < len(m.entries) {
 		detail = tui.FormatDetailBlock(m.entries[m.wfCursor].Description, w)
 	}
-	footer := tui.FormatListFooter(w, m.wfCursor, len(m.entries), workflowsFooter())
+	footer := tui.FormatListFooter(w, m.wfCursor, len(m.entries), workflowsFooter(m.embedded))
+	if m.embedded {
+		footer = tui.MuteChrome(footer)
+		return strings.Join(rows, "\n") + "\n\n" + detail + "\n" + tui.FormatRule(w) + "\n" + footer
+	}
 	head := tui.Truncate("workflows", w)
 	return head + "\n\n" + strings.Join(rows, "\n") + "\n\n" + detail + "\n" + tui.FormatRule(w) + "\n" + footer
 }
@@ -58,6 +64,8 @@ func (m Model) renderWorkflows() string {
 func (m Model) renderDiagram() string {
 	w := m.contentWidth()
 	switch m.diagramMode {
+	case diagramModeInsertSide:
+		return m.renderDiagramInsertSide(w)
 	case diagramModeInstruction:
 		return m.renderDiagramInstruction(w)
 	case diagramModeAgentPick:
@@ -69,29 +77,86 @@ func (m Model) renderDiagram() string {
 
 func (m Model) renderDiagramBody(w int) string {
 	vp := m.scrollViewport()
-	lines := m.diagramScrollLines(w)
-	visible, _ := runsbrowser.ScrollDetailLines(lines, m.diagramScroll, vp)
-	for len(visible) < vp {
-		visible = append(visible, "")
+	body, _ := renderRailYAML(m.diagram, m.diagramYAML, m.diagramMarks(), w, vp, m.diagramScroll)
+	lines := strings.Split(body, "\n")
+	for len(lines) < vp {
+		lines = append(lines, "")
 	}
 	status := m.status
 	if status == "" {
-		status = diagramFooter(m.diagramMode)
+		status = diagramFooter()
 	}
 	footer := tui.FormatListFooter(w, 0, 0, status)
 	head := tui.Truncate("diagram"+tui.ChromeSep+m.diagramTitle, w)
-	return head + "\n" + strings.Join(visible, "\n") + "\n" + tui.FormatRule(w) + "\n" + footer
+	return head + "\n" + strings.Join(lines, "\n") + "\n" + tui.FormatRule(w) + "\n" + footer
+}
+
+func (m Model) renderDiagramInsertSide(w int) string {
+	theme := tui.DefaultTheme()
+	card := m.focusedTitle()
+	lines := []string{tui.Truncate("Insert a new step where?", w)}
+	for _, side := range []insertSide{insertBefore, insertAfter} {
+		row := tui.FormatRow(string(side)+" "+card, "", false, w, side == m.insertAt)
+		if side != m.insertAt {
+			row = theme.Muted.Render(row)
+		}
+		lines = append(lines, row)
+	}
+	vp := m.scrollViewport()
+	for len(lines) < vp {
+		lines = append(lines, "")
+	}
+	status := m.status
+	if status == "" {
+		status = insertSideFooter()
+	}
+	head := tui.Truncate("diagram"+tui.ChromeSep+m.diagramTitle, w)
+	return head + "\n" + strings.Join(lines[:vp], "\n") + "\n" + tui.FormatRule(w) + "\n" + tui.FormatListFooter(w, 0, 0, status)
 }
 
 func (m Model) renderDiagramInstruction(w int) string {
-	body := "send-back instruction\n> " + m.instructionDraft
+	bundle := m.annotationBundle(m.selectedDiagramIDs())
+	lines := []string{
+		tui.Truncate("Tell the agent pane what to change. It edits the workflow file.", w),
+		tui.MuteChrome(tui.Truncate(composerScope(bundle), w)),
+		"",
+	}
+	lines = append(lines, wrapDraft(tui.CursorPrefix+m.instructionDraft+"_", w)...)
+	vp := m.scrollViewport()
+	if len(lines) > vp {
+		lines = lines[len(lines)-vp:]
+	}
+	for len(lines) < vp {
+		lines = append(lines, "")
+	}
 	status := m.status
 	if status == "" {
 		status = "enter send" + tui.ChromeSep + "esc back"
 	}
 	footer := tui.FormatListFooter(w, 0, 0, status)
 	head := tui.Truncate("diagram"+tui.ChromeSep+m.diagramTitle, w)
-	return head + "\n" + tui.Truncate(body, w) + "\n" + tui.FormatRule(w) + "\n" + footer
+	return head + "\n" + strings.Join(lines, "\n") + "\n" + tui.FormatRule(w) + "\n" + footer
+}
+
+// wrapDraft breaks typed text on the content width. Truncating it would hide
+// what the user is typing once the draft passes one row.
+func wrapDraft(s string, width int) []string {
+	if width <= 0 {
+		return []string{s}
+	}
+	var out []string
+	var line []rune
+	used := 0
+	for _, r := range s {
+		rw := tui.Columns(string(r))
+		if used+rw > width {
+			out = append(out, string(line))
+			line, used = nil, 0
+		}
+		line = append(line, r)
+		used += rw
+	}
+	return append(out, string(line))
 }
 
 func (m Model) renderDiagramAgentPick(w int) string {
@@ -155,7 +220,10 @@ func (m Model) renderDetail() string {
 	return chrome + "\n" + strings.Join(visible, "\n") + "\n" + tui.FormatRule(w) + "\n" + footer
 }
 
-func workflowsFooter() string {
+func workflowsFooter(embedded bool) string {
+	if embedded {
+		return tui.ConsoleHint
+	}
 	return strings.Join([]string{"enter diagram", "tab runs", "esc quit"}, tui.ChromeSep)
 }
 
@@ -173,15 +241,10 @@ func (m Model) detailScrollLines() []string {
 	return asciiLines(body, w)
 }
 
-func (m Model) diagramScrollLines(w int) []string {
-	return asciiLines(FormatDiagramWithMarks(m.diagram, m.diagramMarks(), w), w)
+func diagramFooter() string {
+	return strings.Join([]string{"a insert", "d delete", "v toggle", "s send-back", "pgup/pgdn yaml", "esc back"}, tui.ChromeSep)
 }
 
-func diagramFooter(mode diagramMode) string {
-	switch mode {
-	case diagramModeSelect:
-		return strings.Join([]string{"v toggle", "s send-back", "esc back"}, tui.ChromeSep)
-	default:
-		return strings.Join([]string{"v select", "s send-back", "esc back"}, tui.ChromeSep)
-	}
+func insertSideFooter() string {
+	return strings.Join([]string{"up/down pick", "b before", "a after", "enter confirm", "esc back"}, tui.ChromeSep)
 }

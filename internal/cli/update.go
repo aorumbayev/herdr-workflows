@@ -54,7 +54,7 @@ func resolvePluginSource(getenv func(string) string) (update.PluginSourceInfo, e
 	}
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) {
-		return update.PluginSourceInfo{}, fmt.Errorf("herdr plugin list failed: %s", err.Error())
+		return update.PluginSourceInfo{}, fmt.Errorf("herdr plugin list failed: %w", err)
 	}
 	combined := stderrBuf.String() + string(out)
 	if pluginListMissingRE.MatchString(combined) {
@@ -162,7 +162,7 @@ func executeUpdate(deps updateDeps, stdout, stderr io.Writer) error {
 		}
 		return origStandalone(opts)
 	}
-	result, err := update.UpdatePlugin(update.Deps{
+	result, err := update.Plugin(update.Deps{
 		FetchLatest:    deps.FetchLatest,
 		RunInstall:     deps.RunInstall,
 		ListSource:     deps.ListSource,
