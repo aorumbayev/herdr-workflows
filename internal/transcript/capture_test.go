@@ -1,9 +1,12 @@
 package transcript
 
 import (
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aorumbayev/herdr-workflows/internal/caps"
 )
@@ -43,5 +46,21 @@ func TestCaptureCommandTimeout(t *testing.T) {
 	}
 	if !res.timedOut || res.exitCode != -1 {
 		t.Fatalf("got timedOut=%v exitCode=%d", res.timedOut, res.exitCode)
+	}
+}
+
+func TestCaptureCommandTimeoutKillsProcessGroup(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "grandchild")
+	script := "sh -c 'sleep 1; echo alive > " + marker + "' & sleep 3"
+	res, err := captureCommand([]string{"sh", "-c", script}, captureOptions{timeoutMs: 200})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.timedOut {
+		t.Fatalf("expected timeout, got %+v", res)
+	}
+	time.Sleep(2 * time.Second)
+	if _, statErr := os.Stat(marker); statErr == nil {
+		t.Fatal("backgrounded grandchild survived the timeout; extractor was not terminated as a process group")
 	}
 }
