@@ -55,6 +55,14 @@ func run(args []string) error {
 		return nil
 	}
 
+	sync := exec.Command("go", "run", "./scripts/sync-embed")
+	sync.Dir = root
+	sync.Stdout = os.Stdout
+	sync.Stderr = os.Stderr
+	if err := sync.Run(); err != nil {
+		return err
+	}
+
 	cmd := exec.Command("go", "run", "./scripts/generate-workflow-schema")
 	cmd.Dir = root
 	cmd.Stdout = os.Stdout
@@ -63,14 +71,6 @@ func run(args []string) error {
 		return err
 	}
 	fmt.Println("prepare-release: regenerated docs/workflow.schema.json")
-
-	sync := exec.Command("go", "run", "./scripts/sync-embed")
-	sync.Dir = root
-	sync.Stdout = os.Stdout
-	sync.Stderr = os.Stderr
-	if err := sync.Run(); err != nil {
-		return err
-	}
 	return nil
 }
 

@@ -65,6 +65,32 @@ name = "herdr-workflows"
 	}
 }
 
+func TestCommittedSchemaIDMatchesManifestVersion(t *testing.T) {
+	root := repoRoot(t)
+	toml, err := os.ReadFile(filepath.Join(root, "herdr-plugin.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	current := regexp.MustCompile(`(?m)^version\s*=\s*"([^"]+)"`).FindSubmatch(toml)
+	if len(current) != 2 {
+		t.Fatal("unexpected version in herdr-plugin.toml")
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "docs", "workflow.schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema struct {
+		ID string `json:"$id"`
+	}
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		t.Fatal(err)
+	}
+	want := "https://raw.githubusercontent.com/aorumbayev/herdr-workflows/v" + string(current[1]) + "/docs/workflow.schema.json"
+	if schema.ID != want {
+		t.Fatalf("$id = %q, want %q (stamp the schema after the manifest)", schema.ID, want)
+	}
+}
+
 func TestPrepareReleaseDefaultRegeneratesSchemaID(t *testing.T) {
 	root := repoRoot(t)
 	tomlPath := filepath.Join(root, "herdr-plugin.toml")
@@ -81,12 +107,18 @@ func TestPrepareReleaseDefaultRegeneratesSchemaID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	embedSchemaPath := filepath.Join(root, "embed", "workflow.schema.json")
+	beforeEmbedSchema, err := os.ReadFile(embedSchemaPath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	version := string(current[1])
 	t.Cleanup(func() {
 		_ = os.WriteFile(tomlPath, beforeToml, 0o644)
 		embedPath := filepath.Join(root, "embed", "herdr-plugin.toml")
 		_ = os.WriteFile(embedPath, beforeToml, 0o644)
 		_ = os.WriteFile(schemaPath, beforeSchema, 0o644)
+		_ = os.WriteFile(embedSchemaPath, beforeEmbedSchema, 0o644)
 	})
 	stdout, stderr, code := runPrepareRelease(t, version)
 	if code != 0 {
@@ -127,10 +159,16 @@ func TestPrepareReleaseResolvesRepoRootFromNestedCwd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	embedSchemaPath := filepath.Join(root, "embed", "workflow.schema.json")
+	beforeEmbedSchema, err := os.ReadFile(embedSchemaPath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() {
 		_ = os.WriteFile(tomlPath, beforeToml, 0o644)
 		_ = os.WriteFile(filepath.Join(root, "embed", "herdr-plugin.toml"), beforeToml, 0o644)
 		_ = os.WriteFile(schemaPath, beforeSchema, 0o644)
+		_ = os.WriteFile(embedSchemaPath, beforeEmbedSchema, 0o644)
 	})
 
 	cmd := exec.Command("go", "run", filepath.Join(root, "scripts", "prepare-release"), string(current[1]))
