@@ -39,11 +39,11 @@ func (m Model) handleTick(epoch int) (Model, tea.Cmd) {
 	if epoch != m.tickEpoch || !m.ticking {
 		return m, nil
 	}
-	if !m.hasActiveRun() {
-		m.ticking = false
-		return m, nil
+	m.ticking = false
+	if m.screen == screenDetail && m.activeRunID != "" {
+		return m, m.detailLoadCmd(m.activeRunID)
 	}
-	return m, tickCmd(epoch)
+	return m, m.refreshCmd(m.preserveSelection())
 }
 
 func (m Model) hasActiveRun() bool {

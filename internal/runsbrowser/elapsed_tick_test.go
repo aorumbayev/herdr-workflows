@@ -13,7 +13,15 @@ import (
 
 func writeRunningRun(t *testing.T, getenv config.Env, checkout, workflow, startedAt string) string {
 	t.Helper()
+	w := claimRunningRun(t, getenv, checkout, workflow, startedAt)
+	w.Dispose()
+	return w.ID()
+}
+
+func claimRunningRun(t *testing.T, getenv config.Env, checkout, workflow, startedAt string) *history.Writer {
+	t.Helper()
 	w := history.NewWriter(getenv)
+	t.Cleanup(w.Dispose)
 	meta := history.ClaimMeta{Workflow: workflow, Source: "repo", CheckoutRoot: checkout}
 	if startedAt != "" {
 		meta.StartedAt = startedAt
@@ -22,8 +30,27 @@ func writeRunningRun(t *testing.T, getenv config.Env, checkout, workflow, starte
 	if !result.OK || result.State != "claimed" {
 		t.Fatalf("claim = %+v", result)
 	}
-	w.Dispose()
-	return w.ID()
+	return w
+}
+
+func applyImmediateCmd(t *testing.T, m Model, cmd tea.Cmd) (Model, tea.Cmd) {
+	t.Helper()
+	if cmd == nil {
+		return m, nil
+	}
+	done := make(chan tea.Msg, 1)
+	go func() { done <- cmd() }()
+	select {
+	case msg := <-done:
+		if msg == nil {
+			return m, nil
+		}
+		next, follow := m.Update(msg)
+		return next.(Model), follow
+	case <-time.After(300 * time.Millisecond):
+		t.Fatal("tick must reload runs immediately, not wait for the 1s interval")
+	}
+	return m, nil
 }
 
 func loadListOnce(t *testing.T, m Model) (Model, tea.Cmd) {
@@ -102,22 +129,44 @@ func TestRunsTickStopsWhenRunFinishes(t *testing.T) {
 	stateDir := t.TempDir()
 	checkout := t.TempDir()
 	getenv := testGetenv(t, stateDir)
-	nowISO := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
-	writeRunningRun(t, getenv, checkout, "live", nowISO)
+	started := time.Now().UTC().Add(-3 * time.Second)
+	startISO := started.Format("2006-01-02T15:04:05.000Z")
+	w := claimRunningRun(t, getenv, checkout, "live", startISO)
 
-	m := New(Options{RepoRoot: checkout, Width: 80, Env: getenv})
+	var now time.Time
+	m := New(Options{RepoRoot: checkout, Width: 80, Env: getenv, Now: func() time.Time { return now }})
+	now = started.Add(2 * time.Second)
 	m, _ = loadListOnce(t, m)
 	if !m.ticking {
 		t.Fatal("running run must arm the ticker")
 	}
-	m.state.Items[0].Status = "succeeded"
+	w.Finalize("succeeded", history.FinalizeOpts{})
+
 	next, cmd := m.Update(tickMsg{epoch: m.tickEpoch})
 	m = next.(Model)
-	if cmd != nil {
-		t.Fatal("ticker must not re-arm once no run is non-terminal")
+	m, follow := applyImmediateCmd(t, m, cmd)
+	if follow != nil {
+		t.Fatal("ticker must not re-arm once the reloaded snapshot is terminal")
 	}
 	if m.ticking {
 		t.Fatal("ticking flag must clear when nothing runs")
+	}
+	if len(m.state.Items) != 1 || !history.IsTerminal(m.state.Items[0].Status) {
+		t.Fatalf("reloaded run must be terminal, got %+v", m.state.Items)
+	}
+	frozen := history.FormatElapsed(m.state.Items[0].ElapsedMs)
+	if frozen == "" || frozen == "0s" && m.state.Items[0].ElapsedMs != 0 {
+		t.Fatalf("recorded elapsed missing: %+v", m.state.Items[0])
+	}
+	if !strings.Contains(m.View().Content, frozen) {
+		t.Fatalf("view missing recorded elapsed %q:\n%s", frozen, m.View().Content)
+	}
+	now = started.Add(time.Hour)
+	if climbing := history.FormatElapsed(history.LiveElapsedMs(history.Summary{
+		Status:    "running",
+		StartedAt: startISO,
+	}, now)); strings.Contains(m.View().Content, climbing) && climbing != frozen {
+		t.Fatalf("elapsed kept climbing after finish (%q) view:\n%s", climbing, m.View().Content)
 	}
 }
 
@@ -137,8 +186,13 @@ func TestRunsTickIgnoresStaleEpoch(t *testing.T) {
 	if cmd != nil {
 		t.Fatal("a stale-epoch tick must not re-arm")
 	}
-	_, cmd = m.Update(tickMsg{epoch: m.tickEpoch})
+	next, cmd := m.Update(tickMsg{epoch: m.tickEpoch})
+	m = next.(Model)
 	if cmd == nil {
-		t.Fatal("a current-epoch tick must re-arm while a run is active")
+		t.Fatal("a current-epoch tick must reload while a run is active")
+	}
+	_, follow := applyImmediateCmd(t, m, cmd)
+	if follow == nil {
+		t.Fatal("a current-epoch tick must re-arm after reload while a run is active")
 	}
 }

@@ -39,7 +39,12 @@ func (m Model) handleRunsTick(epoch int) (tea.Model, tea.Cmd) {
 	if epoch != m.runsEpoch || !m.runsTicking {
 		return m, nil
 	}
-	if m.screen != screenRuns || !m.hasActiveRun() {
+	if m.screen != screenRuns {
+		m.runsTicking = false
+		return m, nil
+	}
+	m.runs = m.loadRuns()
+	if !m.hasActiveRun() {
 		m.runsTicking = false
 		return m, nil
 	}

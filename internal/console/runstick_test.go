@@ -73,6 +73,45 @@ func TestConsoleRunsTickStopsForTerminalRuns(t *testing.T) {
 	}
 }
 
+func TestConsoleRunsTickStopsWhenRunFinishes(t *testing.T) {
+	started := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	now := started.Add(2 * time.Second)
+	live := runningSummary(started)
+	store := []history.Summary{live}
+	m := New(Options{
+		Width:    80,
+		Height:   24,
+		LoadRuns: func() []history.Summary { return append([]history.Summary(nil), store...) },
+		Now:      func() time.Time { return now },
+	})
+	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	m = next.(Model)
+	if cmd == nil || !m.runsTicking {
+		t.Fatalf("running run must arm the ticker: cmd=%v ticking=%v", cmd != nil, m.runsTicking)
+	}
+	done := live
+	done.Status = "succeeded"
+	done.FinishedAt = started.Add(3 * time.Second).Format("2006-01-02T15:04:05.000Z")
+	done.ElapsedMs = 3000
+	store = []history.Summary{done}
+
+	next, cmd = m.Update(runsTickMsg{epoch: m.runsEpoch})
+	m = next.(Model)
+	if cmd != nil {
+		t.Fatal("ticker must not re-arm once the reloaded snapshot is terminal")
+	}
+	if m.runsTicking {
+		t.Fatal("ticking flag must clear when nothing runs")
+	}
+	if !strings.Contains(m.View().Content, "3s") {
+		t.Fatalf("view missing recorded elapsed:\n%s", m.View().Content)
+	}
+	now = started.Add(time.Hour)
+	if strings.Contains(m.View().Content, "1h") {
+		t.Fatalf("elapsed kept climbing after finish:\n%s", m.View().Content)
+	}
+}
+
 func TestConsoleRunsTickIgnoresStaleEpoch(t *testing.T) {
 	started := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	now := started.Add(time.Second)

@@ -229,9 +229,13 @@ func (m Model) OpenDetail(id string) (Model, tea.Cmd) {
 	m.detailScroll = 0
 	m.yamlScroll = 0
 	m.stepFocus = 0
+	return m, m.detailLoadCmd(id)
+}
+
+func (m Model) detailLoadCmd(id string) tea.Cmd {
 	gen := m.detailGen.Begin()
 	getenv := m.getenv
-	return m, func() tea.Msg {
+	return func() tea.Msg {
 		presented := history.RunDetail(id, getenv, time.Time{})
 		return detailLoadedMsg{
 			gen: gen,
@@ -276,10 +280,13 @@ func (m Model) applyDetailLoaded(msg detailLoadedMsg) (Model, tea.Cmd) {
 	if m.screen != screenDetail || m.activeRunID != msg.id || !m.detailGen.Current(msg.gen) {
 		return m, nil
 	}
+	same := m.detailView.ID == msg.view.ID && m.detailView.Kind == msg.view.Kind
 	m.detailView = msg.view
-	m.detailScroll = 0
-	m.yamlScroll = 0
-	m.stepFocus = defaultStepFocus(msg.view.Detail)
+	if !same {
+		m.detailScroll = 0
+		m.yamlScroll = 0
+		m.stepFocus = defaultStepFocus(msg.view.Detail)
+	}
 	arts, _ := history.LoadDebugArtifacts(msg.id, m.getenv)
 	m.yamlChunks = tui.SplitStepYAML(arts.EntryYAML)
 	return m.armTick()
