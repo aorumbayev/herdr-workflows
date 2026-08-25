@@ -1744,3 +1744,145 @@ steps:
 		t.Fatalf("stepFinishedCalls = %#v, want approved:skipped", recorder.stepFinishedCalls)
 	}
 }
+
+func TestRunWorkflowChildInputMembership(t *testing.T) {
+	t.Parallel()
+	const guardedChild = `version: v1alpha1
+inputs:
+  mode: [fast, slow]
+  extra:
+    type: text
+    when: '{{inputs.mode}} == "slow"'
+steps:
+  - run: 'test "$HWF_extra" = deep'
+    when: '{{inputs.mode}} == "slow"'
+  - run: 'test -n "$HWF_mode"'
+`
+	tests := []struct {
+		name      string
+		files     map[string]string
+		inputs    map[string]string
+		wantOK    bool
+		wantError string
+	}{
+		{
+			name: "an unpassed default is a member",
+			files: map[string]string{
+				"child": `version: v1alpha1
+inputs:
+  mode:
+    type: text
+    default: fast
+steps:
+  - run: 'test "$HWF_mode" = fast'
+`,
+				"parent": `version: v1alpha1
+steps:
+  - workflow: child
+`,
+			},
+			wantOK: true,
+		},
+		{
+			name: "a passed value replaces the default",
+			files: map[string]string{
+				"child": `version: v1alpha1
+inputs:
+  mode:
+    type: text
+    default: fast
+steps:
+  - run: 'test "$HWF_mode" = slow'
+`,
+				"parent": `version: v1alpha1
+steps:
+  - workflow: child
+    inputs: {mode: slow}
+`,
+			},
+			wantOK: true,
+		},
+		{
+			name: "parent inputs are not members of the child",
+			files: map[string]string{
+				"child": `version: v1alpha1
+inputs:
+  mine:
+    type: text
+    default: m
+steps:
+  - run: 'test -z "$HWF_token" -a "$HWF_mine" = m'
+`,
+				"parent": `version: v1alpha1
+inputs:
+  token:
+    type: text
+    default: parent-secret
+steps:
+  - run: 'test "$HWF_token" = parent-secret'
+  - workflow: child
+`,
+			},
+			wantOK: true,
+		},
+		{
+			name: "a passed input the guard activates is a member",
+			files: map[string]string{"child": guardedChild, "parent": `version: v1alpha1
+inputs:
+  pick: [fast, slow]
+steps:
+  - workflow: child
+    inputs:
+      mode: "{{inputs.pick}}"
+      extra: deep
+`},
+			inputs: map[string]string{"pick": "slow"},
+			wantOK: true,
+		},
+		{
+			name: "a passed input the guard rejects fails the step",
+			files: map[string]string{"child": guardedChild, "parent": `version: v1alpha1
+inputs:
+  pick: [fast, slow]
+steps:
+  - workflow: child
+    inputs:
+      mode: "{{inputs.pick}}"
+      extra: deep
+`},
+			inputs:    map[string]string{"pick": "fast"},
+			wantError: "input 'extra' is inactive under current answers",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			writeRunnerWorkflows(t, root, tc.files)
+			result, err := RunWorkflow(RunOptions{
+				Name:     "parent",
+				RepoRoot: root,
+				Config:   runnerBaseConfig(),
+				Ctx:      config.InvocationContext{Selection: "", Cwd: root},
+				Deps:     runnerDeps(newRunnerHarness()),
+				Recorder: newFakeRecorder(),
+				Inputs:   tc.inputs,
+			})
+			if err != nil {
+				t.Fatalf("RunWorkflow: %v", err)
+			}
+			if tc.wantOK {
+				if !result.OK {
+					t.Fatalf("result.OK = false, want true; Error = %q", result.Error)
+				}
+				return
+			}
+			if result.OK {
+				t.Fatal("result.OK = true, want false")
+			}
+			if !strings.Contains(result.Error, tc.wantError) {
+				t.Fatalf("Error = %q, want it to contain %q", result.Error, tc.wantError)
+			}
+		})
+	}
+}

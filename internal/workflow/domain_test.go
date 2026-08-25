@@ -315,3 +315,101 @@ steps:
 		t.Fatalf("pane fields did not round trip: %#v", run)
 	}
 }
+
+func TestChildInputMembershipContract(t *testing.T) {
+	const choiceChild = `version: v1alpha1
+inputs:
+  mode: [fast, slow]
+steps:
+  - run: 'echo "$HWF_mode"'
+`
+	const guardedChild = `version: v1alpha1
+inputs:
+  mode: [fast, slow]
+  extra:
+    type: text
+    when: '{{inputs.mode}} == "slow"'
+steps:
+  - run: 'echo "$HWF_extra"'
+    when: '{{inputs.mode}} == "slow"'
+  - run: 'echo "$HWF_mode"'
+`
+	tests := []struct {
+		name   string
+		child  string
+		parent string
+		want   string
+	}{
+		{"passes an input the child never declares", choiceChild, `version: v1alpha1
+steps:
+  - workflow: child
+    inputs: {mode: fast, extra: x}
+`, "step 1, inputs.extra: unknown child input 'extra'"},
+		{"omits a child input with no default", choiceChild, `version: v1alpha1
+steps:
+  - workflow: child
+`, "step 1, inputs.mode: missing required child input 'mode'"},
+		{"passes a value outside the child options", choiceChild, `version: v1alpha1
+steps:
+  - workflow: child
+    inputs: {mode: turbo}
+`, "step 1, inputs.mode: child input 'mode' must be one of: fast, slow"},
+		{"passes a whole step result", choiceChild, `version: v1alpha1
+steps:
+  - id: probe
+    agent: hi
+    expect: {one_of: [A, B]}
+  - workflow: child
+    inputs: {mode: "{{steps.probe}}"}
+`, "step 2, inputs.mode: child input 'mode' must resolve to text (source type object)"},
+		{"passes an unmerged profile name", `version: v1alpha1
+inputs:
+  who: profile
+steps:
+  - agent: hi
+    using: "{{inputs.who}}"
+`, `version: v1alpha1
+steps:
+  - workflow: child
+    inputs: {who: nobody}
+`, "step 1, inputs.who: child input 'who' must name a merged profile"},
+		{"omits a child input that carries a default", `version: v1alpha1
+inputs:
+  mode:
+    type: text
+    default: fast
+steps:
+  - run: 'echo "$HWF_mode"'
+`, `version: v1alpha1
+steps:
+  - workflow: child
+`, ""},
+		{"omits a child input that is provably inactive", guardedChild, `version: v1alpha1
+steps:
+  - workflow: child
+    inputs: {mode: fast}
+`, ""},
+	}
+	cfg := config.Config{
+		Profiles:       map[string]config.Profile{"claude": {Kind: "claude"}},
+		DefaultProfile: "claude",
+		Transcripts:    map[string]config.TranscriptExtractor{},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			writeDomainWorkflow(t, root, "child", tc.child)
+			writeDomainWorkflow(t, root, "parent", tc.parent)
+			_, err := LoadWorkflow("parent", root, cfg)
+			if tc.want == "" {
+				if err != nil {
+					t.Fatalf("LoadWorkflow: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v, want error containing %q", err, tc.want)
+			}
+		})
+	}
+}
