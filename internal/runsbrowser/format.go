@@ -151,7 +151,6 @@ func RunsFooter(scope Scope) string {
 		scopeLabel = "All"
 	}
 	return strings.Join([]string{
-		"tab",
 		"ctrl+g " + scopeLabel,
 		"enter detail",
 		"esc quit",

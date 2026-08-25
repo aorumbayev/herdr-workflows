@@ -34,6 +34,10 @@ const (
 	modeNewMode
 	modeNewScope
 	modeNewAgentPick
+	modeProfiles
+	modeProfilePalette
+	modeNewProfileName
+	modeNewProfileScope
 )
 
 // Options is the input for a picker model.
@@ -48,6 +52,7 @@ type Options struct {
 	LoadWorkflow       func(workflow.ListEntry) (*workflow.Definition, error)
 	CopyClipboard      func(string) error
 	EditWorkflow       func(path, name string) workflow.ValidateResult
+	EditConfig         func(path string) error
 	OpenURL            func(url string) error
 	Notify             func(title string, body ...string) error
 	LaunchRun          func(LaunchRunOpts) LaunchRunHandle
@@ -65,71 +70,76 @@ type Options struct {
 
 // Model is the picker Bubble Tea model.
 type Model struct {
-	entries              []workflow.ListEntry
-	repoRoot             string
-	config               config.Config
-	width                int
-	height               int
-	load                 func(workflow.ListEntry) (*workflow.Definition, error)
-	copyText             func(string) error
-	env                  config.Env
-	editWorkflow         func(path, name string) workflow.ValidateResult
-	openURL              func(string) error
-	notify               func(title string, body ...string) error
-	launchRun            func(LaunchRunOpts) LaunchRunHandle
-	allocateRunID        func() string
-	exportShare          func(entry workflow.ListEntry) (command string, err error)
-	mode                 mode
-	filter               string
-	cursor               int
-	offset               int
-	savedFilter          string
-	status               string
-	session              *workflow.InputSession
-	prompt               *workflow.InputPrompt
-	promptValue          string
-	choiceOpts           []string
-	custom               bool
-	queue                []workflow.InputSpec
-	delete               DeleteState
-	quit                 bool
-	consent              string
-	sensitivity          []string
-	newerRelease         bool
-	stopResolve          context.CancelFunc
-	resolveGen           uint64
-	runs                 runsbrowser.Model
-	launchRunID          string
-	launchDetach         func()
-	launchAcks           <-chan string
-	launchSettled        <-chan LaunchSettled
-	launchProgress       <-chan string
-	pendingDef           *workflow.Definition
-	openConsole          func(console.Placement, string) error
-	openEditor           func(path, name, placement string) error
-	lastConsolePlacement console.Placement
-	consolePlaceCursor   int
-	editTarget           *workflow.ListEntry
-	editPlaceCursor      int
-	placeBack            mode
-	hoverRow             int
-	reopenPopup          func(PopupState) error
-	popupWidth           string
-	popupHeight          string
-	restoreTab           string
-	restoreEdit          *PopupState
-	restoreRunID         string
-	restoreDetail        bool
-	listAgentPanes       func() ([]console.AgentPaneEntry, error)
-	paneSendText         func(paneID, text string) error
-	now                  func() time.Time
-	agentPanes           []console.AgentPaneEntry
-	agentCursor          int
-	pendingSendText      string
-	editRespawn          bool
-	newModeCursor        int
-	newScopeCursor       int
-	newName              string
+	entries               []workflow.ListEntry
+	repoRoot              string
+	config                config.Config
+	width                 int
+	height                int
+	load                  func(workflow.ListEntry) (*workflow.Definition, error)
+	copyText              func(string) error
+	env                   config.Env
+	editWorkflow          func(path, name string) workflow.ValidateResult
+	editConfig            func(path string) error
+	openURL               func(string) error
+	notify                func(title string, body ...string) error
+	launchRun             func(LaunchRunOpts) LaunchRunHandle
+	allocateRunID         func() string
+	exportShare           func(entry workflow.ListEntry) (command string, err error)
+	mode                  mode
+	filter                string
+	cursor                int
+	offset                int
+	savedFilter           string
+	status                string
+	session               *workflow.InputSession
+	prompt                *workflow.InputPrompt
+	promptValue           string
+	choiceOpts            []string
+	custom                bool
+	queue                 []workflow.InputSpec
+	delete                DeleteState
+	quit                  bool
+	consent               string
+	sensitivity           []string
+	newerRelease          bool
+	stopResolve           context.CancelFunc
+	resolveGen            uint64
+	runs                  runsbrowser.Model
+	launchRunID           string
+	launchDetach          func()
+	launchAcks            <-chan string
+	launchSettled         <-chan LaunchSettled
+	launchProgress        <-chan string
+	pendingDef            *workflow.Definition
+	openConsole           func(console.Placement, string) error
+	openEditor            func(path, name, placement string) error
+	lastConsolePlacement  console.Placement
+	consolePlaceCursor    int
+	editPath              string
+	editName              string
+	editProfile           bool
+	editPlaceCursor       int
+	placeBack             mode
+	hoverRow              int
+	reopenPopup           func(PopupState) error
+	popupWidth            string
+	popupHeight           string
+	restoreTab            string
+	restoreEdit           *PopupState
+	restoreRunID          string
+	restoreDetail         bool
+	listAgentPanes        func() ([]console.AgentPaneEntry, error)
+	paneSendText          func(paneID, text string) error
+	now                   func() time.Time
+	agentPanes            []console.AgentPaneEntry
+	agentCursor           int
+	pendingSendText       string
+	editRespawn           bool
+	newModeCursor         int
+	newScopeCursor        int
+	newName               string
+	profileEntries        []config.ProfileEntry
+	newProfileScopeCursor int
 }
 
 type currentResolvedMsg struct {
@@ -176,6 +186,7 @@ func New(opts Options) Model {
 		copyText:       opts.CopyClipboard,
 		env:            opts.Env,
 		editWorkflow:   opts.EditWorkflow,
+		editConfig:     opts.EditConfig,
 		openURL:        opts.OpenURL,
 		notify:         opts.Notify,
 		launchRun:      opts.LaunchRun,
@@ -210,6 +221,7 @@ func (m *Model) restore(state *PopupState) {
 	m.restoreDetail = state.Detail
 	if state.EditFile != "" {
 		m.restoreEdit = state
+		m.editProfile = state.EditKind == editKindProfile
 	}
 }
 
@@ -344,6 +356,14 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleNewScope(msg)
 	case modeNewAgentPick:
 		return m.handleNewAgentPick(msg)
+	case modeProfiles:
+		return m.handleProfilesKey(msg)
+	case modeProfilePalette:
+		return m.handleProfilePalette(msg)
+	case modeNewProfileName:
+		return m.handleNewProfileName(msg)
+	case modeNewProfileScope:
+		return m.handleNewProfileScope(msg)
 	case modeFail:
 		if key == "enter" || key == "esc" {
 			m.mode = modeList
@@ -462,7 +482,11 @@ func (m Model) applyPaletteAction(action *PaletteAction) (tea.Model, tea.Cmd) {
 		m.status = `import with: hwf workflow import "..."`
 		return m, nil
 	case "open":
-		return m.beginEditPlacement(action.Entry)
+		if action.Entry == nil {
+			m.mode = modeList
+			return m, nil
+		}
+		return m.beginEditPlacement(action.Entry.File, action.Entry.Name, false, modeList)
 	case "examples":
 		if m.openURL != nil {
 			_ = m.openURL(config.ExamplesURL)
@@ -482,6 +506,9 @@ func (m Model) applyPaletteAction(action *PaletteAction) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) beginEdit(path, name string) tea.Cmd {
+	if m.editProfile {
+		return m.beginProfileEdit(path, name)
+	}
 	if m.editWorkflow != nil {
 		return func() tea.Msg {
 			return editorDoneMsg{name: name, result: m.editWorkflow(path, name)}
@@ -525,7 +552,11 @@ func (m Model) applyEditorDone(msg editorDoneMsg) (tea.Model, tea.Cmd) {
 		if m.notify != nil {
 			_ = m.notify("herdr-workflows", m.status)
 		}
-		return m.respawnInto(tui.TabWorkflows)
+		tab := tui.TabWorkflows
+		if m.editProfile {
+			tab = tui.TabProfiles
+		}
+		return m.respawnInto(tab)
 	}
 	return m, nil
 }

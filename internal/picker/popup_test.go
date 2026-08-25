@@ -31,6 +31,10 @@ func TestTabSwitchNeverRespawns(t *testing.T) {
 		t.Fatalf("mode = %v, want runs", m.mode)
 	}
 	m = apply(m, "tab")
+	if m.mode != modeProfiles {
+		t.Fatalf("mode = %v, want profiles", m.mode)
+	}
+	m = apply(m, "tab")
 	if m.mode != modeList {
 		t.Fatalf("mode = %v, want workflows", m.mode)
 	}
@@ -63,8 +67,8 @@ func TestRestoredPickerMountsItsTabWithoutRespawning(t *testing.T) {
 		t.Fatalf("restored picker must not respawn, got %+v", got)
 	}
 	m = apply(m, "tab")
-	if m.mode != modeList {
-		t.Fatalf("tab from runs must return to workflows, mode = %v", m.mode)
+	if m.mode != modeProfiles {
+		t.Fatalf("tab from runs must advance to profiles, mode = %v", m.mode)
 	}
 	if len(got) != 0 {
 		t.Fatalf("switching between compact tabs must not respawn, got %+v", got)

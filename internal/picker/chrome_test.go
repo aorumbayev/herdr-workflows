@@ -216,8 +216,11 @@ func TestWideTitlesStayAligned(t *testing.T) {
 }
 
 func TestPaletteLetters(t *testing.T) {
-	if !strings.Contains(tui.ListHint, "tab") || !strings.Contains(tui.ListHint, "ctrl+p") {
+	if !strings.Contains(tui.ListHint, "enter run") || !strings.Contains(tui.ListHint, "ctrl+p") {
 		t.Fatalf("list hint = %q", tui.ListHint)
+	}
+	if strings.Contains(tui.ListHint, "tab") {
+		t.Fatalf("the tab bar names the key, the footer must not: %q", tui.ListHint)
 	}
 	if ResolvePaletteLetter("n", nil).ID != "new" || ResolvePaletteLetter("i", nil).ID != "import" {
 		t.Fatal("n/i")

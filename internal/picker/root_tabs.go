@@ -20,6 +20,8 @@ func (m Model) cycleRootTab() (tea.Model, tea.Cmd) {
 	case modeList:
 		return m.switchToTab(tui.TabRuns)
 	case modeRuns:
+		return m.switchToTab(tui.TabProfiles)
+	case modeProfiles:
 		return m.switchToTab(tui.TabWorkflows)
 	default:
 		return m, nil
@@ -86,6 +88,8 @@ func (m Model) mountTab(name string) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tui.TabRuns:
 		return m.openRunsTab()
+	case tui.TabProfiles:
+		return m.openProfilesTab()
 	default:
 		return m, nil
 	}

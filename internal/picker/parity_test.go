@@ -115,9 +115,14 @@ var requiredPickerParityScenarios = []string{
 	"Workflow filter has text",
 	"Input collection",
 	"Cycle past runs",
+	"Cycle to profiles",
 	"Return to workflows",
 	"Tab bar shows the active browser",
+	"Tab bar names the key",
 	"Tab never quits the overlay",
+	"Profiles listed with source column",
+	"Profiles filter by typed text",
+	"Empty profiles guide to the palette",
 	"Manifest uses percent size",
 	"Confirmed pop-out quits the picker",
 	"Canceled pop-out keeps the workflow filter",
@@ -168,6 +173,11 @@ var requiredPickerParityScenarios = []string{
 	"Share stays in picker",
 	"Confirmed delete",
 	"Cancel delete",
+	"New profile writes a skeleton to the chosen layer",
+	"New profile rejects a duplicate name",
+	"Open profile edits the defining config file",
+	"Profile edit validates the config loader",
+	"New profile popup opens expanded",
 }
 
 func TestParityBaselineCoversSpecScenarios(t *testing.T) {

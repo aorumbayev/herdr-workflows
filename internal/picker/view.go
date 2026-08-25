@@ -20,6 +20,14 @@ func (m Model) render() string {
 	switch m.mode {
 	case modeRuns:
 		body = m.withTabBar(tui.TabRuns, m.runs.Body())
+	case modeProfiles:
+		body = m.withTabBar(tui.TabProfiles, m.renderProfiles())
+	case modeProfilePalette:
+		body = m.renderProfilePalette()
+	case modeNewProfileName:
+		body = m.renderNewProfileName()
+	case modeNewProfileScope:
+		body = m.renderNewProfileScope()
 	case modePalette:
 		body = m.renderPalette()
 	case modeConsolePlace:

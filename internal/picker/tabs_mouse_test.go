@@ -25,8 +25,15 @@ func TestTabCyclesWorkflowsRuns(t *testing.T) {
 		t.Fatalf("mode = %v", m.mode)
 	}
 	m = apply(m, "tab")
+	if m.mode != modeProfiles {
+		t.Fatalf("mode = %v, want the profiles tab after two cycles", m.mode)
+	}
+	if !strings.Contains(m.View().Content, tui.TabProfiles) {
+		t.Fatalf("profiles tab bar missing:\n%s", m.View().Content)
+	}
+	m = apply(m, "tab")
 	if m.mode != modeList {
-		t.Fatalf("mode = %v, want the workflows tab after two cycles", m.mode)
+		t.Fatalf("mode = %v, want the workflows tab after three cycles", m.mode)
 	}
 }
 
@@ -128,7 +135,7 @@ func TestTabBarClickSwitchesAndObeysTheKeyboardGuard(t *testing.T) {
 }
 
 func tabCellX(name string) int {
-	x := 0
+	x := len(tui.TabKeyPrefix)
 	for _, cell := range tabCells() {
 		if cell.name == name {
 			return x + 1
@@ -240,7 +247,7 @@ func TestTabBarClickOnTheActiveRunsTabKeepsItsState(t *testing.T) {
 	}
 	m = applyMsg(m, press("ctrl+g"))
 	before := m.View().Content
-	m = applyMsg(m, tea.MouseClickMsg{Button: tea.MouseLeft, X: tui.ChromePaddingX + len(tui.TabWorkflows) + 3, Y: 0})
+	m = applyMsg(m, tea.MouseClickMsg{Button: tea.MouseLeft, X: tui.ChromePaddingX + tabCellX(tui.TabRuns), Y: 0})
 	if m.mode != modeRuns {
 		t.Fatalf("mode = %v, want runs", m.mode)
 	}

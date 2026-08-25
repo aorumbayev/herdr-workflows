@@ -301,8 +301,11 @@ func TestDetailLinesDetailWithProgress(t *testing.T) {
 
 func TestRunsFooterJoinsWithChromeSep(t *testing.T) {
 	parts := strings.Split(RunsFooter(ScopeCurrent), tui.ChromeSep)
-	if len(parts) != 4 {
+	if len(parts) != 3 {
 		t.Fatalf("parts = %v", parts)
+	}
+	if parts[0] == "tab" {
+		t.Fatalf("the tab bar names the key, the runs footer must not: %v", parts)
 	}
 	for _, part := range parts {
 		if strings.Contains(part, "/") && part != "up/down scroll" {

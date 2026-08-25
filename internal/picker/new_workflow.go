@@ -92,7 +92,7 @@ func (m Model) createTemplate() (tea.Model, tea.Cmd) {
 	entry := workflow.ListEntry{Name: m.newName, Source: source, File: path, RepoOwned: source == "repo"}
 	m.entries = append(m.entries, entry)
 	m.promptValue = ""
-	return m.beginEditPlacement(&entry)
+	return m.beginEditPlacement(entry.File, entry.Name, false, modeList)
 }
 
 func (m Model) beginNewAgent() (tea.Model, tea.Cmd) {

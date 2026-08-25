@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
-	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
 // PopupStateEnv is the picker state payload for the process that a respawn opens.
@@ -32,9 +31,13 @@ type PopupState struct {
 	// gives $EDITOR the console size.
 	EditFile string `json:"edit_file,omitempty"`
 	EditName string `json:"edit_name,omitempty"`
+	EditKind string `json:"edit_kind,omitempty"`
 	RunID    string `json:"run_id,omitempty"`
 	Detail   bool   `json:"detail,omitempty"`
 }
+
+// editKindProfile marks a popup edit as a config file, not a workflow file.
+const editKindProfile = "profile"
 
 // PopupGeometry is the compact size that both root tabs open at.
 func PopupGeometry() (width, height string) {
@@ -72,10 +75,14 @@ func (s PopupState) Encode() string {
 }
 
 func (m Model) currentTabName() string {
-	if m.mode == modeRuns {
+	switch m.mode {
+	case modeRuns:
 		return tui.TabRuns
+	case modeProfiles:
+		return tui.TabProfiles
+	default:
+		return tui.TabWorkflows
 	}
-	return tui.TabWorkflows
 }
 
 // popupStateFor is the payload for a respawn that opens tab.
@@ -98,12 +105,19 @@ func (m Model) popupStateFor(tab string) PopupState {
 	return state
 }
 
-// popupStateForEdit opens the workflows tab at the console size with the file
-// that the editor uses. Validation then opens a compact popup again.
-func (m Model) popupStateForEdit(entry workflow.ListEntry) PopupState {
-	state := m.popupStateFor(tui.TabWorkflows)
+// popupStateForEdit opens the origin tab at the console size with the file that
+// the editor uses. Validation then opens a compact popup again.
+func (m Model) popupStateForEdit() PopupState {
+	tab := tui.TabWorkflows
+	if m.editProfile {
+		tab = tui.TabProfiles
+	}
+	state := m.popupStateFor(tab)
 	state.Width, state.Height = expandedGeometry()
-	state.EditFile, state.EditName = entry.File, entry.Name
+	state.EditFile, state.EditName = m.editPath, m.editName
+	if m.editProfile {
+		state.EditKind = editKindProfile
+	}
 	return state
 }
 

@@ -81,7 +81,7 @@ func (m Model) listIndexAt(y int) (int, bool) {
 // leave a screen that the keyboard cannot leave.
 func (m Model) tabBarLive() bool {
 	switch m.mode {
-	case modeList:
+	case modeList, modeProfiles:
 		return true
 	case modeRuns:
 		return m.runs.IsList()

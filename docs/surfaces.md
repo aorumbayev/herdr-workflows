@@ -8,9 +8,9 @@ Runs happen in the picker or `hwf run`, because a run needs real herdr panes. In
 
 Press `prefix+k`.
 
-The overlay has two tabs, workflows and runs. `Tab` cycles the two. `Tab` never quits the overlay. A tab bar names the two and marks the active one. The pane title stays static.
+The overlay has three tabs, workflows, runs, and profiles. `Tab` cycles the three in that order and back to workflows. `Tab` never quits the overlay. A tab bar starts with `tab: ` to name the key, then the three labels, and marks the active one with reverse video. The pane title stays static.
 
-The workflows footer is `tab | enter run | ctrl+p actions | esc`. The runs footer is `tab | ctrl+g <scope> | enter detail | esc quit`. The filter placeholders are `filter workflows...` and `filter runs...`. Filter rows use flush-left ASCII without a `/ ` prefix or indent.
+The workflows footer is `enter run | ctrl+p actions | esc`. The runs footer is `ctrl+g <scope> | enter detail | esc quit`. The profiles footer is `enter open | ctrl+p actions | esc`. The tab bar names the `tab` key, so the footers do not repeat it. The filter placeholders are `filter workflows...`, `filter runs...`, and `filter profiles...`. Filter rows use flush-left ASCII without a `/ ` prefix or indent.
 
 The overlay stays compact. Switching tabs does not close and reopen the popup.
 
@@ -33,6 +33,21 @@ A workflow that fails to load still appears, marked `invalid`. Select it to read
 While the picker asks for inputs, each question shows its name and description in focus, above the options. One faint line below the options carries your progress, how to answer, the answers you have given, and the back hint. A sensitive workflow adds a short faint line that names what it touches. The answers you have given stay on screen. Press Escape to step back to the previous question with your earlier answer intact, or return to the list from the first one. If you change an earlier answer, the picker drops the later ones, because they might no longer apply.
 
 With no workflows at all, the picker still opens and points you to the actions palette.
+
+### Profiles browser
+
+The profiles tab lists every profile resolved across the configuration layers. Each row shows the profile name and a source column, `global`, `repo`, or `local`, for the layer that effectively defines it. Type to filter by name. The placeholder is `filter profiles...`. Select a profile to read its kind and a short args summary below the list. With no profiles, the tab shows a friendly message that points to `Ctrl+P` then `n`.
+
+`Enter` opens the defining `config.yaml` of the selected profile in `$EDITOR` through the same placement chooser as workflow edit. When the editor closes, the picker validates the configuration with the loader.
+
+Press `Ctrl+P` in the profiles tab for its actions.
+
+| Key | Action                                                                                              |
+| --- | --------------------------------------------------------------------------------------------------- |
+| `n` | Create a profile: enter a name, choose `global`, `repo`, or `local`, then open the file in `$EDITOR` |
+| `o` | Open the selected profile's defining `config.yaml` in `$EDITOR`                                      |
+
+A new profile writes a minimal skeleton into the chosen layer's `config.yaml`. The picker creates the file when it is absent and adds the profile under the existing `profiles:` map without dropping comments or other entries. A duplicate name in that layer is rejected. Edit or delete a profile by hand in the opened `config.yaml`.
 
 ### Actions palette
 
