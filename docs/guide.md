@@ -144,6 +144,46 @@ A template that fills a whole YAML value keeps that value's type, so an object s
 
 Useful context keys: `pane`, `tab`, `workspace`, `worktree`, `cwd`, `agent`, `selection`, `platform`. Refer to [Reference](/reference#context) for all of them.
 
+## Use the scratch store
+
+Scratch is a flat key-value store in the same global history database as run history. Use it when a later run, or a later step, needs a small value that is not a step result.
+
+There is no `{{scratch.*}}` template. A step that needs a scratch value runs `hwf scratch get` and then reads `{{steps.*.stdout}}`.
+
+```yaml
+steps:
+  - id: save
+    run: [hwf, scratch, set, triage.last_pr, "{{steps.pr.stdout}}"]
+  - id: load
+    run: [hwf, scratch, get, triage.last_pr]
+  - agent: |
+      The last PR number is {{steps.load.stdout}}.
+    using: claude
+```
+
+From a terminal, the same commands work:
+
+```bash
+hwf scratch set triage.last_pr 42
+hwf scratch get triage.last_pr
+hwf scratch list
+hwf scratch delete triage.last_pr
+```
+
+`list` prints one key per line. A missing key fails `get`. A write that crosses the 8 MiB capture cap fails and leaves the previous value unchanged.
+
+A local `run:` step receives `HWF_RUN_ID`, `HWF_WORKFLOW`, and `HWF_CHECKOUT_ROOT`. To drop a key when that run expires, start the key with the run id and a dot:
+
+```yaml
+- id: mark
+  run:
+    - sh
+    - -c
+    - hwf scratch set "${HWF_RUN_ID}.status" "review"
+```
+
+Keys without that prefix stay until you delete them. The `scratch` command does not contact herdr. Command list: [Run and manage](/surfaces#the-cli). Limits: [Reference](/reference#scratch).
+
 ## Ask questions before the run
 
 ```yaml
@@ -299,6 +339,6 @@ hwf skills show herdr-workflow-upgrade
 
 ## Next
 
-- [Run and manage workflows](/surfaces) — picker, CLI, sharing
+- [Run and manage workflows](/surfaces) — picker, CLI, scratch, sharing
 - [Examples](/examples) — working workflows to import
 - [Reference](/reference) — every field, limit, and rule

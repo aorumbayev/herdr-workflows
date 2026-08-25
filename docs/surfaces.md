@@ -93,7 +93,11 @@ hwf response check /path/to/response.txt --one-of APPROVE,REJECT
 
 The offline verdict oracle behind [`expect:`](/reference#expect). It reads the final non-empty line of the file, trims it, and matches it against the comma-separated tokens, which follow the same rules as `expect.one_of`. A match exits 0 and prints the token. A mismatch exits nonzero and names both the line that failed and the expected tokens. A missing or empty file exits nonzero and names the path. The command never writes to the file.
 
-Only `hwf launch`, `hwf run`, `hwf picker`, and `hwf console` run the version and protocol preflight. `skills`, `workflow validate`, and `response` never contact herdr at all. Thus an agent inside a turn can call `response check` or `workflow validate` and get an answer immediately. That is what the runner's appended instruction asks it to do: rerun the check against its own response file until it exits 0.
+Only `hwf launch`, `hwf run`, `hwf picker`, and `hwf console` run the version and protocol preflight. `skills`, `workflow validate`, `response`, and `scratch` never contact herdr at all. Thus an agent inside a turn can call `response check`, `workflow validate`, or `scratch` and get an answer immediately. That is what the runner's appended instruction asks it to do: rerun the check against its own response file until it exits 0.
+
+### Scratch
+
+The scratch store holds keys and values in the global history database. Workflows do not read it through templates. A step runs `hwf scratch get` or `hwf scratch set` and consumes stdout. How to write that step: [Use the scratch store](/guide#use-the-scratch-store). Limits: [Reference](/reference#scratch).
 
 ## Share a workflow
 

@@ -164,7 +164,7 @@ A placed foreground command needs exactly one of `background` or `ready_when`.
 
 ## Templates
 
-Use `{{inputs.name}}`, `{{steps.id.field}}`, and `{{context.key}}`. Nothing else.
+Use `{{inputs.name}}`, `{{steps.id.field}}`, and `{{context.key}}`. Nothing else. The loader rejects `{{scratch.*}}`. To read a scratch value, run `hwf scratch get` and use `{{steps.*.stdout}}`. Refer to [Use the scratch store](/guide#use-the-scratch-store).
 
 A whole-value template keeps its source type. An embedded template renders as text: strings unchanged, booleans lowercase, finite numbers in decimal, null as empty, arrays and objects as compact JSON. Agent prompts always render as text.
 
@@ -266,13 +266,26 @@ Layers, in increasing precedence: the global plugin config directory, `.hwf/conf
 
 **Transcript extractors** use the herdr agent kind as the key. The plugin has built-in extraction for `claude`. Any other kind needs an entry here, or a reference to transcript context fails preflight. A configured extractor replaces built-in extraction for that kind. The environment an extractor receives and its output rules are in [the guide](/guide#support-another-agent-kind).
 
+## Scratch
+
+Scratch is a flat key-value store in the global history database. The key is the whole identifier. There is no scope column, no hierarchy, and no `{{scratch.*}}` template.
+
+| Command                         | Result                                      |
+| ------------------------------- | ------------------------------------------- |
+| `hwf scratch set <key> <value>` | Writes or replaces the value                |
+| `hwf scratch get <key>`         | Prints the value. Missing key fails         |
+| `hwf scratch list`              | Prints keys, one per line, in key order     |
+| `hwf scratch delete <key>`      | Deletes the key                             |
+
+A value uses the 8 MiB capture cap. A write that crosses the cap fails, names the source and the limit, and does not truncate. Retention deletes keys that match `<run-id>.*` when that run expires. Other keys stay until you delete them. Local `run:` environments include `HWF_RUN_ID`, `HWF_WORKFLOW`, and `HWF_CHECKOUT_ROOT`. How to call these commands from a workflow is in [the guide](/guide#use-the-scratch-store).
+
 ## Limits
 
 | What                                                                        | Limit   |
 | --------------------------------------------------------------------------- | ------- |
 | Generated `HWF_*` environment block                                         | 24 KiB  |
 | Inline agent prompt                                                         | 16 KiB  |
-| Command output, agent response, transcript, or dynamic-option output (each) | 8 MiB   |
+| Command output, agent response, transcript, dynamic-option output, or scratch value (each) | 8 MiB   |
 | Raw `claude` session file loaded by built-in extraction                     | 256 MiB |
 | One record in a raw `claude` session file                                   | 32 MiB  |
 | Dynamic options                                                             | 1,000   |
