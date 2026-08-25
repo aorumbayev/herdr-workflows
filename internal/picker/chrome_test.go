@@ -122,10 +122,10 @@ func TestInputPromptWrapsLongDescription(t *testing.T) {
 		Name: "intake_profile", Type: "profile",
 		Description: "Agent persona and tools for the intake reviewer run",
 	}
-	got := FormatInputPrompt(spec, w, 1, 16)
+	got := FormatInputPrompt(spec, w)
 	lines := strings.Split(got, "\n")
-	if lines[0] != "intake_profile  (1 of 16)" {
-		t.Fatalf("field line = %q", lines[0])
+	if lines[0] != "intake_profile" {
+		t.Fatalf("field line must be the name alone, no ordinal: %q", lines[0])
 	}
 	if len(lines) != 3 {
 		t.Fatalf("want field plus two wrapped description lines, got %d:\n%s", len(lines), got)

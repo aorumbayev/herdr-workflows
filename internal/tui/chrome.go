@@ -11,6 +11,8 @@ const (
 	ChoiceHint          = "type filter" + ChromeSep + "up/down move" + ChromeSep + "enter select" + ChromeSep + "esc back"
 	CustomChoiceHint    = "type filter" + ChromeSep + "up/down" + ChromeSep + "enter select/custom" + ChromeSep + "esc back"
 	FailHint            = "enter/esc close"
+	BackHint            = "esc back"
+	TouchesPrefix       = "! touches: "
 	CustomChoiceLabel   = "custom..."
 	FilterWorkflows     = "filter workflows..."
 	FilterRuns          = "filter runs..."
@@ -37,6 +39,8 @@ var ChromeStrings = []string{
 	ChoiceHint,
 	CustomChoiceHint,
 	FailHint,
+	BackHint,
+	TouchesPrefix,
 	CustomChoiceLabel,
 	Ellipsis,
 	ChromeSep,

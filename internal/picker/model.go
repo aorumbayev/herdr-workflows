@@ -94,6 +94,7 @@ type Model struct {
 	delete               DeleteState
 	quit                 bool
 	consent              string
+	sensitivity          []string
 	newerRelease         bool
 	stopResolve          context.CancelFunc
 	resolveGen           uint64
@@ -686,20 +687,12 @@ func (m Model) choiceViewport() int {
 	return tui.FitViewport(m.height, m.choiceChrome(), choiceFloor)
 }
 
-// choiceChrome counts the filter row, two blanks, the consent, prompt, hints,
-// answers, and status lines, and the rule and footer around the option list.
+// choiceChrome counts the prompt header, two blanks, the filter row, the rule,
+// the stats line, and the optional sensitivity and status lines around the option list.
 func (m Model) choiceChrome() int {
 	w := m.contentWidth()
-	n := 6
-	if m.consentLine() != "" {
-		n++
-	}
-	prompt, hints := m.promptBlock(w)
-	n += strings.Count(prompt, "\n")
-	if hints != "" {
-		n++
-	}
-	if FormatInputAnswers(m.queue, m.values(), w) != "" {
+	n := 5 + strings.Count(m.promptHeader(w), "\n") + 1
+	if m.sensitivityLine(w) != "" {
 		n++
 	}
 	if m.status != "" {
@@ -756,6 +749,7 @@ func (m Model) inputBack() (tea.Model, tea.Cmd) {
 		m.mode = modeList
 		m.session = nil
 		m.consent = ""
+		m.sensitivity = nil
 		m.filter = m.savedFilter
 		return m, nil
 	}
@@ -782,6 +776,7 @@ func (m Model) acceptCurrent() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.consent = FormatConsentLine(*entry)
+	m.sensitivity = EntrySensitivity(*entry)
 	if m.load == nil {
 		return m.beginLaunch(&workflow.Definition{Name: entry.Name, Title: entry.Title}, nil, nil)
 	}
@@ -790,6 +785,7 @@ func (m Model) acceptCurrent() (tea.Model, tea.Cmd) {
 		m.mode = modeFail
 		m.status = "Failed" + tui.ChromeSep + err.Error()
 		m.consent = ""
+		m.sensitivity = nil
 		return m, nil
 	}
 	m.pendingDef = loaded

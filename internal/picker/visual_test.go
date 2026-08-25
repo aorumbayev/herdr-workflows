@@ -142,16 +142,23 @@ func choiceInputModel(t *testing.T, height int, opts []string, desc string) Mode
 	return apply(m, "enter")
 }
 
+func hasVisibleLine(body, want string) bool {
+	for _, line := range strings.Split(body, "\n") {
+		if visibleLine(line) == want {
+			return true
+		}
+	}
+	return false
+}
+
 func TestChoiceInputEchoesFilterText(t *testing.T) {
 	m := choiceInputModel(t, 15, []string{"feature", "fix", "main"}, "")
-	first := tui.StripContentPadding(strings.Split(m.View().Content, "\n")[0])
-	if first != tui.FilterOptions {
-		t.Fatalf("empty choice filter row = %q want %q", first, tui.FilterOptions)
+	if !hasVisibleLine(m.View().Content, tui.FilterOptions) {
+		t.Fatalf("empty choice filter row must echo %q:\n%s", tui.FilterOptions, m.View().Content)
 	}
 	m = apply(m, "f", "e")
-	first = tui.StripContentPadding(strings.Split(m.View().Content, "\n")[0])
-	if first != "fe" {
-		t.Fatalf("typed choice filter must be echoed flush-left: %q", first)
+	if !hasVisibleLine(m.View().Content, "fe") {
+		t.Fatalf("typed choice filter must be echoed flush-left:\n%s", m.View().Content)
 	}
 }
 
@@ -170,6 +177,148 @@ func TestChoicePromptFitsCompactPopup(t *testing.T) {
 	}
 	if m.choiceViewport() < choiceFloor {
 		t.Fatalf("option viewport %d fell below the floor %d", m.choiceViewport(), choiceFloor)
+	}
+}
+
+func TestChoicePromptWorstCaseFitsCompactPopup(t *testing.T) {
+	const height = 15
+	desc := "The profile that seeds the intake agent with the reviewer persona and its allowed tools for this run"
+	entry := workflow.ListEntry{
+		Name: "intake", Source: "repo", File: "/r/intake.yaml", Title: "Intake",
+		HasCommands: true, NeedsTranscript: true,
+	}
+	m := New(Options{
+		Entries: []workflow.ListEntry{entry},
+		Width:   64,
+		Height:  height,
+		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
+			return &workflow.Definition{
+				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Intake",
+				Inputs: []workflow.InputSpec{
+					{Name: "mode", Type: "choice", Options: []string{"intake", "review"}},
+					{Name: "intake_profile", Type: "choice", Description: desc, Options: []string{
+						"one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+					}},
+				},
+				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
+			}, nil
+		},
+	})
+	m = apply(m, "enter", "enter") // answer mode, land on intake_profile with a prior answer
+	body := m.View().Content
+	lines := strings.Count(body, "\n") + 1
+	if lines != height {
+		t.Fatalf("worst-case frame = %d lines, PadHeight must fill to exactly %d:\n%s", lines, height, body)
+	}
+	if !strings.Contains(body, tui.TouchesPrefix) || !strings.Contains(body, "chosen: mode=intake") {
+		t.Fatalf("worst case must keep the sensitivity note and prior answers:\n%s", body)
+	}
+	if m.choiceViewport() < choiceFloor {
+		t.Fatalf("option viewport %d fell below the floor %d", m.choiceViewport(), choiceFloor)
+	}
+}
+
+func lineIndex(body, want string) int {
+	for i, line := range strings.Split(body, "\n") {
+		if visibleLine(line) == want {
+			return i
+		}
+	}
+	return -1
+}
+
+func TestChoicePromptQuestionAboveOptions(t *testing.T) {
+	m := choiceInputModel(t, 15, []string{"alpha", "beta"}, "pick the target branch")
+	body := m.View().Content
+	name := lineIndex(body, "target")
+	if name < 0 {
+		t.Fatalf("input name must render on its own line:\n%s", body)
+	}
+	if strings.Contains(body, "1 of 1") || strings.Contains(body, "(1 ") {
+		t.Fatalf("name line must not carry an ordinal:\n%s", body)
+	}
+	option := -1
+	for i, line := range strings.Split(body, "\n") {
+		if strings.Contains(visibleLine(line), "alpha") {
+			option = i
+			break
+		}
+	}
+	if option < 0 || name >= option {
+		t.Fatalf("name (%d) and description must render above the options (%d):\n%s", name, option, body)
+	}
+	if !strings.Contains(body, "pick the target branch") {
+		t.Fatalf("description must render as the question:\n%s", body)
+	}
+}
+
+func TestChoicePromptDemotesStatsToOneLine(t *testing.T) {
+	entry := workflow.ListEntry{Name: "gated", Source: "repo", File: "/r/gated.yaml", Title: "Gated"}
+	m := New(Options{
+		Entries: []workflow.ListEntry{entry},
+		Width:   80,
+		Height:  15,
+		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
+			return &workflow.Definition{
+				Name: e.Name, File: e.File, Version: workflow.Format,
+				Inputs: []workflow.InputSpec{
+					{Name: "mode", Type: "choice", Options: []string{"intake", "review"}},
+					{Name: "unit", Type: "choice", Options: []string{"a", "b"}},
+				},
+				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
+			}, nil
+		},
+	})
+	m = apply(m, "enter", "enter") // answer mode, land on unit
+	stats := ""
+	for _, line := range strings.Split(m.View().Content, "\n") {
+		v := visibleLine(line)
+		if strings.HasPrefix(v, "2/2") {
+			stats = v
+		}
+	}
+	if stats == "" {
+		t.Fatalf("stats line missing:\n%s", m.View().Content)
+	}
+	for _, want := range []string{"pick one", "chosen: mode=intake", tui.BackHint} {
+		if !strings.Contains(stats, want) {
+			t.Fatalf("stats line %q missing %q", stats, want)
+		}
+	}
+	body := m.View().Content
+	if lineIndex(body, "pick one") != -1 {
+		t.Fatalf("no standalone pick-one line allowed:\n%s", body)
+	}
+	if lineIndex(body, "chosen: mode=intake") != -1 {
+		t.Fatalf("no standalone chosen line allowed:\n%s", body)
+	}
+}
+
+func TestChoicePromptSensitivityOnlyWhenSensitive(t *testing.T) {
+	build := func(sensitive bool) string {
+		entry := workflow.ListEntry{Name: "w", Source: "repo", File: "/r/w.yaml", Title: "W", HasCommands: sensitive}
+		m := New(Options{
+			Entries: []workflow.ListEntry{entry},
+			Width:   80,
+			Height:  15,
+			Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
+			LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
+				return &workflow.Definition{
+					Name: e.Name, File: e.File, Version: workflow.Format,
+					Inputs: []workflow.InputSpec{{Name: "unit", Type: "choice", Options: []string{"a", "b"}}},
+					Steps:  []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
+				}, nil
+			},
+		})
+		return apply(m, "enter").View().Content
+	}
+	if !strings.Contains(build(true), tui.TouchesPrefix) {
+		t.Fatal("sensitive workflow must show the compact touches note during input")
+	}
+	if strings.Contains(build(false), tui.TouchesPrefix) {
+		t.Fatal("non-sensitive workflow must show no touches note during input")
 	}
 }
 

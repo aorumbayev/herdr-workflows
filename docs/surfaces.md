@@ -30,7 +30,7 @@ When you select a workflow, the picker shows its description below the list. It 
 
 A workflow that fails to load still appears, marked `invalid`. Select it to read the load error.
 
-While the picker asks for inputs, the answers you have given stay on screen. Press Escape to step back to the previous question with your earlier answer intact, or return to the list from the first one. If you change an earlier answer, the picker drops the later ones, because they might no longer apply.
+While the picker asks for inputs, each question shows its name and description in focus, above the options. One faint line below the options carries your progress, how to answer, the answers you have given, and the back hint. A sensitive workflow adds a short faint line that names what it touches. The answers you have given stay on screen. Press Escape to step back to the previous question with your earlier answer intact, or return to the list from the first one. If you change an earlier answer, the picker drops the later ones, because they might no longer apply.
 
 With no workflows at all, the picker still opens and points you to the actions palette.
 

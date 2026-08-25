@@ -69,7 +69,7 @@ var requiredPickerParityScenarios = []string{
 	"Overlong title",
 	"Inputs are not advertised in the row",
 	"Flags shown before run",
-	"Warnings are not the least legible element",
+	"Sensitivity is compact during input and prominent at launch",
 	"Repository with a broken workflow file",
 	"Selecting an invalid workflow",
 	"Long description wraps instead of cropping",
@@ -92,16 +92,19 @@ var requiredPickerParityScenarios = []string{
 	"Correct the final answer",
 	"Mode change alters active inputs",
 	"Failed run navigation",
+	"Question renders above the options",
+	"Progress type answers and back share one muted line",
+	"Sensitivity line appears only when sensitive",
 	"Dropdown of many options",
 	"Undescribed input",
 	"Custom value accepted",
 	"Constrained text input",
 	"Unresolved dynamic domain",
 	"Long description wraps instead of truncating",
-	"Hints occupy their own muted line",
+	"Text prompt demotes hints to the stats line",
 	"Choice prompt fits the compact popup",
 	"Choice input filter row shows typed text",
-	"Title row keeps named sensitivity flags",
+	"Compact sensitivity note during input",
 	"A guarded domain is explained by an earlier answer",
 	"First prompt has no answers",
 	"Answers exceed the popup width",
@@ -393,17 +396,20 @@ func TestParityFailedRunEscapeReturnsToRunsRoot(t *testing.T) {
 
 func TestParityFormatInputPromptReportsOrdinal(t *testing.T) {
 	spec := workflow.InputSpec{Name: "unit", Type: "choice", Options: []string{"a", "b"}}
-	got := FormatInputPrompt(spec, 60, 1, 3)
-	field := strings.Split(got, "\n")[0]
-	if field != "unit  (1 of 3)" {
-		t.Fatalf("field line must carry name and ordinal: %q", field)
+	field := FormatInputPrompt(spec, 60)
+	if field != "unit" {
+		t.Fatalf("field line must be the name alone, no ordinal: %q", field)
 	}
-	if hints := FormatInputHints(spec); hints != "pick one of 2" {
+	hints := FormatInputHints(spec)
+	if hints != "pick one of 2" {
 		t.Fatalf("hints = %q", hints)
 	}
-	base := FormatInputPrompt(spec, 60)
-	if strings.Contains(base, "1 of") || strings.Contains(base, "2 of") {
-		t.Fatalf("no-ordinal FormatInputPrompt must omit ordinal: %q", base)
+	stats := FormatInputStats(80, 1, 3, hints, "", tui.BackHint)
+	if !strings.HasPrefix(stats, "1/3") {
+		t.Fatalf("stats line must lead with the collection ordinal: %q", stats)
+	}
+	if !strings.Contains(stats, "pick one of 2") || !strings.Contains(stats, tui.BackHint) {
+		t.Fatalf("stats line must carry the type and back hint: %q", stats)
 	}
 }
 
@@ -429,14 +435,18 @@ func TestParityInputTitleRowKeepsSensitivityFlags(t *testing.T) {
 	})
 	m = apply(m, "enter")
 	body := m.View().Content
-	if !strings.Contains(body, "Branch check") || !strings.Contains(body, "commands") {
-		t.Fatalf("title row must keep sensitivity flags:\n%s", body)
+	if !strings.Contains(body, tui.TouchesPrefix) || !strings.Contains(body, "commands") {
+		t.Fatalf("input must show the compact sensitivity note:\n%s", body)
 	}
-	if strings.Contains(body, "input 1") || strings.Contains(body, "input 2") {
-		t.Fatalf("title row must not replace flags with input N:\n%s", body)
+	if strings.Contains(body, "1 of 2") {
+		t.Fatalf("prompt line must not carry the old ordinal form:\n%s", body)
 	}
-	if !strings.Contains(body, "1 of 2") {
-		t.Fatalf("prompt line must carry collection ordinal:\n%s", body)
+	if !strings.Contains(body, "1/2") {
+		t.Fatalf("stats line must carry the collection ordinal:\n%s", body)
+	}
+	// The final pre-run consent still names the flags prominently.
+	if m.consent != "Branch check"+tui.ChromeSep+"repo"+tui.ChromeSep+"commands" {
+		t.Fatalf("final consent must keep the named flags: %q", m.consent)
 	}
 }
 
@@ -575,28 +585,30 @@ func TestParityCursorMovesChangesDetailOnly(t *testing.T) {
 	}
 }
 
-func TestParityConsentUsesWarnWithoutDim(t *testing.T) {
+func TestParityConsentDemotedDuringInputProminentAtLaunch(t *testing.T) {
 	entry := workflow.ListEntry{
 		Name: "deploy", Source: "global", File: "/g/deploy.yaml", Title: "Deploy", HasCommands: true,
 	}
 	m := New(Options{
 		Entries: []workflow.ListEntry{entry},
 		Width:   80,
+		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
 		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format,
-				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
+				Inputs: []workflow.InputSpec{{Name: "unit", Type: "choice", Options: []string{"a", "b"}}},
+				Steps:  []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
 			}, nil
 		},
 	})
 	m = apply(m, "enter")
-	line := m.consentLine()
-	if line == "" || !strings.Contains(line, "commands") {
-		t.Fatalf("consent line = %q", line)
+	w := m.contentWidth()
+	line := m.sensitivityLine(w)
+	if line != tui.MuteChrome(tui.Truncate(tui.TouchesPrefix+"commands", w)) {
+		t.Fatalf("mid-input sensitivity must be the compact muted note: %q", line)
 	}
-	theme := tui.DefaultTheme()
-	if theme.Warn.GetFaint() {
-		t.Fatal("warn style must not be dim/faint")
+	if m.consent != "Deploy"+tui.ChromeSep+"global"+tui.ChromeSep+"commands" {
+		t.Fatalf("final consent must name the flags: %q", m.consent)
 	}
 }
 
