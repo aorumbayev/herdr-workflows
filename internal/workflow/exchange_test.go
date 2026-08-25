@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -289,4 +290,149 @@ func slicesContains(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func writeImportDir(t *testing.T, path, marker string) {
+	t.Helper()
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "demo.yaml"), []byte(marker), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestImportHookFailureKeepsTheDirectoryAndClearsTheJournal(t *testing.T) {
+	crash := errors.New("interrupted")
+	tests := []struct {
+		name  string
+		hooks ImportHooks
+	}{
+		{"after a file is staged", ImportHooks{AfterPublish: func(ImportResult) error { return crash }}},
+		{"just before the swap", ImportHooks{BeforeSwap: func() error { return crash }}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			dir := filepath.Join(root, ".hwf", "workflows")
+			old := "version: v1alpha1\nsteps:\n  - run: keep\n"
+			writeImportDir(t, dir, old)
+			payload, err := EncodePayload(Bundle{{Name: "demo", YAML: "version: v1alpha1\nsteps:\n  - run: new\n"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = RunImport(payload, RunImportOptions{
+				RepoRoot: root, Home: t.TempDir(), Scope: ImportRepo, Force: true, Hooks: tc.hooks,
+			})
+			if !errors.Is(err, crash) {
+				t.Fatalf("err = %v, want %v", err, crash)
+			}
+			got, readErr := os.ReadFile(filepath.Join(dir, "demo.yaml"))
+			if readErr != nil || string(got) != old {
+				t.Fatalf("existing workflow = %q, %v", got, readErr)
+			}
+			if pathExists(ImportJournalPath(dir)) {
+				t.Fatal("journal survived a failed import")
+			}
+			siblings, err := os.ReadDir(filepath.Dir(dir))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, entry := range siblings {
+				if entry.Name() != "workflows" {
+					t.Fatalf("residue next to the destination: %s", entry.Name())
+				}
+			}
+		})
+	}
+}
+
+func TestRecoverInterruptedImportResolvesEveryCrashState(t *testing.T) {
+	tests := []struct {
+		name     string
+		dest     bool
+		staging  bool
+		previous bool
+		journal  string
+		want     string
+	}{
+		{name: "staged but never swapped", dest: true, staging: true, want: "dest"},
+		{name: "swap left the destination missing", staging: true, previous: true, want: "staging"},
+		{name: "swap done before the previous copy went", dest: true, previous: true, want: "dest"},
+		{name: "rename to previous with nothing in place", previous: true, want: "previous"},
+		{name: "unreadable journal", dest: true, journal: "{", want: "dest"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			dir := filepath.Join(root, ".hwf", "workflows")
+			if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			journal := importJournal{Dest: dir, Staging: dir + ".abc.staging", Previous: dir + ".abc.prev"}
+			if tc.dest {
+				writeImportDir(t, journal.Dest, "dest")
+			}
+			if tc.staging {
+				writeImportDir(t, journal.Staging, "staging")
+			}
+			if tc.previous {
+				writeImportDir(t, journal.Previous, "previous")
+			}
+			body := tc.journal
+			if body == "" {
+				data, err := json.Marshal(journal)
+				if err != nil {
+					t.Fatal(err)
+				}
+				body = string(data)
+			}
+			if err := os.WriteFile(ImportJournalPath(dir), []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := RecoverInterruptedImport(dir, true); err != nil {
+				t.Fatalf("RecoverInterruptedImport: %v", err)
+			}
+			got, err := os.ReadFile(filepath.Join(dir, "demo.yaml"))
+			if err != nil || string(got) != tc.want {
+				t.Fatalf("destination = %q, %v; want %q", got, err, tc.want)
+			}
+			if pathExists(ImportJournalPath(dir)) {
+				t.Fatal("journal survived recovery")
+			}
+			if pathExists(journal.Staging) || pathExists(journal.Previous) {
+				t.Fatalf("staging = %v, previous = %v; want both gone",
+					pathExists(journal.Staging), pathExists(journal.Previous))
+			}
+		})
+	}
+}
+
+func TestFreshImportJournalBlocksAnotherImport(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, ".hwf", "workflows")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(importJournal{Dest: dir, Staging: dir + ".abc.staging", Previous: dir + ".abc.prev"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ImportJournalPath(dir), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	payload, err := EncodePayload(Bundle{{Name: "demo", YAML: "version: v1alpha1\nsteps:\n  - run: new\n"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = RunImport(payload, RunImportOptions{RepoRoot: root, Home: t.TempDir(), Scope: ImportRepo, Force: true})
+	if err == nil || !strings.Contains(err.Error(), "import already in progress") {
+		t.Fatalf("err = %v, want an in-progress refusal", err)
+	}
+	if pathExists(filepath.Join(dir, "demo.yaml")) {
+		t.Fatal("blocked import wrote into the destination")
+	}
+	if !pathExists(ImportJournalPath(dir)) {
+		t.Fatal("blocked import removed the live journal")
+	}
 }
