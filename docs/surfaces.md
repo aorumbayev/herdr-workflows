@@ -8,11 +8,11 @@ Runs happen in the picker or `hwf run`, because a run needs real herdr panes. In
 
 Press `prefix+k`.
 
-Tab cycles the Workflow, Runs, and Console browsers. A tab bar names the three browsers and marks the active one. The pane title stays static.
+The overlay has two tabs, workflows and runs. `Tab` cycles the two. `Tab` never quits the overlay. A tab bar names the two and marks the active one. The pane title stays static.
 
-Workflow and Runs footers start with `tab`. The Console tab footer includes `p pop out` to open the console in a herdr pane. The filter placeholders are `filter workflows...` and `filter runs...`. Filter rows use flush-left ASCII without a `/ ` prefix or indent.
+The workflows footer is `tab | enter run | p console | ctrl+k | esc`. The runs footer is `tab | ctrl+g <scope> | enter detail | p console | esc quit`. `p` pops the console out from either list. The filter placeholders are `filter workflows...` and `filter runs...`. Filter rows use flush-left ASCII without a `/ ` prefix or indent.
 
-The popup opens compact at 64 by 15 cells for the Workflow and Runs browsers. The Console browser needs more room, so a switch to it closes the popup and opens it again at 85% by 80%, with the tab, filter, and cursor carried across. A switch back returns the compact size. herdr has no resize for a popup that is already open.
+The overlay stays compact. Switching tabs does not close and reopen the popup.
 
 Workflow titles and the description keep the terminal's own foreground, because a fixed palette slot can be unreadable on your theme. Secondary text such as the location column, the footer hints, and the rule is faint, which derives from that same foreground. `invalid` and the sensitivity `!` marker use warn. The selected row uses reverse video. Pointer hover uses underline, not reverse. Pointer gestures also have keyboard keys.
 
@@ -43,20 +43,28 @@ In list mode, press `Ctrl+K`. A single letter fires the action, with no Enter. E
 | `n` | Create a repo workflow stub, open it in `$EDITOR`, then validate with the loader           |
 | `i` | Show status that names `hwf workflow import`                                             |
 | `e` | Open the examples page in your browser                                                   |
-| `c` | Open the console after a placement chooser (`tab` / `beside` / `below`, default `beside`) |
+| `c` | Open the console after a placement chooser. Same flow as `p` from either list |
 | `o` | Edit the selected workflow in `$EDITOR`, then validate with the loader                     |
 | `s` | Copy the selected workflow's import command and show a herdr notification                |
 | `d` | Delete the selected workflow, after a `y` or `n` confirmation                            |
 
-`o`, `s`, and `d` need a selected valid workflow. `n`, `i`, `e`, and `c` do not. The picker stays open for every palette action except `c`, which dismisses the overlay after the console pane opens.
+`o`, `s`, and `d` need a selected valid workflow. `n`, `i`, `e`, and `c` do not. The picker stays open for every palette action. `c` opens the console the same way `p` does, and the overlay dismisses only after the console pane opens.
 
 Plain `k` still types into the filter.
 
 ## The console
 
-Open it from the picker palette with `c`, or with `hwf console`. Placement is `tab`, `beside`, or `below`. The overlay remembers the last choice for the session. `hwf console --placement` takes the same three values.
+Reach the console by pop-out from the overlay. Press `p` from the workflows list or the runs list, or open the actions palette with `Ctrl+K` and press `c`. Both routes run the same flow. A placement chooser offers `beside`, `below`, and `new tab`. `beside` is the default. The chooser shows `new tab` for the placement value `tab`. The session default is the last successful open, and it starts at `beside`.
 
-The console is a full-screen Charm TUI. Tab switches the workflows list and the runs list. Enter on a workflow opens a read-only diagram of its steps, `when:` edges, and pane targets from the parsed definition. On the diagram, `v` selects step nodes and `s` sends an annotation bundle (selected step YAML plus your instruction) into an agent pane input, but does not submit it. Enter on a run opens debug tabs: `1` log, `2` transcript, `3` yaml-at-run. Press `y` to copy `hwf run <name>` for a retry, without a submit.
+If the console pane cannot open, because you are not inside herdr or there is no pane host, the overlay stays open and shows a plain status line.
+
+After a successful pop-out from a selected workflow, the console opens on that workflow's diagram. Press `Escape` to return to the console catalog. With nothing valid selected, the console opens on the workflows list.
+
+The console is a full-screen Charm TUI. It uses the same catalog chrome as the overlay. Workflow rows show the title, the sensitivity `!`, and the `repo`, `global`, or `invalid` location. The filter placeholders are `filter workflows...` and `filter runs...`. `Tab` cycles the workflows list and the runs list, two labels. `Enter` on a workflow opens a read-only diagram of its steps, `when:` edges, and pane targets from the parsed definition. On the diagram, `v` selects step nodes and `s` sends an annotation bundle (selected step YAML plus your instruction) into an agent pane input, but does not submit it. `Enter` on a run opens debug tabs: `1` log, `2` transcript, `3` yaml-at-run. Press `y` to copy `hwf run <name>` for a retry, without a submit. `Escape` backs out. Quitting restores the terminal.
+
+The workflows footer is `tab | enter diagram | esc`. The runs footer is `tab | enter detail | esc`.
+
+`hwf console` runs the console TUI. `hwf console --placement <tab|beside|below>` opens it in a pane, and falls back to the in-process TUI when no pane host is available and a terminal is present.
 
 ## The CLI
 
