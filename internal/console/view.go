@@ -7,12 +7,21 @@ import (
 
 	"github.com/aorumbayev/herdr-workflows/internal/runsbrowser"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
+	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
 func (m Model) View() tea.View {
 	v := tea.NewView(tui.PadHeight(tui.PadContent(m.render(), m.contentWidth()), m.height))
 	v.MouseMode = tea.MouseModeAllMotion
+	v.AltScreen = true
 	return v
+}
+
+func filterRow(filter, placeholder string, width int) string {
+	if filter == "" {
+		return tui.Truncate(placeholder, width)
+	}
+	return tui.Truncate(filter, width)
 }
 
 func (m Model) render() string {
@@ -31,33 +40,22 @@ func (m Model) render() string {
 func (m Model) renderWorkflows() string {
 	w := m.contentWidth()
 	vp := m.listViewport()
+	entries := m.visibleEntries()
 	var rows []string
-	end := min(m.wfOffset+vp, len(m.entries))
+	end := min(m.wfOffset+vp, len(entries))
 	for i := m.wfOffset; i < end; i++ {
-		e := m.entries[i]
-		title := e.Title
-		if title == "" {
-			title = e.Name
-		}
-		loc := e.Source
-		if e.Error != "" {
-			loc = "invalid"
-		}
-		rows = append(rows, tui.FormatRow(title, loc, false, w, i == m.wfCursor))
+		e := entries[i]
+		rows = append(rows, tui.FormatRow(workflow.DisplayTitle(e.Name, e.Title), entryLocation(e), entrySensitive(e), w, i == m.wfCursor))
 	}
 	for len(rows) < vp {
 		rows = append(rows, "")
 	}
 	detail := ""
-	if len(m.entries) > 0 && m.wfCursor < len(m.entries) {
-		detail = tui.FormatDetailBlock(m.entries[m.wfCursor].Description, w)
+	if m.wfCursor >= 0 && m.wfCursor < len(entries) {
+		detail = tui.FormatDetailBlock(entries[m.wfCursor].Description, w)
 	}
-	footer := tui.FormatListFooter(w, m.wfCursor, len(m.entries), workflowsFooter(m.embedded))
-	if m.embedded {
-		footer = tui.MuteChrome(footer)
-		return strings.Join(rows, "\n") + "\n\n" + detail + "\n" + tui.FormatRule(w) + "\n" + footer
-	}
-	head := tui.Truncate("workflows", w)
+	footer := tui.FormatListFooter(w, m.wfCursor, len(entries), workflowsFooter())
+	head := filterRow(m.wfFilter, tui.FilterWorkflows, w)
 	return head + "\n\n" + strings.Join(rows, "\n") + "\n\n" + detail + "\n" + tui.FormatRule(w) + "\n" + footer
 }
 
@@ -183,23 +181,23 @@ func (m Model) renderDiagramAgentPick(w int) string {
 func (m Model) renderRuns() string {
 	w := m.contentWidth()
 	vp := m.listViewport()
+	runs := m.visibleRuns()
 	var rows []string
-	end := min(m.runOffset+vp, len(m.runs))
+	end := min(m.runOffset+vp, len(runs))
 	titleW := max(0, w-tui.RowTextIndent-tui.RowRightGutter)
 	for i := m.runOffset; i < end; i++ {
-		item := m.runs[i]
-		row := runsbrowser.FormatRunRow(item, titleW, runsbrowser.FormatRunRowOpts{})
+		row := runsbrowser.FormatRunRow(runs[i], titleW, runsbrowser.FormatRunRowOpts{})
 		rows = append(rows, tui.FormatRow(row, "", false, w, i == m.runCursor))
 	}
 	for len(rows) < vp {
 		rows = append(rows, "")
 	}
 	detail := ""
-	if len(m.runs) > 0 && m.runCursor < len(m.runs) {
-		detail = tui.FormatDetailBlock(runsbrowser.FormatRunSummary(m.runs[m.runCursor]), w)
+	if m.runCursor >= 0 && m.runCursor < len(runs) {
+		detail = tui.FormatDetailBlock(runsbrowser.FormatRunSummary(runs[m.runCursor]), w)
 	}
-	footer := tui.FormatListFooter(w, m.runCursor, len(m.runs), runsFooter())
-	head := tui.Truncate("runs", w)
+	footer := tui.FormatListFooter(w, m.runCursor, len(runs), runsFooter())
+	head := filterRow(m.runFilter, tui.FilterRuns, w)
 	return head + "\n\n" + strings.Join(rows, "\n") + "\n\n" + detail + "\n" + tui.FormatRule(w) + "\n" + footer
 }
 
@@ -220,15 +218,12 @@ func (m Model) renderDetail() string {
 	return chrome + "\n" + strings.Join(visible, "\n") + "\n" + tui.FormatRule(w) + "\n" + footer
 }
 
-func workflowsFooter(embedded bool) string {
-	if embedded {
-		return tui.ConsoleHint
-	}
-	return strings.Join([]string{"enter diagram", "tab runs", "esc quit"}, tui.ChromeSep)
+func workflowsFooter() string {
+	return strings.Join([]string{"tab", "enter diagram", "esc"}, tui.ChromeSep)
 }
 
 func runsFooter() string {
-	return strings.Join([]string{"tab workflows", "enter detail", "esc quit"}, tui.ChromeSep)
+	return strings.Join([]string{"tab", "enter detail", "esc"}, tui.ChromeSep)
 }
 
 func detailFooter() string {

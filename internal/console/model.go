@@ -29,20 +29,20 @@ const (
 
 // Options is the input for a console model.
 type Options struct {
-	Entries        []workflow.ListEntry
-	RepoRoot       string
-	Width          int
-	Height         int
-	Env            config.Env
-	Config         config.Config
-	LoadRuns       func() []history.Summary
-	LoadDetail     func(runID string) DetailPayload
-	LoadWorkflow   func(workflow.ListEntry) (*workflow.Definition, error)
-	CopyClipboard  func(string) error
-	Embedded       bool
-	ListAgentPanes func() ([]AgentPaneEntry, error)
-	PaneSendText   func(paneID, text string) error
-	SpillSendback  func(repoRoot, text string) (string, string, error)
+	Entries         []workflow.ListEntry
+	RepoRoot        string
+	Width           int
+	Height          int
+	Env             config.Env
+	Config          config.Config
+	LoadRuns        func() []history.Summary
+	LoadDetail      func(runID string) DetailPayload
+	LoadWorkflow    func(workflow.ListEntry) (*workflow.Definition, error)
+	CopyClipboard   func(string) error
+	LandingWorkflow string
+	ListAgentPanes  func() ([]AgentPaneEntry, error)
+	PaneSendText    func(paneID, text string) error
+	SpillSendback   func(repoRoot, text string) (string, string, error)
 }
 
 // Model is the full-screen console Bubble Tea model.
@@ -76,7 +76,9 @@ type Model struct {
 	listAgentPanes      func() ([]AgentPaneEntry, error)
 	paneSendText        func(paneID, text string) error
 	spillSendback       func(repoRoot, text string) (string, string, error)
-	embedded            bool
+	wfFilter            string
+	runFilter           string
+	initCmd             tea.Cmd
 	cfg                 config.Config
 	detail              DetailPayload
 	diagram             workflow.Diagram
@@ -148,7 +150,7 @@ func New(opts Options) Model {
 	if spillFn == nil {
 		spillFn = MaybeSpillSendbackText
 	}
-	return Model{
+	m := Model{
 		entries:        opts.Entries,
 		repoRoot:       opts.RepoRoot,
 		width:          width,
@@ -162,9 +164,18 @@ func New(opts Options) Model {
 		listAgentPanes: listAgents,
 		paneSendText:   paneSend,
 		spillSendback:  spillFn,
-		embedded:       opts.Embedded,
 		cfg:            opts.Config,
 	}
+	if opts.LandingWorkflow != "" {
+		for _, e := range opts.Entries {
+			if e.Name == opts.LandingWorkflow {
+				opened, cmd := m.OpenDiagram(e)
+				m, m.initCmd = opened, cmd
+				break
+			}
+		}
+	}
+	return m
 }
 
 func defaultLoadDetail(runID string, getenv config.Env) DetailPayload {
@@ -185,7 +196,7 @@ func defaultLoadDetail(runID string, getenv config.Env) DetailPayload {
 	return payload
 }
 
-func (m Model) Init() tea.Cmd { return nil }
+func (m Model) Init() tea.Cmd { return m.initCmd }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -237,7 +248,7 @@ func (m Model) handleWorkflowsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "down":
-		if m.wfCursor+1 < len(m.entries) {
+		if m.wfCursor+1 < len(m.visibleEntries()) {
 			m.wfCursor++
 			m.clampWorkflowWindow()
 		}
@@ -247,8 +258,20 @@ func (m Model) handleWorkflowsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.quit = true
 		return m, tea.Quit
+	case "backspace":
+		if m.wfFilter != "" {
+			r := []rune(m.wfFilter)
+			m.wfFilter = string(r[:len(r)-1])
+			m.wfCursor, m.wfOffset = 0, 0
+		}
+		return m, nil
+	default:
+		if msg.Mod == 0 && msg.Text != "" {
+			m.wfFilter += msg.Text
+			m.wfCursor, m.wfOffset = 0, 0
+		}
+		return m, nil
 	}
-	return m, nil
 }
 
 func (m Model) handleRunsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -264,17 +287,17 @@ func (m Model) handleRunsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "down":
-		if m.runCursor+1 < len(m.runs) {
+		if m.runCursor+1 < len(m.visibleRuns()) {
 			m.runCursor++
 			m.clampRunWindow()
 		}
 		return m, nil
 	case "enter":
-		if m.runCursor < 0 || m.runCursor >= len(m.runs) {
+		runs := m.visibleRuns()
+		if m.runCursor < 0 || m.runCursor >= len(runs) {
 			return m, nil
 		}
-		id := m.runs[m.runCursor].ID
-		m.detail = m.loadDetail(id)
+		m.detail = m.loadDetail(runs[m.runCursor].ID)
 		m.debugTab = DebugTabLog
 		m.detailScroll = 0
 		m.screen = screenDetail
@@ -283,15 +306,28 @@ func (m Model) handleRunsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.quit = true
 		return m, tea.Quit
+	case "backspace":
+		if m.runFilter != "" {
+			r := []rune(m.runFilter)
+			m.runFilter = string(r[:len(r)-1])
+			m.runCursor, m.runOffset = 0, 0
+		}
+		return m, nil
+	default:
+		if msg.Mod == 0 && msg.Text != "" {
+			m.runFilter += msg.Text
+			m.runCursor, m.runOffset = 0, 0
+		}
+		return m, nil
 	}
-	return m, nil
 }
 
 func (m Model) openSelectedDiagram() (tea.Model, tea.Cmd) {
-	if m.wfCursor < 0 || m.wfCursor >= len(m.entries) {
+	entries := m.visibleEntries()
+	if m.wfCursor < 0 || m.wfCursor >= len(entries) {
 		return m, nil
 	}
-	entry := m.entries[m.wfCursor]
+	entry := entries[m.wfCursor]
 	if entry.Error != "" {
 		m.status = "diagram unavailable" + tui.ChromeSep + entry.Error
 		return m, nil
@@ -334,7 +370,7 @@ func (m Model) openSelectedDiagram() (tea.Model, tea.Cmd) {
 // OpenDiagram opens one workflow diagram with no console list. The picker tab
 // is already a workflow list, so it opens the diagram directly.
 func (m Model) OpenDiagram(entry workflow.ListEntry) (Model, tea.Cmd) {
-	for i, e := range m.entries {
+	for i, e := range m.visibleEntries() {
 		if e.Name == entry.Name && e.File == entry.File {
 			m.wfCursor = i
 			m.clampWorkflowWindow()
@@ -366,8 +402,8 @@ func (m Model) handleDetailKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "y":
 		name := m.detail.Workflow
-		if name == "" && m.runCursor >= 0 && m.runCursor < len(m.runs) {
-			name = m.runs[m.runCursor].Workflow
+		if runs := m.visibleRuns(); name == "" && m.runCursor >= 0 && m.runCursor < len(runs) {
+			name = runs[m.runCursor].Workflow
 		}
 		cmd := FormatRetryCommand(name)
 		if err := m.copyText(cmd); err != nil {
@@ -405,23 +441,27 @@ func (m *Model) viewport(chrome int) int {
 }
 
 func (m *Model) clampWorkflowWindow() {
-	vp := m.listViewport()
-	if m.wfCursor < m.wfOffset {
-		m.wfOffset = m.wfCursor
-	}
-	if m.wfCursor >= m.wfOffset+vp {
-		m.wfOffset = m.wfCursor - vp + 1
-	}
+	m.wfCursor, m.wfOffset = clampWindow(m.wfCursor, m.wfOffset, len(m.visibleEntries()), m.listViewport())
 }
 
 func (m *Model) clampRunWindow() {
-	vp := m.listViewport()
-	if m.runCursor < m.runOffset {
-		m.runOffset = m.runCursor
+	m.runCursor, m.runOffset = clampWindow(m.runCursor, m.runOffset, len(m.visibleRuns()), m.listViewport())
+}
+
+func clampWindow(cursor, offset, count, vp int) (int, int) {
+	if cursor > count-1 {
+		cursor = count - 1
 	}
-	if m.runCursor >= m.runOffset+vp {
-		m.runOffset = m.runCursor - vp + 1
+	if cursor < 0 {
+		cursor = 0
 	}
+	if cursor < offset {
+		offset = cursor
+	}
+	if cursor >= offset+vp {
+		offset = cursor - vp + 1
+	}
+	return cursor, offset
 }
 
 // clampAgentWindow keeps the send-back chooser cursor visible. The shown
@@ -464,10 +504,53 @@ func (m Model) Body() string {
 	return m.render()
 }
 
-func (m Model) AtRoot() bool {
-	return m.screen == screenWorkflows || m.screen == screenRuns
+func (m Model) visibleEntries() []workflow.ListEntry {
+	needle := strings.ToLower(m.wfFilter)
+	out := make([]workflow.ListEntry, 0, len(m.entries))
+	for _, e := range m.entries {
+		if e.Hidden {
+			continue
+		}
+		if m.wfFilter != "" {
+			title := strings.ToLower(workflow.DisplayTitle(e.Name, e.Title))
+			if !strings.Contains(title, needle) && !strings.Contains(strings.ToLower(e.Name), needle) {
+				continue
+			}
+		}
+		out = append(out, e)
+	}
+	return out
 }
 
-func (m Model) BlocksPopOut() bool {
-	return m.screen == screenDiagram && (m.diagramMode == diagramModeInstruction || m.diagramMode == diagramModeAgentPick)
+func (m Model) visibleRuns() []history.Summary {
+	if m.runFilter == "" {
+		return m.runs
+	}
+	needle := strings.ToLower(m.runFilter)
+	out := make([]history.Summary, 0, len(m.runs))
+	for _, r := range m.runs {
+		if strings.Contains(strings.ToLower(r.Workflow+" "+r.Title+" "+r.Status), needle) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func entryLocation(e workflow.ListEntry) string {
+	if e.Error != "" {
+		return "invalid"
+	}
+	if e.Source == "repo" {
+		return "repo"
+	}
+	return "global"
+}
+
+func entrySensitive(e workflow.ListEntry) bool {
+	return len(workflow.SensitivityLabels(workflow.Sensitivity{
+		HasCommands:        e.HasCommands,
+		HasTranscript:      e.NeedsTranscript,
+		SensitiveMethods:   e.SensitiveMethods,
+		UnresolvedChildren: e.UnresolvedChildren,
+	})) > 0
 }

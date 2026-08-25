@@ -16,7 +16,8 @@ func TestTabCyclesWorkflowsRuns(t *testing.T) {
 	if !strings.Contains(body, tui.TabWorkflows) || !strings.Contains(body, tui.TabRuns) {
 		t.Fatalf("tab bar missing:\n%s", body)
 	}
-	if strings.Contains(body, "console") {
+	tabBar := strings.Split(body, "\n")[0]
+	if strings.Contains(tabBar, "console") {
 		t.Fatalf("overlay must not show a console tab:\n%s", body)
 	}
 	m = apply(m, "tab")
