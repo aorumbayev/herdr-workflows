@@ -15,8 +15,8 @@ assume a fixed absolute path.
 
 Read these before Phase 0. They decide which findings survive.
 
-**1. The gates are the oracle, not a rubric.** `go tool verify`, the docs build (`npm run build` in `docs/`), and
-`openspec validate` answer questions objectively. A finding that contradicts gate output is wrong.
+**1. The gates are the oracle, not a rubric.** `go tool verify` and the docs build (`npm run build` in `docs/`)
+answer questions objectively. A finding that contradicts gate output is wrong.
 A claim that a check "would fail" is worthless until the check ran.
 
 **2. Deletion is free. Addition is on trial.** A recommendation to delete needs one line of
@@ -33,9 +33,11 @@ line of real output.
 ignore, skipping a test, or widening a type to make the gate green is itself a critical finding.
 See [criteria-risk.md](criteria-risk.md).
 
-**5. Three sources, one truth.** `openspec/specs/*/spec.md` is the spec of record, `internal/` is the
-truth about behavior, `docs/` describes the contract to users. When they disagree, the finding must
-name **which one is wrong**, not merely that they differ.
+**5. Three layers, one truth.** Invariants of record are the loader, `docs/workflow.schema.json` and the
+embed schema, and the tests. Code is current behavior. The user-facing contract lives in `docs/` and
+`README.md`. Hard constraints in `AGENTS.md` are a short agent index — a bullet exists only when a
+machine already owns the same rule. When layers disagree, the finding must name **which one is wrong**,
+not merely that they differ.
 
 **6. herdr runtime behavior comes from the reference checkout.** Any claim about herdr must cite a
 path under `.agents/references/herdr/docs/next/website/src/content/docs/`. Recalled herdr behavior is not
@@ -64,10 +66,9 @@ check instead of auto-fixing, and the docs build writes only gitignored paths.
 ```bash
 go tool verify
 npm ci --prefix docs && npm run build --prefix docs
-openspec validate --all --strict
 ```
 
-`go tool verify` runs every host-feasible check: format, vet, Go tests, lint, the `go run ./scripts/verify-*` gates, then docs, OpenSpec, `govulncheck`, and GoReleaser. `go tool verify -fast` is the pre-commit set and includes format and vet.
+`go tool verify` runs every host-feasible check: format, vet, Go tests, lint, the `go run ./scripts/verify-*` gates, then docs, `govulncheck`, and GoReleaser. `go tool verify -fast` is the pre-commit set and includes format and vet.
 
 Then check that generated artifacts still regenerate to identical bytes:
 
@@ -94,7 +95,7 @@ find internal -name '*.go' | xargs wc -l 2>/dev/null | sort -rn | head -20
 **A red gate outranks every opinion.** If `go tool verify` fails, report that first,
 with the failing name and the shortest decisive output line, and continue the review — do not stop.
 
-If a command is unavailable (no `openspec` CLI, no herdr reference checkout), say so in the report
+If a command is unavailable (no herdr reference checkout), say so in the report
 under a "Not measured" heading. Never infer the result.
 
 ## Phase 1: Scope
@@ -110,7 +111,8 @@ which costs less than deciding in advance that it had nothing to say.
 
 **Pick the scope deliberately.** A bare run measured $10 against a branch run's $6, on fewer findings,
 because the whole repository has more to read. It is also the only invocation that audits standing
-risk: an unpinned GitHub Action, an unlinked doc page, or a dead spec capability sits in unchanged
+risk: an unpinned GitHub Action, an unlinked doc page, or a Hard constraints bullet with no
+machine sits in unchanged
 files, so no `branch` run will ever surface it. Use `branch` before a pull request. Use bare when you
 want the standing state, and expect to pay for it.
 
@@ -136,7 +138,7 @@ Exit: every group has returned findings.
 | Group | Name                | Criteria file                          | Covers                                                                                                   |
 | ----- | ------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | A     | Code & Tests        | [criteria-code.md](criteria-code.md)   | over-splitting, dead abstractions, duplication, dead code, comments, test power, mock abuse              |
-| B     | Truth & Enforcement | [criteria-truth.md](criteria-truth.md) | specs against code against docs, generated artifacts, herdr claims, prose style, gate honesty, CI parity |
+| B     | Truth & Enforcement | [criteria-truth.md](criteria-truth.md) | invariants against code against docs, generated artifacts, herdr claims, prose style, gate honesty, CI parity |
 | C     | Risk & Regression   | [criteria-risk.md](criteria-risk.md)   | trust boundaries, caps, secrets, install path, and on a branch the copout patterns                       |
 
 Each group's brief is wide on purpose. Three review agents is the cap, so coverage comes from depth
@@ -295,5 +297,5 @@ Discarded ADDs go in the report. A rejected idea that is not written down comes 
 (criteria sections with no findings, one line each)
 ```
 
-A finding that changes runtime behavior names the OpenSpec capability under `openspec/specs/` that
-must be updated first — see `CONTRIBUTING.md`.
+A finding that changes runtime behavior must update the invariants of record (loader, schema, tests)
+and the user-facing contract when users see the change — see `CONTRIBUTING.md`.

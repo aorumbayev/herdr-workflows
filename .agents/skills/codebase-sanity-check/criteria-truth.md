@@ -1,9 +1,10 @@
 # Group B: Truth and Enforcement
 
-Three artifacts describe one product. `openspec/specs/*/spec.md` is the spec of record, `internal/` is the
-truth about behavior, `docs/` is the promise to users. You find where they disagree and name **which
-one is wrong**. Then you check whether the rules they state are enforced by a machine or only
-remembered.
+Three layers describe one product. Invariants of record are the loader, `docs/workflow.schema.json`
+and the embed schema, and the tests. Code is current behavior. `docs/` and `README.md` are the
+user-facing contract. Hard constraints in `AGENTS.md` are a short agent index — a bullet exists only
+when a machine already owns the same rule. You find where they disagree and name **which one is
+wrong**. Then you check whether the rules they state are enforced by a machine or only remembered.
 
 Your brief is wide because this repository runs three review agents, not seven. Work the sections in order
 and do not stop early.
@@ -11,7 +12,7 @@ and do not stop early.
 **Boundary:** code shape, duplication of code, and test power are Group A. Security holes are Group
 C. You own truth, prose, and enforcement.
 
-**Read first:** `AGENTS.md` "Hard constraints", `CONTRIBUTING.md` "OpenSpec" and "Documentation
+**Read first:** `AGENTS.md` "Hard constraints", `CONTRIBUTING.md` "Change classes" and "Documentation
 style". Prose follows Simplified Technical English: active voice, one term per concept, short
 sentences, no marketing filler, no semicolons, American spelling. Exact technical contracts and
 examples stay unchanged.
@@ -37,25 +38,23 @@ examples stay unchanged.
 
 ### Not a finding
 
-- Docs describing a documented future step already tracked in an OpenSpec change, provided the doc
-  marks it as not yet available
+- Docs describing a documented future step, provided the doc marks it as not yet available
 
-## 2. Spec against code
+## 2. Invariants of record against code
 
 ### What to check
 
-- A spec requirement the code contradicts, meaning `internal/` does something the spec says it does not
-- Behavior in `internal/` that no main spec covers
-- A capability directory under `openspec/specs/` whose subject no longer exists
+- A loader rule, schema key, or test assertion the code contradicts
+- Behavior in `internal/` that no invariant of record covers
+- A Hard constraints bullet with no machine that owns the same rule
 
 ### How to measure
 
-- `ls openspec/specs/` for the capability list. For each,
-  `rg -n "MUST|SHALL" openspec/specs/<cap>/spec.md`
-- For each requirement, read the implementing code and say whether it agrees. Find it by the
-  requirement's own words: `rg -n "<distinctive phrase from the requirement>" internal main.go`. A requirement
-  with no site at all is section 9's finding. A site that behaves differently is this section's
-- `openspec validate --all --strict` result comes from Phase 0. Quote it. Do not re-run
+- Read loader refinements in `internal/workflow/` and keys in `docs/workflow.schema.json`
+- For each rule, find the implementing site by its own words:
+  `rg -n "<distinctive phrase from the rule>" internal main.go`. A rule with no site at all is
+  section 9's finding. A site that behaves differently is this section's
+- Phase 0 gate output (`go tool verify`, docs build) is evidence. Quote it. Do not re-run
 
 ### Not a finding
 
@@ -90,7 +89,7 @@ examples stay unchanged.
 ### What to check
 
 - Any statement about herdr behavior with no reference path behind it
-- A herdr method, param, or event named in `internal/`, docs, or a spec that the pinned reference version
+- A herdr method, param, or event named in `internal/` or docs that the pinned reference version
   does not define
 - A pinned version in `AGENTS.md` and `CONTRIBUTING.md` that differs from the manifest
 
@@ -175,7 +174,7 @@ both in order and name the first step that fails or that needs knowledge the pag
 - A contributor can clone, install, build, test, change one thing, verify, and open a pull request
   from `CONTRIBUTING.md` and `AGENTS.md` alone
 - Commands in `AGENTS.md` "Commands" all exist and run on this branch
-- OpenSpec instructions match the installed CLI's actual commands
+- Change-class instructions in `CONTRIBUTING.md` match the gates this branch runs
 
 ### How to measure
 
@@ -183,7 +182,7 @@ both in order and name the first step that fails or that needs knowledge the pag
   "Commands" block and `internal/cli/`
 - `rg -in "windows|wsl" README.md docs/*.md` and report where in the reading order it appears
 - Compare the command block in `AGENTS.md` against `CONTRIBUTING.md` "Checks"
-- `openspec validate --help` and `openspec --help` against the commands `CONTRIBUTING.md` names
+- Confirm `CONTRIBUTING.md` names `go tool verify` and the docs build path, not a retired process
 - Run the check commands `CONTRIBUTING.md` lists. Phase 0 covers most. Quote any that fail
 
 ### Not a finding
@@ -216,8 +215,8 @@ A rule that only asks is a wish.
 
 ### What to check
 
-Take every constraint in `AGENTS.md` "Hard constraints" and every `MUST` in `openspec/specs/`. For
-each, find the site that rejects a violation, then rank it:
+Take every constraint in `AGENTS.md` "Hard constraints". For each, find the site that rejects a
+violation, then rank it:
 
 1. The type system rejects it, so it cannot compile
 2. The loader or schema rejects it at load
@@ -284,8 +283,8 @@ A check that cannot fire is worse than no check, because it reports safety it do
   a finding, and you must say which. Cite `file:line` on both sides
 - Count the jobs in `verify.yml` and confirm `AGENTS.md` and `CONTRIBUTING.md` name every one
 - Check these by name, because they are cheap to lose: tests run on two operating systems while
-  Go verify scripts run on one, pre-commit runs Go tests without e2e, and `openspec validate --all
---strict` appears in `CONTRIBUTING.md` — confirm whether any CI job runs it
+  Go verify scripts run on one, and pre-commit runs Go tests without e2e. Confirm `CONTRIBUTING.md`
+  and Phase 0 agree that `go tool verify` and the docs build are the gates
 - The tunable values are few: the file-length cap in `scripts/verify-file-length`, and comment-block
   limits in `scripts/verify-comments`. Note the direction before you judge one: raising the
   file-length ceiling loosens the gate. Enumerate the values, then run
