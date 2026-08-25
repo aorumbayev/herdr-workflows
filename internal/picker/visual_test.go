@@ -12,7 +12,6 @@ import (
 )
 
 func TestPaletteRenderIsPaletteOnly(t *testing.T) {
-	// openspec/specs/picker-editor-actions/spec.md palette overlay
 	m := New(Options{Entries: catalogEntries(), Width: 80})
 	m = apply(m, "ctrl+k")
 	body := m.View().Content
@@ -25,7 +24,6 @@ func TestPaletteRenderIsPaletteOnly(t *testing.T) {
 }
 
 func TestInputClearsLeftoverListFilter(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md input prompts
 	entry := workflow.ListEntry{Name: "branchy", Source: "repo", File: "/r/b.yaml", Title: "Branchy"}
 	m := New(Options{
 		Entries: []workflow.ListEntry{entry},
@@ -57,7 +55,6 @@ func TestInputClearsLeftoverListFilter(t *testing.T) {
 
 func TestFilterRowIsFlushLeftASCIIWithoutSlashPrefix(t *testing.T) {
 	// Product Improvement: Charm flush-left ASCII filter. No OpenTUI "/ " prefix or indent.
-	// openspec/specs/picker-presentation/spec.md "Picker chrome uses width-stable ASCII glyphs"
 	m := New(Options{Entries: catalogEntries(), Width: 80})
 	body := m.View().Content
 	first := tui.StripContentPadding(strings.Split(body, "\n")[1])

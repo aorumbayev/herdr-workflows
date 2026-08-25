@@ -55,8 +55,6 @@ func coveringTestExists(name string, own map[string]struct{}, external map[strin
 }
 
 // Spec scenarios that picker.ParityBaseline owns (picker-presentation + picker-editor-actions).
-// openspec/specs/picker-presentation/spec.md
-// openspec/specs/picker-editor-actions/spec.md
 var requiredPickerParityScenarios = []string{
 	"Title appears only in the pane label",
 	"No runtime retitling",
@@ -162,8 +160,6 @@ var requiredPickerParityScenarios = []string{
 }
 
 func TestParityBaselineCoversSpecScenarios(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md
-	// openspec/specs/picker-editor-actions/spec.md
 	ownTests := loadPackageTestFuncs(".")
 	externalTests := map[string]map[string]struct{}{
 		"tui":      loadPackageTestFuncs("../tui"),
@@ -212,7 +208,6 @@ func TestParityBaselineCoversSpecScenarios(t *testing.T) {
 }
 
 func TestParityFewerMatchesPadBlankRows(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md "Fewer matches than the viewport"
 	m := New(Options{Entries: eightEntries()[:2], Width: 62})
 	body := m.View().Content
 	lines := strings.Split(body, "\n")
@@ -234,7 +229,6 @@ func TestParityFewerMatchesPadBlankRows(t *testing.T) {
 }
 
 func TestParityInvalidRowDetailShowsLoadError(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md "Selecting an invalid workflow"
 	m := New(Options{Entries: catalogEntries(), Width: 80})
 	for m.cursor < len(m.matched())-1 {
 		entry := m.matched()[m.cursor].Entry
@@ -257,7 +251,6 @@ func TestParityInvalidRowDetailShowsLoadError(t *testing.T) {
 }
 
 func TestParityPositionCounterUsesFilteredList(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md "Position counter reflects the filtered list"
 	m := New(Options{Entries: eightEntries(), Width: 80})
 	m = apply(m, "a", "l", "p", "h", "a")
 	body := m.View().Content
@@ -268,7 +261,6 @@ func TestParityPositionCounterUsesFilteredList(t *testing.T) {
 }
 
 func TestParityNoScrollThumbGlyph(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md "No scroll thumb"
 	m := New(Options{Entries: eightEntries(), Width: 62})
 	body := m.View().Content
 	for _, glyph := range []string{"▐", "█", "▓", "░", "▲", "▼", "┃"} {
@@ -279,7 +271,6 @@ func TestParityNoScrollThumbGlyph(t *testing.T) {
 }
 
 func TestParityListFooterIdentifiesRunCtrlKDismiss(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md "Regular list footer"
 	m := New(Options{Entries: catalogEntries(), Width: 80})
 	body := m.View().Content
 	if !strings.Contains(body, "enter run") || !strings.Contains(body, "ctrl+k") || !strings.Contains(body, "esc") {
@@ -288,7 +279,6 @@ func TestParityListFooterIdentifiesRunCtrlKDismiss(t *testing.T) {
 }
 
 func TestParityWidthChangeRecomputesTruncation(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md "Width changes mid-session"
 	m := New(Options{Entries: eightEntries(), Width: 80})
 	wide := m.View().Content
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 40})
@@ -308,7 +298,6 @@ func TestParityWidthChangeRecomputesTruncation(t *testing.T) {
 }
 
 func TestParityModeChangeDiscardsLaterAnswers(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md "Mode change alters active inputs"
 	entry := workflow.ListEntry{Name: "gated", Source: "repo", File: "/r/gated.yaml"}
 	m := New(Options{
 		Entries: []workflow.ListEntry{entry},
@@ -356,7 +345,6 @@ func whenEq(path, value string) []workflow.WhenSpec {
 }
 
 func TestParityFailedRunEscapeReturnsToRunsRoot(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md "Failed run navigation"
 	entry := workflow.ListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml", Title: "Plain"}
 	var detached bool
 	m := New(Options{
@@ -396,7 +384,6 @@ func TestParityFailedRunEscapeReturnsToRunsRoot(t *testing.T) {
 }
 
 func TestParityFormatInputPromptReportsOrdinal(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md "Input prompts state what they collect"
 	got := FormatInputPrompt(workflow.InputSpec{Name: "unit", Type: "choice", Options: []string{"a", "b"}}, 1, 3)
 	if !strings.Contains(got, "1 of 3") {
 		t.Fatalf("missing collection ordinal in %q", got)
@@ -412,7 +399,6 @@ func TestParityFormatInputPromptReportsOrdinal(t *testing.T) {
 
 func TestParityInputTitleRowKeepsSensitivityFlags(t *testing.T) {
 	// Product Improvement: the title row keeps sensitivity names. The prompt line shows the ordinal.
-	// openspec/specs/picker-presentation/spec.md "Title row keeps named sensitivity flags"
 	entry := workflow.ListEntry{
 		Name: "branchy", Source: "repo", File: "/r/b.yaml", Title: "Branch check", HasCommands: true,
 	}
@@ -446,7 +432,6 @@ func TestParityInputTitleRowKeepsSensitivityFlags(t *testing.T) {
 
 func TestParityChoiceRowsUseASCIICursor(t *testing.T) {
 	// Product Improvement: ASCII ">" cursor and a location column on choice rows. No box or arrow glyphs.
-	// openspec/specs/picker-presentation/spec.md "ASCII greater-than cursor on choice option rows"
 	entry := workflow.ListEntry{Name: "branchy", Source: "repo", File: "/r/b.yaml", Title: "Branch check"}
 	m := New(Options{
 		Entries: []workflow.ListEntry{entry},
@@ -491,7 +476,6 @@ func TestParityChoiceRowsUseASCIICursor(t *testing.T) {
 }
 
 func TestParityCollectedAnswersVisibleDuringInput(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md collected answers scenarios
 	entry := workflow.ListEntry{Name: "gated", Source: "repo", File: "/r/gated.yaml"}
 	m := New(Options{
 		Entries: []workflow.ListEntry{entry},
@@ -537,7 +521,6 @@ func TestParityCollectedAnswersVisibleDuringInput(t *testing.T) {
 }
 
 func TestParityEmptyCatalogFooterAndMessage(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md empty catalog scenarios
 	m := New(Options{Entries: nil, Width: 80})
 	body := m.View().Content
 	if !strings.Contains(body, "no runnable workflows") {
@@ -555,7 +538,6 @@ func TestParityEmptyCatalogFooterAndMessage(t *testing.T) {
 }
 
 func TestParityTabFromFilterDoesNotInsertTab(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md "Workflow filter has text"
 	m := New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: t.TempDir()})
 	m = apply(m, "d", "e", "p")
 	if m.filter != "dep" {
@@ -571,7 +553,6 @@ func TestParityTabFromFilterDoesNotInsertTab(t *testing.T) {
 }
 
 func TestParityCursorMovesChangesDetailOnly(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md "Cursor moves"
 	m := New(Options{Entries: eightEntries()[:3], Width: 80})
 	first := m.View().Content
 	m = apply(m, "down")
@@ -585,7 +566,6 @@ func TestParityCursorMovesChangesDetailOnly(t *testing.T) {
 }
 
 func TestParityConsentUsesWarnWithoutDim(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md "Warnings are not the least legible element"
 	entry := workflow.ListEntry{
 		Name: "deploy", Source: "global", File: "/g/deploy.yaml", Title: "Deploy", HasCommands: true,
 	}
@@ -611,7 +591,6 @@ func TestParityConsentUsesWarnWithoutDim(t *testing.T) {
 }
 
 func TestParityLaunchOpensStartingRunningLifecycle(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md "A launched workflow opens matching run detail"
 	entry := workflow.ListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml", Title: "Plain"}
 	var (
 		launched LaunchRunOpts
@@ -846,7 +825,6 @@ func TestParityLaunchOpensStartingRunningLifecycle(t *testing.T) {
 }
 
 func TestParityPrintableKFilters(t *testing.T) {
-	// openspec/specs/picker-editor-actions/spec.md "Printable k filters"
 	m := New(Options{Entries: catalogEntries(), Width: 80})
 	m = apply(m, "k")
 	if m.filter != "k" || m.mode != modeList {
@@ -855,7 +833,6 @@ func TestParityPrintableKFilters(t *testing.T) {
 }
 
 func TestParityPaletteLettersHandoff(t *testing.T) {
-	// openspec/specs/picker-editor-actions/spec.md n/i/e/o/s actions
 	root := t.TempDir()
 	deployPath := root + "/deploy.yaml"
 	if err := os.WriteFile(deployPath, []byte("version: v1alpha1\nsteps:\n  - run: [echo, hi]\n"), 0o644); err != nil {
@@ -983,7 +960,6 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 }
 
 func TestParityCancelDeleteKeepsFile(t *testing.T) {
-	// openspec/specs/picker-editor-actions/spec.md "Cancel delete"
 	dir := t.TempDir()
 	path := dir + "/deploy.yaml"
 	if err := os.WriteFile(path, []byte("name: deploy\n"), 0o644); err != nil {
