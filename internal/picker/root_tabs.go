@@ -42,6 +42,7 @@ func (m Model) openRunsTab() (tea.Model, tea.Cmd) {
 		Height:     m.tabBodyHeight(),
 		Env:        getenv,
 		SelectedID: selected,
+		Now:        m.now,
 	})
 	m.mode = modeRuns
 	m.hoverRow = -1

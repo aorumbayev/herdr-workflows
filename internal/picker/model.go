@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -56,6 +57,7 @@ type Options struct {
 	ListAgentPanes     func() ([]console.AgentPaneEntry, error)
 	PaneSendText       func(paneID, text string) error
 	CheckLatestRelease func() (*update.LatestRelease, error)
+	Now                func() time.Time
 }
 
 // Model is the picker Bubble Tea model.
@@ -116,6 +118,7 @@ type Model struct {
 	restoreDetail        bool
 	listAgentPanes       func() ([]console.AgentPaneEntry, error)
 	paneSendText         func(paneID, text string) error
+	now                  func() time.Time
 	agentPanes           []console.AgentPaneEntry
 	agentCursor          int
 	pendingSendText      string
@@ -179,6 +182,7 @@ func New(opts Options) Model {
 		hoverRow:       -1,
 		listAgentPanes: opts.ListAgentPanes,
 		paneSendText:   opts.PaneSendText,
+		now:            opts.Now,
 	}
 	m.restore(opts.Restore)
 	return m
