@@ -114,6 +114,8 @@ var requiredPickerParityScenarios = []string{
 	"Manifest uses percent size",
 	"Confirmed pop-out quits the picker",
 	"Canceled pop-out keeps the workflow filter",
+	"Shortcut and palette share one flow",
+	"Failed pop-out stays in the overlay",
 	"Hover differs from the cursor",
 	"Wheel has a keyboard twin",
 	"Pointer tab select obeys the keyboard guard",
@@ -249,7 +251,7 @@ func TestParityInvalidRowDetailShowsLoadError(t *testing.T) {
 
 func TestParityPositionCounterUsesFilteredList(t *testing.T) {
 	m := New(Options{Entries: eightEntries(), Width: 80})
-	m = apply(m, "a", "l", "p", "h", "a")
+	m = apply(m, "b", "r", "a", "v", "o")
 	body := m.View().Content
 	if !strings.HasSuffix(strings.TrimSpace(strings.Split(body, "\n")[len(strings.Split(body, "\n"))-1]), "1/1") &&
 		!strings.Contains(body, "1/1") {
@@ -536,8 +538,8 @@ func TestParityEmptyCatalogFooterAndMessage(t *testing.T) {
 
 func TestParityTabFromFilterDoesNotInsertTab(t *testing.T) {
 	m := New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: t.TempDir()})
-	m = apply(m, "d", "e", "p")
-	if m.filter != "dep" {
+	m = apply(m, "l", "o", "y")
+	if m.filter != "loy" {
 		t.Fatalf("filter = %q", m.filter)
 	}
 	m = apply(m, "tab")

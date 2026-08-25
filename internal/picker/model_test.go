@@ -153,12 +153,12 @@ func TestPickerDoesNotRenderPluginNameOrRetitle(t *testing.T) {
 
 func TestPickerFilterAndPaletteRestore(t *testing.T) {
 	m := New(Options{Entries: catalogEntries(), Width: 80})
-	m = apply(m, "d", "e", "p")
-	if m.filter != "dep" {
+	m = apply(m, "l", "o", "y")
+	if m.filter != "loy" {
 		t.Fatalf("filter = %q", m.filter)
 	}
 	body := m.View().Content
-	if got := visibleLine(strings.Split(body, "\n")[1]); got != "dep" {
+	if got := visibleLine(strings.Split(body, "\n")[1]); got != "loy" {
 		t.Fatalf("filter row = %q", got)
 	}
 	if !strings.Contains(body, "Deploy") || strings.Contains(body, "Chat handoff") {
@@ -172,7 +172,7 @@ func TestPickerFilterAndPaletteRestore(t *testing.T) {
 		t.Fatalf("palette body:\n%s", m.View().Content)
 	}
 	m = apply(m, "esc")
-	if m.mode != modeList || m.filter != "dep" {
+	if m.mode != modeList || m.filter != "loy" {
 		t.Fatalf("restore mode=%v filter=%q", m.mode, m.filter)
 	}
 }

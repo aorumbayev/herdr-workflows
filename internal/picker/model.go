@@ -350,6 +350,8 @@ func (m Model) handleList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+k":
 		m.savedFilter = m.filter
 		m.mode = modePalette
+	case "p":
+		return m.beginConsolePlacement(modeList)
 	case "tab":
 		return m.cycleRootTab()
 	case "esc":
@@ -374,6 +376,9 @@ func (m Model) handleRunsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	if key == "tab" && m.runs.IsList() {
 		return m.cycleRootTab()
+	}
+	if key == "p" && m.runs.IsList() {
+		return m.beginConsolePlacement(modeRuns)
 	}
 	if key == "enter" && m.runs.IsList() {
 		if id := m.runs.SelectedID(); id != "" && m.reopenPopup != nil && m.needsExpandedRespawn() {
@@ -456,7 +461,7 @@ func (m Model) applyPaletteAction(action *PaletteAction) (tea.Model, tea.Cmd) {
 	case "share":
 		return m.applyShareAction(action.Entry)
 	case "console":
-		return m.beginConsolePlacement()
+		return m.beginConsolePlacement(modeList)
 	default:
 		m.mode = modeList
 		m.filter = m.savedFilter
