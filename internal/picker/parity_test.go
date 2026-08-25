@@ -97,6 +97,9 @@ var requiredPickerParityScenarios = []string{
 	"Custom value accepted",
 	"Constrained text input",
 	"Unresolved dynamic domain",
+	"Long description wraps instead of truncating",
+	"Hints occupy their own muted line",
+	"Choice prompt fits the compact popup",
 	"Title row keeps named sensitivity flags",
 	"A guarded domain is explained by an earlier answer",
 	"First prompt has no answers",
@@ -383,16 +386,18 @@ func TestParityFailedRunEscapeReturnsToRunsRoot(t *testing.T) {
 }
 
 func TestParityFormatInputPromptReportsOrdinal(t *testing.T) {
-	got := FormatInputPrompt(workflow.InputSpec{Name: "unit", Type: "choice", Options: []string{"a", "b"}}, 1, 3)
-	if !strings.Contains(got, "1 of 3") {
-		t.Fatalf("missing collection ordinal in %q", got)
+	spec := workflow.InputSpec{Name: "unit", Type: "choice", Options: []string{"a", "b"}}
+	got := FormatInputPrompt(spec, 60, 1, 3)
+	field := strings.Split(got, "\n")[0]
+	if field != "unit  (1 of 3)" {
+		t.Fatalf("field line must carry name and ordinal: %q", field)
 	}
-	if !strings.Contains(got, "unit") || !strings.Contains(got, "pick one of 2") {
-		t.Fatalf("prompt = %q", got)
+	if hints := FormatInputHints(spec); hints != "pick one of 2" {
+		t.Fatalf("hints = %q", hints)
 	}
-	base := FormatInputPrompt(workflow.InputSpec{Name: "unit", Type: "choice", Options: []string{"a", "b"}})
+	base := FormatInputPrompt(spec, 60)
 	if strings.Contains(base, "1 of") || strings.Contains(base, "2 of") {
-		t.Fatalf("zero-arg FormatInputPrompt must omit ordinal: %q", base)
+		t.Fatalf("no-ordinal FormatInputPrompt must omit ordinal: %q", base)
 	}
 }
 

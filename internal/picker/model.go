@@ -669,7 +669,37 @@ func (m *Model) moveChoice(delta int) {
 }
 
 func (m *Model) clampChoice() {
-	m.cursor, m.offset = tui.ClampListWindow(m.cursor, m.offset, len(m.choiceRows()), tui.ListViewport)
+	m.cursor, m.offset = tui.ClampListWindow(m.cursor, m.offset, len(m.choiceRows()), m.choiceViewport())
+}
+
+// choiceFloor keeps at least three option rows visible when the prompt block is tall.
+const choiceFloor = 3
+
+// choiceViewport gives the option list the popup rows the prompt chrome does not use.
+func (m Model) choiceViewport() int {
+	return tui.FitViewport(m.height, m.choiceChrome(), choiceFloor)
+}
+
+// choiceChrome counts the two blanks, the consent, prompt, hints, answers, and
+// status lines, and the rule and footer around the option list.
+func (m Model) choiceChrome() int {
+	w := m.contentWidth()
+	n := 5
+	if m.consentLine() != "" {
+		n++
+	}
+	prompt, hints := m.promptBlock(w)
+	n += strings.Count(prompt, "\n")
+	if hints != "" {
+		n++
+	}
+	if FormatInputAnswers(m.queue, m.values(), w) != "" {
+		n++
+	}
+	if m.status != "" {
+		n++
+	}
+	return n
 }
 
 func (m Model) choiceRows() []string {

@@ -80,32 +80,66 @@ func TestFilterChoiceOptionsSubstring(t *testing.T) {
 func ptr[T any](v T) *T { return &v }
 
 func TestFormatInputPrompt(t *testing.T) {
-	if got := FormatInputPrompt(workflow.InputSpec{Name: "target", Type: "profile"}); got != "target | pick one" {
-		t.Fatalf("profile = %q", got)
+	const w = 60
+	// The field line carries the name. The description wraps below it, never crammed after " - ".
+	if got := FormatInputPrompt(workflow.InputSpec{Name: "target", Type: "profile"}, w); got != "target" {
+		t.Fatalf("profile field = %q", got)
 	}
-	if got := FormatInputPrompt(workflow.InputSpec{Name: "target", Type: "profile", Description: "Agent to hand off to"}); got != "target - Agent to hand off to | pick one" {
-		t.Fatalf("described = %q", got)
+	described := FormatInputPrompt(workflow.InputSpec{Name: "target", Type: "profile", Description: "Agent to hand off to"}, w)
+	if lines := strings.Split(described, "\n"); lines[0] != "target" || !strings.Contains(described, "Agent to hand off to") || strings.Contains(described, "target - ") {
+		t.Fatalf("described = %q", described)
 	}
-	if got := FormatInputPrompt(workflow.InputSpec{Name: "focus", Type: "text"}); got != "focus | type free text" {
-		t.Fatalf("text = %q", got)
+	if got := FormatInputPrompt(workflow.InputSpec{Name: "focus", Type: "text"}, w); got != "focus" {
+		t.Fatalf("text field = %q", got)
 	}
-	if got := FormatInputPrompt(workflow.InputSpec{Name: "branch", Type: "choice", Options: []string{"main"}, Description: "Which branch"}); got != "branch - Which branch | pick one of 1" {
-		t.Fatalf("choice = %q", got)
+	// Hints are one line of their own, never merged into the field line.
+	if got := FormatInputHints(workflow.InputSpec{Name: "target", Type: "profile"}); got != "pick one" {
+		t.Fatalf("profile hints = %q", got)
 	}
-	if got := FormatInputPrompt(workflow.InputSpec{Name: "ref", Type: "choice", Options: []string{"main", "dev", "next"}}); got != "ref | pick one of 3" {
-		t.Fatalf("domain = %q", got)
+	if got := FormatInputHints(workflow.InputSpec{Name: "branch", Type: "choice", Options: []string{"main"}}); got != "pick one of 1" {
+		t.Fatalf("choice hints = %q", got)
 	}
-	if got := FormatInputPrompt(workflow.InputSpec{Name: "branch", Type: "choice", Options: []string{"main"}, AllowCustom: true, MinLength: ptr(1)}); got != "branch | pick one of 1 | or type your own | min 1 char" {
-		t.Fatalf("custom min = %q", got)
+	if got := FormatInputHints(workflow.InputSpec{Name: "ref", Type: "choice", Options: []string{"main", "dev", "next"}}); got != "pick one of 3" {
+		t.Fatalf("domain hints = %q", got)
 	}
-	if got := FormatInputPrompt(workflow.InputSpec{Name: "focus", Type: "text", Default: ptr("all")}); got != "focus | type free text | default all" {
-		t.Fatalf("default = %q", got)
+	if got := FormatInputHints(workflow.InputSpec{Name: "branch", Type: "choice", Options: []string{"main"}, AllowCustom: true, MinLength: ptr(1)}); got != "pick one of 1 | or type your own | min 1 char" {
+		t.Fatalf("custom min hints = %q", got)
 	}
-	if got := FormatInputPrompt(workflow.InputSpec{Name: "note", Type: "text", MinLength: ptr(4)}); got != "note | type free text | min 4 chars" {
-		t.Fatalf("min4 = %q", got)
+	if got := FormatInputHints(workflow.InputSpec{Name: "focus", Type: "text", Default: ptr("all")}); got != "type free text | default all" {
+		t.Fatalf("default hints = %q", got)
 	}
-	if got := FormatInputPrompt(workflow.InputSpec{Name: "ref", Type: "choice", DynamicOptions: &workflow.DynamicChoice{Run: []string{"git", "branch"}}}); got != "ref | pick one" {
-		t.Fatalf("dynamic = %q", got)
+	if got := FormatInputHints(workflow.InputSpec{Name: "note", Type: "text", MinLength: ptr(4)}); got != "type free text | min 4 chars" {
+		t.Fatalf("min4 hints = %q", got)
+	}
+	if got := FormatInputHints(workflow.InputSpec{Name: "ref", Type: "choice", DynamicOptions: &workflow.DynamicChoice{Run: []string{"git", "branch"}}}); got != "pick one" {
+		t.Fatalf("dynamic hints = %q", got)
+	}
+}
+
+func TestInputPromptWrapsLongDescription(t *testing.T) {
+	const w = 40
+	spec := workflow.InputSpec{
+		Name: "intake_profile", Type: "profile",
+		Description: "Agent persona and tools for the intake reviewer run",
+	}
+	got := FormatInputPrompt(spec, w, 1, 16)
+	lines := strings.Split(got, "\n")
+	if lines[0] != "intake_profile  (1 of 16)" {
+		t.Fatalf("field line = %q", lines[0])
+	}
+	if len(lines) != 3 {
+		t.Fatalf("want field plus two wrapped description lines, got %d:\n%s", len(lines), got)
+	}
+	if strings.Contains(got, tui.Ellipsis) {
+		t.Fatalf("a description that fits two lines must not truncate: %q", got)
+	}
+	if !strings.Contains(got, "Agent persona") || !strings.Contains(got, "reviewer run") {
+		t.Fatalf("description content lost: %q", got)
+	}
+	for _, line := range lines[1:] {
+		if tui.Columns(line) > w {
+			t.Fatalf("wrapped line exceeds width %d: %q", w, line)
+		}
 	}
 }
 

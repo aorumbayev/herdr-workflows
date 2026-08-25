@@ -121,6 +121,72 @@ func TestInputViewPadsToWindowHeight(t *testing.T) {
 	}
 }
 
+func choiceInputModel(t *testing.T, height int, opts []string, desc string) Model {
+	t.Helper()
+	entry := workflow.ListEntry{Name: "gated", Source: "repo", File: "/r/gated.yaml", Title: "Gated"}
+	m := New(Options{
+		Entries: []workflow.ListEntry{entry},
+		Width:   64,
+		Height:  height,
+		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
+			return &workflow.Definition{
+				Name: e.Name, File: e.File, Version: workflow.Format,
+				Inputs: []workflow.InputSpec{
+					{Name: "target", Type: "choice", Options: opts, Description: desc},
+				},
+				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
+			}, nil
+		},
+	})
+	return apply(m, "enter")
+}
+
+func TestChoicePromptFitsCompactPopup(t *testing.T) {
+	const height = 15
+	desc := "The profile that seeds the intake agent with the reviewer persona and its allowed tools for this run"
+	opts := []string{"one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"}
+	m := choiceInputModel(t, height, opts, desc)
+	lines := strings.Count(m.View().Content, "\n") + 1
+	if lines > height {
+		t.Fatalf("choice prompt frame = %d lines, must fit compact height %d:\n%s", lines, height, m.View().Content)
+	}
+	body := m.View().Content
+	if !strings.Contains(body, "allowed tools") {
+		t.Fatalf("wrapped description must stay visible:\n%s", body)
+	}
+	if m.choiceViewport() < choiceFloor {
+		t.Fatalf("option viewport %d fell below the floor %d", m.choiceViewport(), choiceFloor)
+	}
+}
+
+func TestTextPromptUsesFieldDescriptionHints(t *testing.T) {
+	entry := workflow.ListEntry{Name: "noted", Source: "repo", File: "/r/noted.yaml", Title: "Noted"}
+	m := New(Options{
+		Entries: []workflow.ListEntry{entry},
+		Width:   64,
+		Height:  15,
+		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
+			return &workflow.Definition{
+				Name: e.Name, File: e.File, Version: workflow.Format,
+				Inputs: []workflow.InputSpec{
+					{Name: "focus", Type: "text", Description: "What the run should focus on", MinLength: ptr(4)},
+				},
+				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
+			}, nil
+		},
+	})
+	m = apply(m, "enter")
+	body := m.View().Content
+	if !strings.Contains(body, "focus") || !strings.Contains(body, "What the run should focus on") {
+		t.Fatalf("text prompt must show field and description:\n%s", body)
+	}
+	if !strings.Contains(body, "type free text") || !strings.Contains(body, "min 4 chars") {
+		t.Fatalf("text prompt hints must appear on their own line:\n%s", body)
+	}
+}
+
 func TestRunsPaneViewPadsToWindowHeight(t *testing.T) {
 	const height = 24
 	m := New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: t.TempDir()})

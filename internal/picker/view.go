@@ -129,38 +129,48 @@ func (m Model) consentLine() string {
 	return tui.DefaultTheme().Warn.Render(m.consent)
 }
 
-func (m Model) renderChoice() string {
-	rows := m.choiceRows()
-	w := m.contentWidth()
-	var lines []string
-	end := min(m.offset+tui.ListViewport, len(rows))
-	for i := m.offset; i < end; i++ {
-		lines = append(lines, FormatPickerRowName(rows[i], "", false, w, i == m.cursor))
+// promptBlock gives the field-plus-description block and the hints line for the active input.
+func (m Model) promptBlock(width int) (prompt, hints string) {
+	if m.prompt == nil {
+		return "", ""
 	}
-	for len(lines) < tui.ListViewport {
+	pos, total := m.inputOrdinal()
+	return FormatInputPrompt(m.prompt.Spec, width, pos, total), FormatInputHints(m.prompt.Spec)
+}
+
+func (m Model) renderChoice() string {
+	w := m.contentWidth()
+	rows := m.choiceRows()
+	vp := m.choiceViewport()
+	cursor, offset := tui.ClampListWindow(m.cursor, m.offset, len(rows), vp)
+	var lines []string
+	end := min(offset+vp, len(rows))
+	for i := offset; i < end; i++ {
+		lines = append(lines, FormatPickerRowName(rows[i], "", false, w, i == cursor))
+	}
+	for len(lines) < vp {
 		lines = append(lines, "")
 	}
-	prompt := ""
-	if m.prompt != nil {
-		pos, total := m.inputOrdinal()
-		prompt = FormatInputPrompt(m.prompt.Spec, pos, total)
-	}
+	prompt, hints := m.promptBlock(w)
 	answers := FormatInputAnswers(m.queue, m.values(), w)
 	hint := tui.ChoiceHint
 	if m.custom {
 		hint = tui.CustomChoiceHint
 	}
-	footer := tui.MuteChrome(tui.FormatListFooter(w, m.cursor, len(rows), hint))
+	footer := tui.MuteChrome(tui.FormatListFooter(w, cursor, len(rows), hint))
 	parts := []string{"", strings.Join(lines, "\n"), ""}
 	if line := m.consentLine(); line != "" {
 		parts = append(parts, line)
 	}
 	parts = append(parts, prompt)
+	if hints != "" {
+		parts = append(parts, tui.MuteChrome(hints))
+	}
 	if answers != "" {
 		parts = append(parts, answers)
 	}
 	if m.status != "" {
-		parts = append(parts, m.status)
+		parts = append(parts, tui.Truncate(m.status, w))
 	}
 	parts = append(parts, tui.FormatRule(w), footer)
 	return strings.Join(parts, "\n")
@@ -168,22 +178,25 @@ func (m Model) renderChoice() string {
 
 func (m Model) renderTextPrompt() string {
 	w := m.contentWidth()
-	prompt := tui.PromptPlaceholder
-	if m.prompt != nil {
-		pos, total := m.inputOrdinal()
-		prompt = FormatInputPrompt(m.prompt.Spec, pos, total)
+	prompt, hints := m.promptBlock(w)
+	if prompt == "" {
+		prompt = tui.PromptPlaceholder
 	}
 	answers := FormatInputAnswers(m.queue, m.values(), w)
 	parts := []string{}
 	if line := m.consentLine(); line != "" {
 		parts = append(parts, line)
 	}
-	parts = append(parts, prompt, m.promptValue)
+	parts = append(parts, prompt)
+	if hints != "" {
+		parts = append(parts, tui.MuteChrome(hints))
+	}
+	parts = append(parts, m.promptValue)
 	if answers != "" {
 		parts = append(parts, answers)
 	}
 	if m.status != "" {
-		parts = append(parts, m.status)
+		parts = append(parts, tui.Truncate(m.status, w))
 	}
 	parts = append(parts, tui.SubmitHint)
 	return strings.Join(parts, "\n")

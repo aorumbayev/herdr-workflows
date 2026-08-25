@@ -8,19 +8,24 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-// FormatInputPrompt names the field and the method that answers it.
-// When position and total are both more than 0, the prompt adds a 1-based collection ordinal.
-func FormatInputPrompt(spec workflow.InputSpec, ordinal ...int) string {
-	label := spec.Name
-	if desc := strings.TrimSpace(spec.Description); desc != "" {
-		label = spec.Name + " - " + desc
-	}
-	parts := []string{label}
+// FormatInputPrompt gives the field line and the wrapped description.
+// The field line carries the input name and a 1-based collection ordinal when position and total are both more than 0.
+// A description wraps to at most two indented lines. It is dropped when empty.
+func FormatInputPrompt(spec workflow.InputSpec, width int, ordinal ...int) string {
+	field := spec.Name
 	if len(ordinal) >= 2 && ordinal[0] > 0 && ordinal[1] > 0 {
-		parts = append(parts, strconv.Itoa(ordinal[0])+" of "+strconv.Itoa(ordinal[1]))
+		field += "  (" + strconv.Itoa(ordinal[0]) + " of " + strconv.Itoa(ordinal[1]) + ")"
 	}
-	parts = append(parts, promptHints(spec)...)
-	return strings.Join(parts, tui.ChromeSep)
+	desc := strings.TrimSpace(spec.Description)
+	if desc == "" {
+		return field
+	}
+	return field + "\n" + tui.FormatDetailLines(desc, width)
+}
+
+// FormatInputHints lists how to answer on one line: the pick or free-text rule, then any custom or length rule.
+func FormatInputHints(spec workflow.InputSpec) string {
+	return strings.Join(promptHints(spec), tui.ChromeSep)
 }
 
 func promptHints(spec workflow.InputSpec) []string {
