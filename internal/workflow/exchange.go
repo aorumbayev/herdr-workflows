@@ -451,6 +451,30 @@ func journalStale(path string) bool {
 	return err != nil || time.Since(info.ModTime()) >= 10*time.Second
 }
 
+func crashStateSiblings(dir string) ([]string, error) {
+	parent := filepath.Dir(dir)
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	prefix := filepath.Base(dir) + "."
+	found := []string{}
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasPrefix(name, prefix) {
+			continue
+		}
+		if strings.HasSuffix(name, ".staging") || strings.HasSuffix(name, ".prev") {
+			found = append(found, filepath.Join(parent, name))
+		}
+	}
+	slices.Sort(found)
+	return found, nil
+}
+
 // RecoverInterruptedImport repairs an interrupted directory swap or restores the previous directory.
 func RecoverInterruptedImport(dir string, force ...bool) error {
 	path := ImportJournalPath(dir)
@@ -459,6 +483,15 @@ func RecoverInterruptedImport(dir string, force ...bool) error {
 	}
 	journal, ok := readJournal(dir)
 	if !ok {
+		siblings, err := crashStateSiblings(dir)
+		if err != nil {
+			return err
+		}
+		if len(siblings) > 0 {
+			return &LoadError{fmt.Sprintf(
+				"import journal %s is unreadable and interrupted import state remains (%s): copy the workflows you need out of those directories, then remove them and the journal before you import again",
+				path, strings.Join(siblings, ", "))}
+		}
 		return os.Remove(path)
 	}
 	if len(force) == 0 || !force[0] {
@@ -527,9 +560,30 @@ func claimJournal(journal importJournal) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer func() { _ = file.Close() }()
-	_, err = file.Write(data)
-	return true, err
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		return true, err
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		return true, err
+	}
+	if err := file.Close(); err != nil {
+		return true, err
+	}
+	return true, syncDir(filepath.Dir(ImportJournalPath(journal.Dest)))
+}
+
+func syncDir(path string) error {
+	handle, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	if err := handle.Sync(); err != nil {
+		_ = handle.Close()
+		return err
+	}
+	return handle.Close()
 }
 
 func linkOrCopy(source, destination string) error {
