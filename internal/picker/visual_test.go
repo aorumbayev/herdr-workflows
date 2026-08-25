@@ -142,6 +142,19 @@ func choiceInputModel(t *testing.T, height int, opts []string, desc string) Mode
 	return apply(m, "enter")
 }
 
+func TestChoiceInputEchoesFilterText(t *testing.T) {
+	m := choiceInputModel(t, 15, []string{"feature", "fix", "main"}, "")
+	first := tui.StripContentPadding(strings.Split(m.View().Content, "\n")[0])
+	if first != tui.FilterOptions {
+		t.Fatalf("empty choice filter row = %q want %q", first, tui.FilterOptions)
+	}
+	m = apply(m, "f", "e")
+	first = tui.StripContentPadding(strings.Split(m.View().Content, "\n")[0])
+	if first != "fe" {
+		t.Fatalf("typed choice filter must be echoed flush-left: %q", first)
+	}
+}
+
 func TestChoicePromptFitsCompactPopup(t *testing.T) {
 	const height = 15
 	desc := "The profile that seeds the intake agent with the reviewer persona and its allowed tools for this run"

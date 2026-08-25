@@ -14,6 +14,7 @@ const (
 	CustomChoiceLabel   = "custom..."
 	FilterWorkflows     = "filter workflows..."
 	FilterRuns          = "filter runs..."
+	FilterOptions       = "filter options..."
 	PromptPlaceholder   = "prompt..."
 	SubmitHint          = "enter submit" + ChromeSep + "esc back"
 	CreateNameHint      = "enter create" + ChromeSep + "esc cancel"
@@ -42,6 +43,7 @@ var ChromeStrings = []string{
 	CursorPrefix,
 	FilterWorkflows,
 	FilterRuns,
+	FilterOptions,
 	PromptPlaceholder,
 	SubmitHint,
 	CreateNameHint,

@@ -129,6 +129,14 @@ func (m Model) consentLine() string {
 	return tui.DefaultTheme().Warn.Render(m.consent)
 }
 
+func (m Model) choiceFilterRow(width int) string {
+	label := m.filter
+	if label == "" {
+		label = tui.FilterOptions
+	}
+	return tui.Truncate(label, width)
+}
+
 // promptBlock gives the field-plus-description block and the hints line for the active input.
 func (m Model) promptBlock(width int) (prompt, hints string) {
 	if m.prompt == nil {
@@ -158,7 +166,7 @@ func (m Model) renderChoice() string {
 		hint = tui.CustomChoiceHint
 	}
 	footer := tui.MuteChrome(tui.FormatListFooter(w, cursor, len(rows), hint))
-	parts := []string{"", strings.Join(lines, "\n"), ""}
+	parts := []string{m.choiceFilterRow(w), "", strings.Join(lines, "\n"), ""}
 	if line := m.consentLine(); line != "" {
 		parts = append(parts, line)
 	}

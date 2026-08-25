@@ -100,6 +100,7 @@ var requiredPickerParityScenarios = []string{
 	"Long description wraps instead of truncating",
 	"Hints occupy their own muted line",
 	"Choice prompt fits the compact popup",
+	"Choice input filter row shows typed text",
 	"Title row keeps named sensitivity flags",
 	"A guarded domain is explained by an earlier answer",
 	"First prompt has no answers",

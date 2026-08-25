@@ -680,11 +680,11 @@ func (m Model) choiceViewport() int {
 	return tui.FitViewport(m.height, m.choiceChrome(), choiceFloor)
 }
 
-// choiceChrome counts the two blanks, the consent, prompt, hints, answers, and
-// status lines, and the rule and footer around the option list.
+// choiceChrome counts the filter row, two blanks, the consent, prompt, hints,
+// answers, and status lines, and the rule and footer around the option list.
 func (m Model) choiceChrome() int {
 	w := m.contentWidth()
-	n := 5
+	n := 6
 	if m.consentLine() != "" {
 		n++
 	}
