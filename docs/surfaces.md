@@ -40,7 +40,7 @@ In list mode, press `Ctrl+P`. A single letter fires the action, with no Enter. E
 
 | Key | Action                                                                                   |
 | --- | ---------------------------------------------------------------------------------------- |
-| `n` | Create a repo workflow stub, open it in `$EDITOR`, then validate with the loader           |
+| `n` | Create a new workflow, after a chooser for an agent handoff or a template                 |
 | `i` | Show status that names `hwf workflow import`                                             |
 | `e` | Open the examples page in your browser                                                   |
 | `c` | Open the console after a placement chooser |
@@ -51,6 +51,14 @@ In list mode, press `Ctrl+P`. A single letter fires the action, with no Enter. E
 `o`, `s`, and `d` need a selected valid workflow. `n`, `i`, `e`, and `c` do not. The picker stays open for every palette action. `c` opens the console, and the overlay dismisses only after the console pane opens.
 
 Plain `k` still types into the filter.
+
+#### New workflow
+
+`n` opens a chooser with two options.
+
+Choose **build with an agent** to hand the work to a herdr agent pane. The picker offers an agent-pane chooser. With one pane open, it types the handoff at once. With more than one, select the pane and press `Enter`. The picker types a prompt that asks the agent to follow the `herdr-workflow-create` skill, to grill you about the goal, steps, and inputs before it writes any YAML, to save the workflow at the repo or global level, and to validate the file with `hwf workflow validate`. The prompt is typed, not submitted, so press `Enter` in the pane to start. The overlay dismisses after the handoff. With no agent pane open, the overlay stays open and shows a plain status line.
+
+Choose **edit a template** to write a pre-filled skeleton yourself. Enter a name, then choose the repo (`.hwf/workflows`) or global level. The picker creates the skeleton and opens the same placement chooser as edit (`popup`, `beside`, `below`, `tab`). `popup` opens the editor in the large popup.
 
 ## The console
 
