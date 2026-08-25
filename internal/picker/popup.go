@@ -14,7 +14,7 @@ const PopupStateEnv = "HWF_PICKER_STATE"
 // different size closes this popup and opens the next popup at that size.
 const (
 	compactWidth   = "64"
-	compactHeight  = "15"
+	compactHeight  = "18"
 	expandedWidth  = "85%"
 	expandedHeight = "80%"
 )

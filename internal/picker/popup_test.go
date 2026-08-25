@@ -9,8 +9,8 @@ import (
 
 func TestPopupGeometryCompactAndExpanded(t *testing.T) {
 	w, h := PopupGeometry()
-	if w != "64" || h != "15" {
-		t.Fatalf("compact geometry = %s by %s, want 64 by 15", w, h)
+	if w != "64" || h != "18" {
+		t.Fatalf("compact geometry = %s by %s, want 64 by 18", w, h)
 	}
 	ew, eh := expandedGeometry()
 	if ew != "85%" || eh != "80%" {
@@ -23,7 +23,7 @@ func TestTabSwitchNeverRespawns(t *testing.T) {
 	m := New(Options{
 		Entries:     eightEntries(),
 		Width:       64,
-		Height:      15,
+		Height:      18,
 		ReopenPopup: func(state PopupState) error { got = append(got, state); return nil },
 	})
 	m = apply(m, "down", "tab")
@@ -48,7 +48,7 @@ func TestTabSwitchNeverRespawns(t *testing.T) {
 
 func TestRestoredPickerMountsItsTabWithoutRespawning(t *testing.T) {
 	var got []PopupState
-	state := PopupState{Tab: tui.TabRuns, Cursor: 1, Width: "64", Height: "15"}
+	state := PopupState{Tab: tui.TabRuns, Cursor: 1, Width: "64", Height: "18"}
 	m := New(Options{
 		Entries:     eightEntries(),
 		Width:       120,
@@ -90,7 +90,7 @@ func TestRunDetailExpandsThenRespawnsCompact(t *testing.T) {
 		Entries:     eightEntries(),
 		RepoRoot:    checkout,
 		Width:       64,
-		Height:      15,
+		Height:      18,
 		Env:         getenv,
 		ReopenPopup: func(state PopupState) error { states = append(states, state); return nil },
 	})
@@ -150,7 +150,7 @@ func TestRunDetailExpandsThenRespawnsCompact(t *testing.T) {
 		Entries:     eightEntries(),
 		RepoRoot:    checkout,
 		Width:       64,
-		Height:      15,
+		Height:      18,
 		Env:         getenv,
 		Restore:     &back[0],
 		ReopenPopup: func(PopupState) error { t.Fatal("compact runs list must not respawn"); return nil },
@@ -169,7 +169,7 @@ func TestParsePopupStateRejectsGarbage(t *testing.T) {
 		t.Fatal("unreadable state must start fresh")
 	}
 	state := ParsePopupState(PopupState{Tab: tui.TabRuns}.Encode())
-	if state == nil || state.Width != "64" || state.Height != "15" {
+	if state == nil || state.Width != "64" || state.Height != "18" {
 		t.Fatalf("state = %+v, want the compact size filled in", state)
 	}
 }

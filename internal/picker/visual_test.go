@@ -152,7 +152,7 @@ func hasVisibleLine(body, want string) bool {
 }
 
 func TestChoiceInputEchoesFilterText(t *testing.T) {
-	m := choiceInputModel(t, 15, []string{"feature", "fix", "main"}, "")
+	m := choiceInputModel(t, 18, []string{"feature", "fix", "main"}, "")
 	if !hasVisibleLine(m.View().Content, tui.FilterOptions) {
 		t.Fatalf("empty choice filter row must echo %q:\n%s", tui.FilterOptions, m.View().Content)
 	}
@@ -163,7 +163,7 @@ func TestChoiceInputEchoesFilterText(t *testing.T) {
 }
 
 func TestChoicePromptFitsCompactPopup(t *testing.T) {
-	const height = 15
+	const height = 18
 	desc := "The profile that seeds the intake agent with the reviewer persona and its allowed tools for this run"
 	opts := []string{"one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"}
 	m := choiceInputModel(t, height, opts, desc)
@@ -181,7 +181,7 @@ func TestChoicePromptFitsCompactPopup(t *testing.T) {
 }
 
 func TestChoicePromptWorstCaseFitsCompactPopup(t *testing.T) {
-	const height = 15
+	const height = 18
 	desc := "The profile that seeds the intake agent with the reviewer persona and its allowed tools for this run"
 	entry := workflow.ListEntry{
 		Name: "intake", Source: "repo", File: "/r/intake.yaml", Title: "Intake",
@@ -229,7 +229,7 @@ func lineIndex(body, want string) int {
 }
 
 func TestChoicePromptQuestionAboveOptions(t *testing.T) {
-	m := choiceInputModel(t, 15, []string{"alpha", "beta"}, "pick the target branch")
+	m := choiceInputModel(t, 18, []string{"alpha", "beta"}, "pick the target branch")
 	body := m.View().Content
 	name := lineIndex(body, "target")
 	if name < 0 {
@@ -258,7 +258,7 @@ func TestChoicePromptDemotesStatsToOneLine(t *testing.T) {
 	m := New(Options{
 		Entries: []workflow.ListEntry{entry},
 		Width:   80,
-		Height:  15,
+		Height:  18,
 		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
 		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
@@ -302,7 +302,7 @@ func TestChoicePromptSensitivityOnlyWhenSensitive(t *testing.T) {
 		m := New(Options{
 			Entries: []workflow.ListEntry{entry},
 			Width:   80,
-			Height:  15,
+			Height:  18,
 			Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
 			LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 				return &workflow.Definition{
@@ -327,7 +327,7 @@ func TestTextPromptUsesFieldDescriptionHints(t *testing.T) {
 	m := New(Options{
 		Entries: []workflow.ListEntry{entry},
 		Width:   64,
-		Height:  15,
+		Height:  18,
 		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
 		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
