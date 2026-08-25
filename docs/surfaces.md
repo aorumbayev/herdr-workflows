@@ -10,7 +10,7 @@ Press `prefix+k`.
 
 The overlay has two tabs, workflows and runs. `Tab` cycles the two. `Tab` never quits the overlay. A tab bar names the two and marks the active one. The pane title stays static.
 
-The workflows footer is `tab | enter run | p console | ctrl+k | esc`. The runs footer is `tab | ctrl+g <scope> | enter detail | p console | esc quit`. `p` pops the console out from either list. The filter placeholders are `filter workflows...` and `filter runs...`. Filter rows use flush-left ASCII without a `/ ` prefix or indent.
+The workflows footer is `tab | enter run | ctrl+p actions | esc`. The runs footer is `tab | ctrl+g <scope> | enter detail | esc quit`. The filter placeholders are `filter workflows...` and `filter runs...`. Filter rows use flush-left ASCII without a `/ ` prefix or indent.
 
 The overlay stays compact. Switching tabs does not close and reopen the popup.
 
@@ -36,25 +36,25 @@ With no workflows at all, the picker still opens and points you to the actions p
 
 ### Actions palette
 
-In list mode, press `Ctrl+K`. A single letter fires the action, with no Enter. Escape closes the palette and keeps the picker open.
+In list mode, press `Ctrl+P`. A single letter fires the action, with no Enter. Escape closes the palette and keeps the picker open.
 
 | Key | Action                                                                                   |
 | --- | ---------------------------------------------------------------------------------------- |
 | `n` | Create a repo workflow stub, open it in `$EDITOR`, then validate with the loader           |
 | `i` | Show status that names `hwf workflow import`                                             |
 | `e` | Open the examples page in your browser                                                   |
-| `c` | Open the console after a placement chooser. Same flow as `p` from either list |
+| `c` | Open the console after a placement chooser |
 | `o` | Edit the selected workflow in `$EDITOR`, then validate with the loader                     |
 | `s` | Copy the selected workflow's import command and show a herdr notification                |
 | `d` | Delete the selected workflow, after a `y` or `n` confirmation                            |
 
-`o`, `s`, and `d` need a selected valid workflow. `n`, `i`, `e`, and `c` do not. The picker stays open for every palette action. `c` opens the console the same way `p` does, and the overlay dismisses only after the console pane opens.
+`o`, `s`, and `d` need a selected valid workflow. `n`, `i`, `e`, and `c` do not. The picker stays open for every palette action. `c` opens the console, and the overlay dismisses only after the console pane opens.
 
 Plain `k` still types into the filter.
 
 ## The console
 
-Reach the console by pop-out from the overlay. Press `p` from the workflows list or the runs list, or open the actions palette with `Ctrl+K` and press `c`. Both routes run the same flow. A placement chooser offers `beside`, `below`, and `new tab`. `beside` is the default. The chooser shows `new tab` for the placement value `tab`. The session default is the last successful open, and it starts at `beside`.
+Reach the console by pop-out from the overlay. Open the actions palette with `Ctrl+P` and press `c`. A placement chooser offers `beside`, `below`, and `new tab`. `beside` is the default. The chooser shows `new tab` for the placement value `tab`. The session default is the last successful open, and it starts at `beside`.
 
 If the console pane cannot open, because you are not inside herdr or there is no pane host, the overlay stays open and shows a plain status line.
 
@@ -115,7 +115,7 @@ A share produces one command:
 hwf workflow import "<bundle>"
 ```
 
-Get it from the picker palette with `Ctrl+K` then `s`.
+Get it from the picker palette with `Ctrl+P` then `s`.
 
 The bundle is a gzip-compressed, base64-encoded list of `{name, yaml}` entries. It holds the workflow you picked plus every `workflow:` child it reaches, found the same way a run finds them: repo first, then global. A missing child or a cycle fails the export. The export does not carry an incomplete bundle. Export carries each exact YAML body, including a `$schema` pointer when one exists, and no local paths, config, or scope record. Import pins written files to its own contract.
 
