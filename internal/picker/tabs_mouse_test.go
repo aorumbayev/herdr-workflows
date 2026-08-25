@@ -1,65 +1,54 @@
 package picker
 
 import (
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 
-	"github.com/aorumbayev/herdr-workflows/internal/config"
-	"github.com/aorumbayev/herdr-workflows/internal/console"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
-	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-func TestTabCyclesWorkflowsRunsConsole(t *testing.T) {
+func TestTabCyclesWorkflowsRuns(t *testing.T) {
 	m := New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: t.TempDir()})
 	body := m.View().Content
-	if !strings.Contains(body, tui.TabWorkflows) || !strings.Contains(body, tui.TabRuns) || !strings.Contains(body, tui.TabConsole) {
+	if !strings.Contains(body, tui.TabWorkflows) || !strings.Contains(body, tui.TabRuns) {
 		t.Fatalf("tab bar missing:\n%s", body)
+	}
+	if strings.Contains(body, "console") {
+		t.Fatalf("overlay must not show a console tab:\n%s", body)
 	}
 	m = apply(m, "tab")
 	if m.mode != modeRuns {
 		t.Fatalf("mode = %v", m.mode)
 	}
 	m = apply(m, "tab")
-	if m.mode != modeConsole {
-		t.Fatalf("mode = %v", m.mode)
-	}
-	if !strings.Contains(m.View().Content, tui.ConsoleHint) && !strings.Contains(m.View().Content, "p pop out") {
-		t.Fatalf("console tab missing pop-out hint:\n%s", m.View().Content)
-	}
-	m = apply(m, "tab")
 	if m.mode != modeList {
-		t.Fatalf("mode = %v", m.mode)
+		t.Fatalf("mode = %v, want the workflows tab after two cycles", m.mode)
 	}
 }
 
-func TestConsoleTabPOpensPlacement(t *testing.T) {
-	var opened bool
-	m := New(Options{
-		Entries:  catalogEntries(),
-		Width:    80,
-		RepoRoot: t.TempDir(),
-		OpenConsole: func(console.Placement) error {
-			opened = true
-			return nil
-		},
-	})
-	m = apply(m, "tab", "tab")
-	if m.mode != modeConsole {
-		t.Fatalf("mode = %v", m.mode)
+func TestTabNeverQuitsTheOverlay(t *testing.T) {
+	var reopened []PopupState
+	newModel := func() Model {
+		return New(Options{
+			Entries:     catalogEntries(),
+			Width:       80,
+			RepoRoot:    t.TempDir(),
+			ReopenPopup: func(state PopupState) error { reopened = append(reopened, state); return nil },
+		})
 	}
-	m = apply(m, "p")
-	if m.mode != modeConsolePlace {
-		t.Fatalf("mode = %v want placement", m.mode)
+	m := apply(newModel(), "tab") // workflows -> runs
+	if m.quit {
+		t.Fatal("tab from workflows must not quit the overlay")
 	}
-	if opened {
-		t.Fatal("placement must wait for enter")
+	m = apply(m, "tab") // runs -> workflows
+	if m.quit {
+		t.Fatal("tab from runs must not quit the overlay")
+	}
+	if len(reopened) != 0 {
+		t.Fatalf("tab must not respawn the popup, got %+v", reopened)
 	}
 }
 
@@ -117,9 +106,9 @@ func TestPickerMouseReportsAndMovesCursor(t *testing.T) {
 
 func TestTabBarClickSwitchesAndObeysTheKeyboardGuard(t *testing.T) {
 	m := New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: t.TempDir()})
-	m = applyMsg(m, tea.MouseClickMsg{Button: tea.MouseLeft, X: tui.ChromePaddingX + tabCellX(tui.TabConsole), Y: 0})
-	if m.mode != modeConsole {
-		t.Fatalf("click console = %v", m.mode)
+	m = applyMsg(m, tea.MouseClickMsg{Button: tea.MouseLeft, X: tui.ChromePaddingX + tabCellX(tui.TabRuns), Y: 0})
+	if m.mode != modeRuns {
+		t.Fatalf("click runs = %v", m.mode)
 	}
 	m = applyMsg(m, tea.MouseClickMsg{Button: tea.MouseLeft, X: tui.ChromePaddingX + tabCellX(tui.TabWorkflows), Y: 0})
 	if m.mode != modeList {
@@ -228,48 +217,17 @@ func TestMissingEditorIsAHardError(t *testing.T) {
 func TestPopOutEscapeKeepsTheWorkflowFilter(t *testing.T) {
 	m := New(Options{Entries: catalogEntries(), Width: 80, Height: 30})
 	m = apply(m, "d", "e")
-	m = applyMsg(m, press("tab"))
-	m = applyMsg(m, press("tab"))
-	if m.mode != modeConsole {
-		t.Fatalf("mode = %v, want console", m.mode)
-	}
-	m = applyMsg(m, press("p"))
+	m = apply(m, "ctrl+k")
+	m = apply(m, "c")
 	if m.mode != modeConsolePlace {
 		t.Fatalf("mode = %v, want the placement chooser", m.mode)
 	}
 	m = applyMsg(m, press("esc"))
-	if m.mode != modeConsole {
-		t.Fatalf("mode = %v, want the console tab", m.mode)
+	if m.mode != modeList {
+		t.Fatalf("mode = %v, want the workflows tab", m.mode)
 	}
 	if m.filter != "de" {
 		t.Fatalf("filter = %q, want the typed filter kept", m.filter)
-	}
-}
-
-func TestConsoleTabRedrawsAfterAResizeOnAnotherTab(t *testing.T) {
-	m := New(Options{Entries: catalogEntries(), Width: 80, Height: 30})
-	m = applyMsg(m, press("tab"))
-	m = applyMsg(m, press("tab"))
-	m = applyMsg(m, press("tab"))
-	m = applyMsg(m, tea.WindowSizeMsg{Width: 80, Height: 12})
-	m = applyMsg(m, press("tab"))
-	m = applyMsg(m, press("tab"))
-	if got := len(strings.Split(m.View().Content, "\n")); got != 12 {
-		t.Fatalf("console frame = %d lines, want 12", got)
-	}
-}
-
-func TestConsoleTabSeesWorkflowsAddedAfterItsFirstVisit(t *testing.T) {
-	m := New(Options{Entries: catalogEntries(), Width: 80, Height: 30})
-	m = applyMsg(m, press("tab"))
-	m = applyMsg(m, press("tab"))
-	m = applyMsg(m, press("tab"))
-	m.entries = append(m.entries, workflow.ListEntry{Name: "fresh-one", Title: "Fresh One", Source: "repo"})
-	m.entriesRev++
-	m = applyMsg(m, press("tab"))
-	m = applyMsg(m, press("tab"))
-	if !strings.Contains(m.View().Content, "Fresh One") {
-		t.Fatalf("console tab missed a workflow added this session:\n%s", m.View().Content)
 	}
 }
 
@@ -287,103 +245,5 @@ func TestTabBarClickOnTheActiveRunsTabKeepsItsState(t *testing.T) {
 	}
 	if m.View().Content != before {
 		t.Fatalf("clicking the active tab rebuilt the runs browser:\nbefore:\n%s\nafter:\n%s", before, m.View().Content)
-	}
-}
-
-func TestConsoleTabForwardsDiagramClick(t *testing.T) {
-	path := filepath.Join("..", "..", "examples", "handoff.yaml")
-	body, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	def, err := workflow.ParseWorkflowText("handoff", string(body), config.Config{}, t.TempDir(), path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	m := New(Options{
-		Entries: []workflow.ListEntry{{Name: "handoff", Title: "Handoff", Source: "repo", File: path}},
-		Width:   80,
-		Height:  24,
-		LoadWorkflow: func(entry workflow.ListEntry) (*workflow.Definition, error) {
-			return def, nil
-		},
-	})
-	m = apply(m, "tab", "tab")
-	if m.mode != modeConsole {
-		t.Fatalf("mode = %v", m.mode)
-	}
-	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	m = next.(Model)
-	m = applyMsg(m, tea.MouseClickMsg{Button: tea.MouseLeft, X: tui.ChromePaddingX + 2, Y: 3})
-	if m.console.AtRoot() {
-		t.Fatal("expected diagram after enter")
-	}
-}
-
-func TestConsoleTabForwardsDiagramWheel(t *testing.T) {
-	path := filepath.Join("..", "..", "examples", "handoff.yaml")
-	body, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	def, err := workflow.ParseWorkflowText("handoff", string(body), config.Config{}, t.TempDir(), path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	m := New(Options{
-		Entries: []workflow.ListEntry{{Name: "handoff", Title: "Handoff", Source: "repo", File: path}},
-		Width:   80,
-		Height:  24,
-		LoadWorkflow: func(entry workflow.ListEntry) (*workflow.Definition, error) {
-			return def, nil
-		},
-	})
-	m = apply(m, "tab", "tab")
-	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	m = next.(Model)
-	before := m.console.Body()
-	m = applyMsg(m, tea.MouseWheelMsg{Button: tea.MouseWheelDown, X: tui.ChromePaddingX + 2, Y: 4})
-	after := m.console.Body()
-	if after == before {
-		t.Fatal("wheel did not change the embedded diagram")
-	}
-}
-
-func TestConsoleTabOpensSelectedDiagram(t *testing.T) {
-	path := filepath.Join("..", "..", "examples", "handoff.yaml")
-	body, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	def, err := workflow.ParseWorkflowText("handoff", string(body), config.Config{}, t.TempDir(), path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	m := New(Options{
-		Entries: []workflow.ListEntry{
-			{Name: "alpha", Title: "Alpha", Source: "repo", File: path},
-			{Name: "handoff", Title: "Handoff", Source: "repo", File: path},
-		},
-		Width:        80,
-		Height:       24,
-		LoadWorkflow: func(entry workflow.ListEntry) (*workflow.Definition, error) { return def, nil },
-	})
-	m = apply(m, "down", "tab", "tab")
-	if m.mode != modeConsole {
-		t.Fatalf("mode = %v, want console", m.mode)
-	}
-	if m.console.AtRoot() {
-		t.Fatalf("console tab must open the selected diagram, not a second list:\n%s", m.console.Body())
-	}
-	if !strings.Contains(ansi.Strip(m.console.Body()), "Handoff") {
-		t.Fatalf("diagram must be the selected workflow:\n%s", ansi.Strip(m.console.Body()))
-	}
-	back := applyMsg(m, tea.KeyPressMsg{Code: tea.KeyEsc})
-	if back.mode != modeList {
-		t.Fatalf("esc on the diagram must return to the workflows tab, mode = %v", back.mode)
-	}
-	cycled := apply(m, "tab")
-	if cycled.mode != modeList {
-		t.Fatalf("tab on the diagram must cycle to the workflows tab, mode = %v", cycled.mode)
 	}
 }

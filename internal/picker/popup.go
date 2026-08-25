@@ -11,13 +11,13 @@ import (
 // PopupStateEnv is the picker state payload for the process that a respawn opens.
 const PopupStateEnv = "HWF_PICKER_STATE"
 
-// Popup sizes. herdr cannot resize a live popup, so a tab that needs a
+// Popup sizes. herdr cannot resize a live popup, so a path that needs a
 // different size closes this popup and opens the next popup at that size.
 const (
-	compactWidth  = "64"
-	compactHeight = "15"
-	consoleWidth  = "85%"
-	consoleHeight = "80%"
+	compactWidth   = "64"
+	compactHeight  = "15"
+	expandedWidth  = "85%"
+	expandedHeight = "80%"
 )
 
 // PopupState is the state that a respawned picker restores, plus the size that it opens at.
@@ -36,12 +36,14 @@ type PopupState struct {
 	Detail   bool   `json:"detail,omitempty"`
 }
 
-// PopupGeometry is the popup size a root tab needs.
-func PopupGeometry(tab string) (width, height string) {
-	if tab == tui.TabConsole {
-		return consoleWidth, consoleHeight
-	}
+// PopupGeometry is the compact size that both root tabs open at.
+func PopupGeometry() (width, height string) {
 	return compactWidth, compactHeight
+}
+
+// expandedGeometry is the larger size the $EDITOR and run-detail paths need.
+func expandedGeometry() (width, height string) {
+	return expandedWidth, expandedHeight
 }
 
 // ParsePopupState decodes a respawn payload. Unreadable state starts with no restore data.
@@ -55,7 +57,7 @@ func ParsePopupState(payload string) *PopupState {
 		return nil
 	}
 	if state.Width == "" || state.Height == "" {
-		state.Width, state.Height = PopupGeometry(state.Tab)
+		state.Width, state.Height = PopupGeometry()
 	}
 	return &state
 }
@@ -70,19 +72,15 @@ func (s PopupState) Encode() string {
 }
 
 func (m Model) currentTabName() string {
-	switch m.mode {
-	case modeRuns:
+	if m.mode == modeRuns {
 		return tui.TabRuns
-	case modeConsole:
-		return tui.TabConsole
-	default:
-		return tui.TabWorkflows
 	}
+	return tui.TabWorkflows
 }
 
 // popupStateFor is the payload for a respawn that opens tab.
 func (m Model) popupStateFor(tab string) PopupState {
-	width, height := PopupGeometry(tab)
+	width, height := PopupGeometry()
 	state := PopupState{
 		Tab:    tab,
 		Filter: m.filter,
@@ -104,22 +102,25 @@ func (m Model) popupStateFor(tab string) PopupState {
 // that the editor uses. Validation then opens a compact popup again.
 func (m Model) popupStateForEdit(entry workflow.ListEntry) PopupState {
 	state := m.popupStateFor(tui.TabWorkflows)
-	state.Width, state.Height = consoleWidth, consoleHeight
+	state.Width, state.Height = expandedGeometry()
 	state.EditFile, state.EditName = entry.File, entry.Name
 	return state
 }
 
 func (m Model) popupStateForRunsDetail(id string) PopupState {
 	state := m.popupStateFor(tui.TabRuns)
-	state.Width, state.Height = consoleWidth, consoleHeight
+	state.Width, state.Height = expandedGeometry()
 	state.RunID = id
 	state.Detail = true
 	return state
 }
 
-// needsRespawn is true when tab needs a popup size that this process did not open.
-// A comparison with the live size stops a respawn loop.
-func (m Model) needsRespawn(tab string) bool {
-	width, height := PopupGeometry(tab)
-	return width != m.popupWidth || height != m.popupHeight
+// needsCompactRespawn is true when the live popup is not the compact size.
+func (m Model) needsCompactRespawn() bool {
+	return compactWidth != m.popupWidth || compactHeight != m.popupHeight
+}
+
+// needsExpandedRespawn is true when the live popup is not the expanded size.
+func (m Model) needsExpandedRespawn() bool {
+	return expandedWidth != m.popupWidth || expandedHeight != m.popupHeight
 }

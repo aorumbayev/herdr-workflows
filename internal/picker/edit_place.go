@@ -72,7 +72,7 @@ func (m Model) handleEditPlace(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if place == "popup" {
 			m.mode = modeList
-			if m.reopenPopup != nil && m.needsRespawn(tui.TabConsole) {
+			if m.reopenPopup != nil && m.needsExpandedRespawn() {
 				return m.respawnForEdit(*entry)
 			}
 			return m, m.beginEdit(entry.File, entry.Name)

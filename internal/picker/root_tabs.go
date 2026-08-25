@@ -5,7 +5,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/aorumbayev/herdr-workflows/internal/console"
 	"github.com/aorumbayev/herdr-workflows/internal/runsbrowser"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 )
@@ -21,8 +20,6 @@ func (m Model) cycleRootTab() (tea.Model, tea.Cmd) {
 	case modeList:
 		return m.switchToTab(tui.TabRuns)
 	case modeRuns:
-		return m.switchToTab(tui.TabConsole)
-	case modeConsole:
 		return m.switchToTab(tui.TabWorkflows)
 	default:
 		return m, nil
@@ -59,43 +56,9 @@ func (m Model) openRunsTab() (tea.Model, tea.Cmd) {
 	return m, m.runs.Init()
 }
 
-func (m Model) openConsoleTab() (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-	if !m.consoleReady || m.consoleEntriesRev != m.entriesRev {
-		m.console = console.New(console.Options{
-			Entries:      m.entries,
-			RepoRoot:     m.repoRoot,
-			Width:        m.width,
-			Height:       m.tabBodyHeight(),
-			Env:          m.env,
-			Config:       m.config,
-			LoadWorkflow: m.load,
-			Embedded:     true,
-		})
-		m.consoleReady = true
-		m.consoleEntriesRev = m.entriesRev
-		cmd = m.console.Init()
-	}
-	m.mode = modeConsole
-	m.hoverRow = -1
-	// The console frame uses the size that it holds. A resize on another tab
-	// must go to the console before the console shows.
-	next, _ := m.console.Update(tea.WindowSizeMsg{Width: m.width, Height: m.tabBodyHeight()})
-	m.console = next.(console.Model)
-	if entry := m.selectedEntry(); entry != nil {
-		var open tea.Cmd
-		m.console, open = m.console.OpenDiagram(*entry)
-		cmd = tea.Batch(cmd, open)
-	}
-	return m, cmd
-}
-
 func (m Model) switchToTab(name string) (tea.Model, tea.Cmd) {
 	if name == m.currentTabName() {
 		return m, nil
-	}
-	if m.needsRespawn(name) && m.reopenPopup != nil {
-		return m.respawnInto(name)
 	}
 	return m.mountTab(name)
 }
@@ -122,8 +85,6 @@ func (m Model) mountTab(name string) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tui.TabRuns:
 		return m.openRunsTab()
-	case tui.TabConsole:
-		return m.openConsoleTab()
 	default:
 		return m, nil
 	}

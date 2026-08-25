@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	tea "charm.land/bubbletea/v2"
-
 	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
@@ -28,12 +26,6 @@ func TestPickerFrameFitsPopupHeight(t *testing.T) {
 	}{
 		{"workflows", func(m Model) Model { return m }},
 		{"runs", func(m Model) Model { return apply(m, "tab") }},
-		{"console", func(m Model) Model { return apply(m, "tab", "tab") }},
-		{"console diagram", func(m Model) Model {
-			m = apply(m, "tab", "tab")
-			next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-			return next.(Model)
-		}},
 	}
 	for _, height := range []int{15, 24, 40} {
 		for _, sc := range screens {

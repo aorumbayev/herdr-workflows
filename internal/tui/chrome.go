@@ -23,7 +23,6 @@ const (
 
 	TabWorkflows = "workflows"
 	TabRuns      = "runs"
-	TabConsole   = "console"
 )
 
 // ChromeStrings is every chrome fragment that the picker shows. Each glyph must be
@@ -34,7 +33,6 @@ var ChromeStrings = []string{
 	ConsoleHint,
 	TabWorkflows,
 	TabRuns,
-	TabConsole,
 	PaletteHint,
 	DeleteConfirmHint,
 	ChoiceHint,

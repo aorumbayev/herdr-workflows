@@ -12,7 +12,7 @@ type tabCell struct {
 }
 
 func tabCells() []tabCell {
-	names := []string{tui.TabWorkflows, tui.TabRuns, tui.TabConsole}
+	names := []string{tui.TabWorkflows, tui.TabRuns}
 	out := make([]tabCell, len(names))
 	for i, name := range names {
 		out[i] = tabCell{name: name, width: len(name) + 2}
@@ -20,10 +20,10 @@ func tabCells() []tabCell {
 	return out
 }
 
-// FormatTabBar shows the three picker root tabs. The active tab uses reverse. Inactive tabs use muted.
+// FormatTabBar shows the two picker root tabs. The active tab uses reverse. Inactive tabs use muted.
 func FormatTabBar(active string, width int) string {
 	theme := tui.DefaultTheme()
-	parts := make([]string, 0, 3)
+	parts := make([]string, 0, 2)
 	for _, cell := range tabCells() {
 		text := " " + cell.name + " "
 		if cell.name == active {

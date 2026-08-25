@@ -27,7 +27,6 @@ const (
 	modeNewName
 	modeFail
 	modeRuns
-	modeConsole
 	modeConsolePlace
 	modeEditPlace
 	modeRunsAgentPick
@@ -106,10 +105,6 @@ type Model struct {
 	consolePlaceCursor   int
 	editTarget           *workflow.ListEntry
 	editPlaceCursor      int
-	console              console.Model
-	consoleReady         bool
-	entriesRev           int
-	consoleEntriesRev    int
 	placeBack            mode
 	hoverRow             int
 	reopenPopup          func(PopupState) error
@@ -160,7 +155,7 @@ func New(opts Options) Model {
 	if width <= 0 {
 		width = 80
 	}
-	popupW, popupH := PopupGeometry(tui.TabWorkflows)
+	popupW, popupH := PopupGeometry()
 	m := Model{
 		entries:        opts.Entries,
 		repoRoot:       opts.RepoRoot,
@@ -267,9 +262,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.mode == modeRuns {
 			return m.forwardRuns(sized)
 		}
-		if m.mode == modeConsole && m.consoleReady {
-			return m.forwardConsole(sized)
-		}
 		return m, nil
 	case restoreTabMsg:
 		return m.mountTab(msg.tab)
@@ -305,9 +297,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.mode == modeRuns {
 			return m.forwardRuns(msg)
 		}
-		if m.mode == modeConsole && m.consoleReady {
-			return m.forwardConsole(msg)
-		}
 	}
 	return m, nil
 }
@@ -322,8 +311,6 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch m.mode {
 	case modeRuns:
 		return m.handleRunsKey(msg)
-	case modeConsole:
-		return m.handleConsoleKey(msg)
 	case modePalette:
 		return m.handlePalette(msg)
 	case modeDelete:
@@ -389,13 +376,13 @@ func (m Model) handleRunsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.cycleRootTab()
 	}
 	if key == "enter" && m.runs.IsList() {
-		if id := m.runs.SelectedID(); id != "" && m.reopenPopup != nil && m.needsRespawn(tui.TabConsole) {
+		if id := m.runs.SelectedID(); id != "" && m.reopenPopup != nil && m.needsExpandedRespawn() {
 			return m.respawn(m.popupStateForRunsDetail(id))
 		}
 	}
 	if key == "esc" && !m.runs.IsList() {
 		m.detachLaunch()
-		if m.reopenPopup != nil && m.needsRespawn(tui.TabRuns) {
+		if m.reopenPopup != nil && m.needsCompactRespawn() {
 			return m.respawnInto(tui.TabRuns)
 		}
 	}
@@ -403,30 +390,6 @@ func (m Model) handleRunsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.beginRunsSendback()
 	}
 	return m.forwardRuns(msg)
-}
-
-// handleConsoleKey lets the picker own tab and esc when the embedded console
-// is not in compose mode. Those keys do not stay in a browse screen.
-func (m Model) handleConsoleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if m.console.BlocksPopOut() {
-		return m.forwardConsole(msg)
-	}
-	switch msg.String() {
-	case "tab":
-		return m.cycleRootTab()
-	case "esc":
-		m.mode = modeList
-		return m, nil
-	case "p":
-		return m.beginConsolePlacement()
-	}
-	return m.forwardConsole(msg)
-}
-
-func (m Model) forwardConsole(msg tea.Msg) (tea.Model, tea.Cmd) {
-	next, cmd := m.console.Update(msg)
-	m.console = next.(console.Model)
-	return m, cmd
 }
 
 func (m Model) forwardRuns(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -566,7 +529,6 @@ func (m Model) handleNewName(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		entry := workflow.ListEntry{Name: name, Source: "repo", File: path}
 		m.entries = append(m.entries, entry)
-		m.entriesRev++
 		m.mode = modeList
 		m.promptValue = ""
 		return m, m.beginEdit(path, name)
@@ -644,7 +606,6 @@ func (m Model) handleDelete(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.entries = dropListEntry(m.entries, *entry)
-		m.entriesRev++
 		m.clampCursor()
 	case "n", "esc":
 		m.delete = DeleteState{}

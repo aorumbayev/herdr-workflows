@@ -33,12 +33,8 @@ func formatConsolePlacementBody(cursor int, remembered console.Placement) string
 }
 
 func (m Model) beginConsolePlacement() (tea.Model, tea.Cmd) {
-	if m.mode == modeConsole {
-		m.placeBack = modeConsole
-	} else {
-		m.placeBack = modeList
-		m.filter = m.savedFilter
-	}
+	m.placeBack = modeList
+	m.filter = m.savedFilter
 	m.mode = modeConsolePlace
 	m.status = ""
 	remembered := m.lastConsolePlacement

@@ -28,11 +28,6 @@ func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 			return m.switchToTab(tab)
 		}
 	}
-	if m.mode == modeConsole && m.consoleReady && y > 0 {
-		fwd := msg
-		fwd.Y = msg.Y - 1
-		return m.forwardConsole(fwd)
-	}
 	if m.mode != modeList || msg.Button != tea.MouseLeft {
 		return m, nil
 	}
@@ -45,12 +40,6 @@ func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
-	_, y := mouseContentXY(msg.X, msg.Y)
-	if m.mode == modeConsole && m.consoleReady && y > 0 {
-		fwd := msg
-		fwd.Y = msg.Y - 1
-		return m.forwardConsole(fwd)
-	}
 	if m.mode != modeList {
 		return m, nil
 	}
@@ -96,8 +85,6 @@ func (m Model) tabBarLive() bool {
 		return true
 	case modeRuns:
 		return m.runs.IsList()
-	case modeConsole:
-		return m.consoleReady && !m.console.BlocksPopOut()
 	default:
 		return false
 	}

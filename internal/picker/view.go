@@ -20,8 +20,6 @@ func (m Model) render() string {
 	switch m.mode {
 	case modeRuns:
 		body = m.withTabBar(tui.TabRuns, m.runs.Body())
-	case modeConsole:
-		body = m.withTabBar(tui.TabConsole, m.consoleBody())
 	case modePalette:
 		body = m.renderPalette()
 	case modeConsolePlace:
@@ -48,13 +46,6 @@ func (m Model) render() string {
 
 func (m Model) withTabBar(active, body string) string {
 	return FormatTabBar(active, m.contentWidth()) + "\n" + body
-}
-
-func (m Model) consoleBody() string {
-	if !m.consoleReady {
-		return ""
-	}
-	return m.console.Body()
 }
 
 func (m Model) renderNewName() string {

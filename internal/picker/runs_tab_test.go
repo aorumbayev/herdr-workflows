@@ -25,10 +25,6 @@ func TestTabSwitchesBetweenWorkflowAndRunsBrowsers(t *testing.T) {
 		t.Fatalf("runs filter missing:\n%s", body)
 	}
 	m = apply(m, "tab")
-	if m.mode != modeConsole {
-		t.Fatalf("mode after second tab = %v", m.mode)
-	}
-	m = apply(m, "tab")
 	if m.mode != modeList {
 		t.Fatalf("mode after return = %v", m.mode)
 	}

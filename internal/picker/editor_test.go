@@ -179,8 +179,8 @@ func TestPopupEditExpandsThenRespawnsCompact(t *testing.T) {
 	if len(states) != 1 {
 		t.Fatalf("states = %v", states)
 	}
-	if states[0].Width != consoleWidth || states[0].Height != consoleHeight {
-		t.Fatalf("edit popup opens compact: %+v", states[0])
+	if states[0].Width != expandedWidth || states[0].Height != expandedHeight {
+		t.Fatalf("edit popup opens expanded: %+v", states[0])
 	}
 	if states[0].EditFile != "/r/deploy.yaml" || states[0].EditName != "deploy" {
 		t.Fatalf("edit target lost: %+v", states[0])
