@@ -182,7 +182,7 @@ func TestWideTitlesStayAligned(t *testing.T) {
 }
 
 func TestPaletteLetters(t *testing.T) {
-	if !strings.Contains(tui.ListHint, "tab") || !strings.Contains(tui.ListHint, "ctrl+k") {
+	if !strings.Contains(tui.ListHint, "tab") || !strings.Contains(tui.ListHint, "ctrl+p") {
 		t.Fatalf("list hint = %q", tui.ListHint)
 	}
 	if ResolvePaletteLetter("n", nil).ID != "new" || ResolvePaletteLetter("i", nil).ID != "import" {
@@ -243,6 +243,9 @@ func TestBeginConfirmedDeleteClaimsOnce(t *testing.T) {
 func TestStdinLeakFilter(t *testing.T) {
 	if ShouldDropStdinLeakSequence(string(rune(0x0b))) || ShouldDropStdinLeakSequence(string(rune(0x07))) {
 		t.Fatal("ctrl+k/g must survive")
+	}
+	if ShouldDropStdinLeakSequence(string(rune(0x10))) {
+		t.Fatal("ctrl+p must survive")
 	}
 	if !ShouldDropStdinLeakSequence(string(rune(0x05))) || !ShouldDropStdinLeakSequence(string(rune(0x0f))) {
 		t.Fatal("ctrl+e/o must drop")

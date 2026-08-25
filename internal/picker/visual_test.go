@@ -13,7 +13,7 @@ import (
 
 func TestPaletteRenderIsPaletteOnly(t *testing.T) {
 	m := New(Options{Entries: catalogEntries(), Width: 80})
-	m = apply(m, "ctrl+k")
+	m = apply(m, "ctrl+p")
 	body := m.View().Content
 	if strings.Contains(body, "Chat handoff") || strings.Contains(body, "filter workflows") {
 		t.Fatalf("palette must not ghost the workflow list:\n%s", body)
@@ -81,7 +81,7 @@ func TestPaletteViewPadsToWindowHeight(t *testing.T) {
 	const height = 24
 	m := New(Options{Entries: catalogEntries(), Width: 80})
 	m = applyMsg(m, tea.WindowSizeMsg{Width: 80, Height: height})
-	m = apply(m, "ctrl+k")
+	m = apply(m, "ctrl+p")
 	body := m.View().Content
 	lines := strings.Split(body, "\n")
 	if len(lines) < height {

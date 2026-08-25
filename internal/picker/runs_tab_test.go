@@ -93,7 +93,7 @@ func TestTabDoesNotSwitchDuringInputCollection(t *testing.T) {
 
 func TestTabDoesNotSwitchDuringPalette(t *testing.T) {
 	m := New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: t.TempDir()})
-	m = apply(m, "ctrl+k")
+	m = apply(m, "ctrl+p")
 	next, cmd := m.Update(press("tab"))
 	m = next.(Model)
 	if cmd != nil {

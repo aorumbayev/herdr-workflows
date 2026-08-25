@@ -4,8 +4,8 @@ const (
 	// ChromeSep joins chrome fragments.
 	ChromeSep = " | "
 
-	ListHint            = "tab" + ChromeSep + "enter run" + ChromeSep + "p console" + ChromeSep + "ctrl+k" + ChromeSep + "esc"
-	EmptyListHint       = "tab" + ChromeSep + "p console" + ChromeSep + "ctrl+k" + ChromeSep + "esc"
+	ListHint            = "tab" + ChromeSep + "enter run" + ChromeSep + "ctrl+p actions" + ChromeSep + "esc"
+	EmptyListHint       = "tab" + ChromeSep + "ctrl+p actions" + ChromeSep + "esc"
 	PaletteHint         = "letter fires | esc back"
 	DeleteConfirmHint   = "y delete | n cancel | esc"
 	ChoiceHint          = "type filter" + ChromeSep + "up/down move" + ChromeSep + "enter select" + ChromeSep + "esc back"

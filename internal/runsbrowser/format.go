@@ -154,7 +154,6 @@ func RunsFooter(scope Scope) string {
 		"tab",
 		"ctrl+g " + scopeLabel,
 		"enter detail",
-		"p console",
 		"esc quit",
 	}, tui.ChromeSep)
 }

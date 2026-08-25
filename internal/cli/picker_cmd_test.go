@@ -116,7 +116,7 @@ func TestCompiledBinaryPickerServesWithoutTSRuntime(t *testing.T) {
 	for _, want := range []string{
 		"picker requires a tty",
 		"Open the workflow picker popup",
-		"tab | enter run | p console | ctrl+k | esc",
+		"tab | enter run | ctrl+p actions | esc",
 		"filter workflows...",
 	} {
 		if !strings.Contains(body, want) {

@@ -18,7 +18,7 @@ func TestPaletteConsoleOpensPlacementChooser(t *testing.T) {
 			return nil
 		},
 	})
-	m = apply(m, "ctrl+k")
+	m = apply(m, "ctrl+p")
 	m = apply(m, "c")
 	if m.mode != modeConsolePlace {
 		t.Fatalf("mode = %v, want console place", m.mode)
@@ -44,7 +44,7 @@ func TestPaletteConsoleOpensPlacementChooser(t *testing.T) {
 
 func TestConsoleChooserDisplaysNewTabForTabValue(t *testing.T) {
 	m := New(Options{Entries: catalogEntries(), Width: 80})
-	m = apply(m, "p")
+	m = apply(m, "ctrl+p", "c")
 	body := m.View().Content
 	if strings.Contains(body, "\ntab") || strings.Contains(body, " tab (") {
 		t.Fatalf("raw tab value must not show as a bare option:\n%s", body)
@@ -60,38 +60,25 @@ func TestConsoleChooserDisplaysNewTabForTabValue(t *testing.T) {
 	}
 }
 
-func TestPopOutShortcutAndPaletteAreOneFlow(t *testing.T) {
+func TestConsoleReachedByPaletteOnly(t *testing.T) {
 	m := New(Options{Entries: catalogEntries(), Width: 80, Height: 30})
-	// p on the workflows tab opens the chooser and does not type into the filter.
+	// p is no longer a shortcut. It types into the filter.
 	m = apply(m, "p")
-	if m.mode != modeConsolePlace {
-		t.Fatalf("p mode = %v, want the chooser", m.mode)
+	if m.mode != modeList {
+		t.Fatalf("p mode = %v, want the list", m.mode)
 	}
-	if m.placeBack != modeList {
-		t.Fatalf("placeBack = %v, want list", m.placeBack)
+	if m.filter != "p" {
+		t.Fatalf("p must type into the filter, got %q", m.filter)
 	}
-	if m.filter != "" {
-		t.Fatalf("p must not type into the filter, got %q", m.filter)
-	}
-	m = apply(m, "esc")
-	// palette c reaches the same chooser.
-	m = apply(m, "ctrl+k", "c")
+	m = apply(m, "backspace")
+	// palette c reaches the chooser and returns to the list.
+	m = apply(m, "ctrl+p", "c")
 	if m.mode != modeConsolePlace || m.placeBack != modeList {
 		t.Fatalf("palette c mode = %v placeBack = %v", m.mode, m.placeBack)
 	}
 	m = apply(m, "esc")
-	// p on the runs tab opens the chooser and returns to runs.
-	m = apply(m, "tab")
-	if m.mode != modeRuns {
-		t.Fatalf("mode = %v, want runs", m.mode)
-	}
-	m = apply(m, "p")
-	if m.mode != modeConsolePlace || m.placeBack != modeRuns {
-		t.Fatalf("runs p mode = %v placeBack = %v", m.mode, m.placeBack)
-	}
-	m = apply(m, "esc")
-	if m.mode != modeRuns {
-		t.Fatalf("esc from runs chooser mode = %v, want runs", m.mode)
+	if m.mode != modeList {
+		t.Fatalf("esc from chooser mode = %v, want list", m.mode)
 	}
 }
 
@@ -106,7 +93,7 @@ func TestConsolePlacementRemembersSessionDefault(t *testing.T) {
 		},
 	})
 	m.lastConsolePlacement = console.PlacementTab
-	m = apply(m, "p")
+	m = apply(m, "ctrl+p", "c")
 	if m.consolePlaceCursor != indexOfPlacement(console.PlacementTab) {
 		t.Fatalf("cursor = %d, want tab index", m.consolePlaceCursor)
 	}
@@ -122,7 +109,7 @@ func TestConsolePlacementRemembersOnlyOnSuccess(t *testing.T) {
 		Width:       80,
 		OpenConsole: func(console.Placement, string) error { return errors.New("no pane host") },
 	})
-	mFail = apply(mFail, "p", "enter")
+	mFail = apply(mFail, "ctrl+p", "c", "enter")
 	if mFail.lastConsolePlacement != "" {
 		t.Fatalf("failed open must not be remembered, got %q", mFail.lastConsolePlacement)
 	}
@@ -132,7 +119,7 @@ func TestConsolePlacementRemembersOnlyOnSuccess(t *testing.T) {
 		Width:       80,
 		OpenConsole: func(console.Placement, string) error { return nil },
 	})
-	mOK = apply(mOK, "p", "enter")
+	mOK = apply(mOK, "ctrl+p", "c", "enter")
 	if mOK.lastConsolePlacement != console.PlacementBeside {
 		t.Fatalf("successful open must be remembered, got %q", mOK.lastConsolePlacement)
 	}
@@ -145,7 +132,7 @@ func TestConsoleOpenFailureStaysInOverlay(t *testing.T) {
 		Height:      30,
 		OpenConsole: func(console.Placement, string) error { return errors.New("dial unix: connection refused") },
 	})
-	m = apply(m, "p", "enter")
+	m = apply(m, "ctrl+p", "c", "enter")
 	if m.quit {
 		t.Fatal("failed open must not quit the overlay")
 	}
@@ -171,24 +158,9 @@ func TestConsoleLandsOnSelectedWorkflow(t *testing.T) {
 			return nil
 		},
 	})
-	apply(m, "p", "enter")
+	apply(m, "ctrl+p", "c", "enter")
 	if landed != "chat-handoff" {
 		t.Fatalf("landed workflow = %q, want chat-handoff", landed)
-	}
-
-	landed = "unset"
-	runsM := New(Options{
-		Entries: catalogEntries(),
-		Width:   80,
-		Height:  30,
-		OpenConsole: func(_ console.Placement, workflow string) error {
-			landed = workflow
-			return nil
-		},
-	})
-	apply(runsM, "tab", "p", "enter")
-	if landed != "" {
-		t.Fatalf("runs pop-out landing = %q, want empty", landed)
 	}
 }
 

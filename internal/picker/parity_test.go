@@ -114,7 +114,7 @@ var requiredPickerParityScenarios = []string{
 	"Manifest uses percent size",
 	"Confirmed pop-out quits the picker",
 	"Canceled pop-out keeps the workflow filter",
-	"Shortcut and palette share one flow",
+	"Palette is the only route to the console",
 	"Failed pop-out stays in the overlay",
 	"Hover differs from the cursor",
 	"Wheel has a keyboard twin",
@@ -269,10 +269,10 @@ func TestParityNoScrollThumbGlyph(t *testing.T) {
 	}
 }
 
-func TestParityListFooterIdentifiesRunCtrlKDismiss(t *testing.T) {
+func TestParityListFooterIdentifiesRunCtrlPDismiss(t *testing.T) {
 	m := New(Options{Entries: catalogEntries(), Width: 80})
 	body := m.View().Content
-	if !strings.Contains(body, "enter run") || !strings.Contains(body, "ctrl+k") || !strings.Contains(body, "esc") {
+	if !strings.Contains(body, "enter run") || !strings.Contains(body, "ctrl+p") || !strings.Contains(body, "esc") {
 		t.Fatalf("footer hints:\n%s", body)
 	}
 }
@@ -528,7 +528,7 @@ func TestParityEmptyCatalogFooterAndMessage(t *testing.T) {
 	if strings.Contains(body, tui.FilterWorkflows) {
 		t.Fatal("filter must be hidden")
 	}
-	if !strings.Contains(body, "tab") || !strings.Contains(body, "ctrl+k") || !strings.Contains(body, "esc") {
+	if !strings.Contains(body, "tab") || !strings.Contains(body, "ctrl+p") || !strings.Contains(body, "esc") {
 		t.Fatalf("empty footer:\n%s", body)
 	}
 	if strings.Contains(body, "enter run") {
@@ -866,7 +866,7 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 			return `hwf workflow import "bundle-` + entry.Name + `"`, nil
 		},
 	})
-	m = apply(m, "ctrl+k", "n")
+	m = apply(m, "ctrl+p", "n")
 	if m.quit || m.mode != modeNewName {
 		t.Fatalf("new must prompt for name, quit=%v mode=%v", m.quit, m.mode)
 	}
@@ -885,7 +885,7 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 	}
 
 	m = New(Options{Entries: entries, Width: 80, RepoRoot: root})
-	m = apply(m, "ctrl+k", "i")
+	m = apply(m, "ctrl+p", "i")
 	if m.quit || m.mode != modeList {
 		t.Fatalf("import quit=%v mode=%v", m.quit, m.mode)
 	}
@@ -899,7 +899,7 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 		OpenURL: func(url string) error { opened = append(opened, url); return nil },
 	})
 	opened = nil
-	m = apply(m, "ctrl+k", "e")
+	m = apply(m, "ctrl+p", "e")
 	if m.quit {
 		t.Fatal("examples must keep picker open")
 	}
@@ -917,7 +917,7 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 		RepoRoot:     root,
 		EditWorkflow: edit,
 	})
-	m = apply(m, "down", "ctrl+k", "o", "enter")
+	m = apply(m, "down", "ctrl+p", "o", "enter")
 	if m.quit || m.mode != modeList {
 		t.Fatalf("open must stay on list, quit=%v mode=%v", m.quit, m.mode)
 	}
@@ -941,7 +941,7 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 		},
 	})
 	copied, notified = "", nil
-	m = apply(m, "down", "ctrl+k", "s")
+	m = apply(m, "down", "ctrl+p", "s")
 	if m.quit || m.mode != modeList {
 		t.Fatalf("share must stay on list, quit=%v mode=%v", m.quit, m.mode)
 	}
@@ -966,7 +966,7 @@ func TestParityCancelDeleteKeepsFile(t *testing.T) {
 	}
 	entry := workflow.ListEntry{Name: "deploy", Source: "repo", File: path, Title: "Deploy"}
 	m := New(Options{Entries: []workflow.ListEntry{entry}, Width: 80})
-	m = apply(m, "ctrl+k", "d", "n")
+	m = apply(m, "ctrl+p", "d", "n")
 	if m.mode != modeList {
 		t.Fatalf("mode = %v", m.mode)
 	}

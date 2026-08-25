@@ -27,7 +27,7 @@ func TestOpenEditorDoesNotRunInsideUpdate(t *testing.T) {
 			return workflow.ValidateResult{OK: true}
 		},
 	})
-	m = apply(m, "ctrl+k")
+	m = apply(m, "ctrl+p")
 	next, cmd := m.Update(press("o"))
 	m = next.(Model)
 	if ran {
@@ -75,7 +75,7 @@ func TestLiveOpenEditorReturnsExecProcess(t *testing.T) {
 			return ""
 		},
 	})
-	m = apply(m, "ctrl+k")
+	m = apply(m, "ctrl+p")
 	next, _ := m.Update(press("o"))
 	m = next.(Model)
 	if m.mode != modeEditPlace {
@@ -111,7 +111,7 @@ func TestEditPlacementTabQuitsWithoutReopen(t *testing.T) {
 			return nil
 		},
 	})
-	m = apply(m, "ctrl+k", "o")
+	m = apply(m, "ctrl+p", "o")
 	for m.editPlaceCursor < 3 {
 		m = apply(m, "down")
 	}
@@ -135,7 +135,7 @@ func TestNewNameEditorDoesNotRunInsideUpdate(t *testing.T) {
 			return workflow.ValidateResult{OK: true}
 		},
 	})
-	m = apply(m, "ctrl+k", "n", "s", "h", "i", "p")
+	m = apply(m, "ctrl+p", "n", "s", "h", "i", "p")
 	next, cmd := m.Update(press("enter"))
 	m = next.(Model)
 	if ran {
@@ -172,7 +172,7 @@ func TestPopupEditExpandsThenRespawnsCompact(t *testing.T) {
 			return nil
 		},
 	})
-	m = apply(m, "ctrl+k", "o", "enter")
+	m = apply(m, "ctrl+p", "o", "enter")
 	if !m.quit {
 		t.Fatal("popup edit must quit the compact popup")
 	}

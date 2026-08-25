@@ -113,8 +113,11 @@ func TestRunsFooterASCII(t *testing.T) {
 	if !strings.Contains(RunsFooter(ScopeAll), "All") {
 		t.Fatal("all scope label")
 	}
-	if !strings.Contains(RunsFooter(ScopeCurrent), "p console") {
-		t.Fatal("RunsFooter must advertise p console")
+	if strings.Contains(RunsFooter(ScopeCurrent), "console") {
+		t.Fatal("RunsFooter must not advertise console")
+	}
+	if !strings.Contains(RunsFooter(ScopeCurrent), "enter detail") {
+		t.Fatal("RunsFooter must advertise enter detail")
 	}
 	if strings.Contains(RunsFooter(ScopeCurrent), "0/0") {
 		t.Fatal("RunsFooter must not embed 0/0")
@@ -298,7 +301,7 @@ func TestDetailLinesDetailWithProgress(t *testing.T) {
 
 func TestRunsFooterJoinsWithChromeSep(t *testing.T) {
 	parts := strings.Split(RunsFooter(ScopeCurrent), tui.ChromeSep)
-	if len(parts) != 5 {
+	if len(parts) != 4 {
 		t.Fatalf("parts = %v", parts)
 	}
 	for _, part := range parts {

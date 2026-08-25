@@ -198,7 +198,7 @@ func TestMissingEditorIsAHardError(t *testing.T) {
 		Width:   80,
 		Env:     func(string) string { return "" },
 	})
-	m = apply(m, "ctrl+k")
+	m = apply(m, "ctrl+p")
 	next, _ := m.Update(press("o"))
 	m = next.(Model)
 	if m.mode != modeEditPlace {
@@ -218,7 +218,7 @@ func TestMissingEditorIsAHardError(t *testing.T) {
 func TestPopOutEscapeKeepsTheWorkflowFilter(t *testing.T) {
 	m := New(Options{Entries: catalogEntries(), Width: 80, Height: 30})
 	m = apply(m, "d", "e")
-	m = apply(m, "ctrl+k")
+	m = apply(m, "ctrl+p")
 	m = apply(m, "c")
 	if m.mode != modeConsolePlace {
 		t.Fatalf("mode = %v, want the placement chooser", m.mode)
