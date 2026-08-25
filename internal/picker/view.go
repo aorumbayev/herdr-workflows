@@ -28,6 +28,12 @@ func (m Model) render() string {
 		body = m.renderEditPlace()
 	case modeRunsAgentPick:
 		body = m.renderRunsAgentPick()
+	case modeNewMode:
+		body = m.renderNewMode()
+	case modeNewScope:
+		body = m.renderNewScope()
+	case modeNewAgentPick:
+		body = m.renderNewAgentPick()
 	case modeDelete:
 		body = "Delete " + m.deleteLabel() + "?\n" + tui.DeleteConfirmHint
 	case modeFail:

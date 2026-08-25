@@ -31,6 +31,9 @@ const (
 	modeConsolePlace
 	modeEditPlace
 	modeRunsAgentPick
+	modeNewMode
+	modeNewScope
+	modeNewAgentPick
 )
 
 // Options is the input for a picker model.
@@ -123,6 +126,9 @@ type Model struct {
 	agentCursor          int
 	pendingSendText      string
 	editRespawn          bool
+	newModeCursor        int
+	newScopeCursor       int
+	newName              string
 }
 
 type currentResolvedMsg struct {
@@ -331,6 +337,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleEditPlace(msg)
 	case modeRunsAgentPick:
 		return m.handleRunsAgentPick(msg)
+	case modeNewMode:
+		return m.handleNewMode(msg)
+	case modeNewScope:
+		return m.handleNewScope(msg)
+	case modeNewAgentPick:
+		return m.handleNewAgentPick(msg)
 	case modeFail:
 		if key == "enter" || key == "esc" {
 			m.mode = modeList
@@ -438,9 +450,9 @@ func (m Model) handlePalette(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m Model) applyPaletteAction(action *PaletteAction) (tea.Model, tea.Cmd) {
 	switch action.ID {
 	case "new":
-		m.mode = modeNewName
+		m.mode = modeNewMode
+		m.newModeCursor = 0
 		m.filter = m.savedFilter
-		m.promptValue = ""
 		m.status = ""
 		return m, nil
 	case "import":
@@ -525,19 +537,13 @@ func (m Model) handleNewName(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.status = workflow.NameRule
 			return m, nil
 		}
-		path, err := workflow.CreateRepoWorkflow(m.repoRoot, name)
-		if err != nil {
-			m.status = err.Error()
-			m.mode = modeList
-			return m, nil
-		}
-		entry := workflow.ListEntry{Name: name, Source: "repo", File: path}
-		m.entries = append(m.entries, entry)
-		m.mode = modeList
-		m.promptValue = ""
-		return m, m.beginEdit(path, name)
+		m.newName = name
+		m.newScopeCursor = 0
+		m.mode = modeNewScope
+		m.status = ""
+		return m, nil
 	case "esc":
-		m.mode = modeList
+		m.mode = modeNewMode
 		m.promptValue = ""
 		m.status = ""
 		return m, nil

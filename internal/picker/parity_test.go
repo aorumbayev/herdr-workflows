@@ -149,6 +149,11 @@ var requiredPickerParityScenarios = []string{
 	"New from empty catalog",
 	"Import from empty catalog",
 	"Browse examples",
+	"New offers agent or template",
+	"New agent handoff types the create prompt",
+	"New agent with no panes stays in the overlay",
+	"New template chooses repo or global",
+	"New template popup opens expanded",
 	"Open repo workflow in the popup",
 	"Open in a new tab",
 	"Open without selection",
@@ -873,10 +878,22 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 		},
 	})
 	m = apply(m, "ctrl+p", "n")
-	if m.quit || m.mode != modeNewName {
-		t.Fatalf("new must prompt for name, quit=%v mode=%v", m.quit, m.mode)
+	if m.quit || m.mode != modeNewMode {
+		t.Fatalf("new must offer agent or template, quit=%v mode=%v", m.quit, m.mode)
+	}
+	m = apply(m, "down", "enter")
+	if m.mode != modeNewName {
+		t.Fatalf("template must prompt for name, mode=%v", m.mode)
 	}
 	m = apply(m, "s", "h", "i", "p", "enter")
+	if m.mode != modeNewScope {
+		t.Fatalf("name must go to scope chooser, mode=%v", m.mode)
+	}
+	m = apply(m, "enter")
+	if m.mode != modeEditPlace {
+		t.Fatalf("scope must go to placement chooser, mode=%v", m.mode)
+	}
+	m = apply(m, "enter")
 	if m.quit || m.mode != modeList {
 		t.Fatalf("new after create quit=%v mode=%v", m.quit, m.mode)
 	}

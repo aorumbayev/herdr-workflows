@@ -135,7 +135,7 @@ func TestNewNameEditorDoesNotRunInsideUpdate(t *testing.T) {
 			return workflow.ValidateResult{OK: true}
 		},
 	})
-	m = apply(m, "ctrl+p", "n", "s", "h", "i", "p")
+	m = apply(m, "ctrl+p", "n", "down", "enter", "s", "h", "i", "p", "enter", "enter")
 	next, cmd := m.Update(press("enter"))
 	m = next.(Model)
 	if ran {
