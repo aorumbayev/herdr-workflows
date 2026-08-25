@@ -12,7 +12,6 @@ import (
 )
 
 func TestRunsListSinglePositionCounter(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md Runs footer position
 	checkout := t.TempDir()
 	m, _ := modelWithRuns(t, checkout, "alpha", "bravo")
 	body := m.View().Content
@@ -48,7 +47,6 @@ func TestRunsViewPadsToWindowHeight(t *testing.T) {
 }
 
 func TestRunRowStatusUsesIndexedSlotAndKeepsText(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md "Runs status uses indexed slots"
 	checkout := t.TempDir()
 	m, _ := modelWithRuns(t, checkout, "alpha", "bravo")
 	row := strings.Split(m.View().Content, "\n")[2]

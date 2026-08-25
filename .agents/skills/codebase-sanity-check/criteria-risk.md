@@ -112,9 +112,8 @@ replaces it.
 ---
 
 The remaining sections need a diff. In `branch` scope, read the diff you were given and the task the
-branch claims to complete — the pull request body, the OpenSpec change under `openspec/changes/`, or
-the commit messages. Pre-existing problems in unchanged code are out of scope. A change that newly
-breaks unchanged code is in scope.
+branch claims to complete — the pull request body or the commit messages. Pre-existing problems in
+unchanged code are out of scope. A change that newly breaks unchanged code is in scope.
 
 ## 6. Check weakening (branch only)
 
@@ -146,7 +145,7 @@ judge it.
 
 - A disable with a specific justification naming the rule and why it does not apply. A justification
   that suppresses an error the line itself manufactures is not a justification
-- A cap change that an OpenSpec change explains
+- A cap change that the invariants of record and the user-facing contract explain
 - An ignore covering a generated file whose generator is itself checked. Group B section 10 owns that
   judgment. Defer to it rather than flagging the ignore twice with opposite verdicts
 
@@ -182,7 +181,7 @@ judge it.
 ### How to measure
 
 - `git diff origin/<base>...HEAD | rg -in "^\+.*(pre-existing|already broken|already like this|not my|existing issue)"`
-- For each hit, check whether a tracked issue or an OpenSpec change exists. Absent means finding
+- For each hit, check whether a tracked issue exists. Absent means finding
 
 ### Not a finding
 
@@ -195,7 +194,7 @@ judge it.
 - A component, module, or step type added but never reached from an entry point
 - A new export missing from the surface that would make it usable
 - A test file with `t.Run` blocks and no assertions
-- Docs, specs, or generated artifacts not updated alongside a behavior change
+- Docs or generated artifacts not updated alongside a behavior change
 - An empty `catch` swallowing an error
 
 ### How to measure
@@ -203,7 +202,7 @@ judge it.
 - For each new export in the diff, grep for a call site outside its own file
 - `git diff origin/<base>...HEAD --name-only` and check the pairings the repository requires:
   a loader change with no `docs/workflow.schema.json` change, or a
-  behavior change with no change under `openspec/`
+  behavior change with no docs or test update when users see the change
 - `git diff origin/<base>...HEAD | rg "^\+.*_\s*=\s*err\s*$|^\+.*if err != nil \{\s*\}"`
 
 ### Not a finding

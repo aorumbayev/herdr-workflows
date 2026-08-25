@@ -45,6 +45,8 @@ func TestParseRawGrammar(t *testing.T) {
 		{"missing version", "steps:\n  - run: \"true\"\n", "version is required"},
 		{"missing steps", "version: v1alpha1\n", "steps is required"},
 		{"unknown top-level key", "version: v1alpha1\nretries: 3\nsteps:\n  - run: \"true\"\n", `Unrecognized key: "retries"`},
+		{"herdr version top-level", "version: v1alpha1\nherdr_version: \"0.8.2\"\nsteps:\n  - run: \"true\"\n", `Unrecognized key: "herdr_version"`},
+		{"dotted yaml action key", "version: v1alpha1\nsteps:\n  - pane.split:\n      direction: right\n", "step has no action key"},
 		{"empty steps", "version: v1alpha1\nsteps: []\n", "expected array to have >=1 items"},
 		{"multiple actions", "version: v1alpha1\nsteps:\n  - run: \"true\"\n    agent: hi\n", "multiple action keys"},
 		{"removed key", "version: v1alpha1\nsteps:\n  - run: \"true\"\n    out: x\n", `Unrecognized key: "out"`},

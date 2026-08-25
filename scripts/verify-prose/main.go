@@ -35,7 +35,7 @@ follow CONTRIBUTING.md, "Documentation style" (Simplified Technical English).
 
 var (
 	rootFiles = []string{"README.md", "CONTRIBUTING.md", "AGENTS.md"}
-	rootDirs  = []string{"docs", "openspec", "skills", ".agents/skills"}
+	rootDirs  = []string{"docs", "skills", ".agents/skills"}
 	skipDirs  = map[string]bool{".vitepress": true, "node_modules": true}
 )
 

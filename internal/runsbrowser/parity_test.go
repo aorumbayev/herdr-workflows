@@ -52,7 +52,6 @@ func coveringTestExists(name string, own map[string]struct{}, external map[strin
 }
 
 // Spec scenarios that runsbrowser.ParityBaseline owns (picker-presentation Runs requirements).
-// openspec/specs/picker-presentation/spec.md
 var requiredRunsParityScenarios = []string{
 	"More than six runs",
 	"Tall host shows more runs",
@@ -75,7 +74,6 @@ var requiredRunsParityScenarios = []string{
 }
 
 func TestParityBaselineCoversSpecScenarios(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md Runs requirements
 	ownTests := loadPackageTestFuncs(".")
 	externalTests := map[string]map[string]struct{}{
 		"tui":    loadPackageTestFuncs("../tui"),
@@ -124,7 +122,6 @@ func TestParityBaselineCoversSpecScenarios(t *testing.T) {
 }
 
 func TestParityMoreThanSixRunsScrollsViewport(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md "More than six runs"
 	checkout := t.TempDir()
 	names := []string{"a", "b", "c", "d", "e", "f", "g", "h"}
 	m, _ := modelWithRuns(t, checkout, names...)
@@ -175,7 +172,6 @@ func listViewportRows(body string) int {
 }
 
 func TestParityInterruptedRunShowsTextStatus(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md "Interrupted run"
 	row := FormatRunRow(history.Summary{
 		ID: "550e8400-e29b-41d4-a716-446655440000", Workflow: "demo", Status: "interrupted", ElapsedMs: 1000,
 	}, 80, FormatRunRowOpts{})
@@ -185,7 +181,6 @@ func TestParityInterruptedRunShowsTextStatus(t *testing.T) {
 }
 
 func TestParitySearchShortDisplayedID(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md "Search a short displayed ID"
 	checkout := t.TempDir()
 	m, ids := modelWithRuns(t, checkout, "alpha")
 	prefix := ids[0][:8]
@@ -202,7 +197,6 @@ func TestParitySearchShortDisplayedID(t *testing.T) {
 }
 
 func TestParityInspectActiveAndToleratedDetailKinds(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md active + tolerated failure detail
 	running := DetailLines(DetailView{
 		Kind: "detail",
 		Detail: history.Detail{
@@ -236,7 +230,6 @@ func TestParityInspectActiveAndToleratedDetailKinds(t *testing.T) {
 }
 
 func TestParityNoMachineRunsCopy(t *testing.T) {
-	// openspec/specs/picker-presentation/spec.md "No machine runs"
 	stateDir := t.TempDir()
 	getenv := testGetenv(t, stateDir)
 	m := New(Options{RepoRoot: t.TempDir(), Width: 80, Env: getenv})
@@ -266,7 +259,7 @@ func TestParityWindowSizeRecomputesRunsWidth(t *testing.T) {
 }
 
 func TestRunsViewportGrowsWithHostHeight(t *testing.T) {
-	// openspec picker-presentation: run rows fill the host above the six-row minimum.
+	// Run rows fill the host above the six-row minimum.
 	checkout := t.TempDir()
 	m, _ := modelWithRuns(t, checkout, "a", "b", "c", "d", "e", "f", "g", "h")
 	if m.listViewport() != tui.ListViewport {

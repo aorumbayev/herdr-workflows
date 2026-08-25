@@ -88,7 +88,7 @@ the pin stay put in that case.
    hand-lists the allowed methods with their counts, version pin, and per-method selectors — a
    regen without this refresh teaches authors a stale API. Take new selectors from
    `HERDR_FOCUS_POLICY` in the regenerated file. Then sweep prose for the old floor:
-   `grep -rn "<old version>" README.md AGENTS.md CONTRIBUTING.md docs skills openspec` and move
+   `grep -rn "<old version>" README.md AGENTS.md CONTRIBUTING.md docs skills` and move
    every stated floor, docs pin, and "as of herdr X.Y.Z" sentence to the new release.
 
 ## Phase 5: Prove it live

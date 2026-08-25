@@ -42,7 +42,5 @@ jobs:
           distribution: goreleaser
           version: "~> v2"
           install-only: true
-      - name: Install OpenSpec
-        run: npm install -g @fission-ai/openspec@latest
       - name: Verify
         run: go tool verify

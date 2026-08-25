@@ -57,10 +57,17 @@ func TestVerifyWorkflowUsesUnifiedGoToolVerify(t *testing.T) {
 		"version: v2.13",
 		"install-only: true",
 		"install-mode: goinstall",
-		"@fission-ai/openspec",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf(".github/workflows/verify.yml missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"@fission-ai/openspec",
+		"Install OpenSpec",
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf(".github/workflows/verify.yml must not contain %q", forbidden)
 		}
 	}
 	if strings.Count(text, "go tool verify") < 1 {

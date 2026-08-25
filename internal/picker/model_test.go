@@ -415,7 +415,7 @@ func (stopErr) Error() string { return "stop-after-chdir" }
 var errStop stopErr
 
 func TestPickerViewportGrowsWithPopupHeight(t *testing.T) {
-	// openspec picker-presentation: rows fill the popup above the six-row minimum.
+	// Rows fill the popup above the six-row minimum.
 	m := New(Options{Entries: eightEntries(), Width: 62, Height: 30})
 	body := m.View().Content
 	for _, name := range []string{"Golf", "Hotel"} {
@@ -430,7 +430,7 @@ func TestPickerViewportGrowsWithPopupHeight(t *testing.T) {
 }
 
 func TestPaletteBodyUsesSharedRowChrome(t *testing.T) {
-	// openspec picker-editor-actions: the palette shows with the list chrome.
+	// The palette shows with the list chrome.
 	m := New(Options{Entries: eightEntries(), Width: 62, Height: 24})
 	m = applyMsg(m, tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
 	if m.mode != modePalette {

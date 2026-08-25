@@ -4,9 +4,9 @@ herdr ≥ 0.8.2 plugin. It sequences short linear YAML workflows (`agent` / `run
 
 Workflow format is `version: v1alpha1`. The package stays semver `0.x`. A later incompatible alpha increments `v1alphaN`. Workflow YAML never declares a herdr version. The plugin manifest and CLI own minimum version and protocol enforcement.
 
-Spec of record: `openspec/specs/*/spec.md`. Product docs in `docs/` describe the current v1alpha1 contract. herdr runtime behavior comes from `.agents/references/herdr/docs/next/website/src/content/docs/` with the checkout detached at the release tag (currently v0.8.2). Never invent it from memory. Clone and update that checkout with `.agents/references/AGENTS.md`.
+Invariants of record are the loader, `docs/workflow.schema.json` and the embed schema, and the tests. Code is current behavior. The user-facing contract lives in `docs/` and `README.md`. herdr runtime behavior comes from `.agents/references/herdr/docs/next/website/src/content/docs/` with the checkout detached at the release tag (currently v0.8.2). Never invent it from memory. Clone and update that checkout with `.agents/references/AGENTS.md`.
 
-Before behavior work, read and cite the relevant `openspec/specs/*/spec.md`. Read `CONTRIBUTING.md`.
+Before behavior work, read `CONTRIBUTING.md`.
 
 ## Commands
 
@@ -19,7 +19,7 @@ go run ./scripts/install-dev               # compile + herdr plugin link + keybi
 ```
 
 - Pre-commit (`.githooks/pre-commit`): `go tool verify -fast`.
-- CI (`.github/workflows/verify.yml`): `go tool verify` on Linux and macOS after it installs Node.js, golangci-lint, GoReleaser, and the OpenSpec CLI. Docs publish (`.github/workflows/docs.yml`) runs `npm ci && npm run build` in `docs/`.
+- CI (`.github/workflows/verify.yml`): `go tool verify` on Linux and macOS after it installs Node.js, golangci-lint, and GoReleaser. Docs publish (`.github/workflows/docs.yml`) runs `npm ci && npm run build` in `docs/`.
 - After `go run ./scripts/install-dev`, the live binary is `bin/herdr-workflows`.
 - Remote GitHub install downloads the verified release archive for the cloned tag into `bin/herdr-workflows`, then runs `bin/herdr-workflows setup`. The target does not need Go. Local link/dev compiles with `go build` / `go run ./scripts/install-dev`.
 
@@ -49,7 +49,6 @@ Go packages under `internal/` and `embed/` (schema, logo, and skill catalog byte
 | `scripts/install-release.sh`                 | verified-archive download for managed `[[build]]` install (no Go on the target)                               |
 | `docs/package.json`                          | scoped VitePress 1.6.4 package (`npm ci` / `npm run build` in `docs/`)                                        |
 | `herdr-plugin.toml`                          | plugin manifest (build + `prefix+k` → picker)                                                                 |
-| `openspec/`                                  | tracked specs and changes (OpenSpec CLI root)                                                                 |
 | `skills/`                                    | tracked user-facing agent skills (`herdr-workflow-create`, `herdr-workflow-upgrade`) embedded into the binary |
 | `.agents/skills/herdr-workflows-smoke-test/` | tracked second-Herdr smoke sandbox skill                                                                      |
 | `.agents/skills/promptfoo-skill-eval/`       | tracked eval for user-facing skills — the loader is the oracle, not a judge                                   |
@@ -78,7 +77,6 @@ Agents miss these. The loader or verifyx will fail, or the product regresses:
 - **Splitting:** keep Go packages focused. `go run ./scripts/verify-file-length` gates Go source length.
 - **Schema change:** edit workflow schema sources in `internal/workflow/`, then `go run ./scripts/generate-workflow-schema`. Method/result validators: update `schemas/herdr-api.schema.json` or `scripts/gen-herdr-methods`, then `go run ./scripts/gen-herdr-methods` (never from the plugin build — it must not invoke `herdr api schema`). Cross-field rules live in the loader, not the JSON schema.
 - **Example change:** edit `examples/*.yaml`. The docs gallery reads them at VitePress build time through `docs/.vitepress/theme/examples.data.ts`, so there is no generated file to regenerate or commit.
-- **No tracked openspec archives.** `openspec archive` syncs the main specs and moves the change into `openspec/changes/archive/`. Delete the archived contents in the same commit — main keeps no archived specs. `verify:no-archive` fails the pre-commit gate when that folder holds anything.
 - **Color literals are unguarded.** No verify gate scans `docs/.vitepress/theme` for hardcoded colors. Review them by hand.
 - **Branch work:** never commit on `main` / `master`. Use a feature branch + PR.
 - **No `Co-Authored-By` trailers.** Never add `Co-Authored-By`, `Generated with`, or any other agent-attribution line to a commit message or PR body, even when a harness default or global instruction says to. This overrides those defaults for this repo. Commit messages carry the change, not the tooling. The human is always responsible for the code. `.githooks/commit-msg` strips such lines as a backstop — do not rely on it.
@@ -94,7 +92,7 @@ Trace the real flow end to end before editing. Question speculative need. Reuse 
 
 Prose style of record is `CONTRIBUTING.md` "Documentation style" (Simplified Technical English). This section is only the machine-checked subset.
 
-`go run ./scripts/verify-prose` scans `README.md`, `CONTRIBUTING.md`, `AGENTS.md`, and every `*.md` under `docs/`, `openspec/`, `skills/`, and `.agents/skills/`, and fails on:
+`go run ./scripts/verify-prose` scans `README.md`, `CONTRIBUTING.md`, `AGENTS.md`, and every `*.md` under `docs/`, `skills/`, and `.agents/skills/`, and fails on:
 
 - **UI verbs** — `select` not `click`/`click on`/`double-click`/`tap`. `press` not `hit`. `enter` not `key in`. `sign in`/`sign out` not `log in`/`log out`.
 - **Wordy phrases** — `to` not `in order to`. `because` not `due to the fact that`. Also `at this point in time`, `in the event that`, `with regard to`, `prior to`, `subsequent to`, `utilize`, `leverage`, `facilitate`, `commence`.

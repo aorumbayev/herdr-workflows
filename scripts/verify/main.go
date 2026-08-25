@@ -86,14 +86,12 @@ func checks(cfg Config) []check {
 		{name: "test", run: runTest},
 		{name: "golangci-lint", run: runGolangCILint},
 		{name: "verify-prose", run: runGoScript("verify-prose")},
-		{name: "verify-no-archive", run: runGoScript("verify-no-archive")},
 		{name: "verify-file-length", run: runGoScript("verify-file-length")},
 		{name: "verify-comments", run: runGoScript("verify-comments")},
 	}
 	if !cfg.Fast {
 		out = append(out,
 			check{name: "docs", run: runDocs},
-			check{name: "openspec", run: runOpenSpec},
 			check{name: "govulncheck", run: runGovulncheck},
 			check{name: "goreleaser", run: runGoreleaser},
 		)
@@ -173,11 +171,6 @@ func runDocs(cfg Config) error {
 		return err
 	}
 	_, err := cfg.Command("npm", []string{"run", "build", "--prefix", "docs"})
-	return err
-}
-
-func runOpenSpec(cfg Config) error {
-	_, err := cfg.Command("openspec", []string{"validate", "--strict", "--all", "--no-interactive"})
 	return err
 }
 

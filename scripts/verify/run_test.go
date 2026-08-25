@@ -84,7 +84,7 @@ func TestRunReportsCheckProgress(t *testing.T) {
 	}
 }
 
-func TestFastOmitsDocsOpenSpecAndE2E(t *testing.T) {
+func TestFastOmitsDocsGovulncheckAndE2E(t *testing.T) {
 	var cmds []string
 	cfg := Config{
 		Fast: true,
@@ -124,7 +124,7 @@ func TestFastOmitsDocsOpenSpecAndE2E(t *testing.T) {
 	}
 }
 
-func TestFullIncludesDocsOpenSpecAndAllRaceTests(t *testing.T) {
+func TestFullIncludesDocsAndAllRaceTests(t *testing.T) {
 	dir := t.TempDir()
 	var cmds []string
 	cfg := Config{
@@ -154,12 +154,10 @@ func TestFullIncludesDocsOpenSpecAndAllRaceTests(t *testing.T) {
 		"go test -race ./...",
 		"golangci-lint run",
 		"go run ./scripts/verify-prose",
-		"go run ./scripts/verify-no-archive",
 		"go run ./scripts/verify-file-length",
 		"go run ./scripts/verify-comments",
 		"npm ci --prefix docs",
 		"npm run build --prefix docs",
-		"openspec validate --strict --all --no-interactive",
 		"go tool govulncheck ./...",
 		"goreleaser check",
 		"goreleaser release --snapshot --clean --skip=publish",
@@ -167,6 +165,14 @@ func TestFullIncludesDocsOpenSpecAndAllRaceTests(t *testing.T) {
 	for _, w := range want {
 		if !strings.Contains(joined, w) {
 			t.Fatalf("full mode missing %q; cmds:\n%s", w, joined)
+		}
+	}
+	for _, forbidden := range []string{
+		"openspec validate --strict --all --no-interactive",
+		"go run ./scripts/verify-no-archive",
+	} {
+		if strings.Contains(joined, forbidden) {
+			t.Fatalf("full mode must not run %q; cmds:\n%s", forbidden, joined)
 		}
 	}
 }

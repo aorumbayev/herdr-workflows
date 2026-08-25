@@ -10,9 +10,9 @@
 
 <!-- How it works at a high level. -->
 
-## Affected OpenSpec specs
+## Acceptance criteria
 
-<!-- List `openspec/specs/<capability>/` paths, or `none`. -->
+<!-- Ordinary UI: short checks that prove the change works. Risk-class and skip-ritual PRs may leave this empty. -->
 
 -
 
