@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/aorumbayev/herdr-workflows/internal/history"
 	"github.com/aorumbayev/herdr-workflows/internal/runsbrowser"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
@@ -186,7 +187,9 @@ func (m Model) renderRuns() string {
 	end := min(m.runOffset+vp, len(runs))
 	titleW := max(0, w-tui.RowTextIndent-tui.RowRightGutter)
 	for i := m.runOffset; i < end; i++ {
-		row := runsbrowser.FormatRunRow(runs[i], titleW, runsbrowser.FormatRunRowOpts{})
+		item := runs[i]
+		item.ElapsedMs = history.LiveElapsedMs(item, m.clock())
+		row := runsbrowser.FormatRunRow(item, titleW, runsbrowser.FormatRunRowOpts{})
 		rows = append(rows, tui.FormatRow(row, "", false, w, i == m.runCursor))
 	}
 	for len(rows) < vp {

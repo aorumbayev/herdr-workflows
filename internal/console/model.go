@@ -43,6 +43,7 @@ type Options struct {
 	ListAgentPanes  func() ([]AgentPaneEntry, error)
 	PaneSendText    func(paneID, text string) error
 	SpillSendback   func(repoRoot, text string) (string, string, error)
+	Now             func() time.Time
 }
 
 // Model is the full-screen console Bubble Tea model.
@@ -90,6 +91,9 @@ type Model struct {
 	diagramScroll       int
 	diagramYAMLScroll   int
 	watchEpoch          int
+	runsEpoch           int
+	runsTicking         bool
+	now                 func() time.Time
 	debugTab            DebugTab
 	detailScroll        int
 	status              string
@@ -150,12 +154,17 @@ func New(opts Options) Model {
 	if spillFn == nil {
 		spillFn = MaybeSpillSendbackText
 	}
+	nowFn := opts.Now
+	if nowFn == nil {
+		nowFn = time.Now
+	}
 	m := Model{
 		entries:        opts.Entries,
 		repoRoot:       opts.RepoRoot,
 		width:          width,
 		height:         opts.Height,
 		getenv:         getenv,
+		now:            nowFn,
 		screen:         screenWorkflows,
 		loadRuns:       loadRuns,
 		loadDetail:     loadDetail,
@@ -210,6 +219,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleMouse(msg)
 	case watchTickMsg:
 		return m.handleWatchTick(msg.epoch)
+	case runsTickMsg:
+		return m.handleRunsTick(msg.epoch)
 	}
 	return m, nil
 }
@@ -240,7 +251,7 @@ func (m Model) handleWorkflowsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.runCursor = 0
 		m.runOffset = 0
 		m.status = ""
-		return m, nil
+		return m.armRunsTick()
 	case "up":
 		if m.wfCursor > 0 {
 			m.wfCursor--
@@ -387,7 +398,7 @@ func (m Model) handleDetailKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.screen = screenRuns
 		m.status = ""
-		return m, nil
+		return m.armRunsTick()
 	case "1":
 		m.debugTab = DebugTabLog
 		m.detailScroll = 0
