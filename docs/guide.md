@@ -152,6 +152,8 @@ There is no `{{scratch.*}}` template. A step that needs a scratch value runs `hw
 
 ```yaml
 steps:
+  - id: pr
+    run: [gh, pr, view, --json, number, --jq, .number]
   - id: save
     run: [hwf, scratch, set, triage.last_pr, "{{steps.pr.stdout}}"]
   - id: load
