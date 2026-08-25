@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"os"
 	"strings"
 	"testing"
 
 	assets "github.com/aorumbayev/herdr-workflows/embed"
+	"github.com/spf13/cobra"
 )
 
 func TestConsoleCommandRegistered(t *testing.T) {
@@ -36,6 +38,60 @@ func TestConsoleHelpListsPlacementFlag(t *testing.T) {
 		}
 	}
 	_ = assets.ManifestDescription()
+}
+
+func TestConsolePlacementFallsBackToInProcessWhenNoPaneHost(t *testing.T) {
+	t.Setenv("HERDR_SOCKET_PATH", "")
+	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", t.TempDir())
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", t.TempDir())
+	dir := t.TempDir()
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(prev) }()
+
+	restoreTTY := consoleHasTTY
+	consoleHasTTY = func(*cobra.Command) bool { return true }
+	defer func() { consoleHasTTY = restoreTTY }()
+
+	called := false
+	restoreScreen := consoleScreen
+	consoleScreen = func(*cobra.Command) error { called = true; return nil }
+	defer func() { consoleScreen = restoreScreen }()
+
+	cmd := newConsoleCmd()
+	if err := cmd.Flags().Set("placement", "beside"); err != nil {
+		t.Fatal(err)
+	}
+	if err := runConsole(cmd, nil); err != nil {
+		t.Fatalf("runConsole = %v", err)
+	}
+	if !called {
+		t.Fatal("expected in-process fallback when the pane host is unavailable")
+	}
+}
+
+func TestConsolePlacementWithoutTTYDoesNotFallBack(t *testing.T) {
+	restoreTTY := consoleHasTTY
+	consoleHasTTY = func(*cobra.Command) bool { return false }
+	defer func() { consoleHasTTY = restoreTTY }()
+
+	called := false
+	restoreScreen := consoleScreen
+	consoleScreen = func(*cobra.Command) error { called = true; return nil }
+	defer func() { consoleScreen = restoreScreen }()
+
+	got := runCLI([]string{"console", "--placement", "beside"}, t.TempDir(), testCLIEnv(t, nil), "")
+	if got.code == 0 {
+		t.Fatal("expected nonzero exit without a tty and no pane host")
+	}
+	if called {
+		t.Fatal("must not fall back to the in-process TUI without a tty")
+	}
 }
 
 func TestConsoleRejectsInvalidPlacement(t *testing.T) {
