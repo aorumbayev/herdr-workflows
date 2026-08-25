@@ -132,10 +132,13 @@ func buildPickerOptions(app config.AppContext, entries []workflow.ListEntry) pic
 				Progress: progress,
 			}
 		},
-		OpenConsole: func(placement console.Placement) error {
+		OpenConsole: func(placement console.Placement, workflowName string) error {
 			env := map[string]string{"HERDR_WORKFLOWS_REPO_ROOT": repoRoot}
 			if v := os.Getenv("HERDR_PLUGIN_CONTEXT_JSON"); v != "" {
 				env["HERDR_PLUGIN_CONTEXT_JSON"] = v
+			}
+			if workflowName != "" {
+				env[consoleWorkflowEnv] = workflowName
 			}
 			return host.PluginPaneOpenPlaced("console", string(placement), env)
 		},

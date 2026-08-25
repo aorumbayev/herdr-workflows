@@ -49,7 +49,7 @@ type Options struct {
 	LaunchRun          func(LaunchRunOpts) LaunchRunHandle
 	AllocateRunID      func() string
 	ExportShare        func(entry workflow.ListEntry) (command string, err error)
-	OpenConsole        func(placement console.Placement) error
+	OpenConsole        func(placement console.Placement, workflow string) error
 	OpenEditor         func(path, name, placement string) error
 	ReopenPopup        func(state PopupState) error
 	Restore            *PopupState
@@ -99,7 +99,7 @@ type Model struct {
 	launchSettled        <-chan LaunchSettled
 	launchProgress       <-chan string
 	pendingDef           *workflow.Definition
-	openConsole          func(console.Placement) error
+	openConsole          func(console.Placement, string) error
 	openEditor           func(path, name, placement string) error
 	lastConsolePlacement console.Placement
 	consolePlaceCursor   int

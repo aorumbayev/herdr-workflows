@@ -13,7 +13,7 @@ func TestPaletteConsoleOpensPlacementChooser(t *testing.T) {
 	m := New(Options{
 		Entries: catalogEntries(),
 		Width:   80,
-		OpenConsole: func(p console.Placement) error {
+		OpenConsole: func(p console.Placement, _ string) error {
 			opened = p
 			return nil
 		},
@@ -100,7 +100,7 @@ func TestConsolePlacementRemembersSessionDefault(t *testing.T) {
 	m := New(Options{
 		Entries: catalogEntries(),
 		Width:   80,
-		OpenConsole: func(p console.Placement) error {
+		OpenConsole: func(p console.Placement, _ string) error {
 			opened = append(opened, p)
 			return nil
 		},
@@ -120,7 +120,7 @@ func TestConsolePlacementRemembersOnlyOnSuccess(t *testing.T) {
 	mFail := New(Options{
 		Entries:     catalogEntries(),
 		Width:       80,
-		OpenConsole: func(console.Placement) error { return errors.New("no pane host") },
+		OpenConsole: func(console.Placement, string) error { return errors.New("no pane host") },
 	})
 	mFail = apply(mFail, "p", "enter")
 	if mFail.lastConsolePlacement != "" {
@@ -130,7 +130,7 @@ func TestConsolePlacementRemembersOnlyOnSuccess(t *testing.T) {
 	mOK := New(Options{
 		Entries:     catalogEntries(),
 		Width:       80,
-		OpenConsole: func(console.Placement) error { return nil },
+		OpenConsole: func(console.Placement, string) error { return nil },
 	})
 	mOK = apply(mOK, "p", "enter")
 	if mOK.lastConsolePlacement != console.PlacementBeside {
@@ -143,7 +143,7 @@ func TestConsoleOpenFailureStaysInOverlay(t *testing.T) {
 		Entries:     catalogEntries(),
 		Width:       80,
 		Height:      30,
-		OpenConsole: func(console.Placement) error { return errors.New("dial unix: connection refused") },
+		OpenConsole: func(console.Placement, string) error { return errors.New("dial unix: connection refused") },
 	})
 	m = apply(m, "p", "enter")
 	if m.quit {
@@ -157,6 +157,38 @@ func TestConsoleOpenFailureStaysInOverlay(t *testing.T) {
 	}
 	if strings.Contains(m.status, "connection refused") {
 		t.Fatalf("status must not dump the raw error: %q", m.status)
+	}
+}
+
+func TestConsoleLandsOnSelectedWorkflow(t *testing.T) {
+	var landed string
+	m := New(Options{
+		Entries: catalogEntries(),
+		Width:   80,
+		Height:  30,
+		OpenConsole: func(_ console.Placement, workflow string) error {
+			landed = workflow
+			return nil
+		},
+	})
+	apply(m, "p", "enter")
+	if landed != "chat-handoff" {
+		t.Fatalf("landed workflow = %q, want chat-handoff", landed)
+	}
+
+	landed = "unset"
+	runsM := New(Options{
+		Entries: catalogEntries(),
+		Width:   80,
+		Height:  30,
+		OpenConsole: func(_ console.Placement, workflow string) error {
+			landed = workflow
+			return nil
+		},
+	})
+	apply(runsM, "tab", "p", "enter")
+	if landed != "" {
+		t.Fatalf("runs pop-out landing = %q, want empty", landed)
 	}
 }
 

@@ -79,7 +79,7 @@ func (m Model) handleConsolePlace(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		placement := consolePlacementOptions[m.consolePlaceCursor]
 		if m.openConsole != nil {
-			if err := m.openConsole(placement); err != nil {
+			if err := m.openConsole(placement, m.consoleLandingWorkflow()); err != nil {
 				m.mode = m.placeBack
 				m.status = "console pane unavailable — is this running inside herdr?"
 				return m, nil
@@ -90,6 +90,18 @@ func (m Model) handleConsolePlace(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	return m, nil
+}
+
+// consoleLandingWorkflow gives the selected workflow name when the chooser was
+// opened from the workflows list, so the console pane lands on its diagram.
+func (m Model) consoleLandingWorkflow() string {
+	if m.placeBack != modeList {
+		return ""
+	}
+	if e := m.selectedEntry(); e != nil && e.Error == "" {
+		return e.Name
+	}
+	return ""
 }
 
 func (m Model) renderConsolePlace() string {

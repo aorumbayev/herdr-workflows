@@ -12,6 +12,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// consoleWorkflowEnv carries the picker's selected workflow into the popped-out
+// console pane, so it lands on that workflow's diagram.
+const consoleWorkflowEnv = "HWF_CONSOLE_WORKFLOW"
+
 var (
 	consoleHasTTY = cmdHasTTY
 	consoleScreen = runConsoleScreen
@@ -51,10 +55,11 @@ func runConsoleScreen(_ *cobra.Command) error {
 		return err
 	}
 	code, err := console.RunScreen(console.Options{
-		Entries:  entries,
-		RepoRoot: app.RepoRoot,
-		Config:   app.Config,
-		Env:      os.Getenv,
+		Entries:         entries,
+		RepoRoot:        app.RepoRoot,
+		Config:          app.Config,
+		Env:             os.Getenv,
+		LandingWorkflow: os.Getenv(consoleWorkflowEnv),
 	})
 	if err != nil {
 		return err
