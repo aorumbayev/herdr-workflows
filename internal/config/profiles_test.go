@@ -87,6 +87,46 @@ func TestAppendProfileSkeletonPreservesCommentsAndEntries(t *testing.T) {
 	}
 }
 
+func TestAppendProfileSkeletonMatchesExistingIndent(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	original := "# keep me\nprofiles:\n    existing:\n        kind: claude # inline note\n        args: [\"--flag\"]\ndefault_profile: existing\n"
+	write(t, path, original)
+	if err := AppendProfileSkeleton(path, "review"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "# keep me") || !strings.Contains(text, "# inline note") {
+		t.Fatalf("comments dropped:\n%s", text)
+	}
+	if !strings.Contains(text, "    existing:") || !strings.Contains(text, "default_profile: existing") {
+		t.Fatalf("existing entries dropped:\n%s", text)
+	}
+	if !strings.Contains(text, "    review:\n        kind: claude") {
+		t.Fatalf("new profile must use the existing 4-space indent:\n%s", text)
+	}
+	if strings.Contains(text, "\n  review:") {
+		t.Fatalf("2-space insert re-anchored the profiles block:\n%s", text)
+	}
+	cfg, err := ParseConfigText(path, text)
+	if err != nil {
+		t.Fatalf("result must load: %v", err)
+	}
+	if _, ok := cfg.Profiles["review"]; !ok {
+		t.Fatalf("new profile missing:\n%s", text)
+	}
+	if p := cfg.Profiles["existing"]; p.Kind != "claude" || len(p.Args) != 1 {
+		t.Fatalf("existing profile changed: %+v", p)
+	}
+	if cfg.DefaultProfile != "existing" {
+		t.Fatalf("default_profile = %q", cfg.DefaultProfile)
+	}
+}
+
 func TestAppendProfileSkeletonRejectsDuplicate(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")

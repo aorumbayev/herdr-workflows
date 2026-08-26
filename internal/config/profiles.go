@@ -70,9 +70,52 @@ func ConfigPathForScope(scope, repoRoot string, getenv Env) (string, error) {
 
 const profilesFileHeader = "# herdr-workflows profiles. Set kind, and add args if the agent needs them.\n"
 
-func profileSkeletonEntry(name string) string {
-	return "  " + name + ":\n" +
-		"    kind: claude # native agent kind; add an args list below if needed\n"
+func profileSkeletonEntry(name, childIndent string) string {
+	if childIndent == "" {
+		childIndent = "  "
+	}
+	nested := childIndent + childIndent
+	return childIndent + name + ":\n" +
+		nested + "kind: claude # native agent kind; add an args list below if needed\n"
+}
+
+func profilesChildIndent(lines []string, profilesIdx int) string {
+	for _, line := range lines[profilesIdx+1:] {
+		trimmed := strings.TrimLeft(line, " \t")
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		indent := line[:len(line)-len(trimmed)]
+		if indent == "" {
+			return "  "
+		}
+		return indent
+	}
+	return "  "
+}
+
+// insertProfileEntry puts the skeleton under profiles: as its first child, matching
+// that block's child indent, or appends a new 2-space profiles: block when none exists.
+func insertProfileEntry(existing, name string) string {
+	lines := strings.Split(existing, "\n")
+	for i, line := range lines {
+		if strings.TrimRight(line, " \t") != "profiles:" {
+			continue
+		}
+		entry := strings.Split(strings.TrimRight(profileSkeletonEntry(name, profilesChildIndent(lines, i)), "\n"), "\n")
+		merged := append([]string{}, lines[:i+1]...)
+		merged = append(merged, entry...)
+		merged = append(merged, lines[i+1:]...)
+		return strings.Join(merged, "\n")
+	}
+	block := "profiles:\n" + profileSkeletonEntry(name, "  ")
+	if existing == "" {
+		return block
+	}
+	if strings.HasSuffix(existing, "\n") {
+		return existing + block
+	}
+	return existing + "\n" + block
 }
 
 // AppendProfileSkeleton adds a minimal profile named name to the config file at
@@ -94,7 +137,7 @@ func AppendProfileSkeleton(path, name string) error {
 }
 
 func createConfigWithProfile(path, name string) error {
-	text := profilesFileHeader + "profiles:\n" + profileSkeletonEntry(name)
+	text := profilesFileHeader + "profiles:\n" + profileSkeletonEntry(name, "  ")
 	if _, err := ParseConfigText(path, text); err != nil {
 		return err
 	}
@@ -117,28 +160,4 @@ func appendProfileToExisting(path, existing, name string) error {
 		return err
 	}
 	return os.WriteFile(path, []byte(updated), 0o644)
-}
-
-// insertProfileEntry puts the skeleton entry under an existing profiles: block as
-// its first child, or appends a new profiles: block when none is present.
-func insertProfileEntry(existing, name string) string {
-	entry := strings.Split(strings.TrimRight(profileSkeletonEntry(name), "\n"), "\n")
-	lines := strings.Split(existing, "\n")
-	for i, line := range lines {
-		if strings.TrimRight(line, " \t") != "profiles:" {
-			continue
-		}
-		merged := append([]string{}, lines[:i+1]...)
-		merged = append(merged, entry...)
-		merged = append(merged, lines[i+1:]...)
-		return strings.Join(merged, "\n")
-	}
-	block := "profiles:\n" + profileSkeletonEntry(name)
-	if existing == "" {
-		return block
-	}
-	if strings.HasSuffix(existing, "\n") {
-		return existing + block
-	}
-	return existing + "\n" + block
 }
