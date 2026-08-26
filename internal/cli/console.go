@@ -12,6 +12,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// consoleWorkflowEnv carries the picker's selected workflow into the popped-out
+// console pane, so it lands on that workflow's diagram.
+const consoleWorkflowEnv = "HWF_CONSOLE_WORKFLOW"
+
+var (
+	consoleHasTTY = cmdHasTTY
+	consoleScreen = runConsoleScreen
+)
+
 func runConsole(cmd *cobra.Command, _ []string) error {
 	raw, err := cmd.Flags().GetString("placement")
 	if err != nil {
@@ -22,11 +31,18 @@ func runConsole(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	if cmd.Flags().Changed("placement") {
-		return openConsolePane(placement)
+		err := openConsolePane(placement)
+		if err == nil || !paneHostUnavailable(err) || !consoleHasTTY(cmd) {
+			return err
+		}
 	}
-	if !cmdHasTTY(cmd) {
+	if !consoleHasTTY(cmd) {
 		return fmt.Errorf("console requires a tty")
 	}
+	return consoleScreen(cmd)
+}
+
+func runConsoleScreen(_ *cobra.Command) error {
 	if err := host.EnsureHerdrProtocol(); err != nil {
 		return err
 	}
@@ -39,10 +55,11 @@ func runConsole(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	code, err := console.RunScreen(console.Options{
-		Entries:  entries,
-		RepoRoot: app.RepoRoot,
-		Config:   app.Config,
-		Env:      os.Getenv,
+		Entries:         entries,
+		RepoRoot:        app.RepoRoot,
+		Config:          app.Config,
+		Env:             os.Getenv,
+		LandingWorkflow: os.Getenv(consoleWorkflowEnv),
 	})
 	if err != nil {
 		return err
@@ -74,4 +91,8 @@ func openConsolePane(placement console.Placement) error {
 		return err
 	}
 	return nil
+}
+
+func paneHostUnavailable(err error) bool {
+	return host.IsTransportLoss(err)
 }

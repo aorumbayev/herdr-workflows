@@ -6,7 +6,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
-	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
 const (
@@ -31,16 +30,19 @@ func formatEditPlacementBody(cursor int) string {
 	return strings.Join(lines, "\n")
 }
 
-func (m Model) beginEditPlacement(entry *workflow.ListEntry) (tea.Model, tea.Cmd) {
-	if entry == nil {
-		m.mode = modeList
-		m.filter = m.savedFilter
+func (m Model) beginEditPlacement(path, name string, isProfile bool, back mode) (tea.Model, tea.Cmd) {
+	if path == "" {
+		m.mode = back
 		return m, nil
 	}
-	m.editTarget = entry
+	m.editPath = path
+	m.editName = name
+	m.editProfile = isProfile
 	m.editPlaceCursor = 0
-	m.placeBack = modeList
-	m.filter = m.savedFilter
+	m.placeBack = back
+	if !isProfile {
+		m.filter = m.savedFilter
+	}
 	m.mode = modeEditPlace
 	m.status = ""
 	return m, nil
@@ -50,7 +52,7 @@ func (m Model) handleEditPlace(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.mode = m.placeBack
-		m.editTarget = nil
+		m.editPath, m.editName = "", ""
 		return m, nil
 	case "up":
 		if m.editPlaceCursor > 0 {
@@ -63,22 +65,22 @@ func (m Model) handleEditPlace(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "enter":
-		entry := m.editTarget
+		path, name := m.editPath, m.editName
 		place := editPlacementOptions[m.editPlaceCursor]
-		m.editTarget = nil
-		if entry == nil {
+		if path == "" {
 			m.mode = m.placeBack
 			return m, nil
 		}
 		if place == "popup" {
-			m.mode = modeList
-			if m.reopenPopup != nil && m.needsRespawn(tui.TabConsole) {
-				return m.respawnForEdit(*entry)
+			m.mode = m.landingModeForEdit()
+			if m.reopenPopup != nil && m.needsExpandedRespawn() {
+				return m.respawnForEdit()
 			}
-			return m, m.beginEdit(entry.File, entry.Name)
+			return m, m.beginEdit(path, name)
 		}
+		m.editPath, m.editName = "", ""
 		if m.openEditor != nil {
-			if err := m.openEditor(entry.File, entry.Name, place); err != nil {
+			if err := m.openEditor(path, name, place); err != nil {
 				m.mode = m.placeBack
 				m.status = "editor open failed" + tui.ChromeSep + err.Error()
 				if m.notify != nil {
@@ -93,10 +95,17 @@ func (m Model) handleEditPlace(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) landingModeForEdit() mode {
+	if m.editProfile {
+		return modeProfiles
+	}
+	return modeList
+}
+
 // respawnForEdit opens a console-sized popup, because a 64x15 popup is not
 // large enough for $EDITOR. Validation then opens a compact popup.
-func (m Model) respawnForEdit(entry workflow.ListEntry) (tea.Model, tea.Cmd) {
-	return m.respawn(m.popupStateForEdit(entry))
+func (m Model) respawnForEdit() (tea.Model, tea.Cmd) {
+	return m.respawn(m.popupStateForEdit())
 }
 
 func (m Model) renderEditPlace() string {

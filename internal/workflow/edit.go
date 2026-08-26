@@ -6,11 +6,27 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/aorumbayev/herdr-workflows/internal/config"
 )
 
 const newWorkflowStub = `version: v1alpha1
+title: New workflow
+description: What this workflow does.
 steps:
-  - run: [echo, "edit me"]
+  - run: [echo, "replace this step"]
+
+# Uncomment and adapt these examples as you build the workflow.
+#
+# inputs:
+#   target:
+#     type: text
+#     description: A value the workflow collects before it runs.
+#
+# steps:
+#   - agent: Review {{inputs.target}} and report back.
+#   - run: [echo, "{{inputs.target}}"]
+#     when: "{{context.platform}} == linux"
 `
 
 // EditOpts configures editor handoff plus loader validation.
@@ -42,10 +58,22 @@ func NewWorkflowStubBody() string {
 
 // CreateRepoWorkflow writes a new stub under repoRoot/.hwf/workflows/<name>.yaml.
 func CreateRepoWorkflow(repoRoot, name string) (string, error) {
+	return createWorkflowStub(filepath.Join(repoRoot, ".hwf", "workflows"), name)
+}
+
+// CreateGlobalWorkflow writes a new stub under the global $HOME/.hwf/workflows.
+func CreateGlobalWorkflow(name string) (string, error) {
+	home, err := config.HomeDir(nil)
+	if err != nil {
+		return "", err
+	}
+	return createWorkflowStub(filepath.Join(home, ".hwf", "workflows"), name)
+}
+
+func createWorkflowStub(dir, name string) (string, error) {
 	if !NameRE.MatchString(name) {
 		return "", fmt.Errorf("%s", NameRule)
 	}
-	dir := filepath.Join(repoRoot, ".hwf", "workflows")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
@@ -81,14 +109,12 @@ func EditAndValidate(opts EditOpts) ValidateResult {
 			return cmd.Run()
 		}
 	}
-	if err := run(editorArgv(editor, opts.Path)); err != nil {
+	argv, err := EditorArgv(editor, opts.Path)
+	if err != nil {
+		return ValidateResult{OK: false, Error: err.Error()}
+	}
+	if err := run(argv); err != nil {
 		return ValidateResult{OK: false, Error: err.Error()}
 	}
 	return ValidateFile(opts.Path, opts.Name, opts.RepoRoot)
-}
-
-// editorArgv splits a configured editor command into argv and appends the file
-// path. EDITOR can include flags, for example "code --wait".
-func editorArgv(editor, path string) []string {
-	return append(strings.Fields(editor), path)
 }

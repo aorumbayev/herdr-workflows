@@ -69,7 +69,7 @@ var requiredPickerParityScenarios = []string{
 	"Overlong title",
 	"Inputs are not advertised in the row",
 	"Flags shown before run",
-	"Warnings are not the least legible element",
+	"Sensitivity is compact during input and prominent at launch",
 	"Repository with a broken workflow file",
 	"Selecting an invalid workflow",
 	"Long description wraps instead of cropping",
@@ -92,12 +92,19 @@ var requiredPickerParityScenarios = []string{
 	"Correct the final answer",
 	"Mode change alters active inputs",
 	"Failed run navigation",
+	"Question renders above the options",
+	"Progress type answers and back share one muted line",
+	"Sensitivity line appears only when sensitive",
 	"Dropdown of many options",
 	"Undescribed input",
 	"Custom value accepted",
 	"Constrained text input",
 	"Unresolved dynamic domain",
-	"Title row keeps named sensitivity flags",
+	"Long description wraps instead of truncating",
+	"Text prompt demotes hints to the stats line",
+	"Choice prompt fits the compact popup",
+	"Choice input filter row shows typed text",
+	"Compact sensitivity note during input",
 	"A guarded domain is explained by an earlier answer",
 	"First prompt has no answers",
 	"Answers exceed the popup width",
@@ -108,19 +115,24 @@ var requiredPickerParityScenarios = []string{
 	"Workflow filter has text",
 	"Input collection",
 	"Cycle past runs",
+	"Cycle to profiles",
 	"Return to workflows",
 	"Tab bar shows the active browser",
+	"Tab bar names the key",
+	"Tab never quits the overlay",
+	"Profiles listed with source column",
+	"Profiles filter by typed text",
+	"Empty profiles guide to the palette",
 	"Manifest uses percent size",
-	"Pop-out from the console tab",
 	"Confirmed pop-out quits the picker",
 	"Canceled pop-out keeps the workflow filter",
-	"Console tab follows the popup size and catalog",
+	"Palette is the only route to the console",
+	"Failed pop-out stays in the overlay",
 	"Hover differs from the cursor",
 	"Wheel has a keyboard twin",
 	"Pointer tab select obeys the keyboard guard",
 	"Pointer select on the active tab changes nothing",
 	"Reverse wins on the hovered cursor row",
-	"Pointer in the embedded diagram focuses a card",
 	"Invalid location uses warn",
 	"Sensitivity marker uses warn",
 	"Runs status uses indexed slots",
@@ -138,7 +150,6 @@ var requiredPickerParityScenarios = []string{
 	"Escape closes palette",
 	"Palette uses the shared chrome",
 	"Manifest uses the compact size",
-	"Console tab respawns the popup",
 	"Same-size switch stays in place",
 	"Restored picker does not respawn",
 	"Run detail expands the popup",
@@ -146,6 +157,11 @@ var requiredPickerParityScenarios = []string{
 	"New from empty catalog",
 	"Import from empty catalog",
 	"Browse examples",
+	"New offers agent or template",
+	"New agent handoff types the create prompt",
+	"New agent with no panes stays in the overlay",
+	"New template chooses repo or global",
+	"New template popup opens expanded",
 	"Open repo workflow in the popup",
 	"Open in a new tab",
 	"Open without selection",
@@ -157,6 +173,11 @@ var requiredPickerParityScenarios = []string{
 	"Share stays in picker",
 	"Confirmed delete",
 	"Cancel delete",
+	"New profile writes a skeleton to the chosen layer",
+	"New profile rejects a duplicate name",
+	"Open profile edits the defining config file",
+	"Profile edit validates the config loader",
+	"New profile popup opens expanded",
 }
 
 func TestParityBaselineCoversSpecScenarios(t *testing.T) {
@@ -252,7 +273,7 @@ func TestParityInvalidRowDetailShowsLoadError(t *testing.T) {
 
 func TestParityPositionCounterUsesFilteredList(t *testing.T) {
 	m := New(Options{Entries: eightEntries(), Width: 80})
-	m = apply(m, "a", "l", "p", "h", "a")
+	m = apply(m, "b", "r", "a", "v", "o")
 	body := m.View().Content
 	if !strings.HasSuffix(strings.TrimSpace(strings.Split(body, "\n")[len(strings.Split(body, "\n"))-1]), "1/1") &&
 		!strings.Contains(body, "1/1") {
@@ -270,10 +291,10 @@ func TestParityNoScrollThumbGlyph(t *testing.T) {
 	}
 }
 
-func TestParityListFooterIdentifiesRunCtrlKDismiss(t *testing.T) {
+func TestParityListFooterIdentifiesRunCtrlPDismiss(t *testing.T) {
 	m := New(Options{Entries: catalogEntries(), Width: 80})
 	body := m.View().Content
-	if !strings.Contains(body, "enter run") || !strings.Contains(body, "ctrl+k") || !strings.Contains(body, "esc") {
+	if !strings.Contains(body, "enter run") || !strings.Contains(body, "ctrl+p") || !strings.Contains(body, "esc") {
 		t.Fatalf("footer hints:\n%s", body)
 	}
 }
@@ -384,16 +405,21 @@ func TestParityFailedRunEscapeReturnsToRunsRoot(t *testing.T) {
 }
 
 func TestParityFormatInputPromptReportsOrdinal(t *testing.T) {
-	got := FormatInputPrompt(workflow.InputSpec{Name: "unit", Type: "choice", Options: []string{"a", "b"}}, 1, 3)
-	if !strings.Contains(got, "1 of 3") {
-		t.Fatalf("missing collection ordinal in %q", got)
+	spec := workflow.InputSpec{Name: "unit", Type: "choice", Options: []string{"a", "b"}}
+	field := FormatInputPrompt(spec, 60)
+	if field != "unit" {
+		t.Fatalf("field line must be the name alone, no ordinal: %q", field)
 	}
-	if !strings.Contains(got, "unit") || !strings.Contains(got, "pick one of 2") {
-		t.Fatalf("prompt = %q", got)
+	hints := FormatInputHints(spec)
+	if hints != "pick one of 2" {
+		t.Fatalf("hints = %q", hints)
 	}
-	base := FormatInputPrompt(workflow.InputSpec{Name: "unit", Type: "choice", Options: []string{"a", "b"}})
-	if strings.Contains(base, "1 of") || strings.Contains(base, "2 of") {
-		t.Fatalf("zero-arg FormatInputPrompt must omit ordinal: %q", base)
+	stats := FormatInputStats(80, 1, 3, hints, "", tui.BackHint)
+	if !strings.HasPrefix(stats, "1/3") {
+		t.Fatalf("stats line must lead with the collection ordinal: %q", stats)
+	}
+	if !strings.Contains(stats, "pick one of 2") || !strings.Contains(stats, tui.BackHint) {
+		t.Fatalf("stats line must carry the type and back hint: %q", stats)
 	}
 }
 
@@ -419,14 +445,18 @@ func TestParityInputTitleRowKeepsSensitivityFlags(t *testing.T) {
 	})
 	m = apply(m, "enter")
 	body := m.View().Content
-	if !strings.Contains(body, "Branch check") || !strings.Contains(body, "commands") {
-		t.Fatalf("title row must keep sensitivity flags:\n%s", body)
+	if !strings.Contains(body, tui.TouchesPrefix) || !strings.Contains(body, "commands") {
+		t.Fatalf("input must show the compact sensitivity note:\n%s", body)
 	}
-	if strings.Contains(body, "input 1") || strings.Contains(body, "input 2") {
-		t.Fatalf("title row must not replace flags with input N:\n%s", body)
+	if strings.Contains(body, "1 of 2") {
+		t.Fatalf("prompt line must not carry the old ordinal form:\n%s", body)
 	}
-	if !strings.Contains(body, "1 of 2") {
-		t.Fatalf("prompt line must carry collection ordinal:\n%s", body)
+	if !strings.Contains(body, "1/2") {
+		t.Fatalf("stats line must carry the collection ordinal:\n%s", body)
+	}
+	// The final pre-run consent still names the flags prominently.
+	if m.consent != "Branch check"+tui.ChromeSep+"repo"+tui.ChromeSep+"commands" {
+		t.Fatalf("final consent must keep the named flags: %q", m.consent)
 	}
 }
 
@@ -529,7 +559,7 @@ func TestParityEmptyCatalogFooterAndMessage(t *testing.T) {
 	if strings.Contains(body, tui.FilterWorkflows) {
 		t.Fatal("filter must be hidden")
 	}
-	if !strings.Contains(body, "tab") || !strings.Contains(body, "ctrl+k") || !strings.Contains(body, "esc") {
+	if !strings.Contains(body, "tab") || !strings.Contains(body, "ctrl+p") || !strings.Contains(body, "esc") {
 		t.Fatalf("empty footer:\n%s", body)
 	}
 	if strings.Contains(body, "enter run") {
@@ -539,8 +569,8 @@ func TestParityEmptyCatalogFooterAndMessage(t *testing.T) {
 
 func TestParityTabFromFilterDoesNotInsertTab(t *testing.T) {
 	m := New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: t.TempDir()})
-	m = apply(m, "d", "e", "p")
-	if m.filter != "dep" {
+	m = apply(m, "l", "o", "y")
+	if m.filter != "loy" {
 		t.Fatalf("filter = %q", m.filter)
 	}
 	m = apply(m, "tab")
@@ -565,28 +595,30 @@ func TestParityCursorMovesChangesDetailOnly(t *testing.T) {
 	}
 }
 
-func TestParityConsentUsesWarnWithoutDim(t *testing.T) {
+func TestParityConsentDemotedDuringInputProminentAtLaunch(t *testing.T) {
 	entry := workflow.ListEntry{
 		Name: "deploy", Source: "global", File: "/g/deploy.yaml", Title: "Deploy", HasCommands: true,
 	}
 	m := New(Options{
 		Entries: []workflow.ListEntry{entry},
 		Width:   80,
+		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
 		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format,
-				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
+				Inputs: []workflow.InputSpec{{Name: "unit", Type: "choice", Options: []string{"a", "b"}}},
+				Steps:  []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
 			}, nil
 		},
 	})
 	m = apply(m, "enter")
-	line := m.consentLine()
-	if line == "" || !strings.Contains(line, "commands") {
-		t.Fatalf("consent line = %q", line)
+	w := m.contentWidth()
+	line := m.sensitivityLine(w)
+	if line != tui.MuteChrome(tui.Truncate(tui.TouchesPrefix+"commands", w)) {
+		t.Fatalf("mid-input sensitivity must be the compact muted note: %q", line)
 	}
-	theme := tui.DefaultTheme()
-	if theme.Warn.GetFaint() {
-		t.Fatal("warn style must not be dim/faint")
+	if m.consent != "Deploy"+tui.ChromeSep+"global"+tui.ChromeSep+"commands" {
+		t.Fatalf("final consent must name the flags: %q", m.consent)
 	}
 }
 
@@ -867,11 +899,23 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 			return `hwf workflow import "bundle-` + entry.Name + `"`, nil
 		},
 	})
-	m = apply(m, "ctrl+k", "n")
-	if m.quit || m.mode != modeNewName {
-		t.Fatalf("new must prompt for name, quit=%v mode=%v", m.quit, m.mode)
+	m = apply(m, "ctrl+p", "n")
+	if m.quit || m.mode != modeNewMode {
+		t.Fatalf("new must offer agent or template, quit=%v mode=%v", m.quit, m.mode)
+	}
+	m = apply(m, "down", "enter")
+	if m.mode != modeNewName {
+		t.Fatalf("template must prompt for name, mode=%v", m.mode)
 	}
 	m = apply(m, "s", "h", "i", "p", "enter")
+	if m.mode != modeNewScope {
+		t.Fatalf("name must go to scope chooser, mode=%v", m.mode)
+	}
+	m = apply(m, "enter")
+	if m.mode != modeEditPlace {
+		t.Fatalf("scope must go to placement chooser, mode=%v", m.mode)
+	}
+	m = apply(m, "enter")
 	if m.quit || m.mode != modeList {
 		t.Fatalf("new after create quit=%v mode=%v", m.quit, m.mode)
 	}
@@ -886,7 +930,7 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 	}
 
 	m = New(Options{Entries: entries, Width: 80, RepoRoot: root})
-	m = apply(m, "ctrl+k", "i")
+	m = apply(m, "ctrl+p", "i")
 	if m.quit || m.mode != modeList {
 		t.Fatalf("import quit=%v mode=%v", m.quit, m.mode)
 	}
@@ -900,7 +944,7 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 		OpenURL: func(url string) error { opened = append(opened, url); return nil },
 	})
 	opened = nil
-	m = apply(m, "ctrl+k", "e")
+	m = apply(m, "ctrl+p", "e")
 	if m.quit {
 		t.Fatal("examples must keep picker open")
 	}
@@ -918,7 +962,7 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 		RepoRoot:     root,
 		EditWorkflow: edit,
 	})
-	m = apply(m, "down", "ctrl+k", "o", "enter")
+	m = apply(m, "down", "ctrl+p", "o", "enter")
 	if m.quit || m.mode != modeList {
 		t.Fatalf("open must stay on list, quit=%v mode=%v", m.quit, m.mode)
 	}
@@ -942,7 +986,7 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 		},
 	})
 	copied, notified = "", nil
-	m = apply(m, "down", "ctrl+k", "s")
+	m = apply(m, "down", "ctrl+p", "s")
 	if m.quit || m.mode != modeList {
 		t.Fatalf("share must stay on list, quit=%v mode=%v", m.quit, m.mode)
 	}
@@ -967,7 +1011,7 @@ func TestParityCancelDeleteKeepsFile(t *testing.T) {
 	}
 	entry := workflow.ListEntry{Name: "deploy", Source: "repo", File: path, Title: "Deploy"}
 	m := New(Options{Entries: []workflow.ListEntry{entry}, Width: 80})
-	m = apply(m, "ctrl+k", "d", "n")
+	m = apply(m, "ctrl+p", "d", "n")
 	if m.mode != modeList {
 		t.Fatalf("mode = %v", m.mode)
 	}

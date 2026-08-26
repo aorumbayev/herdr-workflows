@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os/exec"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/aorumbayev/herdr-workflows/internal/caps"
@@ -71,6 +72,16 @@ func captureCommand(argv []string, opts captureOptions) (captureResult, error) {
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = opts.cwd
 	cmd.Env = opts.env
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return nil
+		}
+		if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil {
+			return cmd.Process.Kill()
+		}
+		return nil
+	}
 	budget := &captureBudget{limit: caps.CaptureByteLimit}
 	cmd.Stdout = &streamWriter{budget: budget, dst: &budget.stdout}
 	cmd.Stderr = &streamWriter{budget: budget, dst: &budget.stderr}

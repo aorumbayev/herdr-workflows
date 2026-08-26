@@ -38,8 +38,8 @@ func press(s string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyTab}
 	case "backspace":
 		return tea.KeyPressMsg{Code: tea.KeyBackspace}
-	case "ctrl+k":
-		return tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl}
+	case "ctrl+p":
+		return tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl}
 	case "ctrl+g":
 		return tea.KeyPressMsg{Code: 'g', Mod: tea.ModCtrl}
 	case "ctrl+c":
@@ -153,18 +153,18 @@ func TestPickerDoesNotRenderPluginNameOrRetitle(t *testing.T) {
 
 func TestPickerFilterAndPaletteRestore(t *testing.T) {
 	m := New(Options{Entries: catalogEntries(), Width: 80})
-	m = apply(m, "d", "e", "p")
-	if m.filter != "dep" {
+	m = apply(m, "l", "o", "y")
+	if m.filter != "loy" {
 		t.Fatalf("filter = %q", m.filter)
 	}
 	body := m.View().Content
-	if got := visibleLine(strings.Split(body, "\n")[1]); got != "dep" {
+	if got := visibleLine(strings.Split(body, "\n")[1]); got != "loy" {
 		t.Fatalf("filter row = %q", got)
 	}
 	if !strings.Contains(body, "Deploy") || strings.Contains(body, "Chat handoff") {
 		t.Fatalf("filter miss:\n%s", body)
 	}
-	m = apply(m, "ctrl+k")
+	m = apply(m, "ctrl+p")
 	if m.mode != modePalette {
 		t.Fatalf("mode = %v", m.mode)
 	}
@@ -172,7 +172,7 @@ func TestPickerFilterAndPaletteRestore(t *testing.T) {
 		t.Fatalf("palette body:\n%s", m.View().Content)
 	}
 	m = apply(m, "esc")
-	if m.mode != modeList || m.filter != "dep" {
+	if m.mode != modeList || m.filter != "loy" {
 		t.Fatalf("restore mode=%v filter=%q", m.mode, m.filter)
 	}
 }
@@ -396,7 +396,7 @@ func TestConfirmedDeleteRemovesFile(t *testing.T) {
 	keep := workflow.ListEntry{Name: "keep", Source: "repo", File: filepath.Join(dir, "keep.yaml"), Title: "Keep"}
 	entry := workflow.ListEntry{Name: "deploy", Source: "repo", File: path, Title: "Deploy"}
 	m := New(Options{Entries: []workflow.ListEntry{entry, keep}, Width: 80})
-	m = apply(m, "ctrl+k", "d", "y")
+	m = apply(m, "ctrl+p", "d", "y")
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("file remained: %v", err)
 	}
@@ -432,7 +432,7 @@ func TestPickerViewportGrowsWithPopupHeight(t *testing.T) {
 func TestPaletteBodyUsesSharedRowChrome(t *testing.T) {
 	// The palette shows with the list chrome.
 	m := New(Options{Entries: eightEntries(), Width: 62, Height: 24})
-	m = applyMsg(m, tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
+	m = applyMsg(m, tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
 	if m.mode != modePalette {
 		t.Fatalf("mode = %v, want palette", m.mode)
 	}

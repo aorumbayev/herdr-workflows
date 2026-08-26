@@ -72,6 +72,7 @@ func (m Model) beginLaunch(def *workflow.Definition, values map[string]string, d
 		Width:    m.width,
 		Height:   m.height,
 		Env:      getenv,
+		Now:      m.now,
 	}).OpenLocalDetail(runsbrowser.DetailView{
 		Kind:     "starting",
 		ID:       runID,

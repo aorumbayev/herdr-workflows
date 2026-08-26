@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/aorumbayev/herdr-workflows/internal/history"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 )
 
@@ -20,13 +21,24 @@ func (m Model) Body() string {
 }
 
 func (m Model) render() string {
-	var body string
 	if m.screen == screenDetail {
-		body = m.renderDetail()
-	} else {
-		body = m.renderList()
+		m.detailView = m.liveDetailView()
+		return m.renderDetail()
 	}
-	return body
+	return m.renderList()
+}
+
+// liveDetailView recomputes elapsed for a non-terminal run so the open detail ticks.
+func (m Model) liveDetailView() DetailView {
+	view := m.detailView
+	if !liveDetailTicks(view) {
+		return view
+	}
+	d := view.Detail
+	d.ElapsedMs = history.LiveDetailElapsedMs(d, m.clock())
+	view.Detail = d
+	view.Blocks = history.PresentRunDetail(d)
+	return view
 }
 
 func (m Model) contentWidth() int {
@@ -52,6 +64,7 @@ func (m Model) renderList() string {
 	titleW := max(0, w-tui.RowTextIndent-tui.RowRightGutter)
 	for i := m.offset; i < end; i++ {
 		item := m.state.Items[i]
+		item.ElapsedMs = history.LiveElapsedMs(item, m.clock())
 		row := FormatRunRow(item, titleW, FormatRunRowOpts{ShowLocation: showLocation})
 		plain := tui.FormatRow(row, "", false, w, i == m.cursor)
 		rows = append(rows, paintStatus(plain, rowStatusToken(item, titleW), item.Status, i == m.cursor))

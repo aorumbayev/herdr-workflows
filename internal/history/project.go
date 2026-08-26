@@ -11,9 +11,7 @@ func ProjectStatus(snap Snapshot, now time.Time) string {
 }
 
 func projectStatus(status, heartbeatAt string, now time.Time) string {
-	if status == string(engine.StatusSucceeded) ||
-		status == string(engine.StatusFailed) ||
-		status == string(engine.StatusInterrupted) {
+	if IsTerminal(status) {
 		return status
 	}
 	hb, ok := parseISOTime(heartbeatAt)
@@ -21,6 +19,35 @@ func projectStatus(status, heartbeatAt string, now time.Time) string {
 		return "stale"
 	}
 	return "running"
+}
+
+func IsTerminal(status string) bool {
+	switch status {
+	case string(engine.StatusSucceeded), string(engine.StatusFailed), string(engine.StatusInterrupted):
+		return true
+	default:
+		return false
+	}
+}
+
+// LiveElapsedMs is a running run's wall-clock elapsed at now and a terminal run's recorded ElapsedMs.
+func LiveElapsedMs(s Summary, now time.Time) int64 {
+	return liveElapsedMs(s.StartedAt, s.FinishedAt, s.Status, s.ElapsedMs, now)
+}
+
+// LiveDetailElapsedMs is the detail-view counterpart of LiveElapsedMs.
+func LiveDetailElapsedMs(d Detail, now time.Time) int64 {
+	return liveElapsedMs(d.StartedAt, d.FinishedAt, d.Status, d.ElapsedMs, now)
+}
+
+func liveElapsedMs(startedAt, finishedAt, status string, recordedMs int64, now time.Time) int64 {
+	if IsTerminal(status) {
+		return recordedMs
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	return elapsedMsBetween(startedAt, finishedAt, status, now)
 }
 
 func ToSummary(snap Snapshot, now time.Time) Summary {

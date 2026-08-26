@@ -9,6 +9,28 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
+func TestEditorCommandSplitsEDITORFlags(t *testing.T) {
+	cmd, err := editorCommand("code --wait", "/tmp/config.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"code", "--wait", "/tmp/config.yaml"}
+	if strings.Join(cmd.Args, " ") != strings.Join(want, " ") {
+		t.Fatalf("Args = %#v, want %#v", cmd.Args, want)
+	}
+}
+
+func TestEditorCommandKeepsQuotedArgument(t *testing.T) {
+	cmd, err := editorCommand("nvim -c 'set ft=yaml'", "/tmp/config.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"nvim", "-c", "set ft=yaml", "/tmp/config.yaml"}
+	if strings.Join(cmd.Args, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("Args = %#v, want %#v", cmd.Args, want)
+	}
+}
+
 func TestOpenEditorDoesNotRunInsideUpdate(t *testing.T) {
 	root := t.TempDir()
 	path := root + "/deploy.yaml"
@@ -27,7 +49,7 @@ func TestOpenEditorDoesNotRunInsideUpdate(t *testing.T) {
 			return workflow.ValidateResult{OK: true}
 		},
 	})
-	m = apply(m, "ctrl+k")
+	m = apply(m, "ctrl+p")
 	next, cmd := m.Update(press("o"))
 	m = next.(Model)
 	if ran {
@@ -75,7 +97,7 @@ func TestLiveOpenEditorReturnsExecProcess(t *testing.T) {
 			return ""
 		},
 	})
-	m = apply(m, "ctrl+k")
+	m = apply(m, "ctrl+p")
 	next, _ := m.Update(press("o"))
 	m = next.(Model)
 	if m.mode != modeEditPlace {
@@ -111,7 +133,7 @@ func TestEditPlacementTabQuitsWithoutReopen(t *testing.T) {
 			return nil
 		},
 	})
-	m = apply(m, "ctrl+k", "o")
+	m = apply(m, "ctrl+p", "o")
 	for m.editPlaceCursor < 3 {
 		m = apply(m, "down")
 	}
@@ -135,7 +157,7 @@ func TestNewNameEditorDoesNotRunInsideUpdate(t *testing.T) {
 			return workflow.ValidateResult{OK: true}
 		},
 	})
-	m = apply(m, "ctrl+k", "n", "s", "h", "i", "p")
+	m = apply(m, "ctrl+p", "n", "down", "enter", "s", "h", "i", "p", "enter", "enter")
 	next, cmd := m.Update(press("enter"))
 	m = next.(Model)
 	if ran {
@@ -172,15 +194,15 @@ func TestPopupEditExpandsThenRespawnsCompact(t *testing.T) {
 			return nil
 		},
 	})
-	m = apply(m, "ctrl+k", "o", "enter")
+	m = apply(m, "ctrl+p", "o", "enter")
 	if !m.quit {
 		t.Fatal("popup edit must quit the compact popup")
 	}
 	if len(states) != 1 {
 		t.Fatalf("states = %v", states)
 	}
-	if states[0].Width != consoleWidth || states[0].Height != consoleHeight {
-		t.Fatalf("edit popup opens compact: %+v", states[0])
+	if states[0].Width != expandedWidth || states[0].Height != expandedHeight {
+		t.Fatalf("edit popup opens expanded: %+v", states[0])
 	}
 	if states[0].EditFile != "/r/deploy.yaml" || states[0].EditName != "deploy" {
 		t.Fatalf("edit target lost: %+v", states[0])

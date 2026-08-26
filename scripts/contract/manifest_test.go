@@ -21,7 +21,7 @@ func TestManifestBuildDownloadsVerifiedArchive(t *testing.T) {
 		"bin/herdr-workflows",
 		"setup",
 		"width = 64",
-		"height = 15",
+		"height = 18",
 	} {
 		if !strings.Contains(flat, want) {
 			t.Fatalf("herdr-plugin.toml missing %q", want)

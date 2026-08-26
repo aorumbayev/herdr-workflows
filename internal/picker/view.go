@@ -20,8 +20,14 @@ func (m Model) render() string {
 	switch m.mode {
 	case modeRuns:
 		body = m.withTabBar(tui.TabRuns, m.runs.Body())
-	case modeConsole:
-		body = m.withTabBar(tui.TabConsole, m.consoleBody())
+	case modeProfiles:
+		body = m.withTabBar(tui.TabProfiles, m.renderProfiles())
+	case modeProfilePalette:
+		body = m.renderProfilePalette()
+	case modeNewProfileName:
+		body = m.renderNewProfileName()
+	case modeNewProfileScope:
+		body = m.renderNewProfileScope()
 	case modePalette:
 		body = m.renderPalette()
 	case modeConsolePlace:
@@ -30,6 +36,12 @@ func (m Model) render() string {
 		body = m.renderEditPlace()
 	case modeRunsAgentPick:
 		body = m.renderRunsAgentPick()
+	case modeNewMode:
+		body = m.renderNewMode()
+	case modeNewScope:
+		body = m.renderNewScope()
+	case modeNewAgentPick:
+		body = m.renderNewAgentPick()
 	case modeDelete:
 		body = "Delete " + m.deleteLabel() + "?\n" + tui.DeleteConfirmHint
 	case modeFail:
@@ -48,13 +60,6 @@ func (m Model) render() string {
 
 func (m Model) withTabBar(active, body string) string {
 	return FormatTabBar(active, m.contentWidth()) + "\n" + body
-}
-
-func (m Model) consoleBody() string {
-	if !m.consoleReady {
-		return ""
-	}
-	return m.console.Body()
 }
 
 func (m Model) renderNewName() string {
@@ -131,70 +136,84 @@ func (m Model) listFilterRow(width int) string {
 	return FormatListFilterRow(m.filter, width, hint)
 }
 
-func (m Model) consentLine() string {
-	if m.consent == "" {
+// sensitivityLine is a compact muted note of the touched surfaces, shown only when the workflow is sensitive.
+func (m Model) sensitivityLine(width int) string {
+	if len(m.sensitivity) == 0 {
 		return ""
 	}
-	return tui.DefaultTheme().Warn.Render(m.consent)
+	return tui.MuteChrome(tui.Truncate(tui.TouchesPrefix+strings.Join(m.sensitivity, ", "), width))
+}
+
+func (m Model) choiceFilterRow(width int) string {
+	label := m.filter
+	if label == "" {
+		label = tui.FilterOptions
+	}
+	return tui.Truncate(label, width)
+}
+
+// promptHeader is the input name and its wrapped description, the question in focus.
+func (m Model) promptHeader(width int) string {
+	if m.prompt == nil {
+		return tui.PromptPlaceholder
+	}
+	return FormatInputPrompt(m.prompt.Spec, width)
+}
+
+// statsLine demotes progress, answer hints, prior answers, and the back hint to one muted line.
+func (m Model) statsLine(width int) string {
+	hints := ""
+	if m.prompt != nil {
+		hints = FormatInputHints(m.prompt.Spec)
+	}
+	pos, total := m.inputOrdinal()
+	answers := FormatInputAnswers(m.queue, m.values(), width)
+	return tui.MuteChrome(FormatInputStats(width, pos, total, hints, answers, tui.BackHint))
 }
 
 func (m Model) renderChoice() string {
-	rows := m.choiceRows()
 	w := m.contentWidth()
+	rows := m.choiceRows()
+	vp := m.choiceViewport()
+	cursor, offset := tui.ClampListWindow(m.cursor, m.offset, len(rows), vp)
 	var lines []string
-	end := min(m.offset+tui.ListViewport, len(rows))
-	for i := m.offset; i < end; i++ {
-		lines = append(lines, FormatPickerRowName(rows[i], "", false, w, i == m.cursor))
+	end := min(offset+vp, len(rows))
+	for i := offset; i < end; i++ {
+		lines = append(lines, FormatPickerRowName(rows[i], "", false, w, i == cursor))
 	}
-	for len(lines) < tui.ListViewport {
+	for len(lines) < vp {
 		lines = append(lines, "")
 	}
-	prompt := ""
-	if m.prompt != nil {
-		pos, total := m.inputOrdinal()
-		prompt = FormatInputPrompt(m.prompt.Spec, pos, total)
+	parts := []string{
+		m.promptHeader(w), "",
+		strings.Join(lines, "\n"), "",
+		tui.MuteChrome(m.choiceFilterRow(w)),
+		tui.FormatRule(w),
+		m.statsLine(w),
 	}
-	answers := FormatInputAnswers(m.queue, m.values(), w)
-	hint := tui.ChoiceHint
-	if m.custom {
-		hint = tui.CustomChoiceHint
-	}
-	footer := tui.MuteChrome(tui.FormatListFooter(w, m.cursor, len(rows), hint))
-	parts := []string{"", strings.Join(lines, "\n"), ""}
-	if line := m.consentLine(); line != "" {
+	if line := m.sensitivityLine(w); line != "" {
 		parts = append(parts, line)
 	}
-	parts = append(parts, prompt)
-	if answers != "" {
-		parts = append(parts, answers)
-	}
 	if m.status != "" {
-		parts = append(parts, m.status)
+		parts = append(parts, tui.Truncate(m.status, w))
 	}
-	parts = append(parts, tui.FormatRule(w), footer)
 	return strings.Join(parts, "\n")
 }
 
 func (m Model) renderTextPrompt() string {
 	w := m.contentWidth()
-	prompt := tui.PromptPlaceholder
-	if m.prompt != nil {
-		pos, total := m.inputOrdinal()
-		prompt = FormatInputPrompt(m.prompt.Spec, pos, total)
+	parts := []string{
+		m.promptHeader(w), "",
+		m.promptValue,
+		tui.FormatRule(w),
+		m.statsLine(w),
 	}
-	answers := FormatInputAnswers(m.queue, m.values(), w)
-	parts := []string{}
-	if line := m.consentLine(); line != "" {
+	if line := m.sensitivityLine(w); line != "" {
 		parts = append(parts, line)
 	}
-	parts = append(parts, prompt, m.promptValue)
-	if answers != "" {
-		parts = append(parts, answers)
-	}
 	if m.status != "" {
-		parts = append(parts, m.status)
+		parts = append(parts, tui.Truncate(m.status, w))
 	}
-	parts = append(parts, tui.SubmitHint)
 	return strings.Join(parts, "\n")
 }
 

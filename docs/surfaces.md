@@ -8,11 +8,11 @@ Runs happen in the picker or `hwf run`, because a run needs real herdr panes. In
 
 Press `prefix+k`.
 
-Tab cycles the Workflow, Runs, and Console browsers. A tab bar names the three browsers and marks the active one. The pane title stays static.
+The overlay has three tabs, workflows, runs, and profiles. `Tab` cycles the three in that order and back to workflows. `Tab` never quits the overlay. A tab bar starts with `tab: ` to name the key, then the three labels, and marks the active one with reverse video. The pane title stays static.
 
-Workflow and Runs footers start with `tab`. The Console tab footer includes `p pop out` to open the console in a herdr pane. The filter placeholders are `filter workflows...` and `filter runs...`. Filter rows use flush-left ASCII without a `/ ` prefix or indent.
+The workflows footer is `enter run | ctrl+p actions | esc`. The runs footer is `ctrl+g <scope> | enter detail | esc quit`. The profiles footer is `enter open | ctrl+p actions | esc`. The tab bar names the `tab` key, so the footers do not repeat it. The filter placeholders are `filter workflows...`, `filter runs...`, and `filter profiles...`. Filter rows use flush-left ASCII without a `/ ` prefix or indent.
 
-The popup opens compact at 64 by 15 cells for the Workflow and Runs browsers. The Console browser needs more room, so a switch to it closes the popup and opens it again at 85% by 80%, with the tab, filter, and cursor carried across. A switch back returns the compact size. herdr has no resize for a popup that is already open.
+The overlay stays compact. Switching tabs does not close and reopen the popup.
 
 Workflow titles and the description keep the terminal's own foreground, because a fixed palette slot can be unreadable on your theme. Secondary text such as the location column, the footer hints, and the rule is faint, which derives from that same foreground. `invalid` and the sensitivity `!` marker use warn. The selected row uses reverse video. Pointer hover uses underline, not reverse. Pointer gestures also have keyboard keys.
 
@@ -30,33 +30,64 @@ When you select a workflow, the picker shows its description below the list. It 
 
 A workflow that fails to load still appears, marked `invalid`. Select it to read the load error.
 
-While the picker asks for inputs, the answers you have given stay on screen. Press Escape to step back to the previous question with your earlier answer intact, or return to the list from the first one. If you change an earlier answer, the picker drops the later ones, because they might no longer apply.
+While the picker asks for inputs, each question shows its name and description in focus, above the options. One faint line below the options carries your progress, how to answer, the answers you have given, and the back hint. A sensitive workflow adds a short faint line that names what it touches. The answers you have given stay on screen. Press Escape to step back to the previous question with your earlier answer intact, or return to the list from the first one. If you change an earlier answer, the picker drops the later ones, because they might no longer apply.
 
 With no workflows at all, the picker still opens and points you to the actions palette.
 
+### Profiles browser
+
+The profiles tab lists every profile resolved across the configuration layers. Each row shows the profile name and a source column, `global`, `repo`, or `local`, for the layer that effectively defines it. Type to filter by name. The placeholder is `filter profiles...`. Select a profile to read its kind and a short args summary below the list. With no profiles, the tab shows a friendly message that points to `Ctrl+P` then `n`.
+
+`Enter` opens the defining `config.yaml` of the selected profile in `$EDITOR` through the same placement chooser as workflow edit. When the editor closes, the picker validates the configuration with the loader.
+
+Press `Ctrl+P` in the profiles tab for its actions.
+
+| Key | Action                                                                                              |
+| --- | --------------------------------------------------------------------------------------------------- |
+| `n` | Create a profile: enter a name, choose `global`, `repo`, or `local`, then open the file in `$EDITOR` |
+| `o` | Open the selected profile's defining `config.yaml` in `$EDITOR`                                      |
+
+A new profile writes a minimal skeleton into the chosen layer's `config.yaml`. The picker creates the file when it is absent and adds the profile under the existing `profiles:` map without dropping comments or other entries. A duplicate name in that layer is rejected. Edit or delete a profile by hand in the opened `config.yaml`.
+
 ### Actions palette
 
-In list mode, press `Ctrl+K`. A single letter fires the action, with no Enter. Escape closes the palette and keeps the picker open.
+In list mode, press `Ctrl+P`. A single letter fires the action, with no Enter. Escape closes the palette and keeps the picker open.
 
 | Key | Action                                                                                   |
 | --- | ---------------------------------------------------------------------------------------- |
-| `n` | Create a repo workflow stub, open it in `$EDITOR`, then validate with the loader           |
+| `n` | Create a new workflow, after a chooser for an agent handoff or a template                 |
 | `i` | Show status that names `hwf workflow import`                                             |
 | `e` | Open the examples page in your browser                                                   |
-| `c` | Open the console after a placement chooser (`tab` / `beside` / `below`, default `beside`) |
+| `c` | Open the console after a placement chooser |
 | `o` | Edit the selected workflow in `$EDITOR`, then validate with the loader                     |
 | `s` | Copy the selected workflow's import command and show a herdr notification                |
 | `d` | Delete the selected workflow, after a `y` or `n` confirmation                            |
 
-`o`, `s`, and `d` need a selected valid workflow. `n`, `i`, `e`, and `c` do not. The picker stays open for every palette action except `c`, which dismisses the overlay after the console pane opens.
+`o`, `s`, and `d` need a selected valid workflow. `n`, `i`, `e`, and `c` do not. The picker stays open for every palette action. `c` opens the console, and the overlay dismisses only after the console pane opens.
 
 Plain `k` still types into the filter.
 
+#### New workflow
+
+`n` opens a chooser with two options.
+
+Choose **build with an agent** to hand the work to a herdr agent pane. The picker offers an agent-pane chooser. With one pane open, it types the handoff at once. With more than one, select the pane and press `Enter`. The picker types a prompt that asks the agent to follow the `herdr-workflow-create` skill, to grill you about the goal, steps, and inputs before it writes any YAML, to save the workflow at the repo or global level, and to validate the file with `hwf workflow validate`. The prompt is typed, not submitted, so press `Enter` in the pane to start. The overlay dismisses after the handoff. With no agent pane open, the overlay stays open and shows a plain status line.
+
+Choose **edit a template** to write a pre-filled skeleton yourself. Enter a name, then choose the repo (`.hwf/workflows`) or global level. The picker creates the skeleton and opens the same placement chooser as edit (`popup`, `beside`, `below`, `tab`). `popup` opens the editor in the large popup.
+
 ## The console
 
-Open it from the picker palette with `c`, or with `hwf console`. Placement is `tab`, `beside`, or `below`. The overlay remembers the last choice for the session. `hwf console --placement` takes the same three values.
+Reach the console by pop-out from the overlay. Open the actions palette with `Ctrl+P` and press `c`. A placement chooser offers `beside`, `below`, and `new tab`. `beside` is the default. The chooser shows `new tab` for the placement value `tab`. The session default is the last successful open, and it starts at `beside`.
 
-The console is a full-screen Charm TUI. Tab switches the workflows list and the runs list. Enter on a workflow opens a read-only diagram of its steps, `when:` edges, and pane targets from the parsed definition. On the diagram, `v` selects step nodes and `s` sends an annotation bundle (selected step YAML plus your instruction) into an agent pane input, but does not submit it. Enter on a run opens debug tabs: `1` log, `2` transcript, `3` yaml-at-run. Press `y` to copy `hwf run <name>` for a retry, without a submit.
+If the console pane cannot open, because you are not inside herdr or there is no pane host, the overlay stays open and shows a plain status line.
+
+After a successful pop-out from a selected workflow, the console opens on that workflow's diagram. Press `Escape` to return to the console catalog. With nothing valid selected, the console opens on the workflows list.
+
+The console is a full-screen Charm TUI. It uses the same catalog chrome as the overlay. Workflow rows show the title, the sensitivity `!`, and the `repo`, `global`, or `invalid` location. The filter placeholders are `filter workflows...` and `filter runs...`. `Tab` cycles the workflows list and the runs list, two labels. `Enter` on a workflow opens a read-only diagram of its steps, `when:` edges, and pane targets from the parsed definition. On the diagram, `v` selects step nodes and `s` sends an annotation bundle (selected step YAML plus your instruction) into an agent pane input, but does not submit it. `Enter` on a run opens debug tabs: `1` log, `2` transcript, `3` yaml-at-run. Press `y` to copy `hwf run <name>` for a retry, without a submit. `Escape` backs out. Quitting restores the terminal.
+
+The workflows footer is `tab | enter diagram | esc`. The runs footer is `tab | enter detail | esc`.
+
+`hwf console` runs the console TUI. `hwf console --placement <tab|beside|below>` opens it in a pane, and falls back to the in-process TUI when no pane host is available and a terminal is present.
 
 ## The CLI
 
@@ -107,7 +138,7 @@ A share produces one command:
 hwf workflow import "<bundle>"
 ```
 
-Get it from the picker palette with `Ctrl+K` then `s`.
+Get it from the picker palette with `Ctrl+P` then `s`.
 
 The bundle is a gzip-compressed, base64-encoded list of `{name, yaml}` entries. It holds the workflow you picked plus every `workflow:` child it reaches, found the same way a run finds them: repo first, then global. A missing child or a cycle fails the export. The export does not carry an incomplete bundle. Export carries each exact YAML body, including a `$schema` pointer when one exists, and no local paths, config, or scope record. Import pins written files to its own contract.
 

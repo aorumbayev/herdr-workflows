@@ -64,6 +64,10 @@ func listenPingSocket(t *testing.T, protocol int, version string) string {
 }
 
 func listenHerdrRPC(t *testing.T, onRequest func(method string, params map[string]any)) string {
+	return listenHerdrRPCReply(t, onRequest, "", "")
+}
+
+func listenHerdrRPCReply(t *testing.T, onRequest func(method string, params map[string]any), paneOpenCode, paneOpenMsg string) string {
 	t.Helper()
 	sockPath := filepath.Join("/tmp", fmt.Sprintf("hwf-cli-rpc-%s-%d-%d.sock", t.Name(), os.Getpid(), time.Now().UnixNano()))
 	ln, err := net.Listen("unix", sockPath)
@@ -103,6 +107,12 @@ func listenHerdrRPC(t *testing.T, onRequest func(method string, params map[strin
 						req.ID, host.Protocol, host.MinHerdrVersion)
 					_, _ = c.Write([]byte(resp))
 				case "plugin.pane.open":
+					if paneOpenMsg != "" {
+						resp := fmt.Sprintf(`{"id":%q,"error":{"code":%q,"message":%q}}`+"\n",
+							req.ID, paneOpenCode, paneOpenMsg)
+						_, _ = c.Write([]byte(resp))
+						return
+					}
 					resp := fmt.Sprintf(`{"id":%q,"result":{"type":"ok"}}`+"\n", req.ID)
 					_, _ = c.Write([]byte(resp))
 				default:

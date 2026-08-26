@@ -127,6 +127,37 @@ func TestCreateRepoWorkflowWritesStub(t *testing.T) {
 	}
 }
 
+func TestCreateGlobalWorkflowValidates(t *testing.T) {
+	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	path, err := workflow.CreateGlobalWorkflow("deploy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(home, ".hwf", "workflows", "deploy.yaml")
+	if path != want {
+		t.Fatalf("path = %q want %q", path, want)
+	}
+	result := workflow.ValidateFile(path, "deploy", home)
+	if !result.OK {
+		t.Fatalf("global stub must load: %+v", result)
+	}
+}
+
+func TestNewWorkflowStubValidates(t *testing.T) {
+	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", t.TempDir())
+	root := t.TempDir()
+	path := filepath.Join(root, "skeleton.yaml")
+	if err := os.WriteFile(path, []byte(workflow.NewWorkflowStubBody()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result := workflow.ValidateFile(path, "skeleton", root)
+	if !result.OK {
+		t.Fatalf("skeleton body must load: %+v", result)
+	}
+}
+
 func TestCreateRepoWorkflowRejectsBadNameAndConflict(t *testing.T) {
 	root := t.TempDir()
 	if _, err := workflow.CreateRepoWorkflow(root, "Bad Name"); err == nil {
@@ -192,6 +223,61 @@ type errString string
 
 func (e errString) Error() string { return string(e) }
 
+func TestEditorArgvSplitsFlags(t *testing.T) {
+	got, err := workflow.EditorArgv("code --wait", "/tmp/config.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"code", "--wait", "/tmp/config.yaml"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("EditorArgv = %#v, want %#v", got, want)
+	}
+}
+
+func TestEditorArgvKeepsQuotedArgument(t *testing.T) {
+	got, err := workflow.EditorArgv("nvim -c 'set ft=yaml'", "/tmp/wf.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"nvim", "-c", "set ft=yaml", "/tmp/wf.yaml"}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("EditorArgv = %#v, want %#v", got, want)
+	}
+	got, err = workflow.EditorArgv(`nvim -c "set ft=yaml"`, "/tmp/wf.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("double quotes EditorArgv = %#v, want %#v", got, want)
+	}
+}
+
+func TestEditorArgvKeepsDoubleQuotedBackslash(t *testing.T) {
+	got, err := workflow.EditorArgv(`editor "C:\path"`, "/tmp/wf.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"editor", `C:\path`, "/tmp/wf.yaml"}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("EditorArgv = %#v, want %#v", got, want)
+	}
+	got, err = workflow.EditorArgv(`ed "a\$b\"c\\d"`, "/tmp/wf.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = []string{"ed", "a$b\"c\\d", "/tmp/wf.yaml"}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("special escapes EditorArgv = %#v, want %#v", got, want)
+	}
+}
+
+func TestEditorArgvRejectsUnclosedQuote(t *testing.T) {
+	_, err := workflow.EditorArgv("nvim -c 'set ft=yaml", "/tmp/wf.yaml")
+	if err == nil || !strings.Contains(err.Error(), "quote") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestEditAndValidateSplitsEditorFlags(t *testing.T) {
 	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", t.TempDir())
 	root := t.TempDir()
@@ -215,6 +301,33 @@ func TestEditAndValidateSplitsEditorFlags(t *testing.T) {
 	}
 	want := []string{"code", "--wait", path}
 	if strings.Join(argv, " ") != strings.Join(want, " ") {
+		t.Fatalf("argv = %#v, want %#v", argv, want)
+	}
+}
+
+func TestEditAndValidateKeepsQuotedEditorArgument(t *testing.T) {
+	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", t.TempDir())
+	root := t.TempDir()
+	path := filepath.Join(root, "x.yaml")
+	if err := os.WriteFile(path, []byte("version: v1alpha1\nsteps:\n  - run: [echo, hi]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var argv []string
+	result := workflow.EditAndValidate(workflow.EditOpts{
+		Path:     path,
+		Name:     "x",
+		RepoRoot: root,
+		Getenv:   func(string) string { return "nvim -c 'set ft=yaml'" },
+		Run: func(args []string) error {
+			argv = append([]string(nil), args...)
+			return nil
+		},
+	})
+	if !result.OK {
+		t.Fatalf("result = %+v", result)
+	}
+	want := []string{"nvim", "-c", "set ft=yaml", path}
+	if strings.Join(argv, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("argv = %#v, want %#v", argv, want)
 	}
 }

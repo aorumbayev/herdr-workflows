@@ -58,14 +58,12 @@ for example `printf %s "kind-$(printf %s "$PANE" | tr -c 'A-Za-z0-9' '-')"`, the
 
 ## Confirming param names against the running build
 
-This skill lives outside the herdr-workflows checkout, so its `src/`, `docs/` and
-`schemas/` are **not readable** — do not try to read them. Two runtime sources exist instead:
+This skill lives outside the herdr-workflows checkout, so `src/`, `docs/`, and
+`schemas/` are **not readable**. Do not try to read them. Use these two sources:
 
-1. The generated method table that this skill ships. Offline inspection:
-   already started. It returns `{methods: [{method, allowed, reason?, params:{required, properties}}]}`
-   for all 91 known methods. Use it as the authority for **param names**. Use the endpoint when the
-   allowlist table omits a method. The table covers every method a workflow normally uses. The
-   selector rules are an extra load-time check and do not appear in the payload.
+1. The method table in this file. It is the complete allowlist (60 methods, 91 known in the
+   herdr 0.8.2 schema, protocol 20). Use it as the authority for **method names** and **param names**.
+   The selector rules in this file are an extra load-time check.
 2. `scripts/validate.sh` — its error text names the exact missing selector, for example
    `pane.split: params.target_pane_id is required`.
 

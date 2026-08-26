@@ -102,7 +102,7 @@ steps:
         <article>
           <h3>prefix+k</h3>
           <p>
-            Pick a workflow and run it. <code>Ctrl+K</code> opens actions: create, import, edit,
+            Pick a workflow and run it. <code>Ctrl+P</code> opens actions: create, import, edit,
             share, delete.
           </p>
         </article>
@@ -111,9 +111,11 @@ steps:
           <p>The same runner from a terminal or a script, with <code>--input name=value</code>.</p>
         </article>
         <article>
-          <h3>Console (planned)</h3>
+          <h3>Console</h3>
           <p>
-            A web console for workflow management is planned. Today use the picker and CLI.
+            Full-screen Charm TUI. From the picker, press <code>Ctrl+P</code> then <code>c</code>.
+            Or run <code>hwf console</code>. See
+            <a :href="withBase('/surfaces#the-console')">Run and manage</a>.
           </p>
         </article>
       </div>

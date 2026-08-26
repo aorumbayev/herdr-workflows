@@ -1,10 +1,12 @@
 package picker
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/aorumbayev/herdr-workflows/internal/console"
+	"github.com/aorumbayev/herdr-workflows/internal/host"
 )
 
 func TestPaletteConsoleOpensPlacementChooser(t *testing.T) {
@@ -12,19 +14,21 @@ func TestPaletteConsoleOpensPlacementChooser(t *testing.T) {
 	m := New(Options{
 		Entries: catalogEntries(),
 		Width:   80,
-		OpenConsole: func(p console.Placement) error {
+		OpenConsole: func(p console.Placement, _ string) error {
 			opened = p
 			return nil
 		},
 	})
-	m = apply(m, "ctrl+k")
+	m = apply(m, "ctrl+p")
 	m = apply(m, "c")
 	if m.mode != modeConsolePlace {
 		t.Fatalf("mode = %v, want console place", m.mode)
 	}
 	body := m.View().Content
-	if !strings.Contains(body, "beside") || !strings.Contains(body, "tab") || !strings.Contains(body, "below") {
-		t.Fatalf("chooser missing placements:\n%s", body)
+	for _, want := range []string{"beside", "below", "new tab"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("chooser missing %q:\n%s", want, body)
+		}
 	}
 	// Default beside. Enter opens beside.
 	m = apply(m, "enter")
@@ -34,6 +38,49 @@ func TestPaletteConsoleOpensPlacementChooser(t *testing.T) {
 	if !m.quit {
 		t.Fatal("picker should quit after opening console")
 	}
+	if m.lastConsolePlacement != console.PlacementBeside {
+		t.Fatalf("remembered = %q, want beside", m.lastConsolePlacement)
+	}
+}
+
+func TestConsoleChooserDisplaysNewTabForTabValue(t *testing.T) {
+	m := New(Options{Entries: catalogEntries(), Width: 80})
+	m = apply(m, "ctrl+p", "c")
+	body := m.View().Content
+	if strings.Contains(body, "\ntab") || strings.Contains(body, " tab (") {
+		t.Fatalf("raw tab value must not show as a bare option:\n%s", body)
+	}
+	if !strings.Contains(body, "new tab") {
+		t.Fatalf("tab value must display as new tab:\n%s", body)
+	}
+	if consolePlacementLabel(console.PlacementTab) != "new tab" {
+		t.Fatalf("label = %q", consolePlacementLabel(console.PlacementTab))
+	}
+	if string(console.PlacementTab) != "tab" || string(console.PlacementBeside) != "beside" || string(console.PlacementBelow) != "below" {
+		t.Fatal("placement values must stay tab/beside/below")
+	}
+}
+
+func TestConsoleReachedByPaletteOnly(t *testing.T) {
+	m := New(Options{Entries: catalogEntries(), Width: 80, Height: 30})
+	// p is no longer a shortcut. It types into the filter.
+	m = apply(m, "p")
+	if m.mode != modeList {
+		t.Fatalf("p mode = %v, want the list", m.mode)
+	}
+	if m.filter != "p" {
+		t.Fatalf("p must type into the filter, got %q", m.filter)
+	}
+	m = apply(m, "backspace")
+	// palette c reaches the chooser and returns to the list.
+	m = apply(m, "ctrl+p", "c")
+	if m.mode != modeConsolePlace || m.placeBack != modeList {
+		t.Fatalf("palette c mode = %v placeBack = %v", m.mode, m.placeBack)
+	}
+	m = apply(m, "esc")
+	if m.mode != modeList {
+		t.Fatalf("esc from chooser mode = %v, want list", m.mode)
+	}
 }
 
 func TestConsolePlacementRemembersSessionDefault(t *testing.T) {
@@ -41,29 +88,103 @@ func TestConsolePlacementRemembersSessionDefault(t *testing.T) {
 	m := New(Options{
 		Entries: catalogEntries(),
 		Width:   80,
-		OpenConsole: func(p console.Placement) error {
+		OpenConsole: func(p console.Placement, _ string) error {
 			opened = append(opened, p)
 			return nil
 		},
 	})
-	m = apply(m, "ctrl+k")
-	m = apply(m, "c")
-	m = apply(m, "down") // beside to below (order: beside, tab, below, or tab, beside, below)
-	// Explicit selection. Documented order is tab, beside, below. Default cursor is last or remembered.
-	// First open: pick tab with keys from default beside.
-	m = apply(m, "esc") // cancel first
-	if m.mode != modeList {
-		t.Fatalf("cancel mode = %v", m.mode)
-	}
 	m.lastConsolePlacement = console.PlacementTab
-	m = apply(m, "ctrl+k")
-	m = apply(m, "c")
+	m = apply(m, "ctrl+p", "c")
 	if m.consolePlaceCursor != indexOfPlacement(console.PlacementTab) {
 		t.Fatalf("cursor = %d, want tab index", m.consolePlaceCursor)
 	}
 	m = apply(m, "enter")
 	if len(opened) != 1 || opened[0] != console.PlacementTab {
 		t.Fatalf("opened = %#v", opened)
+	}
+}
+
+func TestConsolePlacementRemembersOnlyOnSuccess(t *testing.T) {
+	mFail := New(Options{
+		Entries:     catalogEntries(),
+		Width:       80,
+		OpenConsole: func(console.Placement, string) error { return errors.New("no pane host") },
+	})
+	mFail = apply(mFail, "ctrl+p", "c", "enter")
+	if mFail.lastConsolePlacement != "" {
+		t.Fatalf("failed open must not be remembered, got %q", mFail.lastConsolePlacement)
+	}
+
+	mOK := New(Options{
+		Entries:     catalogEntries(),
+		Width:       80,
+		OpenConsole: func(console.Placement, string) error { return nil },
+	})
+	mOK = apply(mOK, "ctrl+p", "c", "enter")
+	if mOK.lastConsolePlacement != console.PlacementBeside {
+		t.Fatalf("successful open must be remembered, got %q", mOK.lastConsolePlacement)
+	}
+}
+
+func TestConsoleOpenFailureStaysInOverlay(t *testing.T) {
+	m := New(Options{
+		Entries: catalogEntries(),
+		Width:   80,
+		Height:  30,
+		OpenConsole: func(console.Placement, string) error {
+			return &host.HerdrError{Code: "no_socket", Msg: "HERDR_SOCKET_PATH is not set"}
+		},
+	})
+	m = apply(m, "ctrl+p", "c", "enter")
+	if m.quit {
+		t.Fatal("failed open must not quit the overlay")
+	}
+	if m.mode != modeList {
+		t.Fatalf("mode = %v, want the workflows list", m.mode)
+	}
+	if m.status == "" {
+		t.Fatal("failed open must set a status")
+	}
+	if !strings.Contains(m.status, "inside herdr") {
+		t.Fatalf("transport loss must keep the no-host status, got %q", m.status)
+	}
+}
+
+func TestConsoleOpenFailureSurfacesHostError(t *testing.T) {
+	m := New(Options{
+		Entries: catalogEntries(),
+		Width:   80,
+		Height:  30,
+		OpenConsole: func(console.Placement, string) error {
+			return &host.HerdrError{Code: "internal", Msg: "pane limit reached"}
+		},
+	})
+	m = apply(m, "ctrl+p", "c", "enter")
+	if m.quit {
+		t.Fatal("failed open must not quit the overlay")
+	}
+	if m.mode != modeList {
+		t.Fatalf("mode = %v, want the workflows list", m.mode)
+	}
+	if !strings.Contains(m.status, "pane limit reached") {
+		t.Fatalf("reachable-host rejection must stay in the status, got %q", m.status)
+	}
+}
+
+func TestConsoleLandsOnSelectedWorkflow(t *testing.T) {
+	var landed string
+	m := New(Options{
+		Entries: catalogEntries(),
+		Width:   80,
+		Height:  30,
+		OpenConsole: func(_ console.Placement, workflow string) error {
+			landed = workflow
+			return nil
+		},
+	})
+	apply(m, "ctrl+p", "c", "enter")
+	if landed != "chat-handoff" {
+		t.Fatalf("landed workflow = %q, want chat-handoff", landed)
 	}
 }
 

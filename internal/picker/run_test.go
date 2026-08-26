@@ -100,7 +100,7 @@ func TestPrepareWiresHooksFromOptions(t *testing.T) {
 		t.Fatalf("Prepare: %v", err)
 	}
 
-	_ = apply(m, "ctrl+k", "n", "x", "enter")
+	_ = apply(m, "ctrl+p", "n", "down", "enter", "x", "enter", "enter", "enter")
 	if len(edited) != 1 || edited[0] != "x" {
 		t.Fatalf("EditWorkflow = %v (Options hooks not passed)", edited)
 	}
@@ -115,7 +115,7 @@ func TestPrepareWiresHooksFromOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	opened = ""
-	_ = apply(m, "ctrl+k", "e")
+	_ = apply(m, "ctrl+p", "e")
 	if opened == "" {
 		t.Fatal("OpenURL not wired from Options")
 	}
@@ -160,7 +160,7 @@ func TestPrepareWiresHooksFromOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	notified = nil
-	_ = apply(m, "ctrl+k", "s")
+	_ = apply(m, "ctrl+p", "s")
 	if len(notified) == 0 {
 		t.Fatal("ExportShare/Notify not wired from Options")
 	}

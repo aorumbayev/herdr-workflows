@@ -39,7 +39,7 @@ func CharmVerdicts() []CharmVerdict {
 			CandidateModule:   bubbles,
 			CandidateVersion:  bubblesV,
 			Decision:          "keep-custom",
-			MissingCapability: "textinput.Model and list FilterInput insert printable text without product key routing for Ctrl+K, Tab, and Ctrl+G versus bare letters in the same filter field.",
+			MissingCapability: "textinput.Model and list FilterInput insert printable text without product key routing for Ctrl+P, Tab, and Ctrl+G versus bare letters in the same filter field.",
 			Test:              "TestCharmVerdicts",
 		},
 		{
@@ -47,7 +47,7 @@ func CharmVerdicts() []CharmVerdict {
 			CandidateModule:   bubbletea,
 			CandidateVersion:  bubbleteaV,
 			Decision:          "keep-custom",
-			MissingCapability: "tea.WithFilter has no built-in herdr prefix-key C0 leak allowlist that keeps Tab, LF, CR, ESC, Ctrl+K, and Ctrl+G while dropping other controls.",
+			MissingCapability: "tea.WithFilter has no built-in herdr prefix-key C0 leak allowlist that keeps Tab, LF, CR, ESC, Ctrl+K, Ctrl+P, and Ctrl+G while dropping other controls.",
 			Test:              "TestCharmVerdicts",
 		},
 		{
@@ -151,7 +151,7 @@ func CharmVerdicts() []CharmVerdict {
 			CandidateModule:   bubbles,
 			CandidateVersion:  bubblesV,
 			Decision:          "keep-custom",
-			MissingCapability: "bubbles has no ctrl+k letter-fire palette that keeps list filter state and hides edit/share/delete without a valid selection.",
+			MissingCapability: "bubbles has no ctrl+p letter-fire palette that keeps list filter state and hides edit/share/delete without a valid selection.",
 			Test:              "TestCharmVerdicts",
 		},
 		{

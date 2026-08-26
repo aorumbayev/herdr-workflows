@@ -25,6 +25,7 @@ type Options struct {
 	Height     int
 	Env        config.Env
 	SelectedID string
+	Now        func() time.Time
 }
 
 // Model is the runs browser Bubble Tea model.
@@ -48,6 +49,9 @@ type Model struct {
 	detailGen    *config.Generation
 	refreshGen   *config.Generation
 	selectedID   string
+	now          func() time.Time
+	tickEpoch    int
+	ticking      bool
 }
 
 // SwitchToWorkflowsMsg tells the picker to show the workflow list.
@@ -76,6 +80,10 @@ func New(opts Options) Model {
 	if getenv == nil {
 		getenv = os.Getenv
 	}
+	nowFn := opts.Now
+	if nowFn == nil {
+		nowFn = time.Now
+	}
 	return Model{
 		repoRoot:   opts.RepoRoot,
 		width:      width,
@@ -86,6 +94,7 @@ func New(opts Options) Model {
 		detailGen:  &config.Generation{},
 		refreshGen: &config.Generation{},
 		selectedID: opts.SelectedID,
+		now:        nowFn,
 	}
 }
 
@@ -106,6 +115,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.applyListLoaded(msg)
 	case detailLoadedMsg:
 		return m.applyDetailLoaded(msg)
+	case tickMsg:
+		return m.handleTick(msg.epoch)
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
@@ -218,9 +229,13 @@ func (m Model) OpenDetail(id string) (Model, tea.Cmd) {
 	m.detailScroll = 0
 	m.yamlScroll = 0
 	m.stepFocus = 0
+	return m, m.detailLoadCmd(id)
+}
+
+func (m Model) detailLoadCmd(id string) tea.Cmd {
 	gen := m.detailGen.Begin()
 	getenv := m.getenv
-	return m, func() tea.Msg {
+	return func() tea.Msg {
 		presented := history.RunDetail(id, getenv, time.Time{})
 		return detailLoadedMsg{
 			gen: gen,
@@ -246,10 +261,10 @@ func (m Model) applyListLoaded(msg listLoadedMsg) (Model, tea.Cmd) {
 	m.clampCursor()
 	if want != "" && !idInItems(m.state.Items, want) {
 		m.state.SelectedID = want
-		return m, nil
+		return m.armTick()
 	}
 	m.syncSelectedID()
-	return m, nil
+	return m.armTick()
 }
 
 func idInItems(items []history.Summary, id string) bool {
@@ -265,13 +280,16 @@ func (m Model) applyDetailLoaded(msg detailLoadedMsg) (Model, tea.Cmd) {
 	if m.screen != screenDetail || m.activeRunID != msg.id || !m.detailGen.Current(msg.gen) {
 		return m, nil
 	}
+	same := m.detailView.ID == msg.view.ID && m.detailView.Kind == msg.view.Kind
 	m.detailView = msg.view
-	m.detailScroll = 0
-	m.yamlScroll = 0
-	m.stepFocus = defaultStepFocus(msg.view.Detail)
+	if !same {
+		m.detailScroll = 0
+		m.yamlScroll = 0
+		m.stepFocus = defaultStepFocus(msg.view.Detail)
+	}
 	arts, _ := history.LoadDebugArtifacts(msg.id, m.getenv)
 	m.yamlChunks = tui.SplitStepYAML(arts.EntryYAML)
-	return m, nil
+	return m.armTick()
 }
 
 func (m Model) refreshCmd(preserveID string) tea.Cmd {

@@ -7,56 +7,48 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 )
 
-func TestPopupGeometryPerTab(t *testing.T) {
-	w, h := PopupGeometry(tui.TabWorkflows)
-	if w != "64" || h != "15" {
-		t.Fatalf("workflows geometry = %s by %s, want the compact size", w, h)
+func TestPopupGeometryCompactAndExpanded(t *testing.T) {
+	w, h := PopupGeometry()
+	if w != "64" || h != "18" {
+		t.Fatalf("compact geometry = %s by %s, want 64 by 18", w, h)
 	}
-	if rw, rh := PopupGeometry(tui.TabRuns); rw != w || rh != h {
-		t.Fatalf("runs geometry = %s by %s, want the compact size", rw, rh)
-	}
-	cw, ch := PopupGeometry(tui.TabConsole)
-	if cw != "85%" || ch != "80%" {
-		t.Fatalf("console geometry = %s by %s, want 85%% by 80%%", cw, ch)
+	ew, eh := expandedGeometry()
+	if ew != "85%" || eh != "80%" {
+		t.Fatalf("expanded geometry = %s by %s, want 85%% by 80%%", ew, eh)
 	}
 }
 
-func TestTabSwitchRespawnsOnlyOnSizeChange(t *testing.T) {
+func TestTabSwitchNeverRespawns(t *testing.T) {
 	var got []PopupState
-	newModel := func() Model {
-		return New(Options{
-			Entries:     eightEntries(),
-			Width:       64,
-			Height:      15,
-			ReopenPopup: func(state PopupState) error { got = append(got, state); return nil },
-		})
-	}
-	m := apply(newModel(), "down", "tab")
-	if len(got) != 0 {
-		t.Fatalf("same-size switch must not respawn, got %+v", got)
-	}
+	m := New(Options{
+		Entries:     eightEntries(),
+		Width:       64,
+		Height:      18,
+		ReopenPopup: func(state PopupState) error { got = append(got, state); return nil },
+	})
+	m = apply(m, "down", "tab")
 	if m.mode != modeRuns {
 		t.Fatalf("mode = %v, want runs", m.mode)
 	}
 	m = apply(m, "tab")
-	if len(got) != 1 {
-		t.Fatalf("console switch must respawn once, got %d", len(got))
+	if m.mode != modeProfiles {
+		t.Fatalf("mode = %v, want profiles", m.mode)
 	}
-	if !m.quit {
-		t.Fatal("respawning picker must quit so the popup can close")
+	m = apply(m, "tab")
+	if m.mode != modeList {
+		t.Fatalf("mode = %v, want workflows", m.mode)
 	}
-	state := got[0]
-	if state.Tab != tui.TabConsole || state.Width != "85%" || state.Height != "80%" {
-		t.Fatalf("state = %+v, want the console tab at its own size", state)
+	if len(got) != 0 {
+		t.Fatalf("switching compact tabs must never respawn, got %+v", got)
 	}
-	if state.Cursor != 1 {
-		t.Fatalf("state cursor = %d, want the row the user left on", state.Cursor)
+	if m.quit {
+		t.Fatal("tab must not quit the overlay")
 	}
 }
 
 func TestRestoredPickerMountsItsTabWithoutRespawning(t *testing.T) {
 	var got []PopupState
-	state := PopupState{Tab: tui.TabConsole, Cursor: 1, Width: "85%", Height: "80%"}
+	state := PopupState{Tab: tui.TabRuns, Cursor: 1, Width: "64", Height: "18"}
 	m := New(Options{
 		Entries:     eightEntries(),
 		Width:       120,
@@ -68,15 +60,18 @@ func TestRestoredPickerMountsItsTabWithoutRespawning(t *testing.T) {
 		t.Fatalf("cursor = %d, want the restored row", m.cursor)
 	}
 	m = runCmd(m, m.Init())
-	if m.mode != modeConsole {
-		t.Fatalf("mode = %v, want the restored console tab", m.mode)
+	if m.mode != modeRuns {
+		t.Fatalf("mode = %v, want the restored runs tab", m.mode)
 	}
 	if len(got) != 0 {
 		t.Fatalf("restored picker must not respawn, got %+v", got)
 	}
 	m = apply(m, "tab")
-	if len(got) != 1 || got[0].Tab != tui.TabWorkflows {
-		t.Fatalf("leaving console must respawn compact, got %+v", got)
+	if m.mode != modeProfiles {
+		t.Fatalf("tab from runs must advance to profiles, mode = %v", m.mode)
+	}
+	if len(got) != 0 {
+		t.Fatalf("switching between compact tabs must not respawn, got %+v", got)
 	}
 }
 
@@ -95,7 +90,7 @@ func TestRunDetailExpandsThenRespawnsCompact(t *testing.T) {
 		Entries:     eightEntries(),
 		RepoRoot:    checkout,
 		Width:       64,
-		Height:      15,
+		Height:      18,
 		Env:         getenv,
 		ReopenPopup: func(state PopupState) error { states = append(states, state); return nil },
 	})
@@ -109,8 +104,8 @@ func TestRunDetailExpandsThenRespawnsCompact(t *testing.T) {
 	if states[0].Tab != tui.TabRuns || !states[0].Detail || states[0].RunID == "" {
 		t.Fatalf("detail state = %+v", states[0])
 	}
-	if states[0].Width != consoleWidth || states[0].Height != consoleHeight {
-		t.Fatalf("detail popup opens compact: %+v", states[0])
+	if states[0].Width != expandedWidth || states[0].Height != expandedHeight {
+		t.Fatalf("detail popup opens expanded: %+v", states[0])
 	}
 
 	var back []PopupState
@@ -155,7 +150,7 @@ func TestRunDetailExpandsThenRespawnsCompact(t *testing.T) {
 		Entries:     eightEntries(),
 		RepoRoot:    checkout,
 		Width:       64,
-		Height:      15,
+		Height:      18,
 		Env:         getenv,
 		Restore:     &back[0],
 		ReopenPopup: func(PopupState) error { t.Fatal("compact runs list must not respawn"); return nil },
@@ -173,8 +168,8 @@ func TestParsePopupStateRejectsGarbage(t *testing.T) {
 	if ParsePopupState("") != nil || ParsePopupState("{oops") != nil {
 		t.Fatal("unreadable state must start fresh")
 	}
-	state := ParsePopupState(PopupState{Tab: tui.TabConsole}.Encode())
-	if state == nil || state.Width != "85%" {
-		t.Fatalf("state = %+v, want the console size filled in", state)
+	state := ParsePopupState(PopupState{Tab: tui.TabRuns}.Encode())
+	if state == nil || state.Width != "64" || state.Height != "18" {
+		t.Fatalf("state = %+v, want the compact size filled in", state)
 	}
 }

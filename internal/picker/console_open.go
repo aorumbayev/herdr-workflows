@@ -6,13 +6,21 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/aorumbayev/herdr-workflows/internal/console"
+	"github.com/aorumbayev/herdr-workflows/internal/host"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 )
 
 var consolePlacementOptions = []console.Placement{
 	console.PlacementBeside,
-	console.PlacementTab,
 	console.PlacementBelow,
+	console.PlacementTab,
+}
+
+func consolePlacementLabel(p console.Placement) string {
+	if p == console.PlacementTab {
+		return "new tab"
+	}
+	return string(p)
 }
 
 func formatConsolePlacementBody(cursor int, remembered console.Placement) string {
@@ -23,8 +31,8 @@ func formatConsolePlacementBody(cursor int, remembered console.Placement) string
 		if i == cursor {
 			prefix = tui.CursorPrefix
 		}
-		label := string(p)
-		if p == remembered || (remembered == "" && p == console.DefaultPlacement) {
+		label := consolePlacementLabel(p)
+		if p == remembered {
 			label += " (default)"
 		}
 		lines = append(lines, prefix+label)
@@ -32,19 +40,18 @@ func formatConsolePlacementBody(cursor int, remembered console.Placement) string
 	return strings.Join(lines, "\n")
 }
 
-func (m Model) beginConsolePlacement() (tea.Model, tea.Cmd) {
-	if m.mode == modeConsole {
-		m.placeBack = modeConsole
-	} else {
-		m.placeBack = modeList
-		m.filter = m.savedFilter
+func (m Model) rememberedPlacement() console.Placement {
+	if m.lastConsolePlacement == "" {
+		return console.DefaultPlacement
 	}
+	return m.lastConsolePlacement
+}
+
+func (m Model) beginConsolePlacement(back mode) (tea.Model, tea.Cmd) {
+	m.placeBack = back
 	m.mode = modeConsolePlace
 	m.status = ""
-	remembered := m.lastConsolePlacement
-	if remembered == "" {
-		remembered = console.DefaultPlacement
-	}
+	remembered := m.rememberedPlacement()
 	m.consolePlaceCursor = 0
 	for i, p := range consolePlacementOptions {
 		if p == remembered {
@@ -72,27 +79,42 @@ func (m Model) handleConsolePlace(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "enter":
 		placement := consolePlacementOptions[m.consolePlaceCursor]
-		m.lastConsolePlacement = placement
 		if m.openConsole != nil {
-			if err := m.openConsole(placement); err != nil {
+			if err := m.openConsole(placement, m.consoleLandingWorkflow()); err != nil {
 				m.mode = m.placeBack
-				m.status = "console open failed" + tui.ChromeSep + err.Error()
+				m.status = consoleOpenStatus(err)
 				return m, nil
 			}
 		}
+		m.lastConsolePlacement = placement
 		m.quit = true
 		return m, tea.Quit
 	}
 	return m, nil
 }
 
-func (m Model) renderConsolePlace() string {
-	remembered := m.lastConsolePlacement
-	if remembered == "" {
-		remembered = console.DefaultPlacement
+// consoleLandingWorkflow gives the selected workflow name when the chooser was
+// opened from the workflows list, so the console pane lands on its diagram.
+func (m Model) consoleLandingWorkflow() string {
+	if m.placeBack != modeList {
+		return ""
 	}
+	if e := m.selectedEntry(); e != nil && e.Error == "" {
+		return e.Name
+	}
+	return ""
+}
+
+func (m Model) renderConsolePlace() string {
 	w := m.contentWidth()
-	body := formatConsolePlacementBody(m.consolePlaceCursor, remembered)
+	body := formatConsolePlacementBody(m.consolePlaceCursor, m.rememberedPlacement())
 	footer := tui.FormatListFooter(w, m.consolePlaceCursor, len(consolePlacementOptions), "enter open"+tui.ChromeSep+"esc back")
 	return body + "\n" + tui.FormatRule(w) + "\n" + footer
+}
+
+func consoleOpenStatus(err error) string {
+	if host.IsTransportLoss(err) {
+		return "console pane unavailable — is this running inside herdr?"
+	}
+	return "console pane failed" + tui.ChromeSep + err.Error()
 }

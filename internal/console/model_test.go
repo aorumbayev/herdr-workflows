@@ -70,8 +70,8 @@ func TestModelWorkflowsListAndTabToRuns(t *testing.T) {
 	if !strings.Contains(view, "Alpha") || !strings.Contains(view, "Beta") {
 		t.Fatalf("workflows view = %q", view)
 	}
-	if !strings.Contains(view, "tab runs") {
-		t.Fatalf("footer missing tab runs: %q", view)
+	if !strings.Contains(view, "enter diagram") {
+		t.Fatalf("workflows footer missing enter diagram: %q", view)
 	}
 	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = next.(Model)
@@ -82,8 +82,8 @@ func TestModelWorkflowsListAndTabToRuns(t *testing.T) {
 			t.Fatalf("runs view = %q", view)
 		}
 	}
-	if !strings.Contains(view, "tab workflows") {
-		t.Fatalf("runs footer = %q", view)
+	if !strings.Contains(view, "enter detail") {
+		t.Fatalf("runs footer missing enter detail: %q", view)
 	}
 }
 
@@ -144,6 +144,88 @@ func TestModelRunDetailDebugTabsAndRetryCopy(t *testing.T) {
 	view = stripView(m.View())
 	if !strings.Contains(strings.ToLower(view), "copied") {
 		t.Fatalf("status = %q", view)
+	}
+}
+
+func TestModelConsoleCatalogChromeMatchesOverlay(t *testing.T) {
+	m := New(Options{
+		Entries: []workflow.ListEntry{
+			{Name: "deploy", Title: "Deploy", Source: "global", HasCommands: true},
+			{Name: "alpha", Title: "Alpha", Source: "repo"},
+			{Name: "broken", Source: "repo", Error: "boom"},
+		},
+		Width:  80,
+		Height: 24,
+	})
+	view := stripView(m.View())
+	if !strings.Contains(view, "filter workflows...") {
+		t.Fatalf("missing filter placeholder:\n%s", view)
+	}
+	for _, want := range []string{"Deploy", "!", "global", "repo", "invalid"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("chrome missing %q:\n%s", want, view)
+		}
+	}
+}
+
+func TestModelConsoleFiltersWorkflows(t *testing.T) {
+	m := New(Options{
+		Entries: []workflow.ListEntry{
+			{Name: "alpha", Title: "Alpha", Source: "repo"},
+			{Name: "beta", Title: "Beta", Source: "repo"},
+		},
+		Width:  80,
+		Height: 24,
+	})
+	next, _ := m.Update(keyRune('b'))
+	m = next.(Model)
+	view := stripView(m.View())
+	if !strings.Contains(view, "Beta") || strings.Contains(view, "Alpha") {
+		t.Fatalf("filter b should keep only Beta:\n%s", view)
+	}
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	m = next.(Model)
+	view = stripView(m.View())
+	if !strings.Contains(view, "Alpha") || !strings.Contains(view, "Beta") {
+		t.Fatalf("backspace should restore all rows:\n%s", view)
+	}
+}
+
+func TestModelConsoleLandsOnSelectedDiagram(t *testing.T) {
+	m := New(Options{
+		Entries: []workflow.ListEntry{
+			{Name: "alpha", Title: "Alpha", Source: "repo"},
+			{Name: "deploy", Title: "Deploy", Source: "repo"},
+		},
+		Width:           80,
+		Height:          24,
+		LandingWorkflow: "deploy",
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
+			return &workflow.Definition{Name: e.Name, Title: e.Title, Version: workflow.Format, Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}}}, nil
+		},
+	})
+	if m.screen != screenDiagram {
+		t.Fatalf("screen = %v, want diagram", m.screen)
+	}
+	view := stripView(m.View())
+	if !strings.Contains(view, "diagram") || !strings.Contains(view, "Deploy") {
+		t.Fatalf("landing view = %q", view)
+	}
+	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = next.(Model)
+	if m.screen != screenWorkflows {
+		t.Fatalf("esc from landed diagram screen = %v, want workflows", m.screen)
+	}
+	view = stripView(m.View())
+	if !strings.Contains(view, "enter diagram") {
+		t.Fatalf("esc must show the catalog footer:\n%s", view)
+	}
+}
+
+func TestModelConsoleViewUsesAltScreen(t *testing.T) {
+	m := New(Options{Width: 80, Height: 24})
+	if !m.View().AltScreen {
+		t.Fatal("console View must enable alt-screen so quit restores the terminal")
 	}
 }
 
