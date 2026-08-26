@@ -33,6 +33,7 @@ export default defineConfig({
     nav: [
       { text: "Install", link: "/install" },
       { text: "Guide", link: "/guide" },
+      { text: "Run and manage", link: "/surfaces" },
       { text: "Examples", link: "/examples" },
       { text: "Reference", link: "/reference" },
     ],

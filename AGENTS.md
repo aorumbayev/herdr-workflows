@@ -33,7 +33,7 @@ Go packages under `internal/` and `embed/` (schema, logo, and skill catalog byte
 | `internal/cli/`                              | Cobra commands, terminal I/O, `hwf init` / `setup`                                                            |
 | `embed/` + `internal/cli/`                   | embedded skill catalog (`assets`) and `hwf skills` registry/show formatting                                   |
 | `internal/update/`                           | GitHub release check, managed-plugin `hwf update`, and distribution artifact names/checksums |
-| `internal/picker/`                           | picker TUI, workflow rows, ctrl+k palette, update indicator, Parity Baseline                                  |
+| `internal/picker/`                           | picker TUI, workflow rows, ctrl+p palette, update indicator, Parity Baseline                                  |
 | `internal/console/`                          | full-screen console TUI, workflows/runs lists, run debug tabs, Parity Baseline                                |
 | `internal/runsbrowser/`                      | runs browser TUI, list/detail, run-history presentation, Parity Baseline                                      |
 | `internal/tui/`                              | Charm lipgloss/bubbletea adapter shared by picker, console, and runs browser, Parity Baseline                 |

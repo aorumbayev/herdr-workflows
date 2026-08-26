@@ -15,7 +15,7 @@ Format is `version: v1alpha1`. This skill and its reference files are complete. 
 | `.hwf/config.yaml` | `profiles` / `default_profile` / `transcripts` |
 | `.hwf/config.local.yaml` | gitignored whole-entry overrides |
 
-`<name>`: lowercase, `[a-z0-9][a-z0-9-_]*` (hyphens are valid). Step `id:` and input names use a stricter rule. Refer to Load rules. Edit in `$EDITOR` (picker `n`/`o`) or any text editor. Run with `prefix+k` or `hwf run <name> [--input k=v]`.
+`<name>`: lowercase, `[a-z0-9][a-z0-9-_]*` (hyphens are valid). Step `id:` and input names use a stricter rule. Refer to Load rules. Edit in `$EDITOR` (picker `Ctrl+P`, then `n` or `o`) or any text editor. Run with `prefix+k` or `hwf run <name> [--input k=v]`.
 
 ## Procedure
 

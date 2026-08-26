@@ -82,8 +82,9 @@ Workflows live in `.hwf/workflows/` for one repo, or `~/.hwf/workflows/` for eve
 
 | Command or key   | What it is for                                                                         |
 | ---------------- | -------------------------------------------------------------------------------------- |
-| `prefix+k`       | Pick and run a workflow. `Ctrl+K` opens the actions palette                            |
+| `prefix+k`       | Pick and run a workflow. `Ctrl+P` opens the actions palette                            |
 | `hwf run <name>` | Run from a terminal or a script, with `--input name=value`                             |
+| `hwf console`    | Full-screen console. `--placement tab\|beside\|below` opens it in a pane               |
 | `hwf update`     | Install the latest published release                                                   |
 | `hwf help`       | List every command                                                                     |
 | `hwf scratch`    | Read and write the global key-value store between runs                                 |
