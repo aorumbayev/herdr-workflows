@@ -252,6 +252,25 @@ func TestEditorArgvKeepsQuotedArgument(t *testing.T) {
 	}
 }
 
+func TestEditorArgvKeepsDoubleQuotedBackslash(t *testing.T) {
+	got, err := workflow.EditorArgv(`editor "C:\path"`, "/tmp/wf.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"editor", `C:\path`, "/tmp/wf.yaml"}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("EditorArgv = %#v, want %#v", got, want)
+	}
+	got, err = workflow.EditorArgv(`ed "a\$b\"c\\d"`, "/tmp/wf.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = []string{"ed", "a$b\"c\\d", "/tmp/wf.yaml"}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("special escapes EditorArgv = %#v, want %#v", got, want)
+	}
+}
+
 func TestEditorArgvRejectsUnclosedQuote(t *testing.T) {
 	_, err := workflow.EditorArgv("nvim -c 'set ft=yaml", "/tmp/wf.yaml")
 	if err == nil || !strings.Contains(err.Error(), "quote") {

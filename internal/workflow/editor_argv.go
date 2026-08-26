@@ -17,6 +17,7 @@ func EditorArgv(editor, path string) ([]string, error) {
 }
 
 func splitQuoted(s string) ([]string, error) {
+	rs := []rune(s)
 	var args []string
 	var cur strings.Builder
 	inSingle := false
@@ -29,7 +30,8 @@ func splitQuoted(s string) ([]string, error) {
 		args = append(args, cur.String())
 		cur.Reset()
 	}
-	for _, r := range s {
+	for i := 0; i < len(rs); i++ {
+		r := rs[i]
 		if escape {
 			cur.WriteRune(r)
 			escape = false
@@ -44,15 +46,14 @@ func splitQuoted(s string) ([]string, error) {
 			continue
 		}
 		if inDouble {
-			if r == '\\' {
-				escape = true
-				continue
+			next, closed, err := consumeDoubleQuoted(&cur, rs, i)
+			if err != nil {
+				return nil, err
 			}
-			if r == '"' {
+			i = next
+			if closed {
 				inDouble = false
-				continue
 			}
-			cur.WriteRune(r)
 			continue
 		}
 		switch {
@@ -76,4 +77,27 @@ func splitQuoted(s string) ([]string, error) {
 		return nil, fmt.Errorf("editor command is empty")
 	}
 	return args, nil
+}
+
+func consumeDoubleQuoted(cur *strings.Builder, rs []rune, i int) (int, bool, error) {
+	r := rs[i]
+	if r == '"' {
+		return i, true, nil
+	}
+	if r != '\\' {
+		cur.WriteRune(r)
+		return i, false, nil
+	}
+	if i+1 >= len(rs) {
+		return 0, false, fmt.Errorf("unclosed quote in editor command")
+	}
+	next := rs[i+1]
+	switch next {
+	case '$', '`', '"', '\\', '\n':
+		cur.WriteRune(next)
+	default:
+		cur.WriteRune('\\')
+		cur.WriteRune(next)
+	}
+	return i + 1, false, nil
 }
