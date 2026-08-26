@@ -94,6 +94,5 @@ func openConsolePane(placement console.Placement) error {
 }
 
 func paneHostUnavailable(err error) bool {
-	var herdr *host.HerdrError
-	return errors.As(err, &herdr)
+	return host.IsTransportLoss(err)
 }
