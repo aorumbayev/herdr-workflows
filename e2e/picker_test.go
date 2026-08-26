@@ -87,7 +87,7 @@ func TestCompiledBinaryPickerEmbedsWithoutTSHooks(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := string(data)
-	for _, want := range []string{"picker requires a tty", "tab | enter run | p console | ctrl+k | esc"} {
+	for _, want := range []string{"picker requires a tty", "enter run | ctrl+p actions | esc"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("missing %q", want)
 		}
