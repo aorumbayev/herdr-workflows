@@ -224,10 +224,38 @@ type errString string
 func (e errString) Error() string { return string(e) }
 
 func TestEditorArgvSplitsFlags(t *testing.T) {
-	got := workflow.EditorArgv("code --wait", "/tmp/config.yaml")
+	got, err := workflow.EditorArgv("code --wait", "/tmp/config.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := []string{"code", "--wait", "/tmp/config.yaml"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("EditorArgv = %#v, want %#v", got, want)
+	}
+}
+
+func TestEditorArgvKeepsQuotedArgument(t *testing.T) {
+	got, err := workflow.EditorArgv("nvim -c 'set ft=yaml'", "/tmp/wf.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"nvim", "-c", "set ft=yaml", "/tmp/wf.yaml"}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("EditorArgv = %#v, want %#v", got, want)
+	}
+	got, err = workflow.EditorArgv(`nvim -c "set ft=yaml"`, "/tmp/wf.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("double quotes EditorArgv = %#v, want %#v", got, want)
+	}
+}
+
+func TestEditorArgvRejectsUnclosedQuote(t *testing.T) {
+	_, err := workflow.EditorArgv("nvim -c 'set ft=yaml", "/tmp/wf.yaml")
+	if err == nil || !strings.Contains(err.Error(), "quote") {
+		t.Fatalf("err = %v", err)
 	}
 }
 
@@ -254,6 +282,33 @@ func TestEditAndValidateSplitsEditorFlags(t *testing.T) {
 	}
 	want := []string{"code", "--wait", path}
 	if strings.Join(argv, " ") != strings.Join(want, " ") {
+		t.Fatalf("argv = %#v, want %#v", argv, want)
+	}
+}
+
+func TestEditAndValidateKeepsQuotedEditorArgument(t *testing.T) {
+	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", t.TempDir())
+	root := t.TempDir()
+	path := filepath.Join(root, "x.yaml")
+	if err := os.WriteFile(path, []byte("version: v1alpha1\nsteps:\n  - run: [echo, hi]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var argv []string
+	result := workflow.EditAndValidate(workflow.EditOpts{
+		Path:     path,
+		Name:     "x",
+		RepoRoot: root,
+		Getenv:   func(string) string { return "nvim -c 'set ft=yaml'" },
+		Run: func(args []string) error {
+			argv = append([]string(nil), args...)
+			return nil
+		},
+	})
+	if !result.OK {
+		t.Fatalf("result = %+v", result)
+	}
+	want := []string{"nvim", "-c", "set ft=yaml", path}
+	if strings.Join(argv, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("argv = %#v, want %#v", argv, want)
 	}
 }

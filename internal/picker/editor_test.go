@@ -10,9 +10,23 @@ import (
 )
 
 func TestEditorCommandSplitsEDITORFlags(t *testing.T) {
-	cmd := editorCommand("code --wait", "/tmp/config.yaml")
+	cmd, err := editorCommand("code --wait", "/tmp/config.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := []string{"code", "--wait", "/tmp/config.yaml"}
 	if strings.Join(cmd.Args, " ") != strings.Join(want, " ") {
+		t.Fatalf("Args = %#v, want %#v", cmd.Args, want)
+	}
+}
+
+func TestEditorCommandKeepsQuotedArgument(t *testing.T) {
+	cmd, err := editorCommand("nvim -c 'set ft=yaml'", "/tmp/config.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"nvim", "-c", "set ft=yaml", "/tmp/config.yaml"}
+	if strings.Join(cmd.Args, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("Args = %#v, want %#v", cmd.Args, want)
 	}
 }

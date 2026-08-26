@@ -524,7 +524,13 @@ func (m Model) beginEdit(path, name string) tea.Cmd {
 		}
 	}
 	repoRoot := m.repoRoot
-	return tea.ExecProcess(editorCommand(editor, path), func(err error) tea.Msg {
+	cmd, err := editorCommand(editor, path)
+	if err != nil {
+		return func() tea.Msg {
+			return editorDoneMsg{name: name, result: workflow.ValidateResult{Error: err.Error()}}
+		}
+	}
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
 		if err != nil {
 			return editorDoneMsg{name: name, result: workflow.ValidateResult{Error: err.Error()}}
 		}

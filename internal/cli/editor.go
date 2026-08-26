@@ -31,7 +31,11 @@ func runEditor(_ *cobra.Command, _ []string) error {
 		_ = host.NotificationShow("herdr-workflows", err.Error())
 		return err
 	}
-	argv := workflow.EditorArgv(editor, path)
+	argv, err := workflow.EditorArgv(editor, path)
+	if err != nil {
+		_ = host.NotificationShow("herdr-workflows", err.Error())
+		return err
+	}
 	proc := exec.Command(argv[0], argv[1:]...)
 	proc.Stdin = os.Stdin
 	proc.Stdout = os.Stdout
