@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/aorumbayev/herdr-workflows/internal/console"
+	"github.com/aorumbayev/herdr-workflows/internal/host"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 )
 
@@ -81,7 +82,7 @@ func (m Model) handleConsolePlace(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.openConsole != nil {
 			if err := m.openConsole(placement, m.consoleLandingWorkflow()); err != nil {
 				m.mode = m.placeBack
-				m.status = "console pane unavailable — is this running inside herdr?"
+				m.status = consoleOpenStatus(err)
 				return m, nil
 			}
 		}
@@ -109,4 +110,11 @@ func (m Model) renderConsolePlace() string {
 	body := formatConsolePlacementBody(m.consolePlaceCursor, m.rememberedPlacement())
 	footer := tui.FormatListFooter(w, m.consolePlaceCursor, len(consolePlacementOptions), "enter open"+tui.ChromeSep+"esc back")
 	return body + "\n" + tui.FormatRule(w) + "\n" + footer
+}
+
+func consoleOpenStatus(err error) string {
+	if host.IsTransportLoss(err) {
+		return "console pane unavailable — is this running inside herdr?"
+	}
+	return "console pane failed" + tui.ChromeSep + err.Error()
 }

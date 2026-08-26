@@ -109,14 +109,14 @@ func EditAndValidate(opts EditOpts) ValidateResult {
 			return cmd.Run()
 		}
 	}
-	if err := run(editorArgv(editor, opts.Path)); err != nil {
+	if err := run(EditorArgv(editor, opts.Path)); err != nil {
 		return ValidateResult{OK: false, Error: err.Error()}
 	}
 	return ValidateFile(opts.Path, opts.Name, opts.RepoRoot)
 }
 
-// editorArgv splits a configured editor command into argv and appends the file
+// EditorArgv splits a configured editor command into argv and appends the file
 // path. EDITOR can include flags, for example "code --wait".
-func editorArgv(editor, path string) []string {
+func EditorArgv(editor, path string) []string {
 	return append(strings.Fields(editor), path)
 }

@@ -223,6 +223,14 @@ type errString string
 
 func (e errString) Error() string { return string(e) }
 
+func TestEditorArgvSplitsFlags(t *testing.T) {
+	got := workflow.EditorArgv("code --wait", "/tmp/config.yaml")
+	want := []string{"code", "--wait", "/tmp/config.yaml"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("EditorArgv = %#v, want %#v", got, want)
+	}
+}
+
 func TestEditAndValidateSplitsEditorFlags(t *testing.T) {
 	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", t.TempDir())
 	root := t.TempDir()

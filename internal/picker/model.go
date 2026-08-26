@@ -3,7 +3,6 @@ package picker
 import (
 	"context"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -525,7 +524,7 @@ func (m Model) beginEdit(path, name string) tea.Cmd {
 		}
 	}
 	repoRoot := m.repoRoot
-	return tea.ExecProcess(exec.Command(editor, path), func(err error) tea.Msg {
+	return tea.ExecProcess(editorCommand(editor, path), func(err error) tea.Msg {
 		if err != nil {
 			return editorDoneMsg{name: name, result: workflow.ValidateResult{Error: err.Error()}}
 		}

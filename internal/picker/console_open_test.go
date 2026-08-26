@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/aorumbayev/herdr-workflows/internal/console"
+	"github.com/aorumbayev/herdr-workflows/internal/host"
 )
 
 func TestPaletteConsoleOpensPlacementChooser(t *testing.T) {
@@ -127,10 +128,12 @@ func TestConsolePlacementRemembersOnlyOnSuccess(t *testing.T) {
 
 func TestConsoleOpenFailureStaysInOverlay(t *testing.T) {
 	m := New(Options{
-		Entries:     catalogEntries(),
-		Width:       80,
-		Height:      30,
-		OpenConsole: func(console.Placement, string) error { return errors.New("dial unix: connection refused") },
+		Entries: catalogEntries(),
+		Width:   80,
+		Height:  30,
+		OpenConsole: func(console.Placement, string) error {
+			return &host.HerdrError{Code: "no_socket", Msg: "HERDR_SOCKET_PATH is not set"}
+		},
 	})
 	m = apply(m, "ctrl+p", "c", "enter")
 	if m.quit {
@@ -142,8 +145,29 @@ func TestConsoleOpenFailureStaysInOverlay(t *testing.T) {
 	if m.status == "" {
 		t.Fatal("failed open must set a status")
 	}
-	if strings.Contains(m.status, "connection refused") {
-		t.Fatalf("status must not dump the raw error: %q", m.status)
+	if !strings.Contains(m.status, "inside herdr") {
+		t.Fatalf("transport loss must keep the no-host status, got %q", m.status)
+	}
+}
+
+func TestConsoleOpenFailureSurfacesHostError(t *testing.T) {
+	m := New(Options{
+		Entries: catalogEntries(),
+		Width:   80,
+		Height:  30,
+		OpenConsole: func(console.Placement, string) error {
+			return &host.HerdrError{Code: "internal", Msg: "pane limit reached"}
+		},
+	})
+	m = apply(m, "ctrl+p", "c", "enter")
+	if m.quit {
+		t.Fatal("failed open must not quit the overlay")
+	}
+	if m.mode != modeList {
+		t.Fatalf("mode = %v, want the workflows list", m.mode)
+	}
+	if !strings.Contains(m.status, "pane limit reached") {
+		t.Fatalf("reachable-host rejection must stay in the status, got %q", m.status)
 	}
 }
 

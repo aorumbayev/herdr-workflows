@@ -2,7 +2,6 @@ package picker
 
 import (
 	"os"
-	"os/exec"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -238,7 +237,7 @@ func (m Model) beginProfileEdit(path, name string) tea.Cmd {
 			return editorDoneMsg{name: name, result: workflow.ValidateResult{Error: err.Error()}}
 		}
 	}
-	return tea.ExecProcess(exec.Command(editor, path), func(err error) tea.Msg {
+	return tea.ExecProcess(editorCommand(editor, path), func(err error) tea.Msg {
 		if err != nil {
 			return editorDoneMsg{name: name, result: workflow.ValidateResult{Error: err.Error()}}
 		}

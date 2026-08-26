@@ -9,6 +9,14 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
+func TestEditorCommandSplitsEDITORFlags(t *testing.T) {
+	cmd := editorCommand("code --wait", "/tmp/config.yaml")
+	want := []string{"code", "--wait", "/tmp/config.yaml"}
+	if strings.Join(cmd.Args, " ") != strings.Join(want, " ") {
+		t.Fatalf("Args = %#v, want %#v", cmd.Args, want)
+	}
+}
+
 func TestOpenEditorDoesNotRunInsideUpdate(t *testing.T) {
 	root := t.TempDir()
 	path := root + "/deploy.yaml"
