@@ -1,8 +1,8 @@
 # herdr 0.8.0 breakage classes
 
-Three ways a workflow written for an older herdr breaks on 0.8.0. Each class loads clean — the
-failure is at run time, so `hwf workflow inspect` passes on the broken file too. Grep for the
-pattern, apply the fix, then re-inspect.
+Three ways a workflow written for an older herdr breaks on 0.8.0. Each class loads. The
+failure is at run time, so `hwf workflow inspect` also passes on the broken file. Grep for the
+pattern, apply the fix, then inspect again.
 
 ## 1. Worktree actions: `workspace_id` vs `cwd`
 

@@ -36,7 +36,7 @@ Input **names** match `[a-z][a-z0-9_]{0,31}` — same rule as step ids, hyphens 
 Mapped-input keys — these seven and no others: `type`, `description`, `default`, `options`,
 `when`, `allow_custom`, `min_length`. Any other key fails to load.
 
-`description:` is the only part of the picker's prompt line an author controls — **write one for
+`description:` is the only part of the picker prompt line that an author controls. **Write one for
 every non-shorthand input**.
 
 Types: `text`, `choice` (static list or `{run: argv}`), `profile`. Only the entry workflow prompts.
@@ -72,7 +72,8 @@ step that has an `id:`, through `{{steps.<id>.…}}`.
 
 ### `run:`
 
-- argv list — local and tab placement avoid a shell. Split placement submits one shell-quoted line. Each element accepts templates
+- argv list — local and tab placement avoid a shell. Split placement submits one shell-quoted line.
+  Each element accepts templates
 - string — shell (`sh` by default, override with `shell:`). No templates in the command text. Use
   `env:` / `HWF_*`
 

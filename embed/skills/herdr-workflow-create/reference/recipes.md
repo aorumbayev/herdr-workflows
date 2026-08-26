@@ -179,10 +179,10 @@ steps:
 
 ## Capture before jq
 
-A pipeline reports only the last command's exit status, and `jq` exits 0 on empty input. So
+A pipeline reports only the last command exit status, and `jq` exits 0 on empty input. So
 `herdr … | jq` hides a herdr failure behind empty output. Capture the output into a variable
-first, in `run:` steps and in dynamic-choice option commands: a herdr failure then aborts the
-command and its stderr reaches the user.
+first, in `run:` steps and in dynamic-choice option commands. A herdr failure then aborts the
+command, and its stderr reaches the user.
 
 ```yaml
 version: v1alpha1
