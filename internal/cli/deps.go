@@ -19,7 +19,6 @@ func liveRunnerDeps() engine.RunnerDeps {
 		AgentStatus:    host.AgentStatus,
 		AgentInfo:      liveAgentInfo,
 		PaneClose:      host.PaneClose,
-		TabClose:       host.TabClose,
 		ReportToken:    host.ReportToken,
 		TranscriptText: liveTranscriptText,
 	}

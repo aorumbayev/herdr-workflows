@@ -193,11 +193,7 @@ func (m Model) handleDiagramInstructionKey(msg tea.KeyPressMsg) (tea.Model, tea.
 		m.instructionDraft = ""
 		return m.finishSendback()
 	case "backspace":
-		if m.instructionDraft == "" {
-			return m, nil
-		}
-		r := []rune(m.instructionDraft)
-		m.instructionDraft = string(r[:len(r)-1])
+		m.instructionDraft = tui.TrimLastRune(m.instructionDraft)
 		return m, nil
 	default:
 		if msg.Mod == 0 && msg.Text != "" {

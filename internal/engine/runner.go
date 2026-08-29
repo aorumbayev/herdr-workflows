@@ -365,7 +365,7 @@ func evaluateReturns(returns *workflow.ReturnsSpec, ns workflow.TemplateNamespac
 }
 
 func workflowStep(frame StepFrame) (StepOutcome, error) {
-	action, ok := asWorkflowAction(frame.Step.Action)
+	action, ok := asAction[workflow.WorkflowAction](frame.Step.Action)
 	if !ok {
 		return StepOutcome{OK: false, Error: "internal: not a workflow step"}, nil
 	}
@@ -558,7 +558,7 @@ func runSteps(steps []workflow.Step, opts StepRunOpts, values workflow.TemplateN
 			continue
 		}
 		emitProgress(opts, n, total, label, ProgressStart)
-		if err := opts.Run.StartStep(StepRef{Ordinal: n, Total: total, Label: label, Phase: PhaseMain}); err != nil {
+		if err := opts.Run.StartStep(); err != nil {
 			return StepsResult{}, err
 		}
 		_ = opts.Recorder.StepStarted(step, n, total, label, PhaseMain)
@@ -618,7 +618,7 @@ func runRecovery(
 		WorkflowPath:  recoveryPath,
 		ParentOrdinal: &parentOrdinal,
 	})
-	if err := opts.Run.StartStep(StepRef{Ordinal: 1, Total: 1, Label: label, Phase: PhaseRecovery}); err != nil {
+	if err := opts.Run.StartStep(); err != nil {
 		return StepOutcome{}, err
 	}
 	_ = recoveryOpts.Recorder.StepStarted(step, 1, 1, label, PhaseRecovery)

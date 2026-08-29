@@ -358,13 +358,6 @@ func StripDeadBindings(text string) string {
 	return out
 }
 
-func derefString(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
-}
-
 func mergeEnv(getenv func(string) string, extra map[string]string) []string {
 	if getenv == nil {
 		getenv = os.Getenv
@@ -458,7 +451,7 @@ func InstallKeybindings(opts KeybindingInstallOpts) KeybindingInstallResult {
 		cleaned = &s
 	}
 
-	missing := cleaned == nil || !strings.Contains(derefString(cleaned), "herdr-workflows.launch")
+	missing := cleaned == nil || !strings.Contains(*cleaned, "herdr-workflows.launch")
 	if !missing && cleaned != nil && original != nil && *cleaned == *original {
 		messages = append(messages, "herdr-workflows keybindings already present; skipping")
 		return KeybindingInstallResult{Messages: messages, Path: path}

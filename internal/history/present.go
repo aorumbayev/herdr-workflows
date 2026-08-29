@@ -1,7 +1,9 @@
 package history
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
@@ -179,26 +181,15 @@ func orderDetailSteps(steps []DetailStep) []DetailStep {
 				children = append(children, pair{step, i})
 			}
 		}
-		for i := 0; i < len(children); i++ {
-			for j := i + 1; j < len(children); j++ {
-				a, b := children[i], children[j]
-				if len(a.step.WorkflowPath) != len(b.step.WorkflowPath) {
-					if len(a.step.WorkflowPath) > len(b.step.WorkflowPath) {
-						children[i], children[j] = b, a
-					}
-					continue
-				}
-				if a.step.Ordinal != b.step.Ordinal {
-					if a.step.Ordinal > b.step.Ordinal {
-						children[i], children[j] = b, a
-					}
-					continue
-				}
-				if a.i > b.i {
-					children[i], children[j] = b, a
-				}
+		slices.SortFunc(children, func(a, b pair) int {
+			if c := cmp.Compare(len(a.step.WorkflowPath), len(b.step.WorkflowPath)); c != 0 {
+				return c
 			}
-		}
+			if c := cmp.Compare(a.step.Ordinal, b.step.Ordinal); c != 0 {
+				return c
+			}
+			return cmp.Compare(a.i, b.i)
+		})
 		for _, child := range children {
 			if len(child.step.WorkflowPath) == len(parent.WorkflowPath)+1 {
 				emit(child.i)
@@ -224,13 +215,12 @@ func orderDetailSteps(steps []DetailStep) []DetailStep {
 			tops = append(tops, pair{step, i})
 		}
 	}
-	for i := 0; i < len(tops); i++ {
-		for j := i + 1; j < len(tops); j++ {
-			if tops[i].step.Ordinal > tops[j].step.Ordinal || (tops[i].step.Ordinal == tops[j].step.Ordinal && tops[i].i > tops[j].i) {
-				tops[i], tops[j] = tops[j], tops[i]
-			}
+	slices.SortFunc(tops, func(a, b pair) int {
+		if c := cmp.Compare(a.step.Ordinal, b.step.Ordinal); c != 0 {
+			return c
 		}
-	}
+		return cmp.Compare(a.i, b.i)
+	})
 	for _, top := range tops {
 		emit(top.i)
 	}

@@ -87,14 +87,10 @@ func (m Model) handleRunsAgentPick(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.agentPanes = nil
 		return m, nil
 	case "up":
-		if m.agentCursor > 0 {
-			m.agentCursor--
-		}
+		m.agentCursor = tui.StepCursor(m.agentCursor, -1, len(m.agentPanes))
 		return m, nil
 	case "down":
-		if m.agentCursor+1 < len(m.agentPanes) {
-			m.agentCursor++
-		}
+		m.agentCursor = tui.StepCursor(m.agentCursor, 1, len(m.agentPanes))
 		return m, nil
 	case "enter":
 		if m.agentCursor < 0 || m.agentCursor >= len(m.agentPanes) {

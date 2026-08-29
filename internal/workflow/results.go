@@ -118,12 +118,7 @@ func ParseVerdictTokens(raw string) ([]string, error) {
 		return nil, fmt.Errorf("--one-of requires at least one verdict token")
 	}
 	for _, token := range tokens {
-		valid := len(token) >= 1 && len(token) <= 32 && token[0] >= 'A' && token[0] <= 'Z'
-		for i := 1; valid && i < len(token); i++ {
-			c := token[i]
-			valid = (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'
-		}
-		if !valid {
+		if !verdictTokenRE.MatchString(token) {
 			return nil, fmt.Errorf("invalid verdict token '%s' — must match %s", token, VerdictTokenPattern)
 		}
 	}

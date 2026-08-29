@@ -260,7 +260,7 @@ func resolveInspectDomains(
 		if !workflow.EvaluateWhen(spec.When, ns) {
 			continue
 		}
-		if spec.Default != nil && !hasKey(values, spec.Name) {
+		if _, ok := values[spec.Name]; spec.Default != nil && !ok {
 			values[spec.Name] = *spec.Default
 			ns.Inputs[spec.Name] = *spec.Default
 		}
@@ -285,7 +285,7 @@ func resolveInspectDomains(
 
 func dynamicChoiceInputsProvided(dynamic workflow.DynamicChoice, provided map[string]string) bool {
 	for _, ref := range workflow.DynamicChoiceInputRefs(dynamic) {
-		if !hasKey(provided, ref) {
+		if _, ok := provided[ref]; !ok {
 			return false
 		}
 	}
@@ -376,9 +376,4 @@ func readYes(in io.Reader) (bool, error) {
 		return false, err
 	}
 	return strings.EqualFold(strings.TrimSpace(line), "y"), nil
-}
-
-func hasKey(m map[string]string, key string) bool {
-	_, ok := m[key]
-	return ok
 }

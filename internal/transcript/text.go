@@ -11,6 +11,8 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/host"
 )
 
+const transcriptTimeoutMs = 30_000
+
 // Options holds the invocation context and the host session seam. If GetInfo is
 // nil, the default is the real herdr agent-session lookup.
 type Options struct {
@@ -53,34 +55,32 @@ func runTranscriptCommand(argv []string, paneID string, info host.AgentSessionIn
 	if cwd == "" {
 		cwd = invocationCwd
 	}
-	result, err := captureCommand(argv, captureOptions{
-		cwd:       cwd,
-		env:       transcriptEnv(paneID, info, invocationCwd),
-		timeoutMs: transcriptTimeoutMs,
+	result, err := caps.Spawn(argv, caps.SpawnOpts{
+		Cwd:              cwd,
+		Env:              transcriptEnv(paneID, info, invocationCwd),
+		TimeoutMs:        transcriptTimeoutMs,
+		MaxCaptureSource: "transcript",
 	})
 	if err != nil {
 		return "", err
 	}
-	if result.timedOut {
-		return "", &host.HerdrError{Code: "transcript_command_failed", Msg: fmt.Sprintf("transcript command for '%s' failed: timed out after %ds", info.Agent, result.timeoutMs/1000)}
+	if result.TimedOut {
+		return "", &host.HerdrError{Code: "transcript_command_failed", Msg: fmt.Sprintf("transcript command for '%s' failed: timed out after %ds", info.Agent, result.TimeoutMs/1000)}
 	}
-	if result.exitCode != 0 {
-		tail := strings.TrimSpace(result.stderr)
+	if result.ExitCode != 0 {
+		tail := strings.TrimSpace(result.Stderr)
 		if tail == "" {
-			tail = fmt.Sprintf("exit %d", result.exitCode)
+			tail = fmt.Sprintf("exit %d", result.ExitCode)
 		}
 		if runes := []rune(tail); len(runes) > 500 {
 			tail = string(runes[len(runes)-500:])
 		}
 		return "", &host.HerdrError{Code: "transcript_command_failed", Msg: fmt.Sprintf("transcript command for '%s' failed: %s", info.Agent, tail)}
 	}
-	if strings.TrimSpace(result.stdout) == "" {
+	if strings.TrimSpace(result.Stdout) == "" {
 		return "", &host.HerdrError{Code: "transcript_command_empty", Msg: fmt.Sprintf("transcript command for '%s' printed nothing", info.Agent)}
 	}
-	if err := caps.AssertUnderCaptureCap("transcript", result.stdout); err != nil {
-		return "", err
-	}
-	return result.stdout, nil
+	return result.Stdout, nil
 }
 
 // Text gives the text transcript for the agent session of a pane. The source

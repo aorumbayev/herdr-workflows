@@ -134,7 +134,6 @@ type RunnerDeps struct {
 	AgentStatus      func(target string) (string, error)
 	AgentInfo        func(target string) (map[string]any, error)
 	PaneClose        func(paneID string) error
-	TabClose         func(tabID string) error
 	ReportToken      func(paneID string, value *string) error
 	TranscriptText   func(paneID string, transcripts map[string]config.TranscriptExtractor, opts TranscriptTextOpts) (string, error)
 	Sleep            func(d time.Duration)

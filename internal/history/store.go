@@ -21,6 +21,7 @@ import (
 const (
 	RetentionKeep = 50
 	historyDBName = "history.db"
+	schemaVersion = 2
 )
 
 const schemaSQL = `
@@ -28,27 +29,12 @@ CREATE TABLE IF NOT EXISTS runs (
 	id TEXT PRIMARY KEY,
 	version INTEGER NOT NULL,
 	expired INTEGER NOT NULL DEFAULT 0,
-	workflow TEXT NOT NULL,
-	title TEXT NOT NULL DEFAULT '',
-	source TEXT NOT NULL,
-	checkout_root TEXT NOT NULL,
 	status TEXT NOT NULL DEFAULT '',
 	started_at TEXT NOT NULL,
 	heartbeat_at TEXT NOT NULL,
-	finished_at TEXT NOT NULL DEFAULT '',
-	current_label TEXT NOT NULL DEFAULT '',
-	progress_done INTEGER,
-	progress_total INTEGER,
-	step_labels TEXT NOT NULL DEFAULT '[]',
-	failure_action TEXT NOT NULL DEFAULT '',
-	failure_exit_code INTEGER,
-	failure_method TEXT NOT NULL DEFAULT '',
-	failure_coordination TEXT NOT NULL DEFAULT '',
-	failure_step_id TEXT NOT NULL DEFAULT '',
 	snapshot TEXT
 );
 CREATE INDEX IF NOT EXISTS runs_list_idx ON runs (expired, started_at DESC, id);
-CREATE INDEX IF NOT EXISTS runs_checkout_idx ON runs (checkout_root, expired, started_at DESC);
 CREATE TABLE IF NOT EXISTS artifacts (
 	run_id TEXT NOT NULL,
 	kind TEXT NOT NULL,
@@ -173,7 +159,7 @@ func migrateSchema(db *sql.DB, ddl string) error {
 	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
 		return err
 	}
-	if _, err := conn.ExecContext(ctx, ddl); err != nil {
+	if err := applySchema(ctx, conn, ddl); err != nil {
 		_, _ = conn.ExecContext(ctx, "ROLLBACK")
 		return err
 	}
@@ -182,6 +168,26 @@ func migrateSchema(db *sql.DB, ddl string) error {
 		return err
 	}
 	return nil
+}
+
+// applySchema rebuilds the cache tables when the stored schema version differs.
+// scratch holds durable user keys, so a rebuild never drops it.
+func applySchema(ctx context.Context, conn *sql.Conn, ddl string) error {
+	var stored int
+	if err := conn.QueryRowContext(ctx, "PRAGMA user_version").Scan(&stored); err != nil {
+		return err
+	}
+	if stored != schemaVersion {
+		drop := `DROP TABLE IF EXISTS runs; DROP TABLE IF EXISTS artifacts;`
+		if _, err := conn.ExecContext(ctx, drop); err != nil {
+			return err
+		}
+		if _, err := conn.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", schemaVersion)); err != nil {
+			return err
+		}
+	}
+	_, err := conn.ExecContext(ctx, ddl)
+	return err
 }
 
 func lockCompanions(path string) {
@@ -234,50 +240,30 @@ func upsertRun(db *sql.DB, snap Snapshot, insert bool) error {
 	if err != nil {
 		return err
 	}
-	sum := ToSummary(snap, time.Now())
-	args := []any{
-		snap.Version, snap.Workflow, snap.Title, snap.Source, snap.CheckoutRoot, snap.Status,
-		snap.StartedAt, snap.HeartbeatAt, snap.FinishedAt, sum.CurrentLabel, progressDone(sum), progressTotal(sum),
-		labelsJSON(sum.StepLabels), failureAction(sum), failureExit(sum), failureMethod(sum), failureCoord(sum), failureStepID(sum), string(blob), snap.ID,
-	}
 	if insert {
-		_, err = db.Exec(`INSERT INTO runs (
-			id, version, expired, workflow, title, source, checkout_root, status,
-			started_at, heartbeat_at, finished_at, current_label, progress_done, progress_total,
-			step_labels, failure_action, failure_exit_code, failure_method, failure_coordination, failure_step_id, snapshot
-		) VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			snap.ID, snap.Version, snap.Workflow, snap.Title, snap.Source, snap.CheckoutRoot, snap.Status,
-			snap.StartedAt, snap.HeartbeatAt, snap.FinishedAt, sum.CurrentLabel, progressDone(sum), progressTotal(sum),
-			labelsJSON(sum.StepLabels), failureAction(sum), failureExit(sum), failureMethod(sum), failureCoord(sum), failureStepID(sum), string(blob),
-		)
+		_, err = db.Exec(`INSERT INTO runs (id, version, expired, status, started_at, heartbeat_at, snapshot)
+			VALUES (?, ?, 0, ?, ?, ?, ?)`,
+			snap.ID, snap.Version, snap.Status, snap.StartedAt, snap.HeartbeatAt, string(blob))
 		return err
 	}
-	res, err := db.Exec(`UPDATE runs SET
-		version=?, workflow=?, title=?, source=?, checkout_root=?, status=?,
-		started_at=?, heartbeat_at=?, finished_at=?, current_label=?, progress_done=?, progress_total=?,
-		step_labels=?, failure_action=?, failure_exit_code=?, failure_method=?, failure_coordination=?, failure_step_id=?, snapshot=?
-		WHERE id=? AND expired=0`, args...)
+	res, err := db.Exec(`UPDATE runs SET version=?, status=?, started_at=?, heartbeat_at=?, snapshot=?
+		WHERE id=? AND expired=0`,
+		snap.Version, snap.Status, snap.StartedAt, snap.HeartbeatAt, string(blob), snap.ID)
 	if err != nil {
 		return err
 	}
 	if n, err := res.RowsAffected(); err == nil && n == 0 {
-		return restoreRun(db, snap, sum, string(blob))
+		return restoreRun(db, snap, string(blob))
 	}
 	return nil
 }
 
 // restoreRun writes a row again after a writer removed it. An expired
 // row causes a conflict and stays expired.
-func restoreRun(db *sql.DB, snap Snapshot, sum Summary, blob string) error {
-	_, err := db.Exec(`INSERT INTO runs (
-		id, version, expired, workflow, title, source, checkout_root, status,
-		started_at, heartbeat_at, finished_at, current_label, progress_done, progress_total,
-		step_labels, failure_action, failure_exit_code, failure_method, failure_coordination, failure_step_id, snapshot
-	) VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`,
-		snap.ID, snap.Version, snap.Workflow, snap.Title, snap.Source, snap.CheckoutRoot, snap.Status,
-		snap.StartedAt, snap.HeartbeatAt, snap.FinishedAt, sum.CurrentLabel, progressDone(sum), progressTotal(sum),
-		labelsJSON(sum.StepLabels), failureAction(sum), failureExit(sum), failureMethod(sum), failureCoord(sum), failureStepID(sum), blob,
-	)
+func restoreRun(db *sql.DB, snap Snapshot, blob string) error {
+	_, err := db.Exec(`INSERT INTO runs (id, version, expired, status, started_at, heartbeat_at, snapshot)
+		VALUES (?, ?, 0, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`,
+		snap.ID, snap.Version, snap.Status, snap.StartedAt, snap.HeartbeatAt, blob)
 	return err
 }
 
@@ -311,19 +297,23 @@ func loadRunRow(id string, getenv config.Env) (snapshotLoad, error) {
 	if version != SnapshotVersion {
 		return snapshotLoad{Incompatible: &IncompatibleSnapshot{ID: id, Version: version}}, nil
 	}
-	if !blob.Valid || blob.String == "" {
-		return snapshotLoad{}, nil
-	}
-	var v any
-	if err := json.Unmarshal([]byte(blob.String), &v); err != nil {
-		return snapshotLoad{}, nil
-	}
-	snap, ok := parseSnapshotValue(v)
+	snap, ok := snapshotFromBlob(blob)
 	if !ok || snap.ID != id {
 		return snapshotLoad{}, nil
 	}
 	snap.HeartbeatAt = heartbeat
 	return snapshotLoad{Snap: &snap}, nil
+}
+
+func snapshotFromBlob(blob sql.NullString) (Snapshot, bool) {
+	if !blob.Valid || blob.String == "" {
+		return Snapshot{}, false
+	}
+	var v any
+	if err := json.Unmarshal([]byte(blob.String), &v); err != nil {
+		return Snapshot{}, false
+	}
+	return parseSnapshotValue(v)
 }
 
 func listRunSummaries(now time.Time, getenv config.Env) ([]Summary, []IncompatibleSnapshot, []string, error) {
@@ -335,10 +325,7 @@ func listRunSummaries(now time.Time, getenv config.Env) ([]Summary, []Incompatib
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	rows, err := db.Query(`SELECT id, workflow, title, source, checkout_root, status, started_at, heartbeat_at, finished_at,
-		current_label, progress_done, progress_total, step_labels,
-		failure_action, failure_exit_code, failure_method, failure_coordination, failure_step_id
-		FROM runs WHERE expired=0 AND version=?`, SnapshotVersion)
+	rows, err := db.Query(`SELECT heartbeat_at, snapshot FROM runs WHERE expired=0 AND version=?`, SnapshotVersion)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -346,12 +333,19 @@ func listRunSummaries(now time.Time, getenv config.Env) ([]Summary, []Incompatib
 	var items []Summary
 	roots := map[string]struct{}{}
 	for rows.Next() {
-		item, root, ok := scanSummary(rows, now)
+		var heartbeat string
+		var blob sql.NullString
+		if err := rows.Scan(&heartbeat, &blob); err != nil {
+			continue
+		}
+		snap, ok := snapshotFromBlob(blob)
 		if !ok {
 			continue
 		}
+		snap.HeartbeatAt = heartbeat
+		item := ToSummary(snap, now)
 		items = append(items, item)
-		roots[root] = struct{}{}
+		roots[item.CheckoutRoot] = struct{}{}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, nil, nil, err
@@ -378,36 +372,6 @@ func listIncompatible(db *sql.DB) ([]IncompatibleSnapshot, error) {
 		out = append(out, row)
 	}
 	return out, rows.Err()
-}
-
-func scanSummary(rows *sql.Rows, now time.Time) (Summary, string, bool) {
-	var item Summary
-	var heartbeat string
-	var progressDone, progressTotal, failExit sql.NullInt64
-	var labelsRaw, failAction, failMethod, failCoord, failStep string
-	if err := rows.Scan(&item.ID, &item.Workflow, &item.Title, &item.Source, &item.CheckoutRoot, &item.Status,
-		&item.StartedAt, &heartbeat, &item.FinishedAt, &item.CurrentLabel, &progressDone, &progressTotal, &labelsRaw,
-		&failAction, &failExit, &failMethod, &failCoord, &failStep); err != nil {
-		return Summary{}, "", false
-	}
-	item.DisplayID = DisplayRunID(item.ID)
-	item.Status = projectStatus(item.Status, heartbeat, now)
-	item.ElapsedMs = elapsedMsBetween(item.StartedAt, item.FinishedAt, item.Status, now)
-	if progressDone.Valid && progressTotal.Valid {
-		item.Progress = &Progress{Done: int(progressDone.Int64), Total: int(progressTotal.Int64)}
-	}
-	if labelsRaw != "" && labelsRaw != "[]" {
-		_ = json.Unmarshal([]byte(labelsRaw), &item.StepLabels)
-	}
-	if failAction != "" {
-		fact := &FailureFact{Action: failAction, Method: failMethod, Coordination: failCoord, StepID: failStep}
-		if failExit.Valid {
-			n := int(failExit.Int64)
-			fact.ExitCode = &n
-		}
-		item.Failure = fact
-	}
-	return item, item.CheckoutRoot, true
 }
 
 func retentionCleanup(getenv config.Env) error {
@@ -455,8 +419,7 @@ func expireRun(db *sql.DB, id string) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.Exec(`UPDATE runs SET expired=1, snapshot=NULL, current_label='', progress_done=NULL, progress_total=NULL,
-		step_labels='[]', failure_action='', failure_exit_code=NULL, failure_method='', failure_coordination='', failure_step_id='' WHERE id=?`, id); err != nil {
+	if _, err := tx.Exec(`UPDATE runs SET expired=1, snapshot=NULL WHERE id=?`, id); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`DELETE FROM artifacts WHERE run_id=?`, id); err != nil {
@@ -484,64 +447,4 @@ func getArtifact(db *sql.DB, id, kind string) (string, bool, error) {
 		return "", false, err
 	}
 	return string(body), true, nil
-}
-
-func labelsJSON(labels []string) string {
-	if len(labels) == 0 {
-		return "[]"
-	}
-	raw, err := json.Marshal(labels)
-	if err != nil {
-		return "[]"
-	}
-	return string(raw)
-}
-
-func progressDone(sum Summary) any {
-	if sum.Progress == nil {
-		return nil
-	}
-	return sum.Progress.Done
-}
-
-func progressTotal(sum Summary) any {
-	if sum.Progress == nil {
-		return nil
-	}
-	return sum.Progress.Total
-}
-
-func failureAction(sum Summary) string {
-	if sum.Failure == nil {
-		return ""
-	}
-	return sum.Failure.Action
-}
-
-func failureExit(sum Summary) any {
-	if sum.Failure == nil || sum.Failure.ExitCode == nil {
-		return nil
-	}
-	return *sum.Failure.ExitCode
-}
-
-func failureMethod(sum Summary) string {
-	if sum.Failure == nil {
-		return ""
-	}
-	return sum.Failure.Method
-}
-
-func failureCoord(sum Summary) string {
-	if sum.Failure == nil {
-		return ""
-	}
-	return sum.Failure.Coordination
-}
-
-func failureStepID(sum Summary) string {
-	if sum.Failure == nil {
-		return ""
-	}
-	return sum.Failure.StepID
 }

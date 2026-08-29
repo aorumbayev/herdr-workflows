@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
+	"github.com/aorumbayev/herdr-workflows/scripts/internal/reporoot"
 )
 
 type ExampleCard struct {
@@ -29,28 +30,11 @@ type exampleSource struct {
 }
 
 func defaultExamplesDir() (string, error) {
-	root, err := repoRoot()
+	root, err := reporoot.Find()
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(root, "examples"), nil
-}
-
-func repoRoot() (string, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", fmt.Errorf("go.mod not found")
-		}
-		dir = parent
-	}
 }
 
 func BuildExamples(dir string) ([]ExampleCard, error) {

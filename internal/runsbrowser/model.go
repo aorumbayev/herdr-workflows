@@ -163,8 +163,7 @@ func (m Model) handleListKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "backspace":
 		if m.filter != "" {
-			r := []rune(m.filter)
-			m.filter = string(r[:len(r)-1])
+			m.filter = tui.TrimLastRune(m.filter)
 			m.cursor, m.offset = 0, 0
 			return m, m.refreshCmd("")
 		}

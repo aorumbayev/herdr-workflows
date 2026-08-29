@@ -1,6 +1,7 @@
 package history
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
@@ -217,6 +218,39 @@ func TestExpiredRunIsNotResurrectedByALateWrite(t *testing.T) {
 	loaded, err := loadSnapshot(w.ID(), getenv)
 	if err != nil || !loaded.Expired {
 		t.Fatalf("loaded = %+v err=%v", loaded, err)
+	}
+}
+
+func TestOldSchemaDatabaseIsRebuilt(t *testing.T) {
+	_, checkout, getenv := testWriterEnv(t)
+	path := historyDBPath(getenv)
+	raw, err := sql.Open("sqlite", historyDSN(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(`CREATE TABLE runs (id TEXT PRIMARY KEY, workflow TEXT NOT NULL);
+		INSERT INTO runs (id, workflow) VALUES ('stale-row', 'old');
+		CREATE TABLE scratch (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
+		INSERT INTO scratch (key, value, updated_at) VALUES ('durable.key', 'kept', '2026-01-01T00:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	listed := ListRuns(ListFilter{}, getenv)
+	if !listed.OK || len(listed.Runs) != 0 || len(listed.Incompatible) != 0 {
+		t.Fatalf("list after rebuild = %+v", listed)
+	}
+	w := NewWriter(getenv)
+	defer w.Dispose()
+	if w.Claim(ClaimMeta{Workflow: "demo", Source: "repo", CheckoutRoot: checkout}).State != "claimed" {
+		t.Fatal("claim after rebuild")
+	}
+	if value, err := ScratchGet("durable.key", getenv); err != nil || value != "kept" {
+		t.Fatalf("scratch after rebuild = %q, %v; want durable keys to survive", value, err)
 	}
 }
 

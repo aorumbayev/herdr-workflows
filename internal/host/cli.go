@@ -34,12 +34,6 @@ func herdrCLI(args []string) (cliResult, error) {
 	return cliResult{stdout: stdout.String(), stderr: stderr.String()}, nil
 }
 
-// TabClose closes a herdr tab.
-func TabClose(tabID string) error {
-	_, err := HerdrCall("tab.close", map[string]any{"tab_id": tabID})
-	return err
-}
-
 // PaneClose closes a herdr pane.
 func PaneClose(paneID string) error {
 	_, err := HerdrCall("pane.close", map[string]any{"pane_id": paneID})

@@ -266,11 +266,8 @@ func stepTemplates(step Step) []TemplatePath {
 	return collectActionTemplates(step.Action, out)
 }
 
-// sensitiveContextKeys are context keys that can expose transcript data.
-var sensitiveContextKeys = map[string]bool{"transcript": true, "transcript_file": true}
-
 func isSensitiveContextPath(path TemplatePath) bool {
-	return path.Root == "context" && len(path.Segments) > 0 && sensitiveContextKeys[path.Segments[0]]
+	return path.Root == "context" && len(path.Segments) > 0 && SensitiveContextKeys[path.Segments[0]]
 }
 
 // TemplateRefs lists every template that workflow steps, returns,

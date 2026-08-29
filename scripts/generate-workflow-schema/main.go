@@ -400,21 +400,14 @@ func schemaJSON() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	raw, err := json.Marshal(schema)
+	raw, err := json.MarshalIndent(schema, "", "  ")
 	if err != nil {
 		return nil, err
 	}
 	raw = bytes.ReplaceAll(raw, []byte(`\u003c`), []byte("<"))
 	raw = bytes.ReplaceAll(raw, []byte(`\u003e`), []byte(">"))
 	raw = bytes.ReplaceAll(raw, []byte(`\u0026`), []byte("&"))
-	var output bytes.Buffer
-	encoder := json.NewEncoder(&output)
-	encoder.SetEscapeHTML(false)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(json.RawMessage(raw)); err != nil {
-		return nil, err
-	}
-	return bytes.TrimSuffix(output.Bytes(), []byte{'\n'}), nil
+	return raw, nil
 }
 
 func writeSchema(path string) error {
@@ -426,16 +419,12 @@ func writeSchema(path string) error {
 }
 
 func main() {
-	docsPath := filepath.Join("docs", "workflow.schema.json")
-	if err := writeSchema(docsPath); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	for _, dir := range []string{"docs", "embed"} {
+		path := filepath.Join(dir, "workflow.schema.json")
+		if err := writeSchema(path); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Printf("wrote %s\n", path)
 	}
-	fmt.Printf("wrote %s\n", docsPath)
-	embedPath := filepath.Join("embed", "workflow.schema.json")
-	if err := writeSchema(embedPath); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	fmt.Printf("wrote %s\n", embedPath)
 }

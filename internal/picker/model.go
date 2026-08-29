@@ -3,6 +3,7 @@ package picker
 import (
 	"context"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -391,8 +392,7 @@ func (m Model) handleList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "backspace":
 		if m.filter != "" {
-			r := []rune(m.filter)
-			m.filter = string(r[:len(r)-1])
+			m.filter = tui.TrimLastRune(m.filter)
 			m.cursor, m.offset = 0, 0
 		}
 	default:
@@ -586,10 +586,7 @@ func (m Model) handleNewName(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.status = ""
 		return m, nil
 	case "backspace":
-		if m.promptValue != "" {
-			r := []rune(m.promptValue)
-			m.promptValue = string(r[:len(r)-1])
-		}
+		m.promptValue = tui.TrimLastRune(m.promptValue)
 	default:
 		if msg.Mod == 0 && msg.Text != "" {
 			m.promptValue += msg.Text
@@ -690,8 +687,7 @@ func (m Model) handleInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.inputBack()
 	case "backspace":
 		if m.filter != "" {
-			r := []rune(m.filter)
-			m.filter = string(r[:len(r)-1])
+			m.filter = tui.TrimLastRune(m.filter)
 			m.cursor, m.offset = 0, 0
 		}
 	default:
@@ -768,10 +764,7 @@ func (m Model) handleInputText(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeInput
 		return m, nil
 	case "backspace":
-		if m.promptValue != "" {
-			r := []rune(m.promptValue)
-			m.promptValue = string(r[:len(r)-1])
-		}
+		m.promptValue = tui.TrimLastRune(m.promptValue)
 	default:
 		if msg.Mod == 0 && msg.Text != "" {
 			m.promptValue += msg.Text
@@ -935,19 +928,10 @@ func restoredText(hasAnswer bool, answer string, fallback *string) string {
 
 func choiceCursor(rows []string, hasAnswer bool, answer string, fallback *string) int {
 	if hasAnswer {
-		return indexOf(rows, answer)
+		return max(0, slices.Index(rows, answer))
 	}
 	if fallback != nil {
-		return indexOf(rows, *fallback)
-	}
-	return 0
-}
-
-func indexOf(items []string, want string) int {
-	for i, item := range items {
-		if item == want {
-			return i
-		}
+		return max(0, slices.Index(rows, *fallback))
 	}
 	return 0
 }

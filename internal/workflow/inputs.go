@@ -1,26 +1,20 @@
 package workflow
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 	"sync"
-	"sync/atomic"
-	"syscall"
 	"time"
 	"unicode/utf8"
 
 	"github.com/aorumbayev/herdr-workflows/internal/caps"
 	"github.com/aorumbayev/herdr-workflows/internal/config"
-	"gopkg.in/yaml.v3"
 )
 
 // SchemaPointer returns the language-server schema pointer for this build.
@@ -50,285 +44,6 @@ func WithPinnedSchemaPointer(text string) string {
 	return pointer + "\n" + strings.Join(kept, "\n")
 }
 
-// DumpWorkflow emits reviewable YAML from a parsed Document.
-func DumpWorkflow(doc Document) (string, error) {
-	entries := []dumpEntry{{key: "version", value: dumpNode(doc.Version)}}
-	if doc.Title != "" {
-		entries = append(entries, dumpEntry{key: "title", value: dumpNode(doc.Title)})
-	}
-	if doc.Description != "" {
-		entries = append(entries, dumpEntry{key: "description", value: dumpNode(doc.Description)})
-	}
-	if doc.Hidden {
-		entries = append(entries, dumpEntry{key: "hidden", value: dumpNode(true)})
-	}
-	if len(doc.Inputs) > 0 {
-		inputEntries := make([]dumpEntry, 0, len(doc.Inputs))
-		for _, input := range doc.Inputs {
-			inputEntries = append(inputEntries, dumpEntry{key: input.Name, value: dumpInputNode(input.Value)})
-		}
-		entries = append(entries, dumpEntry{key: "inputs", value: dumpMapping(inputEntries)})
-	}
-	if doc.Returns != nil {
-		if doc.Returns.Template != "" {
-			entries = append(entries, dumpEntry{key: "returns", value: dumpNode(doc.Returns.Template)})
-		} else {
-			returnEntries := make([]dumpEntry, 0, len(doc.Returns.Fields))
-			for _, field := range doc.Returns.Fields {
-				returnEntries = append(returnEntries, dumpEntry{key: field.Name, value: dumpNode(field.Template)})
-			}
-			entries = append(entries, dumpEntry{key: "returns", value: dumpMapping(returnEntries)})
-		}
-	}
-	stepNodes := make([]*yaml.Node, len(doc.Steps))
-	for i, step := range doc.Steps {
-		stepNodes[i] = dumpStepNode(step)
-	}
-	entries = append(entries, dumpEntry{key: "steps", value: dumpSequence(stepNodes)})
-	if doc.OnFailure != nil {
-		entries = append(entries, dumpEntry{key: "on_failure", value: dumpMapping(dumpActionEntries(doc.OnFailure))})
-	}
-	data, err := yaml.Marshal(dumpMapping(entries))
-	if err != nil {
-		return "", err
-	}
-	return SchemaPointer() + "\n" + string(data), nil
-}
-
-type dumpEntry struct {
-	key   string
-	value *yaml.Node
-}
-
-func dumpNode(value any) *yaml.Node {
-	data, err := yaml.Marshal(value)
-	if err != nil {
-		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: fmt.Sprint(value)}
-	}
-	var document yaml.Node
-	if yaml.Unmarshal(data, &document) != nil || len(document.Content) == 0 {
-		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: fmt.Sprint(value)}
-	}
-	return document.Content[0]
-}
-
-func dumpMapping(entries []dumpEntry) *yaml.Node {
-	node := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	for _, entry := range entries {
-		node.Content = append(node.Content, dumpNode(entry.key), entry.value)
-	}
-	return node
-}
-
-func dumpSequence(values []*yaml.Node) *yaml.Node {
-	node := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
-	node.Content = append(node.Content, values...)
-	return node
-}
-
-func dumpInputNode(value RawInputValue) *yaml.Node {
-	switch input := value.(type) {
-	case RawInputShorthand:
-		return dumpNode(string(input))
-	case RawInputStatic:
-		values := make([]*yaml.Node, len(input))
-		for i, option := range input {
-			values[i] = dumpNode(option)
-		}
-		return dumpSequence(values)
-	case *RawInputMap:
-		entries := []dumpEntry{}
-		if input.Type != "" {
-			entries = append(entries, dumpEntry{key: "type", value: dumpNode(input.Type)})
-		}
-		if input.Description != nil {
-			entries = append(entries, dumpEntry{key: "description", value: dumpNode(*input.Description)})
-		}
-		if input.Default != nil {
-			entries = append(entries, dumpEntry{key: "default", value: dumpNode(*input.Default)})
-		}
-		if input.Options != nil {
-			if input.Options.Dynamic != nil {
-				args := make([]*yaml.Node, len(input.Options.Dynamic.Run))
-				for i, arg := range input.Options.Dynamic.Run {
-					args[i] = dumpNode(arg)
-				}
-				entries = append(entries, dumpEntry{key: "options", value: dumpMapping([]dumpEntry{{key: "run", value: dumpSequence(args)}})})
-			} else {
-				options := make([]*yaml.Node, len(input.Options.Static))
-				for i, option := range input.Options.Static {
-					options[i] = dumpNode(option)
-				}
-				entries = append(entries, dumpEntry{key: "options", value: dumpSequence(options)})
-			}
-		}
-		if len(input.When) == 1 {
-			entries = append(entries, dumpEntry{key: "when", value: dumpNode(input.When[0])})
-		} else if len(input.When) > 1 {
-			clauses := make([]*yaml.Node, len(input.When))
-			for i, clause := range input.When {
-				clauses[i] = dumpNode(clause)
-			}
-			entries = append(entries, dumpEntry{key: "when", value: dumpSequence(clauses)})
-		}
-		if input.AllowCustom != nil {
-			entries = append(entries, dumpEntry{key: "allow_custom", value: dumpNode(*input.AllowCustom)})
-		}
-		if input.MinLength != nil {
-			entries = append(entries, dumpEntry{key: "min_length", value: dumpNode(*input.MinLength)})
-		}
-		return dumpMapping(entries)
-	default:
-		return dumpNode(nil)
-	}
-}
-
-func dumpStepNode(step Step) *yaml.Node {
-	entries := dumpActionEntries(step.Action)
-	if step.ID != "" {
-		entries = append(entries, dumpEntry{key: "id", value: dumpNode(step.ID)})
-	}
-	if len(step.When) == 1 {
-		entries = append(entries, dumpEntry{key: "when", value: dumpNode(formatWhen(step.When[0]))})
-	} else if len(step.When) > 1 {
-		clauses := make([]*yaml.Node, len(step.When))
-		for j, clause := range step.When {
-			clauses[j] = dumpNode(formatWhen(clause))
-		}
-		entries = append(entries, dumpEntry{key: "when", value: dumpSequence(clauses)})
-	}
-	if step.ContinueOnError {
-		entries = append(entries, dumpEntry{key: "continue_on_error", value: dumpNode(true)})
-	}
-	return dumpMapping(entries)
-}
-
-func formatWhen(clause WhenSpec) string {
-	if clause.Kind == WhenTruthy {
-		return "{{" + clause.Path + "}}"
-	}
-	op := "=="
-	if clause.Negate {
-		op = "!="
-	}
-	return fmt.Sprintf("{{%s}} %s %q", clause.Path, op, clause.Value)
-}
-
-func dumpActionEntries(action Action) []dumpEntry {
-	entries := []dumpEntry{}
-	switch value := action.(type) {
-	case AgentAction:
-		entries = append(entries, dumpEntry{key: "agent", value: dumpNode(value.Prompt)})
-		if value.Using != "" {
-			entries = append(entries, dumpEntry{key: "using", value: dumpNode(value.Using)})
-		}
-		if value.Target != "" {
-			entries = append(entries, dumpEntry{key: "target", value: dumpNode(value.Target)})
-		}
-		entries = append(entries, dumpCommonActionFields(value.Cwd, value.Env, value.Pane, value.Background, value.Timeout)...)
-		if value.Expect != nil {
-			expect := []dumpEntry{{key: "one_of", value: dumpNode(value.Expect.OneOf)}}
-			if len(value.Expect.Require) > 0 {
-				expect = append(expect, dumpEntry{key: "require", value: dumpNode(value.Expect.Require)})
-			}
-			entries = append(entries, dumpEntry{key: "expect", value: dumpMapping(expect)})
-		}
-	case RunAction:
-		if value.Payload.IsArgv() {
-			entries = append(entries, dumpEntry{key: "run", value: dumpNode(value.Payload.Argv)})
-		} else {
-			entries = append(entries, dumpEntry{key: "run", value: dumpNode(value.Payload.Command)})
-			if value.Payload.Shell != "" {
-				entries = append(entries, dumpEntry{key: "shell", value: dumpNode(value.Payload.Shell)})
-			}
-		}
-		entries = append(entries, dumpCommonActionFields(value.Cwd, value.Env, value.Pane, value.Background, value.Timeout)...)
-		if value.ReadyWhen != "" {
-			entries = append(entries, dumpEntry{key: "ready_when", value: dumpNode("/" + value.ReadyWhen + "/")})
-		}
-		if value.Retry != nil {
-			entries = append(entries, dumpEntry{key: "retry", value: dumpRetryNode(value.Retry)})
-		}
-		if len(value.SuccessCodes) > 0 {
-			entries = append(entries, dumpEntry{key: "success_codes", value: dumpNode(value.SuccessCodes)})
-		}
-	case HerdrAction:
-		entries = append(entries, dumpEntry{key: "herdr", value: dumpNode(value.Method)})
-		if value.Params != nil {
-			entries = append(entries, dumpEntry{key: "params", value: dumpNode(value.Params)})
-		}
-		if value.Retry != nil {
-			entries = append(entries, dumpEntry{key: "retry", value: dumpRetryNode(value.Retry)})
-		}
-	case WorkflowAction:
-		entries = append(entries, dumpEntry{key: "workflow", value: dumpNode(value.Name)})
-		if value.Inputs != nil {
-			entries = append(entries, dumpEntry{key: "inputs", value: dumpNode(value.Inputs)})
-		}
-	}
-	return entries
-}
-
-func dumpCommonActionFields(cwd string, env map[string]string, pane *PaneSpec, background bool, timeout time.Duration) []dumpEntry {
-	entries := []dumpEntry{}
-	if cwd != "" {
-		entries = append(entries, dumpEntry{key: "cwd", value: dumpNode(cwd)})
-	}
-	if env != nil {
-		keys := make([]string, 0, len(env))
-		for key := range env {
-			keys = append(keys, key)
-		}
-		slices.Sort(keys)
-		values := make([]dumpEntry, 0, len(keys))
-		for _, key := range keys {
-			values = append(values, dumpEntry{key: key, value: dumpNode(env[key])})
-		}
-		entries = append(entries, dumpEntry{key: "env", value: dumpMapping(values)})
-	}
-	if pane != nil {
-		entries = append(entries, dumpEntry{key: "pane", value: dumpPaneNode(pane)})
-	}
-	if background {
-		entries = append(entries, dumpEntry{key: "background", value: dumpNode(true)})
-	}
-	if timeout != 0 {
-		entries = append(entries, dumpEntry{key: "timeout", value: dumpNode(timeout.String())})
-	}
-	return entries
-}
-
-func dumpPaneNode(pane *PaneSpec) *yaml.Node {
-	entries := []dumpEntry{{key: "open", value: dumpNode(pane.Open)}}
-	if pane.Anchor != "" {
-		entries = append(entries, dumpEntry{key: "target", value: dumpNode(pane.Anchor)})
-	}
-	if pane.Workspace != "" {
-		entries = append(entries, dumpEntry{key: "workspace", value: dumpNode(pane.Workspace)})
-	}
-	if pane.Size != nil {
-		entries = append(entries, dumpEntry{key: "size", value: dumpNode(*pane.Size)})
-	}
-	if pane.Focus != nil {
-		entries = append(entries, dumpEntry{key: "focus", value: dumpNode(*pane.Focus)})
-	}
-	if pane.Name != "" {
-		entries = append(entries, dumpEntry{key: "name", value: dumpNode(pane.Name)})
-	}
-	if pane.Close != "" {
-		entries = append(entries, dumpEntry{key: "close", value: dumpNode(pane.Close)})
-	}
-	return dumpMapping(entries)
-}
-
-func dumpRetryNode(retry *RetrySpec) *yaml.Node {
-	entries := []dumpEntry{{key: "attempts", value: dumpNode(retry.Attempts)}}
-	if retry.Delay != 0 {
-		entries = append(entries, dumpEntry{key: "delay", value: dumpNode(retry.Delay.String())})
-	}
-	return dumpMapping(entries)
-}
-
 // ParseDynamicChoiceStdout normalizes one choice per output line.
 func ParseDynamicChoiceStdout(stdout string) []string {
 	seen := map[string]bool{}
@@ -350,147 +65,6 @@ const (
 	stderrTail           = 500
 )
 
-type captureOutcome struct {
-	stdout   string
-	stderr   string
-	exitCode int
-	timedOut bool
-}
-
-type captureBudget struct {
-	total  atomic.Int64
-	limit  int64
-	source string
-}
-
-func (b *captureBudget) add(size int) error {
-	total := b.total.Add(int64(size))
-	if total > b.limit {
-		return &caps.CaptureLimitError{Source: b.source, Bytes: int(total), Limit: int(b.limit)}
-	}
-	return nil
-}
-
-func readCapture(reader io.Reader, budget *captureBudget, overflow chan<- error) ([]byte, error) {
-	var result bytes.Buffer
-	buffer := make([]byte, 32*1024)
-	for {
-		n, err := reader.Read(buffer)
-		if n > 0 {
-			if budgetErr := budget.add(n); budgetErr != nil {
-				overflow <- budgetErr
-				return nil, nil
-			}
-			_, _ = result.Write(buffer[:n])
-		}
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return result.Bytes(), nil
-			}
-			return nil, err
-		}
-	}
-}
-
-func killProcessGroup(cmd *exec.Cmd) {
-	if cmd.Process == nil {
-		return
-	}
-	if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil {
-		_ = cmd.Process.Kill()
-	}
-}
-
-func runDynamicCommand(ctx context.Context, argv []string, repoRoot, source string) (captureOutcome, error) {
-	if len(argv) == 0 {
-		return captureOutcome{}, fmt.Errorf("empty dynamic choice command")
-	}
-	cmd := exec.Command(argv[0], argv[1:]...)
-	cmd.Dir = repoRoot
-	cmd.Env = os.Environ()
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return captureOutcome{}, err
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return captureOutcome{}, err
-	}
-	if err := cmd.Start(); err != nil {
-		return captureOutcome{}, err
-	}
-	overflow := make(chan error, 2)
-	budget := &captureBudget{limit: caps.CaptureByteLimit, source: source}
-	stdoutDone := make(chan []byte, 1)
-	stderrDone := make(chan []byte, 1)
-	go func() {
-		value, readErr := readCapture(stdout, budget, overflow)
-		if readErr != nil {
-			overflow <- readErr
-		}
-		stdoutDone <- value
-	}()
-	go func() {
-		value, readErr := readCapture(stderr, budget, overflow)
-		if readErr != nil {
-			overflow <- readErr
-		}
-		stderrDone <- value
-	}()
-
-	stop := make(chan struct{})
-	stopped := make(chan struct{})
-	reason := make(chan error, 1)
-	go func() {
-		defer close(stopped)
-		select {
-		case err := <-overflow:
-			killProcessGroup(cmd)
-			reason <- err
-		case <-ctx.Done():
-			killProcessGroup(cmd)
-			reason <- context.DeadlineExceeded
-		case <-stop:
-		}
-	}()
-	stdoutBytes := <-stdoutDone
-	stderrBytes := <-stderrDone
-	var stopErr error
-	select {
-	case stopErr = <-overflow:
-		killProcessGroup(cmd)
-	default:
-	}
-	close(stop)
-	waitErr := cmd.Wait()
-	<-stopped
-	if stopErr == nil {
-		select {
-		case stopErr = <-reason:
-		default:
-		}
-	}
-	out := captureOutcome{timedOut: errors.Is(stopErr, context.DeadlineExceeded)}
-	out.stdout = string(stdoutBytes)
-	out.stderr = string(stderrBytes)
-	if stopErr != nil && !out.timedOut {
-		return captureOutcome{}, stopErr
-	}
-	if out.timedOut {
-		return out, nil
-	}
-	if waitErr == nil {
-		return out, nil
-	}
-	var exitErr *exec.ExitError
-	if errors.As(waitErr, &exitErr) {
-		out.exitCode = exitErr.ExitCode()
-		return out, nil
-	}
-	return captureOutcome{}, waitErr
-}
-
 // ResolveDynamicChoices executes one validated direct-argv choice command.
 func ResolveDynamicChoices(ctx context.Context, file, name string, dynamic DynamicChoice, repoRoot string, values map[string]string) ([]string, error) {
 	ns := TemplateNamespace{Inputs: map[string]any{}, Steps: map[string]any{}, Context: map[string]any{}}
@@ -503,24 +77,29 @@ func ResolveDynamicChoices(ctx context.Context, file, name string, dynamic Dynam
 	}
 	commandCtx, cancel := context.WithTimeout(ctx, dynamicChoiceTimeout)
 	defer cancel()
-	outcome, err := runDynamicCommand(commandCtx, argv, repoRoot, "inputs."+name+" dynamic choice")
+	outcome, err := caps.Spawn(argv, caps.SpawnOpts{
+		Cwd:              repoRoot,
+		Env:              os.Environ(),
+		Ctx:              commandCtx,
+		MaxCaptureSource: "inputs." + name + " dynamic choice",
+	})
 	if err != nil {
 		return nil, err
 	}
-	if outcome.timedOut {
+	if outcome.TimedOut {
 		return nil, bail(file, 0, "inputs."+name, "dynamic choice failed: timed out after 10s")
 	}
-	if outcome.exitCode != 0 {
-		tail := strings.TrimSpace(outcome.stderr)
+	if outcome.ExitCode != 0 {
+		tail := strings.TrimSpace(outcome.Stderr)
 		if len(tail) > stderrTail {
 			tail = tail[len(tail)-stderrTail:]
 		}
 		if tail == "" {
-			tail = fmt.Sprintf("exit %d", outcome.exitCode)
+			tail = fmt.Sprintf("exit %d", outcome.ExitCode)
 		}
 		return nil, bail(file, 0, "inputs."+name, "dynamic choice failed: "+tail)
 	}
-	choices := ParseDynamicChoiceStdout(outcome.stdout)
+	choices := ParseDynamicChoiceStdout(outcome.Stdout)
 	if len(choices) == 0 {
 		return nil, bail(file, 0, "inputs."+name, "dynamic choice produced no options")
 	}

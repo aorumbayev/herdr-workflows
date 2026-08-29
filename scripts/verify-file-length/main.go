@@ -9,9 +9,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
+
+	"github.com/aorumbayev/herdr-workflows/scripts/internal/reporoot"
 )
 
 const maxLines = 2500
@@ -107,20 +108,16 @@ func countLines(path string) (int, error) {
 	return n, sc.Err()
 }
 
-func defaultRepoRoot() string {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		wd, _ := os.Getwd()
-		return wd
-	}
-	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
-}
-
 func repoRoot() string {
 	if len(os.Args) > 1 {
 		return os.Args[1]
 	}
-	return defaultRepoRoot()
+	root, err := reporoot.Find()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	return root
 }
 
 func main() {

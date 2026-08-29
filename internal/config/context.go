@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cmp"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -38,15 +39,6 @@ type ctxJSON struct {
 	} `json:"pane"`
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
 func readInvocationContext(getenv Env) InvocationContext {
 	env := envOr(getenv)
 	var injected ctxJSON
@@ -55,12 +47,12 @@ func readInvocationContext(getenv Env) InvocationContext {
 	}
 	cwd, _ := os.Getwd()
 	return InvocationContext{
-		WorkspaceID:  firstNonEmpty(env("HERDR_WORKSPACE_ID"), injected.WorkspaceID, injected.Workspace.WorkspaceID),
-		TabID:        firstNonEmpty(env("HERDR_TAB_ID"), injected.TabID, injected.Tab.TabID),
-		PaneID:       firstNonEmpty(env("HERDR_PANE_ID"), injected.FocusedPaneID, injected.PaneID, injected.Pane.PaneID),
+		WorkspaceID:  cmp.Or(env("HERDR_WORKSPACE_ID"), injected.WorkspaceID, injected.Workspace.WorkspaceID),
+		TabID:        cmp.Or(env("HERDR_TAB_ID"), injected.TabID, injected.Tab.TabID),
+		PaneID:       cmp.Or(env("HERDR_PANE_ID"), injected.FocusedPaneID, injected.PaneID, injected.Pane.PaneID),
 		WorktreePath: injected.Worktree.CheckoutPath,
 		Selection:    injected.SelectedText,
-		Cwd:          firstNonEmpty(injected.Worktree.CheckoutPath, injected.FocusedPaneCwd, injected.WorkspaceCwd, cwd),
+		Cwd:          cmp.Or(injected.Worktree.CheckoutPath, injected.FocusedPaneCwd, injected.WorkspaceCwd, cwd),
 	}
 }
 

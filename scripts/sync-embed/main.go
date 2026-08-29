@@ -16,6 +16,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/aorumbayev/herdr-workflows/scripts/internal/reporoot"
 )
 
 type copySpec struct {
@@ -71,24 +73,8 @@ func copyFile(src, dst string) error {
 	return err
 }
 
-func repoRoot() (string, error) {
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	for dir := filepath.Clean(wd); ; dir = filepath.Dir(dir) {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", fmt.Errorf("sync-embed: no go.mod above %s", wd)
-		}
-	}
-}
-
 func main() {
-	root, err := repoRoot()
+	root, err := reporoot.Find()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
