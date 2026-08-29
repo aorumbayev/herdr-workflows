@@ -27,7 +27,7 @@ func TestCompactFrameKeepsTabBarAsFirstLine(t *testing.T) {
 	if len(lines) != height {
 		t.Fatalf("compact frame = %d lines, want the popup height %d:\n%s", len(lines), height, body)
 	}
-	want := visibleLine(FormatTabBar(tui.TabWorkflows, m.contentWidth()))
+	want := visibleLine(tui.PadContentLine(FormatTabBar(tui.TabWorkflows, m.contentWidth()), m.contentWidth()))
 	if got := visibleLine(lines[0]); got != want {
 		t.Fatalf("first rendered line = %q, want the tab bar %q:\n%s", got, want, body)
 	}

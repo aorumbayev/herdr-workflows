@@ -112,11 +112,24 @@ func popupSize(value string) any {
 	return nil
 }
 
-// NotificationShow sends a herdr notification with the CLI.
+// NotificationShow sends a herdr notification with the CLI and the default sound.
 func NotificationShow(title string, body ...string) error {
+	text := ""
+	if len(body) > 0 {
+		text = body[0]
+	}
+	return NotificationShowSound(title, text, "")
+}
+
+// NotificationShowSound names the herdr toast sound: none, done, or request.
+// An empty sound keeps the herdr default.
+func NotificationShowSound(title, body, sound string) error {
 	args := []string{"notification", "show", title}
-	if len(body) > 0 && body[0] != "" {
-		args = append(args, "--body", body[0])
+	if body != "" {
+		args = append(args, "--body", body)
+	}
+	if sound != "" {
+		args = append(args, "--sound", sound)
 	}
 	res, err := herdrCLI(args)
 	if err != nil {

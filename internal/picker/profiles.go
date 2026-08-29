@@ -87,6 +87,8 @@ func (m Model) handleProfilesKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.status = ""
 	case "tab":
 		return m.cycleRootTab()
+	case "shift+tab":
+		return m.cycleRootTabBack()
 	case "esc":
 		m.quit = true
 		return m, tea.Quit

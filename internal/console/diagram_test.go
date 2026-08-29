@@ -31,7 +31,6 @@ func TestFormatDiagramHandoff(t *testing.T) {
 		"agent",
 		"pane: tab",
 		"close: success",
-		"notification.show",
 		"pane: {{inputs.placement}}",
 		"bg",
 		"tab.close",

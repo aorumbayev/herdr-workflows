@@ -97,9 +97,7 @@ func buildPickerOptions(app config.AppContext, entries []workflow.ListEntry) pic
 			return exported.Command, nil
 		},
 		LaunchRun: func(opts picker.LaunchRunOpts) picker.LaunchRunHandle {
-			acks := make(chan string, 16)
-			settled := make(chan picker.LaunchSettled, 1)
-			progress := make(chan string, 16)
+			events := make(chan picker.LaunchEvent, 16)
 			handle := engine.LaunchDetachedRun(engine.LaunchRunRequest{
 				Name:       opts.Name,
 				RepoRoot:   opts.RepoRoot,
@@ -109,28 +107,16 @@ func buildPickerOptions(app config.AppContext, entries []workflow.ListEntry) pic
 				Domains:    opts.Domains,
 				RunID:      opts.RunID,
 				OnHistoryAck: func(line string) {
-					acks <- line
-				},
-				OnProgressLine: func(line string) {
-					select {
-					case progress <- line:
-					default:
-					}
+					events <- picker.LaunchEvent{Ack: line}
 				},
 			})
 			go func() {
-				r := <-handle.Result
-				settled <- picker.LaunchSettled{OK: r.OK, Detail: r.Detail, RunID: opts.RunID}
-				close(acks)
-				close(progress)
-				close(settled)
+				if r := <-handle.Result; !r.OK {
+					events <- picker.LaunchEvent{Fail: r.Detail}
+				}
+				close(events)
 			}()
-			return picker.LaunchRunHandle{
-				Detach:   handle.Detach,
-				Acks:     acks,
-				Settled:  settled,
-				Progress: progress,
-			}
+			return picker.LaunchRunHandle{Detach: handle.Detach, Events: events}
 		},
 		OpenConsole: func(placement console.Placement, workflowName string) error {
 			env := map[string]string{"HERDR_WORKFLOWS_REPO_ROOT": repoRoot}

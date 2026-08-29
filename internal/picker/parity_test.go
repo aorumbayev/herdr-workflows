@@ -6,12 +6,10 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
-	"github.com/aorumbayev/herdr-workflows/internal/history"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
@@ -118,7 +116,8 @@ var requiredPickerParityScenarios = []string{
 	"Cycle to profiles",
 	"Return to workflows",
 	"Tab bar shows the active browser",
-	"Tab bar names the key",
+	"Tab bar centers in the popup",
+	"Shift+Tab cycles backward",
 	"Tab never quits the overlay",
 	"Profiles listed with source column",
 	"Profiles filter by typed text",
@@ -139,8 +138,8 @@ var requiredPickerParityScenarios = []string{
 	"Content keeps the terminal foreground",
 	"Child acknowledges start",
 	"Child cannot record history",
+	"History refuses the claim",
 	"Child fails before claim",
-	"Fast successful workflow",
 	"Leave an active launch",
 	"Newer release appears after mount",
 	"Update service is unavailable",
@@ -160,6 +159,7 @@ var requiredPickerParityScenarios = []string{
 	"New offers agent or template",
 	"New agent handoff types the create prompt",
 	"New agent with no panes stays in the overlay",
+	"Agent chooser names each pane",
 	"New template chooses repo or global",
 	"New template popup opens expanded",
 	"Open repo workflow in the popup",
@@ -386,7 +386,7 @@ func TestParityFailedRunEscapeReturnsToRunsRoot(t *testing.T) {
 		t.Fatalf("launch must open Runs detail, mode=%v", m.mode)
 	}
 	id := m.runs.ActiveRunID()
-	m = applyMsg(m, launchSettledMsg{OK: false, Detail: "spawn failed", RunID: id})
+	m = applyMsg(m, launchAckMsg{Line: "@hwf-history:rejected " + id + " spawn failed"})
 	body := m.View().Content
 	if !strings.Contains(body, "LAUNCH FAILED") && !strings.Contains(body, "launch") {
 		t.Fatalf("expected local launch failure detail:\n%s", body)
@@ -559,7 +559,7 @@ func TestParityEmptyCatalogFooterAndMessage(t *testing.T) {
 	if strings.Contains(body, tui.FilterWorkflows) {
 		t.Fatal("filter must be hidden")
 	}
-	if !strings.Contains(body, "tab") || !strings.Contains(body, "ctrl+p") || !strings.Contains(body, "esc") {
+	if !strings.Contains(body, "ctrl+p") || !strings.Contains(body, "esc") {
 		t.Fatalf("empty footer:\n%s", body)
 	}
 	if strings.Contains(body, "enter run") {
@@ -622,13 +622,10 @@ func TestParityConsentDemotedDuringInputProminentAtLaunch(t *testing.T) {
 	}
 }
 
-func TestParityLaunchOpensStartingRunningLifecycle(t *testing.T) {
+func launchModel(t *testing.T, runID string, detached *bool) Model {
+	t.Helper()
 	entry := workflow.ListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml", Title: "Plain"}
-	var (
-		launched LaunchRunOpts
-		detached bool
-	)
-	m := New(Options{
+	return New(Options{
 		Entries:  []workflow.ListEntry{entry},
 		Width:    80,
 		RepoRoot: t.TempDir(),
@@ -639,220 +636,114 @@ func TestParityLaunchOpensStartingRunningLifecycle(t *testing.T) {
 			}, nil
 		},
 		LaunchRun: func(opts LaunchRunOpts) LaunchRunHandle {
-			launched = opts
-			return LaunchRunHandle{Detach: func() { detached = true }}
+			return LaunchRunHandle{Detach: func() { *detached = true }}
 		},
-		AllocateRunID: func() string {
-			return "550e8400-e29b-41d4-a716-446655440000"
-		},
+		AllocateRunID: func() string { return runID },
 	})
-	m = apply(m, "enter")
-	if m.mode != modeRuns {
-		t.Fatalf("mode = %v, want modeRuns", m.mode)
-	}
-	body := m.View().Content
-	if !strings.Contains(body, "STARTING") {
-		t.Fatalf("expected STARTING detail:\n%s", body)
-	}
-	if launched.RunID != "550e8400-e29b-41d4-a716-446655440000" {
-		t.Fatalf("launch RunID = %q", launched.RunID)
-	}
-	if launched.Name != "plain" {
-		t.Fatalf("launch Name = %q", launched.Name)
-	}
+}
 
-	m = applyMsg(m, launchAckMsg{Line: "@hwf-history:claimed 550e8400-e29b-41d4-a716-446655440000"})
-	body = m.View().Content
-	if !strings.Contains(body, "RUNNING") {
-		t.Fatalf("claim must move detail to RUNNING:\n%s", body)
-	}
-
-	m2 := New(Options{
-		Entries: []workflow.ListEntry{entry},
-		Width:   80,
-		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
-			return &workflow.Definition{
-				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
-				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
-			}, nil
-		},
-		LaunchRun: func(opts LaunchRunOpts) LaunchRunHandle {
-			return LaunchRunHandle{Detach: func() {}}
-		},
-		AllocateRunID: func() string { return "550e8400-e29b-41d4-a716-446655440001" },
-	})
-	m2 = apply(m2, "enter")
-	m2 = applyMsg(m2, launchAckMsg{Line: "@hwf-history:unavailable 550e8400-e29b-41d4-a716-446655440001"})
-	if !strings.Contains(m2.View().Content, "HISTORY UNAVAILABLE") {
-		t.Fatalf("history unavailable:\n%s", m2.View().Content)
-	}
-
-	m3 := New(Options{
-		Entries: []workflow.ListEntry{entry},
-		Width:   80,
-		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
-			return &workflow.Definition{
-				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
-				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
-			}, nil
-		},
-		LaunchRun: func(opts LaunchRunOpts) LaunchRunHandle {
-			return LaunchRunHandle{Detach: func() { detached = true }}
-		},
-		AllocateRunID: func() string { return "550e8400-e29b-41d4-a716-446655440002" },
-	})
-	m3 = apply(m3, "enter")
-	m3 = applyMsg(m3, launchSettledMsg{OK: false, Detail: "child exited", RunID: "550e8400-e29b-41d4-a716-446655440002"})
-	if !strings.Contains(m3.View().Content, "LAUNCH FAILED") {
-		t.Fatalf("child fail before claim:\n%s", m3.View().Content)
-	}
-
-	stateDir := t.TempDir()
-	checkout := t.TempDir()
-	getenv := func(key string) string {
-		if key == "HERDR_PLUGIN_STATE_DIR" {
-			return stateDir
-		}
-		return os.Getenv(key)
-	}
-	successID := "550e8400-e29b-41d4-a716-446655440003"
-	startedAt := time.Now().UTC().Add(-5 * time.Second).Format("2006-01-02T15:04:05.000Z")
-	w := history.NewWriter(getenv)
-	t.Cleanup(w.Dispose)
-	claimed := w.Claim(history.ClaimMeta{
-		ID: successID, Workflow: "plain", Title: "Plain", Source: "repo",
-		CheckoutRoot: checkout, StartedAt: startedAt,
-	})
-	if !claimed.OK || claimed.State != "claimed" {
-		t.Fatalf("success claim = %+v", claimed)
-	}
-	w.RecordStep(history.StepRecord{
-		StepIdentity: history.StepIdentity{
-			Phase: "main", Workflow: "plain", WorkflowPath: []string{"plain"},
-			Ordinal: 1, Total: 1, Action: "run", Label: "echo-ok",
-		},
-		FinishedAt: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
-		Outcome:    "succeeded",
-	})
-	w.Finalize("succeeded", history.FinalizeOpts{})
-
-	m4 := New(Options{
+func TestParityLaunchFailureBeforeClaimShowsTheReason(t *testing.T) {
+	failID := "550e8400-e29b-41d4-a716-446655440006"
+	events := make(chan LaunchEvent, 1)
+	entry := workflow.ListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml", Title: "Plain"}
+	m := New(Options{
 		Entries:  []workflow.ListEntry{entry},
 		Width:    80,
-		RepoRoot: checkout,
-		Env:      getenv,
+		RepoRoot: t.TempDir(),
 		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
 			return &workflow.Definition{
 				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
 				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
 			}, nil
 		},
-		LaunchRun: func(opts LaunchRunOpts) LaunchRunHandle {
-			return LaunchRunHandle{Detach: func() { detached = true }}
-		},
-		AllocateRunID: func() string { return successID },
-	})
-	m4 = apply(m4, "enter")
-	m4 = applyMsg(m4, launchAckMsg{Line: "@hwf-history:claimed " + successID})
-	m4 = applyMsg(m4, launchSettledMsg{OK: true, Detail: "", RunID: successID})
-	if m4.quit || m4.mode != modeRuns {
-		t.Fatalf("fast success must stay open on Runs detail, mode=%v quit=%v", m4.mode, m4.quit)
-	}
-	presented := history.RunDetail(successID, getenv, time.Time{})
-	if presented.Detail.ElapsedMs <= 0 {
-		t.Fatalf("expected elapsed > 0, got %d", presented.Detail.ElapsedMs)
-	}
-	elapsed := history.FormatElapsed(presented.Detail.ElapsedMs)
-	body = m4.View().Content
-	if !strings.Contains(body, "SUCCEEDED") {
-		t.Fatalf("fast success detail must show SUCCEEDED:\n%s", body)
-	}
-	if !strings.Contains(body, "echo-ok") || !strings.Contains(body, "succeeded") {
-		t.Fatalf("fast success detail must show recorded step outcomes:\n%s", body)
-	}
-	if !strings.Contains(body, elapsed) {
-		t.Fatalf("fast success detail must show elapsed %q:\n%s", elapsed, body)
-	}
-
-	failID := "550e8400-e29b-41d4-a716-446655440005"
-	failStarted := time.Now().UTC().Add(-3 * time.Second).Format("2006-01-02T15:04:05.000Z")
-	fw := history.NewWriter(getenv)
-	t.Cleanup(fw.Dispose)
-	failClaimed := fw.Claim(history.ClaimMeta{
-		ID: failID, Workflow: "plain", Title: "Plain", Source: "repo",
-		CheckoutRoot: checkout, StartedAt: failStarted,
-	})
-	if !failClaimed.OK || failClaimed.State != "claimed" {
-		t.Fatalf("fail claim = %+v", failClaimed)
-	}
-	fw.RecordStep(history.StepRecord{
-		StepIdentity: history.StepIdentity{
-			Phase: "main", Workflow: "plain", WorkflowPath: []string{"plain"},
-			Ordinal: 1, Total: 1, Action: "run", Label: "boom-step",
-		},
-		FinishedAt: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
-		Outcome:    "failed",
-	})
-	fw.Finalize("failed", history.FinalizeOpts{})
-
-	mFail := New(Options{
-		Entries:  []workflow.ListEntry{entry},
-		Width:    80,
-		RepoRoot: checkout,
-		Env:      getenv,
-		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
-			return &workflow.Definition{
-				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
-				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
-			}, nil
-		},
-		LaunchRun: func(opts LaunchRunOpts) LaunchRunHandle {
-			return LaunchRunHandle{Detach: func() { detached = true }}
+		LaunchRun: func(LaunchRunOpts) LaunchRunHandle {
+			return LaunchRunHandle{Detach: func() {}, Events: events}
 		},
 		AllocateRunID: func() string { return failID },
 	})
-	mFail = apply(mFail, "enter")
-	mFail = applyMsg(mFail, launchAckMsg{Line: "@hwf-history:claimed " + failID})
-	mFail = applyMsg(mFail, launchSettledMsg{OK: false, Detail: "child exited", RunID: failID})
-	failBody := mFail.View().Content
-	if strings.Contains(failBody, "RUNNING") {
-		t.Fatalf("claim-then-fail must not leave synthetic RUNNING:\n%s", failBody)
+	next, cmd := m.Update(press("enter"))
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("a launch must listen for events")
 	}
-	if strings.Contains(failBody, "LAUNCH FAILED") {
-		t.Fatalf("claim-then-fail must use persisted detail, not local-failure:\n%s", failBody)
+	events <- LaunchEvent{Fail: "exec format error"}
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+	if m.quit {
+		t.Fatal("a child that never claimed must keep the popup open")
 	}
-	if !strings.Contains(failBody, "FAILED") && !strings.Contains(failBody, "INTERRUPTED") {
-		t.Fatalf("claim-then-fail must show FAILED or INTERRUPTED persisted detail:\n%s", failBody)
+	body := m.View().Content
+	if !strings.Contains(body, "LAUNCH FAILED") {
+		t.Fatalf("a child that never claimed must show the failure:\n%s", body)
 	}
-	if !strings.Contains(failBody, "boom-step") {
-		t.Fatalf("claim-then-fail must show recorded step outcomes:\n%s", failBody)
+	if !strings.Contains(body, "exec format error") {
+		t.Fatalf("a child that never claimed must show the reason text:\n%s", body)
+	}
+
+	var detached bool
+	unavailableID := "550e8400-e29b-41d4-a716-446655440007"
+	m2 := apply(launchModel(t, unavailableID, &detached), "enter")
+	m2 = applyMsg(m2, launchAckMsg{Line: "@hwf-history:unavailable " + unavailableID})
+	m2 = applyMsg(m2, launchFailedMsg{Detail: "run exited 1"})
+	if strings.Contains(m2.View().Content, "LAUNCH FAILED") {
+		t.Fatalf("a failure after an ack must not overwrite the ack surface:\n%s", m2.View().Content)
+	}
+}
+
+func TestParityLaunchClaimClosesThePopup(t *testing.T) {
+	claimedID := "550e8400-e29b-41d4-a716-446655440000"
+	var detached bool
+	m := launchModel(t, claimedID, &detached)
+	m = apply(m, "enter")
+	if m.mode != modeRuns || !strings.Contains(m.View().Content, "STARTING") {
+		t.Fatalf("launch must show STARTING until the ack:\n%s", m.View().Content)
+	}
+	next, cmd := m.Update(launchAckMsg{Line: "@hwf-history:claimed " + claimedID})
+	m = next.(Model)
+	if !m.quit || cmd == nil {
+		t.Fatalf("a claimed launch must quit the popup: quit=%v cmd=%v", m.quit, cmd != nil)
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatal("a claimed launch must return tea.Quit")
+	}
+	if !detached {
+		t.Fatal("a claimed launch must detach the child before quitting")
+	}
+
+	unavailableID := "550e8400-e29b-41d4-a716-446655440001"
+	detached = false
+	m2 := apply(launchModel(t, unavailableID, &detached), "enter")
+	m2 = applyMsg(m2, launchAckMsg{Line: "@hwf-history:unavailable " + unavailableID})
+	if m2.quit {
+		t.Fatal("a launch with no history entry must keep the popup open")
+	}
+	if !strings.Contains(m2.View().Content, "HISTORY UNAVAILABLE") {
+		t.Fatalf("history unavailable must stay visible:\n%s", m2.View().Content)
+	}
+
+	rejectedID := "550e8400-e29b-41d4-a716-446655440002"
+	detached = false
+	m3 := apply(launchModel(t, rejectedID, &detached), "enter")
+	m3 = applyMsg(m3, launchAckMsg{Line: "@hwf-history:rejected " + rejectedID + " already claimed"})
+	if m3.quit {
+		t.Fatal("a rejected launch must keep the popup open")
+	}
+	body := m3.View().Content
+	if !strings.Contains(body, "LAUNCH FAILED") {
+		t.Fatalf("a rejected launch must show why:\n%s", body)
+	}
+	if !strings.Contains(body, "already claimed") {
+		t.Fatalf("a rejected launch must show the reason text:\n%s", body)
 	}
 
 	detached = false
-	m5 := New(Options{
-		Entries: []workflow.ListEntry{entry},
-		Width:   80,
-		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
-			return &workflow.Definition{
-				Name: e.Name, File: e.File, Version: workflow.Format, Title: "Plain",
-				Steps: []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
-			}, nil
-		},
-		LaunchRun: func(opts LaunchRunOpts) LaunchRunHandle {
-			return LaunchRunHandle{Detach: func() { detached = true }}
-		},
-		AllocateRunID: func() string { return "550e8400-e29b-41d4-a716-446655440004" },
-	})
-	m5 = apply(m5, "enter")
-	m5 = apply(m5, "esc")
+	m4 := apply(launchModel(t, "550e8400-e29b-41d4-a716-446655440004", &detached), "enter")
+	m4 = apply(m4, "esc")
 	if !detached {
-		t.Fatal("Escape from active launch must detach child observation")
+		t.Fatal("Escape from an active launch must detach child observation")
 	}
-	if m5.mode != modeRuns {
-		t.Fatalf("Escape must return to Runs root, mode=%v", m5.mode)
-	}
-	if !m5.runs.IsList() {
-		t.Fatalf("Escape must land on Runs list")
+	if m4.mode != modeRuns || !m4.runs.IsList() {
+		t.Fatalf("Escape must return to the Runs list, mode=%v list=%v", m4.mode, m4.runs.IsList())
 	}
 }
 

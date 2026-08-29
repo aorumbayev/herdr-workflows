@@ -199,7 +199,7 @@ func CharmVerdicts() []CharmVerdict {
 			CandidateModule:   bubbles,
 			CandidateVersion:  bubblesV,
 			Decision:          "keep-custom",
-			MissingCapability: "bubbles tabs do not render a three-label ASCII bar with reverse active and muted inactive states under picker chrome width rules.",
+			MissingCapability: "bubbles tabs do not center a three-label ASCII bar with reverse active and muted inactive states under picker chrome width rules, and give no column-to-tab hit test for the centered row.",
 			Test:              "TestFormatTabBarActiveReverseInactiveMuted",
 		},
 		{

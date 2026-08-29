@@ -8,6 +8,7 @@ import (
 
 	"github.com/aorumbayev/herdr-workflows/internal/console"
 	"github.com/aorumbayev/herdr-workflows/internal/history"
+	"github.com/aorumbayev/herdr-workflows/internal/tui"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
@@ -94,8 +95,8 @@ func TestRunsSendbackAgentChooser(t *testing.T) {
 		Env:      getenv,
 		ListAgentPanes: func() ([]console.AgentPaneEntry, error) {
 			return []console.AgentPaneEntry{
-				{PaneID: "a1", Title: "One"},
-				{PaneID: "a2", Title: "Two"},
+				{PaneID: "w1:p1", Tab: "1", Status: "idle", Title: "One", Self: true},
+				{PaneID: "w1:p2", Tab: "2", Status: "working", Title: "Two"},
 			}, nil
 		},
 		PaneSendText: func(id, _ string) error { sentPane = id; return nil },
@@ -104,8 +105,14 @@ func TestRunsSendbackAgentChooser(t *testing.T) {
 	if m.mode != modeRunsAgentPick {
 		t.Fatalf("mode = %v, want agent pick", m.mode)
 	}
+	body := m.View().Content
+	for _, want := range []string{"1 - One", "(you)", "2 * Two", tui.AgentStatusLegend} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("runs chooser missing %q:\n%s", want, body)
+		}
+	}
 	m = apply(m, "down", "enter")
-	if sentPane != "a2" {
+	if sentPane != "w1:p2" {
 		t.Fatalf("sent pane = %q", sentPane)
 	}
 }

@@ -65,7 +65,7 @@ Say so in the report if a test leaves the shared binary in a broken state.
 - Prefer headless: `hsb herdr pane list | send-keys | send-text | read | wait-output`, and `hsb herdr agent list | read | prompt | wait`. Check flags with `hsb herdr pane read --help`.
 - For the TUI itself: `tmux capture-pane -p -t hwf-sandbox` to read the screen, `tmux send-keys -t hwf-sandbox ...` for keybindings such as `prefix+k` (the picker).
 - To watch live: `tmux attach -t hwf-sandbox` (detach with `Ctrl-b d`).
-- Plugin logs: `hsb herdr plugin log herdr-workflows`.
+- Plugin logs: `hsb herdr plugin log list --plugin herdr-workflows`.
 
 ## After `up`, stop and ask
 

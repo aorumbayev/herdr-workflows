@@ -124,7 +124,7 @@ func (m Model) deliverRunsSendback(paneID string) (tea.Model, tea.Cmd) {
 
 func (m Model) renderRunsAgentPick() string {
 	w := m.contentWidth()
-	body := console.FormatAgentPickBody(m.agentPanes, m.agentCursor)
-	footer := tui.FormatListFooter(w, m.agentCursor, len(m.agentPanes), "enter send"+tui.ChromeSep+"esc back")
+	body := console.FormatAgentPickBody(m.agentPanes, m.agentCursor, w)
+	footer := tui.FormatListFooter(w, m.agentCursor, len(m.agentPanes), "enter send"+tui.ChromeSep+"esc back"+tui.ChromeSep+tui.AgentStatusLegend)
 	return body + "\n" + tui.FormatRule(w) + "\n" + footer
 }

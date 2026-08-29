@@ -113,6 +113,9 @@ func runRun(cmd *cobra.Command, args []string) error {
 	}
 
 	result, err := engine.RunWorkflow(runOpts)
+	if runIsDetached(cmd) {
+		notifyRunOutcome(recorder.RunID(), workflow.DisplayTitle(loaded.Name, loaded.Title), os.Getenv)
+	}
 	if err != nil {
 		var loadErr *workflow.LoadError
 		if errors.As(err, &loadErr) {

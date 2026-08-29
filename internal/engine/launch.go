@@ -62,17 +62,16 @@ type DetachedRunHandle struct {
 
 // LaunchRunRequest launches a detached `hwf run` with a stdin launch payload.
 type LaunchRunRequest struct {
-	Name           string
-	RepoRoot       string
-	Executable     string
-	Ctx            config.InvocationContext
-	Inputs         map[string]string
-	Domains        map[string][]string
-	RunID          string
-	Env            map[string]string
-	OnProgressLine func(string)
-	OnHistoryAck   func(string)
-	Spawn          func(argv []string, opts SpawnOpts) (*Spawned, error)
+	Name         string
+	RepoRoot     string
+	Executable   string
+	Ctx          config.InvocationContext
+	Inputs       map[string]string
+	Domains      map[string][]string
+	RunID        string
+	Env          map[string]string
+	OnHistoryAck func(string)
+	Spawn        func(argv []string, opts SpawnOpts) (*Spawned, error)
 }
 
 type progressLine struct {
@@ -516,9 +515,6 @@ func observeDetachedRun(
 				diagMu.Lock()
 				lastProgress = trimmed
 				diagMu.Unlock()
-				if !isDetached && req.OnProgressLine != nil {
-					req.OnProgressLine(trimmed)
-				}
 				return
 			}
 			diagMu.Lock()

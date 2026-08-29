@@ -8,6 +8,7 @@ const (
 	EmptyListHint        = "ctrl+p actions" + ChromeSep + "esc"
 	ProfilesListHint     = "enter open" + ChromeSep + "ctrl+p actions" + ChromeSep + "esc"
 	ProfilesEmptyHint    = "ctrl+p actions" + ChromeSep + "esc"
+	AgentStatusLegend    = "* busy  - idle  ! blocked"
 	PaletteHint          = "letter fires | esc back"
 	DeleteConfirmHint    = "y delete | n cancel | esc"
 	ChoiceHint           = "type filter" + ChromeSep + "up/down move" + ChromeSep + "enter select" + ChromeSep + "esc back"
@@ -30,7 +31,6 @@ const (
 	TabWorkflows = "workflows"
 	TabRuns      = "runs"
 	TabProfiles  = "profiles"
-	TabKeyPrefix = "tab: "
 )
 
 // ChromeStrings is every chrome fragment that the picker shows. Each glyph must be
@@ -40,11 +40,11 @@ var ChromeStrings = []string{
 	EmptyListHint,
 	ProfilesListHint,
 	ProfilesEmptyHint,
+	AgentStatusLegend,
 	ProfilesEmptyMessage,
 	TabWorkflows,
 	TabRuns,
 	TabProfiles,
-	TabKeyPrefix,
 	FilterProfiles,
 	PaletteHint,
 	DeleteConfirmHint,

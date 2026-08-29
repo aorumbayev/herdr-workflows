@@ -28,8 +28,6 @@ type DetailView struct {
 	ID       string
 	Workflow string
 	Message  string
-	Progress []string
-	Finished string
 	Detail   history.Detail
 	Blocks   []history.Block
 }

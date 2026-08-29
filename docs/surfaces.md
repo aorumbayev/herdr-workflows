@@ -8,9 +8,9 @@ Runs happen in the picker or `hwf run`, because a run needs real herdr panes. In
 
 Press `prefix+k`.
 
-The overlay has three tabs, workflows, runs, and profiles. `Tab` cycles the three in that order and back to workflows. `Tab` never quits the overlay. A tab bar starts with `tab: ` to name the key, then the three labels, and marks the active one with reverse video. The pane title stays static.
+The overlay has three tabs, workflows, runs, and profiles. `Tab` cycles the three in that order and back to workflows. `Shift+Tab` cycles the other way. Neither key quits the overlay. A tab bar centers the three labels above the body and marks the active one with reverse video. The pane title stays static.
 
-The workflows footer is `enter run | ctrl+p actions | esc`. The runs footer is `ctrl+g <scope> | enter detail | esc quit`. The profiles footer is `enter open | ctrl+p actions | esc`. The tab bar names the `tab` key, so the footers do not repeat it. The filter placeholders are `filter workflows...`, `filter runs...`, and `filter profiles...`. Filter rows use flush-left ASCII without a `/ ` prefix or indent.
+The workflows footer is `enter run | ctrl+p actions | esc`. The runs footer is `ctrl+g <scope> | enter detail | esc quit`. The profiles footer is `enter open | ctrl+p actions | esc`. The filter placeholders are `filter workflows...`, `filter runs...`, and `filter profiles...`. Filter rows use flush-left ASCII without a `/ ` prefix or indent.
 
 The overlay stays compact. Switching tabs does not close and reopen the popup.
 
@@ -22,7 +22,7 @@ One line per workflow. The list fills the popup rows above a floor of six. Each 
 
 Runs defaults to the exact current checkout root. `Ctrl+G` toggles temporary All scope across retained checkouts. Printable `g` still types into the filter. Each row shows textual status, workflow identity, progress, and elapsed time.
 
-Enter opens one scrollable detail view for the selected run. After the final input, a launch opens the same detail in `STARTING`, then attached `RUNNING` once the child claims its snapshot. Terminal results stay visible. Escape returns to the Runs list. An active child continues to run.
+Enter opens one scrollable detail view for the selected run. After the final input, a launch shows `STARTING` until the child claims its run, then the popup closes and the run continues in the background. A launch that herdr rejects, or that cannot record history, keeps the popup open with the reason, because it has no runs-tab entry. A child that ends before it claims a run keeps the popup open with the failure text, because no run record and no notification can report it. Escape returns to the Runs list. An active child continues to run.
 
 A non-terminal run is `RUNNING` while its heartbeat is fresher than fifteen seconds, and `STALE` afterward. Stale is not failure. Detail may show a bounded failure explanation. List rows and search never include that text. Search matches safe step labels from recorded outcomes. History reads only the private plugin-state database.
 
@@ -71,7 +71,7 @@ Plain `k` still types into the filter.
 
 `n` opens a chooser with two options.
 
-Choose **build with an agent** to hand the work to a herdr agent pane. The picker offers an agent-pane chooser. With one pane open, it types the handoff at once. With more than one, select the pane and press `Enter`. The picker types a prompt that asks the agent to follow the `herdr-workflow-create` skill, to grill you about the goal, steps, and inputs before it writes any YAML, to save the workflow at the repo or global level, and to validate the file with `hwf workflow validate`. The prompt is typed, not submitted, so press `Enter` in the pane to start. The overlay dismisses after the handoff. With no agent pane open, the overlay stays open and shows a plain status line.
+Choose **build with an agent** to hand the work to a herdr agent pane. The picker offers an agent-pane chooser. With one pane open, it types the handoff at once. With more than one, select the pane and press `Enter`. Each chooser row shows the tab number, a status glyph, the pane title, and `(you)` on the pane you started from. The status glyphs are `*` busy, `-` idle, `!` blocked, and `?` unknown, and the footer repeats the first three. The title comes from a renamed agent, then the pane's terminal title, then the pane ID. Herdr loses terminal titles on a cold restart, so a pane can show its ID again. The picker types a prompt that asks the agent to follow the `herdr-workflow-create` skill, to grill you about the goal, steps, and inputs before it writes any YAML, to save the workflow at the repo or global level, and to validate the file with `hwf workflow validate`. The prompt is typed, not submitted, so press `Enter` in the pane to start. The overlay dismisses after the handoff. With no agent pane open, the overlay stays open and shows a plain status line.
 
 Choose **edit a template** to write a pre-filled skeleton yourself. Enter a name, then choose the repo (`.hwf/workflows`) or global level. The picker creates the skeleton and opens the same placement chooser as edit (`popup`, `beside`, `below`, `tab`). `popup` opens the editor in the large popup.
 
@@ -113,6 +113,8 @@ The workflows footer is `tab | enter diagram | esc`. The runs footer is `tab | e
 | `hwf --version`                 | Prints the installed plugin version                                      |
 
 Bare `hwf` with no subcommand prints help and exits nonzero.
+
+A run that has no interactive terminal shows a herdr notification when it ends. A picker launch and a `nohup hwf run ... &` are both detached. The title is `herdr-workflows`. A run that succeeded shows `<workflow> succeeded in 12s` with the finished sound. Every other terminal status shows `<workflow> failed after 12s - <run id>` with no sound. A run in a terminal stays silent, because it already prints its outcome.
 
 `hwf` and `herdr-workflows` are the same command under two names.
 

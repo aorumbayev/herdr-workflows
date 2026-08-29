@@ -7,10 +7,9 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-func TestBeginLaunchListenCmdDeliversAckAndSettled(t *testing.T) {
+func TestBeginLaunchListenCmdDeliversAck(t *testing.T) {
 	entry := workflow.ListEntry{Name: "plain", Source: "repo", File: "/r/plain.yaml", Title: "Plain"}
-	acks := make(chan string, 1)
-	settled := make(chan LaunchSettled, 1)
+	events := make(chan LaunchEvent, 1)
 	m := New(Options{
 		Entries:  []workflow.ListEntry{entry},
 		Width:    80,
@@ -22,36 +21,24 @@ func TestBeginLaunchListenCmdDeliversAckAndSettled(t *testing.T) {
 			}, nil
 		},
 		LaunchRun: func(LaunchRunOpts) LaunchRunHandle {
-			return LaunchRunHandle{Detach: func() {}, Acks: acks, Settled: settled}
+			return LaunchRunHandle{Detach: func() {}, Events: events}
 		},
 		AllocateRunID: func() string { return "550e8400-e29b-41d4-a716-446655440010" },
 	})
 	next, cmd := m.Update(press("enter"))
 	m = next.(Model)
 	if cmd == nil {
-		t.Fatal("beginLaunch must return a listen cmd when LaunchRunHandle exposes Acks/Settled")
+		t.Fatal("beginLaunch must return a listen cmd when LaunchRunHandle exposes Events")
 	}
 	if !strings.Contains(m.View().Content, "STARTING") {
 		t.Fatalf("expected STARTING:\n%s", m.View().Content)
 	}
 
-	acks <- "@hwf-history:claimed 550e8400-e29b-41d4-a716-446655440010"
-	msg := cmd()
-	next, cmd = m.Update(msg)
+	events <- LaunchEvent{Ack: "@hwf-history:claimed 550e8400-e29b-41d4-a716-446655440010"}
+	next, _ = m.Update(cmd())
 	m = next.(Model)
-	if !strings.Contains(m.View().Content, "RUNNING") {
-		t.Fatalf("listen cmd ack must reach Update as RUNNING:\n%s", m.View().Content)
-	}
-	if cmd == nil {
-		t.Fatal("ack handler must re-arm listen until settled")
-	}
-
-	settled <- LaunchSettled{OK: true, RunID: "550e8400-e29b-41d4-a716-446655440010"}
-	msg = cmd()
-	next, _ = m.Update(msg)
-	m = next.(Model)
-	if m.mode != modeRuns {
-		t.Fatalf("settled must keep Runs detail, mode=%v", m.mode)
+	if !m.quit {
+		t.Fatal("the listen cmd ack must reach Update and close the popup")
 	}
 }
 

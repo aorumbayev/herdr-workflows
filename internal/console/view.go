@@ -130,7 +130,7 @@ func (m Model) renderDiagramInstruction(w int) string {
 	}
 	status := m.status
 	if status == "" {
-		status = "enter send" + tui.ChromeSep + "esc back"
+		status = "enter send" + tui.ChromeSep + "esc back" + tui.ChromeSep + tui.AgentStatusLegend
 	}
 	footer := tui.FormatListFooter(w, 0, 0, status)
 	head := tui.Truncate("diagram"+tui.ChromeSep+m.diagramTitle, w)
@@ -160,7 +160,7 @@ func wrapDraft(s string, width int) []string {
 
 func (m Model) renderDiagramAgentPick(w int) string {
 	vp := m.scrollViewport()
-	body := FormatAgentPickBody(m.agentPanes, m.agentCursor)
+	body := FormatAgentPickBody(m.agentPanes, m.agentCursor, w)
 	lines := strings.Split(body, "\n")
 	header, items := lines[0], lines[1:]
 	itemVP := vp - 1
@@ -172,7 +172,7 @@ func (m Model) renderDiagramAgentPick(w int) string {
 	}
 	status := m.status
 	if status == "" {
-		status = "enter send" + tui.ChromeSep + "esc back"
+		status = "enter send" + tui.ChromeSep + "esc back" + tui.ChromeSep + tui.AgentStatusLegend
 	}
 	footer := tui.FormatListFooter(w, m.agentCursor, len(m.agentPanes), status)
 	head := tui.Truncate("diagram"+tui.ChromeSep+m.diagramTitle, w)

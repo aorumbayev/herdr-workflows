@@ -20,12 +20,11 @@ func tabCells() []tabCell {
 	return out
 }
 
-// FormatTabBar shows the key hint then the three picker root tabs. The active
-// tab uses reverse. Inactive tabs and the key prefix use muted.
+// FormatTabBar centers the three picker root tabs in width. The active tab
+// uses reverse. Inactive tabs use muted.
 func FormatTabBar(active string, width int) string {
 	theme := tui.DefaultTheme()
-	parts := make([]string, 0, len(tabCells())+1)
-	parts = append(parts, theme.Muted.Render(tui.TabKeyPrefix))
+	parts := make([]string, 0, len(tabCells()))
 	for _, cell := range tabCells() {
 		text := " " + cell.name + " "
 		if cell.name == active {
@@ -34,14 +33,14 @@ func FormatTabBar(active string, width int) string {
 		}
 		parts = append(parts, theme.Muted.Render(text))
 	}
-	bar := parts[0] + strings.Join(parts[1:], " ")
+	bar := strings.Repeat(" ", tabBarOffset(width)) + strings.Join(parts, " ")
 	return tui.Truncate(bar, width)
 }
 
-// TabAtX gives the tab name at content-column x, or an empty string. The tab
-// labels begin after the key prefix.
-func TabAtX(x int) string {
-	pos := len(tui.TabKeyPrefix)
+// TabAtX gives the tab name at content-column x of a bar rendered in width,
+// or an empty string.
+func TabAtX(x, width int) string {
+	pos := tabBarOffset(width)
 	for _, cell := range tabCells() {
 		if x >= pos && x < pos+cell.width {
 			return cell.name
@@ -49,4 +48,24 @@ func TabAtX(x int) string {
 		pos += cell.width + 1
 	}
 	return ""
+}
+
+// tabBarOffset is the left pad that centers the tab row in width.
+func tabBarOffset(width int) int {
+	row := tabRowWidth()
+	if width <= row {
+		return 0
+	}
+	return (width - row) / 2
+}
+
+func tabRowWidth() int {
+	total := 0
+	for i, cell := range tabCells() {
+		if i > 0 {
+			total++
+		}
+		total += cell.width
+	}
+	return total
 }

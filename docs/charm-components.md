@@ -41,7 +41,7 @@ This cycle does not add `bubbles` or `huh`. Unused modules violate YAGNI.
 | Viewport height pad | `bubbletea/v2` | v2.0.9 | keep-custom | Bubble Tea does not clear unused TTY rows after a shorter frame. `PadHeight` appends blank lines to the prior frame height. | `TestPadHeight` |
 | Runs detail scroll | `bubbles/v2` viewport | v2.1.1 | keep-custom | `viewport.Model` has no scrollbar chrome and keeps `SoftWrap` off by default. Runs detail still scrolls a fixed ASCII window over pre-wrapped lines with clamped offset and no bubbles import. | `TestScrollDetailLines` |
 | Theme kind palette | `lipgloss/v2` | v2.0.6 | keep-custom | No ready theme for indexed kind colors (agent 6, run 2, herdr 5, workflow 4, default 7), fail 1, faint secondary text, underline hover distinct from reverse, and run status slots. | `TestDefaultThemeKindPaletteAndHover` |
-| Picker tab bar | `bubbles/v2` | v2.1.1 | keep-custom | Bubbles tabs do not render a three-label ASCII bar with reverse active and muted inactive states under picker chrome width rules. Picker owns `FormatTabBar`. | `TestFormatTabBarActiveReverseInactiveMuted` |
+| Picker tab bar | `bubbles/v2` | v2.1.1 | keep-custom | Bubbles tabs do not center a three-label ASCII bar with reverse active and muted inactive states under picker chrome width rules, and give no column-to-tab hit test for the centered row. Picker owns `FormatTabBar`. | `TestFormatTabBarActiveReverseInactiveMuted` |
 | Picker mouse hover | `bubbletea/v2` | v2.0.9 | keep-custom | Bubble Tea reports mouse cells but does not map hover to a non-reverse row style while reverse remains the keyboard cursor. | `TestPickerHoverStyleIsNotReverse` |
 | Console hit zones | `bubbletea/v2` | v2.0.9 | keep-custom | Bubble Tea reports mouse cells but has no hit-zone registry for diagram cards. | `TestModelDiagramClickFocusesCard` |
 | Console mouse reporting | `bubbletea/v2` | v2.0.9 | keep-custom | Mouse reporting stays off unless the view sets MouseMode. Both console hosts enable all-motion reporting. | `TestModelConsoleViewEnablesMouseReporting` |
@@ -131,7 +131,7 @@ Lip Gloss can color text. It does not ship indexed kind slots (agent 6, run 2, h
 
 ### Picker tab bar
 
-The picker needs a three-label ASCII bar with reverse on the active tab and muted inactive tabs, clipped to chrome width. Bubbles tabs do not match that chrome. Keep `FormatTabBar` in the picker.
+The picker needs a centered three-label ASCII bar with reverse on the active tab and muted inactive tabs, clipped to chrome width, plus a column-to-tab hit test that follows the centering offset. Bubbles tabs do not match that chrome. Keep `FormatTabBar` and `TabAtX` in the picker.
 
 ### Picker mouse hover
 

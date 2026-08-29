@@ -182,12 +182,11 @@ func TestDetailLinesStartingAndUnavailable(t *testing.T) {
 	}
 	unavailable := DetailLines(DetailView{
 		Kind: "history-unavailable", ID: id, Workflow: "demo",
-		Progress: []string{"[1/1] shell"}, Finished: "succeeded",
 	}, 80)
 	if !strings.Contains(unavailable[0], "HISTORY UNAVAILABLE") {
 		t.Fatalf("unavailable head = %q", unavailable[0])
 	}
-	if !strings.Contains(unavailable[0], "SUCCEEDED") {
+	if !strings.Contains(unavailable[0], "RUNNING") {
 		t.Fatalf("unavailable status = %q", unavailable[0])
 	}
 }
@@ -197,7 +196,7 @@ func TestDetailLinesHistoryUnavailableEllipsis(t *testing.T) {
 	id := "550e8400-e29b-41d4-a716-446655440000"
 	lines := DetailLines(DetailView{
 		Kind: "history-unavailable", ID: id, Workflow: "demo",
-		Progress: []string{"[1/2] build…"}, Message: "…bounded failure",
+		Message: "…bounded failure",
 	}, 120)
 	for _, line := range lines {
 		if !isASCII(line) {
@@ -205,9 +204,6 @@ func TestDetailLinesHistoryUnavailableEllipsis(t *testing.T) {
 		}
 	}
 	joined := strings.Join(lines, "\n")
-	if !strings.Contains(joined, "[1/2] build...") {
-		t.Fatalf("progress mapping: %q", joined)
-	}
 	if !strings.Contains(joined, "...bounded failure") {
 		t.Fatalf("message mapping: %q", joined)
 	}
@@ -278,24 +274,6 @@ func TestDetailLinesLocalFailure(t *testing.T) {
 		if !isASCII(line) {
 			t.Fatalf("non-ASCII: %q", line)
 		}
-	}
-}
-
-func TestDetailLinesDetailWithProgress(t *testing.T) {
-	blocks := []history.Block{
-		{Kind: "head", Status: "RUNNING", Title: "demo", DisplayID: "abc12345", Elapsed: "1s"},
-	}
-	lines := DetailLines(DetailView{
-		Kind: "detail", Blocks: blocks, Progress: []string{"[1/2] step…"},
-	}, 120)
-	if len(lines) < 3 {
-		t.Fatalf("lines = %v", lines)
-	}
-	if lines[len(lines)-2] != "" {
-		t.Fatalf("blank separator before progress: %q", lines[len(lines)-2])
-	}
-	if !strings.Contains(lines[len(lines)-1], "[1/2] step...") {
-		t.Fatalf("progress line = %q", lines[len(lines)-1])
 	}
 }
 
