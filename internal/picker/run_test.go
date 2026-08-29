@@ -102,7 +102,7 @@ func TestPrepareWiresHooksFromOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	opened = ""
-	_ = apply(m, "ctrl+p", "e")
+	_ = apply(m, "ctrl+p", "o")
 	if opened == "" {
 		t.Fatal("OpenURL not wired from Options")
 	}

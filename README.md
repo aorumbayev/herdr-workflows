@@ -89,7 +89,7 @@ Workflows live in `.hwf/workflows/` for one repo, or `~/.hwf/workflows/` for eve
 | `hwf help`       | List every command                                                                     |
 | `hwf scratch`    | Read and write the global key-value store between runs                                 |
 
-Run workflows from the picker or with `hwf run`. Runs need real herdr panes. Edit workflows in `$EDITOR` from the picker palette (`n` / `o`), or import with `hwf workflow import`.
+Run workflows from the picker or with `hwf run`. Runs need real herdr panes. Edit workflows in `$EDITOR` from the picker palette (`n` / `e`), or import with `hwf workflow import`.
 
 ## Build workflows with your agent
 

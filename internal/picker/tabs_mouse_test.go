@@ -228,7 +228,7 @@ func TestMissingEditorIsAHardError(t *testing.T) {
 		Env:     func(string) string { return "" },
 	})
 	m = apply(m, "ctrl+p")
-	next, _ := m.Update(press("o"))
+	next, _ := m.Update(press("e"))
 	m = next.(Model)
 	if m.mode != modeEditPlace {
 		t.Fatalf("mode = %v, want edit place", m.mode)

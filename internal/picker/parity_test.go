@@ -835,7 +835,7 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 		OpenURL: func(url string) error { opened = append(opened, url); return nil },
 	})
 	opened = nil
-	m = apply(m, "ctrl+p", "e")
+	m = apply(m, "ctrl+p", "o")
 	if m.quit {
 		t.Fatal("examples must keep picker open")
 	}
@@ -853,7 +853,7 @@ func TestParityPaletteLettersHandoff(t *testing.T) {
 		RepoRoot:     root,
 		EditWorkflow: edit,
 	})
-	m = apply(m, "down", "ctrl+p", "o", "enter")
+	m = apply(m, "down", "ctrl+p", "e", "enter")
 	if m.quit || m.mode != modeList {
 		t.Fatalf("open must stay on list, quit=%v mode=%v", m.quit, m.mode)
 	}

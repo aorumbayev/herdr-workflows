@@ -57,13 +57,13 @@ In list mode, press `Ctrl+P`. A single letter fires the action, with no Enter. E
 | --- | ---------------------------------------------------------------------------------------- |
 | `n` | Create a new workflow, after a chooser for an agent handoff or a template                 |
 | `i` | Show status that names `hwf workflow import`                                             |
-| `e` | Open the examples page in your browser                                                   |
+| `o` | Open the examples page in your browser                                                   |
 | `c` | Open the console after a placement chooser |
-| `o` | Edit the selected workflow in `$EDITOR`, then validate with the loader                     |
+| `e` | Edit the selected workflow in `$EDITOR`, then validate with the loader                     |
 | `s` | Copy the selected workflow's import command and show a herdr notification                |
 | `d` | Delete the selected workflow, after a `y` or `n` confirmation                            |
 
-`o`, `s`, and `d` need a selected valid workflow. `n`, `i`, `e`, and `c` do not. The picker stays open for every palette action. `c` opens the console, and the overlay dismisses only after the console pane opens.
+`e`, `s`, and `d` need a selected valid workflow. `n`, `i`, `o`, and `c` do not. The picker stays open for every palette action. `c` opens the console, and the overlay dismisses only after the console pane opens.
 
 Plain `k` still types into the filter.
 
@@ -114,7 +114,7 @@ The workflows footer is `tab | enter diagram | esc`. The runs footer is `tab | e
 
 Bare `hwf` with no subcommand prints help and exits nonzero.
 
-A run that has no interactive terminal shows a herdr notification when it ends. A picker launch and a `nohup hwf run ... &` are both detached. The title is `herdr-workflows`. A run that succeeded shows `<workflow> succeeded in 12s` with the finished sound. Every other terminal status shows `<workflow> failed after 12s - <run id>` with no sound. A run in a terminal stays silent, because it already prints its outcome.
+A run that has no interactive terminal shows a herdr notification when it ends. A picker launch and a `nohup hwf run ... &` are both detached. The title is `herdr-workflows`. A run that succeeded shows `<workflow> succeeded in 12s` with the `done` sound. Every other terminal status shows `<workflow> failed after 12s - <run id>` with the `none` sound. A run in a terminal stays silent, because it already prints its outcome.
 
 `hwf` and `herdr-workflows` are the same command under two names.
 
