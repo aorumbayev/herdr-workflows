@@ -271,8 +271,7 @@ func (m Model) handleWorkflowsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "backspace":
 		if m.wfFilter != "" {
-			r := []rune(m.wfFilter)
-			m.wfFilter = string(r[:len(r)-1])
+			m.wfFilter = tui.TrimLastRune(m.wfFilter)
 			m.wfCursor, m.wfOffset = 0, 0
 		}
 		return m, nil
@@ -319,8 +318,7 @@ func (m Model) handleRunsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "backspace":
 		if m.runFilter != "" {
-			r := []rune(m.runFilter)
-			m.runFilter = string(r[:len(r)-1])
+			m.runFilter = tui.TrimLastRune(m.runFilter)
 			m.runCursor, m.runOffset = 0, 0
 		}
 		return m, nil

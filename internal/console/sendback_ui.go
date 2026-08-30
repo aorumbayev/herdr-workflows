@@ -14,6 +14,10 @@ import (
 // uses a declared id, and a positional title cannot name a step.
 const noStepIDStatus = "step declares no id" + tui.ChromeSep + "add id: to select it"
 
+// agentSelfMarker names the caller's own pane. Sending back to yourself is the
+// mistake it prevents.
+const agentSelfMarker = "(you)"
+
 type diagramMode int
 
 const (
@@ -35,14 +39,24 @@ const (
 // AgentPaneEntry is one selectable agent pane for send-back.
 type AgentPaneEntry struct {
 	PaneID string
-	Name   string
+	Tab    string
+	Kind   string
+	Status string
 	Title  string
+	Self   bool
 }
 
 func AgentPaneEntriesFromHost(panes []host.AgentPane) []AgentPaneEntry {
 	out := make([]AgentPaneEntry, len(panes))
 	for i, pane := range panes {
-		out[i] = AgentPaneEntry{PaneID: pane.PaneID, Name: pane.Name, Title: pane.Title}
+		out[i] = AgentPaneEntry{
+			PaneID: pane.PaneID,
+			Tab:    pane.Tab,
+			Kind:   pane.Kind,
+			Status: pane.Status,
+			Title:  pane.Title,
+			Self:   pane.Self,
+		}
 	}
 	return out
 }
@@ -179,11 +193,7 @@ func (m Model) handleDiagramInstructionKey(msg tea.KeyPressMsg) (tea.Model, tea.
 		m.instructionDraft = ""
 		return m.finishSendback()
 	case "backspace":
-		if m.instructionDraft == "" {
-			return m, nil
-		}
-		r := []rune(m.instructionDraft)
-		m.instructionDraft = string(r[:len(r)-1])
+		m.instructionDraft = tui.TrimLastRune(m.instructionDraft)
 		return m, nil
 	default:
 		if msg.Mod == 0 && msg.Text != "" {
@@ -350,22 +360,56 @@ func (m Model) diagramMarks() DiagramMarks {
 	}
 }
 
-func FormatAgentPickBody(panes []AgentPaneEntry, cursor int) string {
-	var lines []string
-	lines = append(lines, "send-back target agent")
+// FormatAgentPickBody lists agent panes as tab, status, title, and a self marker.
+// Only the title truncates, because it is the part worth reading.
+func FormatAgentPickBody(panes []AgentPaneEntry, cursor, width int) string {
+	lines := []string{"send-back target agent"}
+	tabW := 0
+	for _, pane := range panes {
+		tabW = max(tabW, tui.Columns(agentPaneTab(pane)))
+	}
 	for i, pane := range panes {
 		prefix := "  "
 		if i == cursor {
 			prefix = tui.CursorPrefix
 		}
-		label := pane.Title
-		if label == "" {
-			label = pane.Name
+		left := prefix + tui.PadColumns(agentPaneTab(pane), tabW) + " " + AgentStatusGlyph(pane.Status) + " "
+		marker := ""
+		if pane.Self {
+			marker = " " + agentSelfMarker
 		}
-		if label == "" {
-			label = pane.PaneID
-		}
-		lines = append(lines, prefix+label)
+		titleW := max(1, width-tui.Columns(left)-tui.Columns(marker))
+		title := tui.PadColumns(tui.Truncate(agentPaneTitle(pane), titleW), titleW)
+		lines = append(lines, strings.TrimRight(left+title+marker, " "))
 	}
 	return strings.Join(lines, "\n")
+}
+
+// AgentStatusGlyph is the one-column status token. The chooser footer legend
+// names the three that a reader acts on.
+func AgentStatusGlyph(status string) string {
+	switch status {
+	case "working":
+		return "*"
+	case "idle", "done":
+		return "-"
+	case "blocked":
+		return "!"
+	default:
+		return "?"
+	}
+}
+
+func agentPaneTab(pane AgentPaneEntry) string {
+	if pane.Tab != "" {
+		return pane.Tab
+	}
+	return "?"
+}
+
+func agentPaneTitle(pane AgentPaneEntry) string {
+	if pane.Title != "" {
+		return pane.Title
+	}
+	return pane.PaneID
 }

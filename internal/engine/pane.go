@@ -212,7 +212,7 @@ func PlaceCommandPane(o PlaceOpts) (PlacedPane, error) {
 			return PlacedPane{}, err
 		}
 
-		return createdPaneFromLayout(result, false)
+		return createdPaneFromLayout(result)
 	}
 
 	placed, err := PlaceEmptyPane(o)
@@ -235,7 +235,7 @@ func PlaceCommandPane(o PlaceOpts) (PlacedPane, error) {
 	return placed, nil
 }
 
-func createdPaneFromLayout(result map[string]any, split bool) (PlacedPane, error) {
+func createdPaneFromLayout(result map[string]any) (PlacedPane, error) {
 	layout, _ := result["layout"].(map[string]any)
 
 	tabID, _ := layout["tab_id"].(string)
@@ -245,7 +245,7 @@ func createdPaneFromLayout(result map[string]any, split bool) (PlacedPane, error
 		return PlacedPane{}, failPlacement("layout.apply did not return tab/workspace identifiers")
 	}
 
-	paneID, err := createdPaneID(layout, split)
+	paneID, err := createdPaneID(layout)
 	if err != nil {
 		return PlacedPane{}, err
 	}
@@ -257,16 +257,8 @@ func createdPaneFromLayout(result map[string]any, split bool) (PlacedPane, error
 	}, nil
 }
 
-func createdPaneID(layout map[string]any, split bool) (string, error) {
-	var node map[string]any
-	if split {
-		root, _ := layout["root"].(map[string]any)
-		second, _ := root["second"].(map[string]any)
-		node = second
-	} else {
-		root, _ := layout["root"].(map[string]any)
-		node = root
-	}
+func createdPaneID(layout map[string]any) (string, error) {
+	node, _ := layout["root"].(map[string]any)
 
 	if paneID, ok := node["pane_id"].(string); ok && paneID != "" {
 		return paneID, nil

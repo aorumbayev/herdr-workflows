@@ -1,8 +1,6 @@
 package picker
 
 import (
-	"strings"
-
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/aorumbayev/herdr-workflows/internal/console"
@@ -24,20 +22,14 @@ func consolePlacementLabel(p console.Placement) string {
 }
 
 func formatConsolePlacementBody(cursor int, remembered console.Placement) string {
-	var lines []string
-	lines = append(lines, "open console placement")
+	labels := make([]string, len(consolePlacementOptions))
 	for i, p := range consolePlacementOptions {
-		prefix := "  "
-		if i == cursor {
-			prefix = tui.CursorPrefix
-		}
-		label := consolePlacementLabel(p)
+		labels[i] = consolePlacementLabel(p)
 		if p == remembered {
-			label += " (default)"
+			labels[i] += " (default)"
 		}
-		lines = append(lines, prefix+label)
 	}
-	return strings.Join(lines, "\n")
+	return formatChooserBody("open console placement", labels, cursor)
 }
 
 func (m Model) rememberedPlacement() console.Placement {
@@ -68,14 +60,10 @@ func (m Model) handleConsolePlace(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.mode = m.placeBack
 		return m, nil
 	case "up":
-		if m.consolePlaceCursor > 0 {
-			m.consolePlaceCursor--
-		}
+		m.consolePlaceCursor = tui.StepCursor(m.consolePlaceCursor, -1, len(consolePlacementOptions))
 		return m, nil
 	case "down":
-		if m.consolePlaceCursor+1 < len(consolePlacementOptions) {
-			m.consolePlaceCursor++
-		}
+		m.consolePlaceCursor = tui.StepCursor(m.consolePlaceCursor, 1, len(consolePlacementOptions))
 		return m, nil
 	case "enter":
 		placement := consolePlacementOptions[m.consolePlaceCursor]

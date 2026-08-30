@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+
+	"github.com/aorumbayev/herdr-workflows/scripts/internal/reporoot"
 )
 
 var versionRE = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
@@ -28,7 +30,7 @@ func run(args []string) error {
 	}
 	version := args[0]
 
-	root, err := repoRoot()
+	root, err := reporoot.Find()
 	if err != nil {
 		return err
 	}
@@ -72,22 +74,6 @@ func run(args []string) error {
 	}
 	fmt.Println("prepare-release: regenerated docs/workflow.schema.json")
 	return nil
-}
-
-func repoRoot() (string, error) {
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	for dir := filepath.Clean(wd); ; dir = filepath.Dir(dir) {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", fmt.Errorf("prepare-release: no go.mod above %s", wd)
-		}
-	}
 }
 
 func argOrNull(args []string) any {

@@ -65,7 +65,7 @@ Say so in the report if a test leaves the shared binary in a broken state.
 - Prefer headless: `hsb herdr pane list | send-keys | send-text | read | wait-output`, and `hsb herdr agent list | read | prompt | wait`. Check flags with `hsb herdr pane read --help`.
 - For the TUI itself: `tmux capture-pane -p -t hwf-sandbox` to read the screen, `tmux send-keys -t hwf-sandbox ...` for keybindings such as `prefix+k` (the picker).
 - To watch live: `tmux attach -t hwf-sandbox` (detach with `Ctrl-b d`).
-- Plugin logs: `hsb herdr plugin log herdr-workflows`.
+- Plugin logs: `hsb herdr plugin log list --plugin herdr-workflows`.
 
 ## After `up`, stop and ask
 
@@ -101,6 +101,7 @@ confuses the next run.
 - `herdr server reload-config` needs the sandbox server already up. Never run the Go build and `setup` before `sandbox.sh up` has started it.
 - For a cold start over a leftover owned sandbox, run `down` first — `up` reuses an owned `/tmp/hwf-sandbox` as-is.
 - `hsb` does not sandbox `$HOME`, so `hwf`'s global-workflow discovery still reads the user's real `~/.hwf/workflows`. The picker will list those global workflows next to the sandbox repo's. Only act on the sandbox repo workflows (`repo` source). Never run, edit, share, or delete a `global` row.
+- herdr 0.8.2 ignored the sandbox `[worktrees] directory` and put a `worktree.create` checkout in the real `~/.herdr/worktrees`. Check that path after a worktree test and remove what the test left.
 - A leftover `/tmp/hwf-sandbox` without the `.hwf-sandbox-owned` sentinel (for example from a crashed `up`) is refused by both `up` and `down`. Remove it by hand only after confirming it holds no real work, then run `up`.
 
 ## Picker visual compare (Go vs last pre-Go TypeScript)

@@ -3,7 +3,6 @@ package workflow
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -28,15 +27,6 @@ steps:
 #   - run: [echo, "{{inputs.target}}"]
 #     when: "{{context.platform}} == linux"
 `
-
-// EditOpts configures editor handoff plus loader validation.
-type EditOpts struct {
-	Path     string
-	Name     string
-	RepoRoot string
-	Getenv   func(string) string
-	Run      func(argv []string) error
-}
 
 // ResolveEditor returns $EDITOR, then $VISUAL.
 func ResolveEditor(getenv func(string) string) (string, error) {
@@ -87,34 +77,4 @@ func createWorkflowStub(dir, name string) (string, error) {
 		return "", err
 	}
 	return path, nil
-}
-
-// EditAndValidate opens path in the resolved editor, then validates with the loader.
-func EditAndValidate(opts EditOpts) ValidateResult {
-	getenv := opts.Getenv
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-	editor, err := ResolveEditor(getenv)
-	if err != nil {
-		return ValidateResult{OK: false, Error: err.Error()}
-	}
-	run := opts.Run
-	if run == nil {
-		run = func(argv []string) error {
-			cmd := exec.Command(argv[0], argv[1:]...)
-			cmd.Stdin = os.Stdin
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			return cmd.Run()
-		}
-	}
-	argv, err := EditorArgv(editor, opts.Path)
-	if err != nil {
-		return ValidateResult{OK: false, Error: err.Error()}
-	}
-	if err := run(argv); err != nil {
-		return ValidateResult{OK: false, Error: err.Error()}
-	}
-	return ValidateFile(opts.Path, opts.Name, opts.RepoRoot)
 }

@@ -24,7 +24,7 @@ func (m Model) handleMouse(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	x, y := mouseContentXY(msg.X, msg.Y)
 	if y == 0 && m.tabBarLive() {
-		if tab := TabAtX(x); tab != "" {
+		if tab := TabAtX(x, m.contentWidth()); tab != "" {
 			return m.switchToTab(tab)
 		}
 	}

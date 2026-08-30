@@ -50,7 +50,7 @@ func TestOpenEditorDoesNotRunInsideUpdate(t *testing.T) {
 		},
 	})
 	m = apply(m, "ctrl+p")
-	next, cmd := m.Update(press("o"))
+	next, cmd := m.Update(press("e"))
 	m = next.(Model)
 	if ran {
 		t.Fatal("editor hook must not run inside Update")
@@ -98,7 +98,7 @@ func TestLiveOpenEditorReturnsExecProcess(t *testing.T) {
 		},
 	})
 	m = apply(m, "ctrl+p")
-	next, _ := m.Update(press("o"))
+	next, _ := m.Update(press("e"))
 	m = next.(Model)
 	if m.mode != modeEditPlace {
 		t.Fatalf("mode = %v, want edit place", m.mode)
@@ -133,7 +133,7 @@ func TestEditPlacementTabQuitsWithoutReopen(t *testing.T) {
 			return nil
 		},
 	})
-	m = apply(m, "ctrl+p", "o")
+	m = apply(m, "ctrl+p", "e")
 	for m.editPlaceCursor < 3 {
 		m = apply(m, "down")
 	}
@@ -194,7 +194,7 @@ func TestPopupEditExpandsThenRespawnsCompact(t *testing.T) {
 			return nil
 		},
 	})
-	m = apply(m, "ctrl+p", "o", "enter")
+	m = apply(m, "ctrl+p", "e", "enter")
 	if !m.quit {
 		t.Fatal("popup edit must quit the compact popup")
 	}

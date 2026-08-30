@@ -87,13 +87,14 @@ func (m Model) handleProfilesKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.status = ""
 	case "tab":
 		return m.cycleRootTab()
+	case "shift+tab":
+		return m.cycleRootTabBack()
 	case "esc":
 		m.quit = true
 		return m, tea.Quit
 	case "backspace":
 		if m.filter != "" {
-			r := []rune(m.filter)
-			m.filter = string(r[:len(r)-1])
+			m.filter = tui.TrimLastRune(m.filter)
 			m.cursor, m.offset = 0, 0
 		}
 	default:
@@ -154,10 +155,7 @@ func (m Model) handleNewProfileName(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.status = ""
 		return m, nil
 	case "backspace":
-		if m.promptValue != "" {
-			r := []rune(m.promptValue)
-			m.promptValue = string(r[:len(r)-1])
-		}
+		m.promptValue = tui.TrimLastRune(m.promptValue)
 	default:
 		if msg.Mod == 0 && msg.Text != "" {
 			m.promptValue += msg.Text
@@ -173,14 +171,10 @@ func (m Model) handleNewProfileScope(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.status = ""
 		return m, nil
 	case "up":
-		if m.newProfileScopeCursor > 0 {
-			m.newProfileScopeCursor--
-		}
+		m.newProfileScopeCursor = tui.StepCursor(m.newProfileScopeCursor, -1, len(newProfileScopeOptions))
 		return m, nil
 	case "down":
-		if m.newProfileScopeCursor+1 < len(newProfileScopeOptions) {
-			m.newProfileScopeCursor++
-		}
+		m.newProfileScopeCursor = tui.StepCursor(m.newProfileScopeCursor, 1, len(newProfileScopeOptions))
 		return m, nil
 	case "enter":
 		return m.createProfile()

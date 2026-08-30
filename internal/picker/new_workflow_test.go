@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/aorumbayev/herdr-workflows/internal/console"
+	"github.com/aorumbayev/herdr-workflows/internal/tui"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
@@ -66,6 +67,29 @@ func TestNewWorkflowAgentHandoffSendsPrompt(t *testing.T) {
 	}
 	if !m.quit {
 		t.Fatal("handoff must dismiss the overlay")
+	}
+}
+
+func TestNewWorkflowAgentChooserNamesPanesAndExplainsGlyphs(t *testing.T) {
+	m := New(Options{
+		Entries: catalogEntries(),
+		Width:   80,
+		Height:  24,
+		ListAgentPanes: func() ([]console.AgentPaneEntry, error) {
+			return []console.AgentPaneEntry{
+				{PaneID: "w1:p1", Tab: "1", Status: "blocked", Title: "One", Self: true},
+				{PaneID: "w1:p2", Tab: "2", Status: "done", Title: "Two"},
+			}, nil
+		},
+		PaneSendText: func(string, string) error { return nil },
+		Notify:       func(string, ...string) error { return nil },
+	})
+	m = apply(m, "ctrl+p", "n", "enter")
+	body := m.View().Content
+	for _, want := range []string{"1 ! One", "(you)", "2 - Two", "enter select", tui.AgentStatusLegend} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("new-workflow chooser missing %q:\n%s", want, body)
+		}
 	}
 }
 

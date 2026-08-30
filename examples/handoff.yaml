@@ -83,12 +83,6 @@ steps:
       focus: false
       close: success
 
-  - herdr: notification.show
-    params:
-      title: handoff ready
-      body: "opening {{inputs.target}} in {{inputs.placement}}"
-      sound: done
-
   - agent: |
       Focus: {{inputs.focus}}
 

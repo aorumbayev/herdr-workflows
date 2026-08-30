@@ -8,18 +8,10 @@ import (
 
 var runIDRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
-// StepRef identifies a step while it is current on the run stack.
-type StepRef struct {
-	Ordinal int
-	Total   int
-	Label   string
-	Phase   StepPhase
-}
-
 // Run is the in-memory execution lifecycle for one workflow invocation.
 type Run struct {
 	id       string
-	stack    []StepRef
+	depth    int
 	outcomes []StepOutcomeKind
 	terminal *RunTerminalStatus
 }
@@ -57,7 +49,7 @@ func NewRun(id string) (*Run, error) {
 
 func (r *Run) ID() string { return r.id }
 
-func (r *Run) HasCurrentStep() bool { return len(r.stack) > 0 }
+func (r *Run) HasCurrentStep() bool { return r.depth > 0 }
 
 func (r *Run) TerminalStatus() (RunTerminalStatus, bool) {
 	if r.terminal == nil {
@@ -72,11 +64,11 @@ func (r *Run) Outcomes() []StepOutcomeKind {
 	return out
 }
 
-func (r *Run) StartStep(ref StepRef) error {
+func (r *Run) StartStep() error {
 	if r.terminal != nil {
 		return fmt.Errorf("run is already terminal")
 	}
-	r.stack = append(r.stack, ref)
+	r.depth++
 	return nil
 }
 
@@ -91,10 +83,10 @@ func (r *Run) FinishStep(kind StepOutcomeKind) error {
 		r.outcomes = append(r.outcomes, kind)
 		return nil
 	}
-	if len(r.stack) == 0 {
+	if r.depth == 0 {
 		return fmt.Errorf("no current step")
 	}
-	r.stack = r.stack[:len(r.stack)-1]
+	r.depth--
 	r.outcomes = append(r.outcomes, kind)
 	return nil
 }
@@ -103,7 +95,7 @@ func (r *Run) Finish(status RunTerminalStatus) error {
 	if r.terminal != nil {
 		return fmt.Errorf("run is already terminal")
 	}
-	if len(r.stack) > 0 {
+	if r.depth > 0 {
 		return fmt.Errorf("current step still in flight")
 	}
 	if !ValidTerminalStatus(string(status)) {

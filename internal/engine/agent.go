@@ -195,13 +195,6 @@ func ApplyVerdict(response string, expect workflow.ExpectSpec, details map[strin
 	}
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 const (
 	turnTimeout               = 30 * time.Minute
 	pollInterval              = 1 * time.Second
@@ -926,21 +919,9 @@ func targetTurn(frame *StepFrame, action *workflow.AgentAction, rawTarget string
 	return managedResult(frame, target, path, agentTimeout(action), managedWaitTarget, details, action.Expect)
 }
 
-func asAgentAction(action workflow.Action) (*workflow.AgentAction, bool) {
-	switch a := action.(type) {
-	case *workflow.AgentAction:
-		return a, true
-	case workflow.AgentAction:
-		cp := a
-		return &cp, true
-	default:
-		return nil, false
-	}
-}
-
 // AgentStep runs one managed agent turn (new-agent or target mode).
 func AgentStep(frame *StepFrame) (StepOutcome, error) {
-	action, ok := asAgentAction(frame.Step.Action)
+	action, ok := asAction[workflow.AgentAction](frame.Step.Action)
 	if !ok {
 		return StepOutcome{OK: false, Error: "internal: not an agent step"}, nil
 	}

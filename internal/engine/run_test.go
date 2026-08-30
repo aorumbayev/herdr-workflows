@@ -41,8 +41,7 @@ func TestRunRejectsContradictoryTransitions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ref := StepRef{Ordinal: 1, Total: 2, Label: "run: true", Phase: PhaseMain}
-	if err := run.StartStep(ref); err != nil {
+	if err := run.StartStep(); err != nil {
 		t.Fatalf("StartStep: %v", err)
 	}
 	if !run.HasCurrentStep() {
@@ -51,8 +50,7 @@ func TestRunRejectsContradictoryTransitions(t *testing.T) {
 	if err := run.Finish(StatusFailed); err == nil {
 		t.Fatal("Finish while current step error = nil")
 	}
-	child := StepRef{Ordinal: 1, Total: 1, Label: "run: child", Phase: PhaseMain}
-	if err := run.StartStep(child); err != nil {
+	if err := run.StartStep(); err != nil {
 		t.Fatalf("nested StartStep: %v", err)
 	}
 	if err := run.FinishStep(OutcomeSucceeded); err != nil {
@@ -86,8 +84,7 @@ func TestRunSkipDoesNotPopParentCurrentStep(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	parent := StepRef{Ordinal: 1, Total: 1, Label: "workflow: child", Phase: PhaseMain}
-	if err := run.StartStep(parent); err != nil {
+	if err := run.StartStep(); err != nil {
 		t.Fatalf("StartStep: %v", err)
 	}
 	if err := run.FinishStep(OutcomeSkipped); err != nil {
@@ -115,7 +112,7 @@ func TestRunFinishSucceededRejectsFailedOutcomes(t *testing.T) {
 	if err := run.FinishStep(OutcomeSkipped); err != nil {
 		t.Fatal(err)
 	}
-	if err := run.StartStep(StepRef{Ordinal: 2, Total: 2, Label: "run: false", Phase: PhaseMain}); err != nil {
+	if err := run.StartStep(); err != nil {
 		t.Fatal(err)
 	}
 	if err := run.FinishStep(OutcomeFailedContinued); err != nil {
@@ -130,7 +127,7 @@ func TestRunFinishSucceededRejectsFailedOutcomes(t *testing.T) {
 	if got, ok := run.TerminalStatus(); !ok || got != StatusFailed {
 		t.Fatalf("TerminalStatus() = %q, %v, want %s true", got, ok, StatusFailed)
 	}
-	if err := run.StartStep(StepRef{Ordinal: 1, Total: 1, Label: "x", Phase: PhaseMain}); err == nil {
+	if err := run.StartStep(); err == nil {
 		t.Fatal("StartStep after terminal error = nil")
 	}
 	if err := run.Finish(StatusFailed); err == nil {
@@ -143,7 +140,7 @@ func TestRunFinishInterruptedRequiresInterruptedOutcome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := run.StartStep(StepRef{Ordinal: 1, Total: 1, Label: "herdr", Phase: PhaseMain}); err != nil {
+	if err := run.StartStep(); err != nil {
 		t.Fatal(err)
 	}
 	if err := run.FinishStep(OutcomeInterrupted); err != nil {

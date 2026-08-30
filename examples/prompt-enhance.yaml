@@ -65,9 +65,3 @@ steps:
     env:
       TEXT: "{{steps.refined.response}}"
     when: '{{context.platform}} != "macos"'
-
-  - herdr: notification.show
-    params:
-      title: prompt ready
-      body: refined prompt copied to clipboard
-      sound: done

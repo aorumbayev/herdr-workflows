@@ -75,7 +75,7 @@ func TestPromptEnhanceUsesConfiguredCustomAgentAndPlatformClipboard(t *testing.T
 	if startParams == nil || startParams["kind"] != "custom" {
 		t.Fatalf("agent.start params = %#v", startParams)
 	}
-	if got := titles(calls); len(got) != 2 || got[0] != "enhancing prompt" || got[1] != "prompt ready" {
+	if got := titles(calls); len(got) != 1 || got[0] != "enhancing prompt" {
 		t.Fatalf("titles = %v", got)
 	}
 	foundClose := false
@@ -103,7 +103,7 @@ func TestPromptEnhanceFallsBackToXclipWhenNoWaylandDisplayIsSet(t *testing.T) {
 	if string(clip) != "xclip:refined prompt" {
 		t.Fatalf("clipboard = %q", clip)
 	}
-	if got := titles(calls); len(got) != 2 || got[0] != "enhancing prompt" || got[1] != "prompt ready" {
+	if got := titles(calls); len(got) != 1 || got[0] != "enhancing prompt" {
 		t.Fatalf("titles = %v", got)
 	}
 }
@@ -226,7 +226,7 @@ func TestWorktreeCreateRunsFullLayoutWithPerPaneAgentName(t *testing.T) {
 	if findCall(calls, "tab.focus") == nil {
 		t.Fatal("missing tab.focus")
 	}
-	if got := titles(calls); len(got) != 1 || got[0] != "Worktree ready" {
+	if got := titles(calls); len(got) != 0 {
 		t.Fatalf("titles = %v", got)
 	}
 }
@@ -250,7 +250,7 @@ func TestWorktreeOpenTargetsExistingBranchThroughSameLayout(t *testing.T) {
 	if findCall(calls, "worktree.create") != nil {
 		t.Fatal("unexpected worktree.create")
 	}
-	if got := titles(calls); len(got) != 1 || got[0] != "Worktree ready" {
+	if got := titles(calls); len(got) != 0 {
 		t.Fatalf("titles = %v", got)
 	}
 }
@@ -365,7 +365,7 @@ func TestWorktreeOpenSkipsAgentStartWhenReopenedPaneAlreadyHasOne(t *testing.T) 
 	if findCall(calls, "tab.focus") == nil {
 		t.Fatal("missing tab.focus")
 	}
-	if got := titles(calls); len(got) != 1 || got[0] != "Worktree ready" {
+	if got := titles(calls); len(got) != 0 {
 		t.Fatalf("titles = %v", got)
 	}
 }

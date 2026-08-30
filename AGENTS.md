@@ -15,6 +15,7 @@ go tool verify                             # every host-feasible check (same as 
 go tool verify -fast                       # pre-commit
 go run ./scripts/generate-workflow-schema  # regenerate docs/workflow.schema.json
 go run ./scripts/gen-herdr-methods         # regenerate internal/host/herdr_methods.gen.go
+go run ./scripts/sync-embed                # copy skills/, manifest, logo, schema into embed/
 go run ./scripts/install-dev               # compile + herdr plugin link + keybindings + reload
 ```
 

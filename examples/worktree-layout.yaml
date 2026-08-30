@@ -52,8 +52,3 @@ steps:
   - herdr: tab.focus
     params:
       tab_id: "{{inputs.tab_id}}"
-
-  - herdr: notification.show
-    params:
-      title: Worktree ready
-      sound: done

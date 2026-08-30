@@ -285,9 +285,8 @@ func TestLaunchDetachedRunPinsCallerEnv(t *testing.T) {
 			WorkspaceID:  "wCaller",
 			WorktreePath: "/repo/.wt",
 		},
-		Inputs:         map[string]string{},
-		OnProgressLine: func(string) {},
-		Spawn:          exitingSpawn(seen, 0, "", "", nil),
+		Inputs: map[string]string{},
+		Spawn:  exitingSpawn(seen, 0, "", "", nil),
 	})
 
 	wantEnv := map[string]string{
@@ -332,13 +331,12 @@ func TestLaunchDetachedRunArgv(t *testing.T) {
 	seen := &spawnSeen{}
 	executable := "/tmp/fake-herdr-workflows"
 	_ = LaunchDetachedRun(LaunchRunRequest{
-		Name:           "sleep",
-		RepoRoot:       "/repo",
-		Executable:     executable,
-		Ctx:            config.InvocationContext{Selection: "", Cwd: "/repo"},
-		Inputs:         map[string]string{},
-		OnProgressLine: func(string) {},
-		Spawn:          exitingSpawn(seen, 0, "", "", nil),
+		Name:       "sleep",
+		RepoRoot:   "/repo",
+		Executable: executable,
+		Ctx:        config.InvocationContext{Selection: "", Cwd: "/repo"},
+		Inputs:     map[string]string{},
+		Spawn:      exitingSpawn(seen, 0, "", "", nil),
 	})
 
 	if len(seen.argv) < 3 {
@@ -364,13 +362,12 @@ func TestLaunchDetachedRunPayloadOnStdin(t *testing.T) {
 	stdin := &capturingStdin{}
 	secret := "cred-value-9f3a"
 	handle := LaunchDetachedRun(LaunchRunRequest{
-		Name:           "safe",
-		RepoRoot:       "/repo",
-		Executable:     "/tmp/fake-herdr-workflows",
-		Ctx:            config.InvocationContext{Selection: "", Cwd: "/repo"},
-		Inputs:         map[string]string{"token": secret},
-		OnProgressLine: func(string) {},
-		Spawn:          exitingSpawn(seen, 0, "", "", stdin),
+		Name:       "safe",
+		RepoRoot:   "/repo",
+		Executable: "/tmp/fake-herdr-workflows",
+		Ctx:        config.InvocationContext{Selection: "", Cwd: "/repo"},
+		Inputs:     map[string]string{"token": secret},
+		Spawn:      exitingSpawn(seen, 0, "", "", stdin),
 	})
 	result := settle(t, handle)
 	if !result.OK {
@@ -401,16 +398,12 @@ func TestLaunchDetachedRunPayloadOnStdin(t *testing.T) {
 
 func TestLaunchDetachedRunFailedDiagnostic(t *testing.T) {
 	seen := &spawnSeen{}
-	var progress []string
 	handle := LaunchDetachedRun(LaunchRunRequest{
 		Name:       "ignored",
 		RepoRoot:   "/repo",
 		Executable: "/tmp/fake-herdr-workflows",
 		Ctx:        config.InvocationContext{Selection: "", Cwd: "/repo"},
 		Inputs:     map[string]string{},
-		OnProgressLine: func(line string) {
-			progress = append(progress, line)
-		},
 		Spawn: exitingSpawn(seen, 2,
 			"[1/1] run: noisy\nstdout noise one\nstdout noise two\n",
 			"stderr line one\nfinal diagnostic\n",
@@ -424,23 +417,18 @@ func TestLaunchDetachedRunFailedDiagnostic(t *testing.T) {
 	if result.Detail != "final diagnostic" {
 		t.Fatalf("Detail = %q, want final diagnostic", result.Detail)
 	}
-	wantProgress := []string{"[1/1] run: noisy"}
-	if !slices.Equal(progress, wantProgress) {
-		t.Fatalf("progress = %#v, want %#v", progress, wantProgress)
-	}
 }
 
 func TestLaunchDetachedRunStderrTail(t *testing.T) {
 	seen := &spawnSeen{}
 	flood := strings.Repeat("a", 80*1024) + "TAIL-END"
 	handle := LaunchDetachedRun(LaunchRunRequest{
-		Name:           "ignored",
-		RepoRoot:       "/repo",
-		Executable:     "/tmp/fake-herdr-workflows",
-		Ctx:            config.InvocationContext{Selection: "", Cwd: "/repo"},
-		Inputs:         map[string]string{},
-		OnProgressLine: func(string) {},
-		Spawn:          exitingSpawn(seen, 2, "[1/1] run: flood\n", flood, nil),
+		Name:       "ignored",
+		RepoRoot:   "/repo",
+		Executable: "/tmp/fake-herdr-workflows",
+		Ctx:        config.InvocationContext{Selection: "", Cwd: "/repo"},
+		Inputs:     map[string]string{},
+		Spawn:      exitingSpawn(seen, 2, "[1/1] run: flood\n", flood, nil),
 	})
 	result := settle(t, handle)
 	if result.OK {

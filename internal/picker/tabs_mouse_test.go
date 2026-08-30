@@ -37,6 +37,28 @@ func TestTabCyclesWorkflowsRuns(t *testing.T) {
 	}
 }
 
+func TestShiftTabCyclesRootTabsBackward(t *testing.T) {
+	m := New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: t.TempDir()})
+	m = apply(m, "shift+tab")
+	if m.mode != modeProfiles {
+		t.Fatalf("mode = %v, want the profiles tab one step back from workflows", m.mode)
+	}
+	m = apply(m, "shift+tab")
+	if m.mode != modeRuns {
+		t.Fatalf("mode = %v, want the runs tab", m.mode)
+	}
+	m = apply(m, "shift+tab")
+	if m.mode != modeList {
+		t.Fatalf("mode = %v, want the workflows tab after three backward cycles", m.mode)
+	}
+	if m.quit {
+		t.Fatal("shift+tab must not quit the overlay")
+	}
+	if m.filter != "" {
+		t.Fatalf("shift+tab must not reach the filter: %q", m.filter)
+	}
+}
+
 func TestTabNeverQuitsTheOverlay(t *testing.T) {
 	var reopened []PopupState
 	newModel := func() Model {
@@ -114,11 +136,11 @@ func TestPickerMouseReportsAndMovesCursor(t *testing.T) {
 
 func TestTabBarClickSwitchesAndObeysTheKeyboardGuard(t *testing.T) {
 	m := New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: t.TempDir()})
-	m = applyMsg(m, tea.MouseClickMsg{Button: tea.MouseLeft, X: tui.ChromePaddingX + tabCellX(tui.TabRuns), Y: 0})
+	m = applyMsg(m, tea.MouseClickMsg{Button: tea.MouseLeft, X: tui.ChromePaddingX + tabCellX(tui.TabRuns, m.contentWidth()), Y: 0})
 	if m.mode != modeRuns {
 		t.Fatalf("click runs = %v", m.mode)
 	}
-	m = applyMsg(m, tea.MouseClickMsg{Button: tea.MouseLeft, X: tui.ChromePaddingX + tabCellX(tui.TabWorkflows), Y: 0})
+	m = applyMsg(m, tea.MouseClickMsg{Button: tea.MouseLeft, X: tui.ChromePaddingX + tabCellX(tui.TabWorkflows, m.contentWidth()), Y: 0})
 	if m.mode != modeList {
 		t.Fatalf("click workflows = %v", m.mode)
 	}
@@ -128,14 +150,14 @@ func TestTabBarClickSwitchesAndObeysTheKeyboardGuard(t *testing.T) {
 		t.Skip("runs browser stayed in list mode without run history")
 	}
 	before := m.mode
-	m = applyMsg(m, tea.MouseClickMsg{Button: tea.MouseLeft, X: tui.ChromePaddingX + tabCellX(tui.TabWorkflows), Y: 0})
+	m = applyMsg(m, tea.MouseClickMsg{Button: tea.MouseLeft, X: tui.ChromePaddingX + tabCellX(tui.TabWorkflows, m.contentWidth()), Y: 0})
 	if m.mode != before {
 		t.Fatalf("pointer left run detail where Tab cannot: %v", m.mode)
 	}
 }
 
-func tabCellX(name string) int {
-	x := len(tui.TabKeyPrefix)
+func tabCellX(name string, width int) int {
+	x := tabBarOffset(width)
 	for _, cell := range tabCells() {
 		if cell.name == name {
 			return x + 1
@@ -206,7 +228,7 @@ func TestMissingEditorIsAHardError(t *testing.T) {
 		Env:     func(string) string { return "" },
 	})
 	m = apply(m, "ctrl+p")
-	next, _ := m.Update(press("o"))
+	next, _ := m.Update(press("e"))
 	m = next.(Model)
 	if m.mode != modeEditPlace {
 		t.Fatalf("mode = %v, want edit place", m.mode)
@@ -247,7 +269,7 @@ func TestTabBarClickOnTheActiveRunsTabKeepsItsState(t *testing.T) {
 	}
 	m = applyMsg(m, press("ctrl+g"))
 	before := m.View().Content
-	m = applyMsg(m, tea.MouseClickMsg{Button: tea.MouseLeft, X: tui.ChromePaddingX + tabCellX(tui.TabRuns), Y: 0})
+	m = applyMsg(m, tea.MouseClickMsg{Button: tea.MouseLeft, X: tui.ChromePaddingX + tabCellX(tui.TabRuns, m.contentWidth()), Y: 0})
 	if m.mode != modeRuns {
 		t.Fatalf("mode = %v, want runs", m.mode)
 	}

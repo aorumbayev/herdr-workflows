@@ -28,6 +28,19 @@ func (m Model) cycleRootTab() (tea.Model, tea.Cmd) {
 	}
 }
 
+func (m Model) cycleRootTabBack() (tea.Model, tea.Cmd) {
+	switch m.mode {
+	case modeList:
+		return m.switchToTab(tui.TabProfiles)
+	case modeRuns:
+		return m.switchToTab(tui.TabWorkflows)
+	case modeProfiles:
+		return m.switchToTab(tui.TabRuns)
+	default:
+		return m, nil
+	}
+}
+
 func (m Model) openRunsTab() (tea.Model, tea.Cmd) {
 	getenv := m.env
 	if getenv == nil {

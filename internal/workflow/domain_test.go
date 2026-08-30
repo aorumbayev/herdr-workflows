@@ -280,42 +280,6 @@ func mapsEqual(a, b map[string]string) bool {
 	return true
 }
 
-func TestDumpWorkflowPreservesInputOrderAndSchemaFields(t *testing.T) {
-	raw, err := ParseRaw("dump.yaml", `version: v1alpha1
-inputs:
-  mode: [create, delete]
-  branch:
-    type: text
-    when: '{{inputs.mode}} == "create"'
-steps:
-  - id: server
-    run: [echo, ready]
-    pane:
-      open: tab
-      name: "server {{inputs.mode}}"
-    ready_when: /ready/
-    timeout: 5s
-`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	dumped, err := DumpWorkflow(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	parsed, err := ParseRaw("dumped.yaml", dumped)
-	if err != nil {
-		t.Fatalf("dumped workflow does not parse: %s\n%s", err, dumped)
-	}
-	if len(parsed.Inputs) != 2 || parsed.Inputs[0].Name != "mode" || parsed.Inputs[1].Name != "branch" {
-		t.Fatalf("input order changed: %#v", parsed.Inputs)
-	}
-	run := parsed.Steps[0].Action.(RunAction)
-	if run.Pane == nil || run.Pane.Name == "" || run.Pane.Anchor != "" || run.ReadyWhen != "ready" {
-		t.Fatalf("pane fields did not round trip: %#v", run)
-	}
-}
-
 func TestChildInputMembershipContract(t *testing.T) {
 	const choiceChild = `version: v1alpha1
 inputs:

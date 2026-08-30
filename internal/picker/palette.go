@@ -22,7 +22,7 @@ func ResolvePaletteLetter(letter string, selected *workflow.ListEntry) *PaletteA
 		return &PaletteAction{ID: "new"}
 	case "i":
 		return &PaletteAction{ID: "import"}
-	case "e":
+	case "o":
 		return &PaletteAction{ID: "examples"}
 	case "c":
 		return &PaletteAction{ID: "console"}
@@ -31,7 +31,7 @@ func ResolvePaletteLetter(letter string, selected *workflow.ListEntry) *PaletteA
 		return nil
 	}
 	switch key {
-	case "o":
+	case "e":
 		e := *selected
 		return &PaletteAction{ID: "open", Entry: &e}
 	case "s":
@@ -49,14 +49,14 @@ func FormatPaletteBody(selected *workflow.ListEntry, width int) string {
 	rows := []string{
 		paletteRow("n", "new", width),
 		paletteRow("i", "import", width),
-		paletteRow("e", "examples", width),
+		paletteRow("o", "examples", width),
 		paletteRow("c", "console", width),
 	}
 	if selected == nil || selected.Error != "" {
 		return strings.Join(rows, "\n")
 	}
 	return strings.Join(append(rows,
-		paletteRow("o", "edit", width),
+		paletteRow("e", "edit", width),
 		paletteRow("s", "share", width),
 		paletteRow("d", "delete", width),
 	), "\n")

@@ -175,28 +175,14 @@ func DetailLines(view DetailView, width int) []string {
 		head := strings.Join([]string{"LAUNCH FAILED", view.Workflow, history.DisplayRunID(view.ID)}, tui.ChromeSep)
 		return []string{tui.Truncate(head, width), asciiGlyphs(tui.Truncate(view.Message, width))}
 	case "history-unavailable":
-		status := "RUNNING"
-		if view.Finished != "" {
-			status = strings.ToUpper(view.Finished)
-		}
-		head := strings.Join([]string{status, "HISTORY UNAVAILABLE", view.Workflow}, tui.ChromeSep)
+		head := strings.Join([]string{"RUNNING", "HISTORY UNAVAILABLE", view.Workflow}, tui.ChromeSep)
 		lines := []string{tui.Truncate(head, width)}
-		for _, line := range view.Progress {
-			lines = append(lines, asciiGlyphs(tui.Truncate(line, width)))
-		}
 		if view.Message != "" {
 			lines = append(lines, asciiGlyphs(tui.Truncate(view.Message, width)))
 		}
 		return lines
 	default:
-		lines := FormatRunDetailLines(view.Blocks, width)
-		if len(view.Progress) > 0 {
-			lines = append(lines, "")
-			for _, line := range view.Progress {
-				lines = append(lines, asciiGlyphs(tui.Truncate(line, width)))
-			}
-		}
-		return lines
+		return FormatRunDetailLines(view.Blocks, width)
 	}
 }
 

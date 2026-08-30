@@ -15,11 +15,11 @@ import (
 	"golang.org/x/term"
 )
 
-// HerdrAgentKinds lists types that herdr agent start --kind accepts (herdr 0.8.0).
+// HerdrAgentKinds lists types that herdr agent start --kind accepts (herdr 0.8.2).
 var HerdrAgentKinds = []string{
 	"pi", "claude", "codex", "gemini", "cursor", "devin", "agy", "cline", "omp",
 	"mastracode", "opencode", "copilot", "kimi", "kiro", "droid", "amp", "grok",
-	"hermes", "kilo", "qodercli", "maki",
+	"hermes", "kilo", "qodercli", "qwen", "maki",
 }
 
 var knownKinds = []struct {

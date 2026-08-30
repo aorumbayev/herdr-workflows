@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/aorumbayev/herdr-workflows/scripts/internal/reporoot"
 )
 
 func main() {
@@ -19,7 +21,7 @@ func main() {
 }
 
 func run() error {
-	root, err := repoRoot()
+	root, err := reporoot.Find()
 	if err != nil {
 		return err
 	}
@@ -43,22 +45,6 @@ func run() error {
 	// Reload fails when no Herdr server operates. The link is already installed.
 	runCmdIgnoringFailure(root, herdr, []string{"server", "reload-config"})
 	return nil
-}
-
-func repoRoot() (string, error) {
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	for dir := filepath.Clean(wd); ; dir = filepath.Dir(dir) {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", fmt.Errorf("install-dev: no go.mod above %s", wd)
-		}
-	}
 }
 
 func runCmd(dir, step, name string, args []string) error {

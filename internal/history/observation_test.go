@@ -120,7 +120,7 @@ func insertIncompatibleForTest(id string, version int, blob string, getenv confi
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(`INSERT INTO runs (id, version, expired, workflow, title, source, checkout_root, status, started_at, heartbeat_at, snapshot)
-		VALUES (?, ?, 0, 'old', '', 'repo', '/repo/a', '', '2026-08-20T12:00:00.000Z', '2026-08-20T12:00:00.000Z', ?)`, id, version, blob)
+	_, err = db.Exec(`INSERT INTO runs (id, version, expired, status, started_at, heartbeat_at, snapshot)
+		VALUES (?, ?, 0, '', '2026-08-20T12:00:00.000Z', '2026-08-20T12:00:00.000Z', ?)`, id, version, blob)
 	return err
 }

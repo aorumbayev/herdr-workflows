@@ -225,10 +225,10 @@ func TestPaletteLetters(t *testing.T) {
 	if ResolvePaletteLetter("n", nil).ID != "new" || ResolvePaletteLetter("i", nil).ID != "import" {
 		t.Fatal("n/i")
 	}
-	if ResolvePaletteLetter("e", nil).ID != "examples" {
-		t.Fatal("e")
+	if ResolvePaletteLetter("o", nil).ID != "examples" {
+		t.Fatal("o")
 	}
-	if ResolvePaletteLetter("o", nil) != nil || ResolvePaletteLetter("s", nil) != nil || ResolvePaletteLetter("d", nil) != nil {
+	if ResolvePaletteLetter("e", nil) != nil || ResolvePaletteLetter("s", nil) != nil || ResolvePaletteLetter("d", nil) != nil {
 		t.Fatal("selection-dependent without row")
 	}
 	empty := FormatPaletteBody(nil, 80)
@@ -241,7 +241,7 @@ func TestPaletteLetters(t *testing.T) {
 		}
 	}
 	entry := workflow.ListEntry{Name: "deploy", Source: "repo", File: "/r/d.yaml"}
-	if got := ResolvePaletteLetter("o", &entry); got == nil || got.ID != "open" || got.Entry == nil || got.Entry.Name != "deploy" {
+	if got := ResolvePaletteLetter("e", &entry); got == nil || got.ID != "open" || got.Entry == nil || got.Entry.Name != "deploy" {
 		t.Fatalf("open = %+v", got)
 	}
 	if got := ResolvePaletteLetter("s", &entry); got == nil || got.Entry.Name != "deploy" {

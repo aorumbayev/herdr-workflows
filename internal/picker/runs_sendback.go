@@ -87,14 +87,10 @@ func (m Model) handleRunsAgentPick(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.agentPanes = nil
 		return m, nil
 	case "up":
-		if m.agentCursor > 0 {
-			m.agentCursor--
-		}
+		m.agentCursor = tui.StepCursor(m.agentCursor, -1, len(m.agentPanes))
 		return m, nil
 	case "down":
-		if m.agentCursor+1 < len(m.agentPanes) {
-			m.agentCursor++
-		}
+		m.agentCursor = tui.StepCursor(m.agentCursor, 1, len(m.agentPanes))
 		return m, nil
 	case "enter":
 		if m.agentCursor < 0 || m.agentCursor >= len(m.agentPanes) {
@@ -124,7 +120,7 @@ func (m Model) deliverRunsSendback(paneID string) (tea.Model, tea.Cmd) {
 
 func (m Model) renderRunsAgentPick() string {
 	w := m.contentWidth()
-	body := console.FormatAgentPickBody(m.agentPanes, m.agentCursor)
-	footer := tui.FormatListFooter(w, m.agentCursor, len(m.agentPanes), "enter send"+tui.ChromeSep+"esc back")
+	body := console.FormatAgentPickBody(m.agentPanes, m.agentCursor, w)
+	footer := tui.FormatListFooter(w, m.agentCursor, len(m.agentPanes), "enter send"+tui.ChromeSep+"esc back"+tui.ChromeSep+tui.AgentStatusLegend)
 	return body + "\n" + tui.FormatRule(w) + "\n" + footer
 }

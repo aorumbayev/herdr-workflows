@@ -698,32 +698,7 @@ func (s *validationScope) checkStepShape(step map[string]any) bool {
 	}
 	shape.checkWhen(step, "when")
 	shape.checkBool(step, "continue_on_error")
-	shape.checkString(step, "agent", false)
-	shape.checkString(step, "using", true)
-	shape.checkString(step, "target", true)
-	shape.checkRun(step)
-	if shell, ok := step["shell"]; ok {
-		if text, isString := shell.(string); !isString {
-			shape.add(typeMismatch("string", shell), "shell")
-		} else if !slices.Contains(Shells, text) {
-			shape.add(`Invalid option: expected one of "sh"|"bash"|"zsh"|"pwsh"|"powershell"|"cmd"`, "shell")
-		}
-	}
-	shape.checkString(step, "herdr", false)
-	if params, ok := step["params"]; ok {
-		if _, isObj := params.(map[string]any); !isObj {
-			shape.add(typeMismatch("object", params), "params")
-		}
-	}
-	shape.checkString(step, "workflow", false)
-	shape.checkStringMap(step, "inputs")
-	shape.checkString(step, "cwd", true)
-	shape.checkStringMap(step, "env")
-	shape.checkPane(step)
-	shape.checkReadyWhen(step)
-	shape.checkDuration(step, "timeout")
-	shape.checkExpect(step)
-	shape.checkSuccessCodes(step)
+	shape.checkActionShape(step)
 	shape.checkBool(step, "background")
 	shape.checkRetry(step)
 	return len(s.c.issues.list) == before
@@ -732,33 +707,38 @@ func (s *validationScope) checkStepShape(step map[string]any) bool {
 func (s *validationScope) checkRecoveryShape(step map[string]any) bool {
 	before := len(s.c.issues.list)
 	shape := &validationScope{c: s.c, step: s.step, key: s.key}
-	shape.checkString(step, "agent", false)
-	shape.checkString(step, "using", true)
-	shape.checkString(step, "target", true)
-	shape.checkRun(step)
+	shape.checkActionShape(step)
+	return len(s.c.issues.list) == before
+}
+
+// checkActionShape validates the action fields shared by steps and on_failure.
+func (s *validationScope) checkActionShape(step map[string]any) {
+	s.checkString(step, "agent", false)
+	s.checkString(step, "using", true)
+	s.checkString(step, "target", true)
+	s.checkRun(step)
 	if shell, ok := step["shell"]; ok {
 		if text, isString := shell.(string); !isString {
-			shape.add(typeMismatch("string", shell), "shell")
+			s.add(typeMismatch("string", shell), "shell")
 		} else if !slices.Contains(Shells, text) {
-			shape.add(`Invalid option: expected one of "sh"|"bash"|"zsh"|"pwsh"|"powershell"|"cmd"`, "shell")
+			s.add(`Invalid option: expected one of "sh"|"bash"|"zsh"|"pwsh"|"powershell"|"cmd"`, "shell")
 		}
 	}
-	shape.checkString(step, "herdr", false)
+	s.checkString(step, "herdr", false)
 	if params, ok := step["params"]; ok {
 		if _, isObj := params.(map[string]any); !isObj {
-			shape.add(typeMismatch("object", params), "params")
+			s.add(typeMismatch("object", params), "params")
 		}
 	}
-	shape.checkString(step, "workflow", false)
-	shape.checkStringMap(step, "inputs")
-	shape.checkString(step, "cwd", true)
-	shape.checkStringMap(step, "env")
-	shape.checkPane(step)
-	shape.checkReadyWhen(step)
-	shape.checkDuration(step, "timeout")
-	shape.checkExpect(step)
-	shape.checkSuccessCodes(step)
-	return len(s.c.issues.list) == before
+	s.checkString(step, "workflow", false)
+	s.checkStringMap(step, "inputs")
+	s.checkString(step, "cwd", true)
+	s.checkStringMap(step, "env")
+	s.checkPane(step)
+	s.checkReadyWhen(step)
+	s.checkDuration(step, "timeout")
+	s.checkExpect(step)
+	s.checkSuccessCodes(step)
 }
 
 func (c *checker) checkStep(index int, value any) {

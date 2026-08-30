@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"sort"
 	"strings"
 	"unicode"
 
@@ -151,7 +150,7 @@ func analyzeWorkflowSensitivity(raw Document) Sensitivity {
 			flags.SensitiveMethods = appendUnique(flags.SensitiveMethods, method)
 		}
 	}
-	sort.Strings(flags.SensitiveMethods)
+	slices.Sort(flags.SensitiveMethods)
 	return flags
 }
 
@@ -194,8 +193,8 @@ func analyzeResolvedSensitivity(raw Document, name, repoRoot string, stack []str
 		}
 		MergeSensitivity(&aggregated, analyzeResolvedSensitivity(child, childName, repoRoot, nextStack))
 	}
-	sort.Strings(aggregated.SensitiveMethods)
-	sort.Strings(aggregated.UnresolvedChildren)
+	slices.Sort(aggregated.SensitiveMethods)
+	slices.Sort(aggregated.UnresolvedChildren)
 	return aggregated
 }
 
@@ -214,7 +213,7 @@ func ReferencedWorkflowChildren(raw Document) []string {
 			names = append(names, name)
 		}
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names
 }
 

@@ -1,8 +1,6 @@
 package picker
 
 import (
-	"strings"
-
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
@@ -16,18 +14,14 @@ const (
 var editPlacementOptions = []string{"popup", "beside", "below", "tab"}
 
 func formatEditPlacementBody(cursor int) string {
-	lines := []string{"open editor placement"}
+	labels := make([]string, len(editPlacementOptions))
 	for i, opt := range editPlacementOptions {
-		prefix := "  "
-		if i == cursor {
-			prefix = tui.CursorPrefix
-		}
+		labels[i] = opt
 		if opt == "popup" {
-			opt += " (default)"
+			labels[i] += " (default)"
 		}
-		lines = append(lines, prefix+opt)
 	}
-	return strings.Join(lines, "\n")
+	return formatChooserBody("open editor placement", labels, cursor)
 }
 
 func (m Model) beginEditPlacement(path, name string, isProfile bool, back mode) (tea.Model, tea.Cmd) {
@@ -55,14 +49,10 @@ func (m Model) handleEditPlace(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.editPath, m.editName = "", ""
 		return m, nil
 	case "up":
-		if m.editPlaceCursor > 0 {
-			m.editPlaceCursor--
-		}
+		m.editPlaceCursor = tui.StepCursor(m.editPlaceCursor, -1, len(editPlacementOptions))
 		return m, nil
 	case "down":
-		if m.editPlaceCursor+1 < len(editPlacementOptions) {
-			m.editPlaceCursor++
-		}
+		m.editPlaceCursor = tui.StepCursor(m.editPlaceCursor, 1, len(editPlacementOptions))
 		return m, nil
 	case "enter":
 		path, name := m.editPath, m.editName

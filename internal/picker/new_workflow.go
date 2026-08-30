@@ -34,14 +34,10 @@ func (m Model) handleNewMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.status = ""
 		return m, nil
 	case "up":
-		if m.newModeCursor > 0 {
-			m.newModeCursor--
-		}
+		m.newModeCursor = tui.StepCursor(m.newModeCursor, -1, len(newModeOptions))
 		return m, nil
 	case "down":
-		if m.newModeCursor+1 < len(newModeOptions) {
-			m.newModeCursor++
-		}
+		m.newModeCursor = tui.StepCursor(m.newModeCursor, 1, len(newModeOptions))
 		return m, nil
 	case "enter":
 		if m.newModeCursor == 0 {
@@ -62,14 +58,10 @@ func (m Model) handleNewScope(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.status = ""
 		return m, nil
 	case "up":
-		if m.newScopeCursor > 0 {
-			m.newScopeCursor--
-		}
+		m.newScopeCursor = tui.StepCursor(m.newScopeCursor, -1, len(newScopeOptions))
 		return m, nil
 	case "down":
-		if m.newScopeCursor+1 < len(newScopeOptions) {
-			m.newScopeCursor++
-		}
+		m.newScopeCursor = tui.StepCursor(m.newScopeCursor, 1, len(newScopeOptions))
 		return m, nil
 	case "enter":
 		return m.createTemplate()
@@ -123,14 +115,10 @@ func (m Model) handleNewAgentPick(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.agentPanes = nil
 		return m, nil
 	case "up":
-		if m.agentCursor > 0 {
-			m.agentCursor--
-		}
+		m.agentCursor = tui.StepCursor(m.agentCursor, -1, len(m.agentPanes))
 		return m, nil
 	case "down":
-		if m.agentCursor+1 < len(m.agentPanes) {
-			m.agentCursor++
-		}
+		m.agentCursor = tui.StepCursor(m.agentCursor, 1, len(m.agentPanes))
 		return m, nil
 	case "enter":
 		if m.agentCursor < 0 || m.agentCursor >= len(m.agentPanes) {
@@ -192,7 +180,7 @@ func (m Model) renderNewScope() string {
 
 func (m Model) renderNewAgentPick() string {
 	w := m.contentWidth()
-	body := console.FormatAgentPickBody(m.agentPanes, m.agentCursor)
-	footer := tui.FormatListFooter(w, m.agentCursor, len(m.agentPanes), "enter select"+tui.ChromeSep+"esc back")
+	body := console.FormatAgentPickBody(m.agentPanes, m.agentCursor, w)
+	footer := tui.FormatListFooter(w, m.agentCursor, len(m.agentPanes), "enter select"+tui.ChromeSep+"esc back"+tui.ChromeSep+tui.AgentStatusLegend)
 	return body + "\n" + tui.FormatRule(w) + "\n" + footer
 }
