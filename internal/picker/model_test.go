@@ -92,10 +92,17 @@ func listRowCount(view string) int {
 			i++
 		}
 	}
+	skipEdge := func() {
+		if i < len(lines) && strings.HasPrefix(visibleLine(lines[i]), "----") {
+			i++
+		}
+	}
 	skipBlank()
 	i++
 	skipBlank()
+	skipEdge()
 	i++
+	skipEdge()
 	skipBlank()
 	n := 0
 	for j := 0; j < tui.ListViewport && i < len(lines); j++ {
@@ -158,7 +165,7 @@ func TestPickerFilterAndPaletteRestore(t *testing.T) {
 		t.Fatalf("filter = %q", m.filter)
 	}
 	body := m.View().Content
-	if got := visibleLine(strings.Split(body, "\n")[1]); got != "loy" {
+	if got := visibleLine(strings.Split(body, "\n")[2]); got != tui.FieldCursor+"  loy" {
 		t.Fatalf("filter row = %q", got)
 	}
 	if !strings.Contains(body, "Deploy") || strings.Contains(body, "Chat handoff") {
@@ -262,13 +269,16 @@ func TestInputFailureScreen(t *testing.T) {
 
 func TestListFilterMissKeepsFilterRow(t *testing.T) {
 	m := New(Options{Entries: catalogEntries(), Width: 80})
-	if got := tui.StripContentPadding(strings.Split(m.View().Content, "\n")[1]); got != tui.FilterWorkflows {
+	if got := tui.StripContentPadding(strings.Split(m.View().Content, "\n")[2]); got != tui.FormatField("", tui.FilterWorkflows, 78) {
 		t.Fatalf("empty filter row = %q", got)
 	}
 	m = apply(m, "z", "z", "z")
 	body := m.View().Content
-	if got := tui.StripContentPadding(strings.Split(body, "\n")[1]); got != "zzz" {
+	if got := tui.StripContentPadding(strings.Split(body, "\n")[2]); got != tui.FieldCursor+"  zzz" {
 		t.Fatalf("miss filter row = %q", got)
+	}
+	if got := visibleLine(strings.Split(body, "\n")[3]); got != tui.FormatFieldEdge(78) {
+		t.Fatalf("miss field edge = %q", got)
 	}
 	if !strings.Contains(body, "No workflows matching zzz") {
 		t.Fatalf("miss copy:\n%s", body)

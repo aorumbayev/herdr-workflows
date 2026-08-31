@@ -3,7 +3,9 @@ package tui
 import (
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -46,6 +48,56 @@ func Truncate(s string, max int) string {
 		return ansi.Cut(Ellipsis, 0, max)
 	}
 	return ansi.Truncate(s, max, Ellipsis)
+}
+
+// TruncateStart shortens s to max cells and adds Ellipsis on the left, so the
+// tail the user is typing stays visible.
+func TruncateStart(s string, max int) string {
+	used := Columns(s)
+	if used <= max {
+		return s
+	}
+	if max <= 0 {
+		return ""
+	}
+	ellipsisCols := Columns(Ellipsis)
+	if max < ellipsisCols {
+		return ansi.Cut(Ellipsis, 0, max)
+	}
+	start := used - (max - ellipsisCols)
+	for start <= used {
+		got := Ellipsis + ansi.Cut(s, start, used)
+		if Columns(got) <= max {
+			return got
+		}
+		start++
+	}
+	return ansi.Cut(Ellipsis, 0, max)
+}
+
+// FormatField renders a free-text field value after a fixed FieldCursor at column
+// zero. The text starts at RowTextIndent, in register with list row titles.
+// A long value keeps its tail, so the newest characters stay visible.
+func FormatField(value, placeholder string, width int) string {
+	prefix := FieldCursor + strings.Repeat(" ", RowTextIndent-Columns(FieldCursor))
+	room := max(0, width-Columns(prefix))
+	if room == 0 {
+		return FieldCursor
+	}
+	if value != "" {
+		return prefix + TruncateStart(value, room)
+	}
+	if placeholder == "" {
+		return FieldCursor
+	}
+	return prefix + DefaultTheme().Placeholder.Render(Truncate(placeholder, room))
+}
+
+// FormatFieldEdge draws the edge under a free-text field, flush left and wide as
+// width. The glyph is the lipgloss ASCII bottom border, so the edge and FormatRule
+// stay one system.
+func FormatFieldEdge(width int) string {
+	return strings.Repeat(lipgloss.ASCIIBorder().Bottom, max(0, width))
 }
 
 // PadColumns adds spaces on the right of s until the width in cells.
@@ -161,11 +213,31 @@ func takeWrappedLine(text string, budget int) string {
 		return text
 	}
 	window := takeColumns(text, budget)
+	if window == "" {
+		_, size := utf8.DecodeRuneInString(text)
+		return text[:size]
+	}
 	space := strings.LastIndex(window, " ")
 	if space > 0 {
 		return window[:space]
 	}
 	return window
+}
+
+// WrapIndented breaks text on word boundaries into rows indented by RowTextIndent,
+// so continuations hang under the first row instead of the left edge.
+func WrapIndented(text string, contentWidth int) []string {
+	indent := strings.Repeat(" ", RowTextIndent)
+	budget := max(1, contentWidth-RowTextIndent)
+	var out []string
+	for {
+		line := takeWrappedLine(text, budget)
+		out = append(out, indent+line)
+		text = strings.TrimLeft(text[len(line):], " ")
+		if text == "" {
+			return out
+		}
+	}
 }
 
 // FormatDetailBlock puts detail text on two fixed rows.
@@ -188,7 +260,7 @@ func FormatDetailLines(description string, contentWidth int) string {
 		return ""
 	}
 	indent := strings.Repeat(" ", RowTextIndent)
-	budget := max(0, contentWidth-RowTextIndent)
+	budget := max(0, contentWidth-RowTextIndent-RowRightGutter)
 	line1 := takeWrappedLine(text, budget)
 	rest := strings.TrimLeft(text[len(line1):], " \t")
 	if rest == "" {

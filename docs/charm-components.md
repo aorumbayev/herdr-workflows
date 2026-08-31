@@ -22,18 +22,19 @@ This cycle does not add `bubbles` or `huh`. Unused modules violate YAGNI.
 | --- | --- | --- | --- | --- | --- |
 | Fixed six-row list viewport | `bubbles/v2` list | v2.1.1 | keep-custom | `list.Model` pagination owns `PerPage` and optional paginator chrome. It cannot lock six rows with cursor-offset scrolling and no scroll thumb. | `TestCharmVerdicts` |
 | Filter text accumulation | `bubbles/v2` textinput | v2.1.1 | keep-custom | No product key routing that keeps Ctrl+P, Tab, and Ctrl+G out of the filter while bare letters still type. | `TestCharmVerdicts` |
-| FilterInput stdin leak drop | `bubbletea/v2` | v2.0.9 | keep-custom | `tea.WithFilter` has no herdr prefix-key C0 allowlist that keeps Tab, LF, CR, ESC, Ctrl+K, Ctrl+P, and Ctrl+G. | `TestCharmVerdicts` |
+| FilterInput stdin leak drop | `bubbletea/v2` | v2.0.9 | keep-custom | `tea.WithFilter` has no herdr prefix-key C0 allowlist that keeps Tab, LF, CR, ESC, Ctrl+K, Ctrl+P, Ctrl+G, and Ctrl+V. | `TestCharmVerdicts` |
 | Choice list plus custom row | `huh/v2` Select | v2.0.3 | keep-custom | No tagged `custom...` sentinel that opens free text under the same six-row ASCII chrome. | `TestCharmVerdicts` |
 | Text prompt | `huh/v2` Input | v2.0.3 | keep-custom | Standalone form field. It does not share picker filter or backtrack state with ASCII submit chrome. | `TestCharmVerdicts` |
 | Footer and position counter | `bubbles/v2` help or status | v2.1.1 | keep-custom | No hint-left index/total-right footer that clips the hint before the counter. | `TestFormatListFooter` |
 | Two-line detail wrap | `lipgloss/v2` | v2.0.6 | keep-custom | No two-line wrap with `RowTextIndent` that truncates only line two with ASCII ellipsis. | `TestFormatDetailLines` |
 | Inset muted horizontal rule | `lipgloss/v2` | v2.0.6 | keep-custom | No inset dash rule matched to `RowTextIndent` and content width. | `TestFormatRuleInsetMuted` |
+| Field edge under a free-text field | `lipgloss/v2` | v2.0.6 | keep-custom | Borders derive the edge width from the rendered block, so a field edge cannot be narrower than its row. `FormatFieldEdge` repeats the `ASCIIBorder` bottom glyph at an explicit width. The picker update hint shares only the value row, so both edges stay full width. | `TestFieldEdgeIsOneASCIIRowNoColumns` |
 | Horizontal content padding | `lipgloss/v2` | v2.0.6 | keep-custom | `Padding` does not pair with `StripContentPadding` or the `Truncate` ASCII ellipsis for the one-cell popup inset on every line. | `TestPadContentAddsHorizontalPadding` |
 | Fixed two-row detail block | `lipgloss/v2` | v2.0.6 | keep-custom | `Style.Height` reserves blank rows but does not wrap detail text onto two indented lines with ASCII ellipsis on line two. | `TestFormatDetailBlockReservesTwoRows` |
 | Column row layout | `bubbles/v2` ItemDelegate | v2.1.1 | keep-custom | No built-in cursor prefix, title truncate, warning, and location columns. | `TestPadColumnsKeepsASCIIIndicatorSingleColumn` |
 | ASCII-only chrome strings | `bubbles/v2` styles | v2.1.1 | keep-custom | Default glyphs are not single-column ASCII `ChromeStrings`. | `TestChromeStringsAreSingleColumnASCII` |
 | Terminal-column truncate | `x/ansi` | v0.11.8 | keep-custom | Width helpers exist. Product still owns ASCII `Ellipsis` and `PadColumns`. | `TestTruncateEllipsisAtMax` |
-| Theme warning versus muted | `lipgloss/v2` | v2.0.6 | keep-custom | No ready theme for indexed ANSI warn (3), faint secondary text, and reverse without OSC 4. | `TestDefaultThemeUsesIndexedWarnMutedAndReverse` |
+| Theme warning versus muted | `lipgloss/v2` | v2.0.6 | keep-custom | No ready theme for indexed ANSI warn (3), faint muted, color-only placeholder (8), and reverse without OSC 4. | `TestDefaultThemeUsesIndexedWarnMutedAndReverse` |
 | Filter-row update indicator | `bubbles/v2` FilterInput | v2.1.1 | keep-custom | No width-gated ASCII update hint that hides under a four-cell filter floor. Picker owns the row. TUI tests cover `Truncate` and `PadColumns`. | `TestPadColumnsKeepsASCIIIndicatorSingleColumn` |
 | Palette body | `bubbles/v2` | v2.1.1 | keep-custom | No Ctrl+P letter-fire palette that hides edit/share/delete without a selection. | `TestCharmVerdicts` |
 | Delete confirm y/n | `huh/v2` Confirm | v2.0.3 | keep-custom | Confirm does not match bare y/n/esc and `DeleteConfirmHint` ASCII chrome. | `TestChromeStringsAreSingleColumnASCII` |
@@ -63,7 +64,7 @@ Filter typing must ignore Ctrl+P, Tab, and other mods while it still accepts bar
 
 ### FilterInput stdin leak drop
 
-After Bubble Tea parses keys, herdr can still leak C0 bytes from the prefix binding. The allowlist must keep Tab, LF, CR, ESC, Ctrl+K, Ctrl+P, and Ctrl+G. Bubble Tea supplies `WithFilter` only. Keep picker `FilterInput`.
+After Bubble Tea parses keys, herdr can still leak C0 bytes from the prefix binding. The allowlist must keep Tab, LF, CR, ESC, Ctrl+K, Ctrl+P, Ctrl+G, and Ctrl+V. Bubble Tea supplies `WithFilter` only. Keep picker `FilterInput`.
 
 ### Choice list plus custom row
 
@@ -99,7 +100,7 @@ Every chrome fragment must be single-column ASCII. Bubbles defaults are not that
 
 ### Theme warning versus muted
 
-Indexed ANSI warn (3), faint secondary text, and reverse selection avoid OSC 4 palette queries. Content keeps the terminal foreground, so no slot can render it unreadable. Lip Gloss styles colors but does not ship that theme. Keep `DefaultTheme`.
+Indexed ANSI warn (3), faint muted, color-only placeholder (8), and reverse selection avoid OSC 4 palette queries. Content keeps the terminal foreground, so no slot can render it unreadable. Lip Gloss styles colors but does not ship that theme. Keep `DefaultTheme`.
 
 ### Filter-row update indicator
 

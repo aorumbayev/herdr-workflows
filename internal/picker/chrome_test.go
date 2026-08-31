@@ -322,24 +322,27 @@ func TestUpdateIndicator(t *testing.T) {
 	if FormatFilterUpdateHint(10) != "" {
 		t.Fatal("narrow")
 	}
-	if FormatFilterUpdateHint(len(UpdateIndicator)+6) != "" {
+	if FormatFilterUpdateHint(len(UpdateIndicator)+7) != "" {
 		t.Fatal("still cramped")
 	}
-	if FormatFilterUpdateHint(len(UpdateIndicator)+7) != UpdateIndicator {
+	if FormatFilterUpdateHint(len(UpdateIndicator)+8) != UpdateIndicator {
 		t.Fatal("just fits")
 	}
 	if FormatFilterUpdateHint(80) != UpdateIndicator {
 		t.Fatal("wide")
 	}
-	if FormatListFilterRow("", 80, "") != tui.FilterWorkflows {
+	if FormatListFilterRow("", 80, "") != tui.FormatField("", tui.FilterWorkflows, 80) {
 		t.Fatalf("placeholder = %q", FormatListFilterRow("", 80, ""))
 	}
-	if FormatListFilterRow("dep", 80, "") != "dep" {
+	if FormatListFilterRow("dep", 80, "") != tui.FormatField("dep", tui.FilterWorkflows, 80) {
 		t.Fatalf("typed = %q", FormatListFilterRow("dep", 80, ""))
 	}
 	got := FormatListFilterRow("", 80, UpdateIndicator)
 	if !strings.Contains(got, tui.FilterWorkflows) || !strings.Contains(got, UpdateIndicator) {
 		t.Fatalf("hint row = %q", got)
+	}
+	if !strings.HasPrefix(got, tui.FieldCursor+"  ") {
+		t.Fatalf("hint row must lead with the caret = %q", got)
 	}
 	if !UpdateAvailable("0.1.0", "0.2.0") || UpdateAvailable("0.2.0", "0.2.0") || UpdateAvailable("0.3.0", "0.2.0") || UpdateAvailable("0.1.0", "not-a-version") {
 		t.Fatal("semver gate")
@@ -407,3 +410,17 @@ type netErr struct{}
 func (netErr) Error() string { return "network" }
 
 var errNet netErr
+
+func TestFormatListFilterEdgeSpansTheFullWidth(t *testing.T) {
+	// The update hint shares the field row only. Cutting the edges would tear
+	// two rules that have nothing beside them.
+	for _, width := range []int{20, 80} {
+		if got := FormatListFilterEdge(width); tui.Columns(got) != width {
+			t.Fatalf("edge at width %d = %d columns", width, tui.Columns(got))
+		}
+	}
+	row := FormatListFilterRow("", 80, UpdateIndicator)
+	if tui.Columns(row) != 80 || !strings.HasSuffix(row, UpdateIndicator) {
+		t.Fatalf("field row must still yield to the hint: %q", row)
+	}
+}

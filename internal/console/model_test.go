@@ -9,6 +9,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/aorumbayev/herdr-workflows/internal/history"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/aorumbayev/herdr-workflows/internal/tui"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
@@ -177,11 +180,23 @@ func TestModelConsoleFiltersWorkflows(t *testing.T) {
 		Width:  80,
 		Height: 24,
 	})
+	consoleRow := func(view string, i int) string {
+		return strings.TrimRight(ansi.Strip(tui.StripContentPadding(strings.Split(view, "\n")[i])), " ")
+	}
+	if got := consoleRow(stripView(m.View()), 1); got != tui.FieldCursor+"  "+tui.FilterWorkflows {
+		t.Fatalf("empty filter row = %q", got)
+	}
+	if got := consoleRow(stripView(m.View()), 2); got != tui.FormatFieldEdge(m.contentWidth()) {
+		t.Fatalf("field edge row = %q", got)
+	}
 	next, _ := m.Update(keyRune('b'))
 	m = next.(Model)
 	view := stripView(m.View())
 	if !strings.Contains(view, "Beta") || strings.Contains(view, "Alpha") {
 		t.Fatalf("filter b should keep only Beta:\n%s", view)
+	}
+	if got := consoleRow(view, 1); got != tui.FieldCursor+"  b" {
+		t.Fatalf("typed filter row = %q", got)
 	}
 	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 	m = next.(Model)
@@ -239,8 +254,8 @@ func stripView(v tea.View) string {
 
 func TestConsoleListViewportUsesTerminalHeight(t *testing.T) {
 	m := New(Options{Width: 80, Height: 40})
-	if m.listViewport() != 33 {
-		t.Fatalf("listViewport = %d want 33", m.listViewport())
+	if m.listViewport() != 32 {
+		t.Fatalf("listViewport = %d want 32", m.listViewport())
 	}
 	m = New(Options{Width: 80, Height: 6})
 	if m.listViewport() != 3 {

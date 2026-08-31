@@ -31,3 +31,20 @@ func TestStepCursor(t *testing.T) {
 		}
 	}
 }
+
+func TestPasteLineFlattensNewlinesAndDropsC0(t *testing.T) {
+	cases := []struct{ in, want string }{
+		// bubbletea decodes control bytes into the paste: ultraviolet key_test.go:1185.
+		{"a\x03\nb", "a b"},
+		{"line one\r\nline two\tline three", "line one line two line three"},
+		{"  padded  ", "padded"},
+		{"a\x7fb", "ab"},
+		{"keeps  inner spaces", "keeps  inner spaces"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := PasteLine(c.in); got != c.want {
+			t.Errorf("PasteLine(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}

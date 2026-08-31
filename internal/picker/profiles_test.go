@@ -47,6 +47,13 @@ func TestProfilesTabListsProfilesWithSourceColumn(t *testing.T) {
 			t.Fatalf("profiles body missing %q:\n%s", want, body)
 		}
 	}
+	lines := strings.Split(body, "\n")
+	if got := tui.StripContentPadding(lines[2]); got != tui.FormatField("", tui.FilterProfiles, 78) {
+		t.Fatalf("profiles filter row = %q", got)
+	}
+	if got := visibleLine(lines[3]); got != tui.FormatFieldEdge(78) {
+		t.Fatalf("profiles field edge = %q", got)
+	}
 }
 
 func TestProfilesBrowserFiltersByTypedText(t *testing.T) {

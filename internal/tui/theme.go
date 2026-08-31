@@ -16,15 +16,17 @@ const (
 	KindHerdrIndex    = 5
 	KindAgentIndex    = 6
 	KindDefaultIndex  = 7
+	PlaceholderIndex  = 8
 )
 
 // Theme is indexed ANSI colors plus reverse-video selection (ticket 04 GAP 1).
-// Secondary text is faint, not a palette slot. Faint uses the foreground of the user.
-// A terminal that does not show faint still shows readable text.
+// Secondary chrome is faint, not a palette slot. Placeholder text takes indexed
+// slot 8 alone. Faint on top of slot 8 renders too dark to read.
 type Theme struct {
 	Plain        lipgloss.Style
 	Warn         lipgloss.Style
 	Muted        lipgloss.Style
+	Placeholder  lipgloss.Style
 	Reverse      lipgloss.Style
 	Hover        lipgloss.Style
 	KindAgent    lipgloss.Style
@@ -48,6 +50,7 @@ func DefaultTheme() Theme {
 		Plain:        lipgloss.NewStyle(),
 		Warn:         fg(WarnIndex),
 		Muted:        lipgloss.NewStyle().Faint(true),
+		Placeholder:  fg(PlaceholderIndex),
 		Reverse:      lipgloss.NewStyle().Reverse(true),
 		Hover:        lipgloss.NewStyle().Underline(true),
 		KindAgent:    fg(KindAgentIndex),

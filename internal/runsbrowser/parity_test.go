@@ -53,6 +53,9 @@ func coveringTestExists(name string, own map[string]struct{}, external map[strin
 
 // Spec scenarios that runsbrowser.ParityBaseline owns (picker-presentation Runs requirements).
 var requiredRunsParityScenarios = []string{
+	"Runs filter caret and dim placeholder",
+	"Runs filter edge starts at column 0",
+	"Clipboard paste lands in the runs filter",
 	"More than six runs",
 	"Tall host shows more runs",
 	"Run detail fills the host",
@@ -156,7 +159,13 @@ func listViewportRows(body string) int {
 	if i >= len(lines) {
 		return 0
 	}
+	if i < len(lines) && strings.Contains(tui.StripContentPadding(lines[i]), "----") {
+		i++
+	}
 	i++
+	if i < len(lines) && strings.Contains(tui.StripContentPadding(lines[i]), "----") {
+		i++
+	}
 	for i < len(lines) && tui.StripContentPadding(lines[i]) == "" {
 		i++
 	}

@@ -18,6 +18,7 @@ func TestCharmVerdicts(t *testing.T) {
 		"footer-position-counter",
 		"two-line-detail-wrap",
 		"inset-muted-rule",
+		"field-edge",
 		"chrome-horizontal-padding",
 		"detail-block-height",
 		"column-row-layout",

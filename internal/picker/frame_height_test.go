@@ -81,3 +81,60 @@ func TestStatusLineDoesNotChangeFrameHeight(t *testing.T) {
 		t.Fatalf("frame = %d lines, want the popup height 18", quiet+1)
 	}
 }
+
+func TestFooterHoldsItsRowAcrossEmptyStates(t *testing.T) {
+	// One non-matching keystroke used to float the rule and the footer ten rows
+	// up the popup. Every list state must put them where the populated list does.
+	entries := []workflow.ListEntry{{Name: "deploy", Title: "deploy", Source: "repo", Description: "deploy the app"}}
+	populated := New(Options{Entries: entries, Width: 62, Height: 18, RepoRoot: t.TempDir()})
+	want := lastContentRow(populated.View().Content)
+	cases := map[string]Model{
+		"filter matches nothing": apply(populated, "z", "z", "z"),
+		"empty catalog":          New(Options{Width: 62, Height: 18, RepoRoot: t.TempDir()}),
+		"runs tab":               apply(populated, "tab"),
+		"profiles tab":           apply(populated, "tab", "tab"),
+	}
+	for name, m := range cases {
+		if got := lastContentRow(m.View().Content); got != want {
+			t.Errorf("%s footer on row %d, populated list puts it on %d:\n%s", name, got, want, m.View().Content)
+		}
+	}
+}
+
+func lastContentRow(body string) int {
+	lines := strings.Split(body, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if visibleLine(lines[i]) != "" {
+			return i
+		}
+	}
+	return -1
+}
+
+func TestEveryPickerScreenHoldsItsFooterOnTheLastRow(t *testing.T) {
+	// A short screen that lets its rule and footer float leaves the frame
+	// bottom-heavy with dead rows under the hint.
+	const height = 18
+	base := func() Model {
+		return New(Options{Entries: catalogEntries(), Width: 62, Height: height, RepoRoot: t.TempDir()})
+	}
+	screens := map[string]mode{
+		"palette":       modePalette,
+		"new mode":      modeNewMode,
+		"new scope":     modeNewScope,
+		"console place": modeConsolePlace,
+		"edit place":    modeEditPlace,
+		"fail":          modeFail,
+		"delete":        modeDelete,
+		"new name":      modeNewName,
+	}
+	for name, screen := range screens {
+		m := base()
+		m.mode = screen
+		m.status = "something happened"
+		body := m.View().Content
+		if got := lastContentRow(body); got != height-1 {
+			t.Errorf("%s ends on row %d, want %d:\n%s", name, got, height-1, body)
+		}
+	}
+}

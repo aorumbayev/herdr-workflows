@@ -14,6 +14,9 @@ type ParitySurface struct {
 func ParityBaseline() []ParitySurface {
 	const presentation = "picker-presentation"
 	return []ParitySurface{
+		{Spec: presentation, Requirement: "Free-text fields read as fields", Scenario: "Runs filter caret and dim placeholder", Kind: "view", GoSurface: "Model.listFilterRow/tui.FormatField", CoveringTest: "TestFilterMissKeepsFilterRow"},
+		{Spec: presentation, Requirement: "Field chrome uses two alignment bands", Scenario: "Runs filter edge starts at column 0", Kind: "view", GoSurface: "tui.FormatFieldEdge", CoveringTest: "tui.TestFieldEdgeStartsAtColumnZeroAndSpansFieldWidth"},
+		{Spec: presentation, Requirement: "Free-text fields read as fields", Scenario: "Clipboard paste lands in the runs filter", Kind: "transition", GoSurface: "Model.handlePaste", CoveringTest: "TestPasteMsgAppendsToActiveField"},
 		{Spec: presentation, Requirement: "Runs use the fixed list chrome", Scenario: "More than six runs", Kind: "view", GoSurface: "Model.listViewport/Model.renderList", CoveringTest: "TestParityMoreThanSixRunsScrollsViewport"},
 		{Spec: presentation, Requirement: "List viewport fills the popup above a six-row floor", Scenario: "Tall host shows more runs", Kind: "view", GoSurface: "tui.FitViewport/Model.listViewport", CoveringTest: "TestRunsViewportGrowsWithHostHeight"},
 		{Spec: presentation, Requirement: "List viewport fills the popup above a six-row floor", Scenario: "Run detail fills the host", Kind: "view", GoSurface: "Model.detailRows/Model.renderDetail", CoveringTest: "TestRunsViewportGrowsWithHostHeight"},

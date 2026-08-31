@@ -14,6 +14,10 @@ type ParitySurface struct {
 func ParityBaseline() []ParitySurface {
 	const presentation = "console-presentation"
 	return []ParitySurface{
+		{Spec: presentation, Requirement: "Free-text fields read as fields", Scenario: "Console filter caret and dim placeholder", Kind: "view", GoSurface: "filterRow/tui.FormatField", CoveringTest: "TestModelConsoleFiltersWorkflows"},
+		{Spec: presentation, Requirement: "Free-text fields read as fields", Scenario: "Clipboard paste lands in the focused console field", Kind: "transition", GoSurface: "Model.handlePaste", CoveringTest: "TestPasteMsgAppendsToActiveField"},
+		{Spec: presentation, Requirement: "Free-text fields read as fields", Scenario: "Oversized console paste is refused with its limit", Kind: "transition", GoSurface: "caps.AssertUnderFieldPasteCap/Model.handlePaste", CoveringTest: "TestOversizedPasteRefusedAndReported"},
+		{Spec: presentation, Requirement: "Field chrome uses two alignment bands", Scenario: "Console field and edge start at column 0", Kind: "view", GoSurface: "tui.FormatFieldEdge", CoveringTest: "tui.TestFieldEdgeStartsAtColumnZeroAndSpansFieldWidth"},
 		{Spec: presentation, Requirement: "Console opens at tab, beside, or below", Scenario: "Default beside from the overlay", Kind: "transition", GoSurface: "picker.beginConsolePlacement", CoveringTest: "picker.TestPaletteConsoleOpensPlacementChooser"},
 		{Spec: presentation, Requirement: "Chrome uses one-cell horizontal padding", Scenario: "Console content inset", Kind: "view", GoSurface: "tui.PadContent", CoveringTest: "tui.TestPadContentAddsHorizontalPadding"},
 		{Spec: presentation, Requirement: "Detail block reserves two rows under the list", Scenario: "Workflows and runs list detail", Kind: "view", GoSurface: "tui.FormatDetailBlock", CoveringTest: "tui.TestFormatDetailBlockReservesTwoRows"},

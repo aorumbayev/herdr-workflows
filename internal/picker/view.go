@@ -43,9 +43,9 @@ func (m Model) render() string {
 	case modeNewAgentPick:
 		body = m.renderNewAgentPick()
 	case modeDelete:
-		body = "Delete " + m.deleteLabel() + "?\n" + tui.DeleteConfirmHint
+		body = m.renderConfirm("Delete "+m.deleteLabel()+"?", tui.DeleteConfirmHint)
 	case modeFail:
-		body = m.status + "\n" + tui.FailHint
+		body = m.renderConfirm(m.status, tui.FailHint)
 	case modeNewName:
 		body = m.renderNewName()
 	case modeInputText:
@@ -58,18 +58,39 @@ func (m Model) render() string {
 	return body
 }
 
+// padToPopup holds tail on the last rows of the popup, so a short screen does not
+// float its hint into the middle of an empty frame.
+func (m Model) padToPopup(head, tail string) string {
+	rows := strings.Count(head, "\n") + strings.Count(tail, "\n") + 2
+	return head + strings.Repeat("\n", max(1, m.height-rows+1)) + tail
+}
+
 func (m Model) withTabBar(active, body string) string {
 	return FormatTabBar(active, m.contentWidth()) + "\n" + body
 }
 
 func (m Model) renderNewName() string {
+	return m.renderNameField("Workflow name")
+}
+
+// renderNameField gives E and H the shape of the free-text prompt: the label on
+// its own row, the field flush left, and the edge across the full width.
+func (m Model) renderNameField(label string) string {
 	w := m.contentWidth()
-	line := "Workflow name: " + m.promptValue
-	hint := tui.CreateNameHint
-	if m.status != "" {
-		return tui.Truncate(line, w) + "\n" + tui.Truncate(m.status, w) + "\n" + hint
-	}
-	return tui.Truncate(line, w) + "\n" + hint
+	head := strings.Join([]string{
+		tui.Truncate(label, w),
+		tui.MuteChrome(tui.FormatFieldEdge(w)),
+		tui.FormatField(m.promptValue, "", w),
+		tui.MuteChrome(tui.FormatFieldEdge(w)),
+	}, "\n")
+	return m.padToPopup(head, tui.Truncate(m.status, w)+"\n"+tui.CreateNameHint)
+}
+
+// renderConfirm gives a one-message screen the same rule and footer as a list.
+func (m Model) renderConfirm(message, hint string) string {
+	w := m.contentWidth()
+	tail := tui.FormatRule(w) + "\n" + tui.MuteChrome(tui.FormatListFooter(w, 0, 0, hint))
+	return m.padToPopup(tui.FormatDetailBlock(message, w), tail)
 }
 
 func (m Model) deleteLabel() string {
@@ -82,25 +103,23 @@ func (m Model) deleteLabel() string {
 func (m Model) renderPalette() string {
 	w := m.contentWidth()
 	body := FormatPaletteBody(m.selectedEntry(), w)
-	return body + "\n" + tui.FormatRule(w) + "\n" + tui.MuteChrome(tui.FormatListFooter(w, 0, 0, tui.PaletteHint))
+	return m.padToPopup(body, tui.FormatRule(w)+"\n"+tui.MuteChrome(tui.FormatListFooter(w, 0, 0, tui.PaletteHint)))
 }
 
 func (m Model) renderList() string {
 	opts := m.matched()
 	w := m.contentWidth()
+	vp := m.listViewport()
 	if !HasVisibleEntries(m.entries) {
-		parts := []string{tui.FormatDetailBlock(tui.EmptyCatalogMessage, w)}
-		if m.status != "" {
-			parts = append(parts, tui.Truncate(m.status, w))
-		}
-		parts = append(parts, tui.FormatRule(w), tui.MuteChrome(tui.FormatListFooter(w, 0, 0, tui.EmptyListHint)))
-		return strings.Join(parts, "\n")
+		body := tui.PadHeight(tui.FormatDetailBlock(tui.EmptyCatalogMessage, w), vp+3)
+		return m.listTail(w, body, tui.FormatDetailBlock("", w), tui.EmptyListHint, 0, 0)
 	}
 	filter := m.listFilterRow(w)
+	edge := m.listFilterEdge(w)
 	if len(opts) == 0 {
-		return filter + "\n\n" + tui.FormatDetailBlock("No workflows matching "+m.filter, w) + "\n" + tui.FormatRule(w) + "\n" + tui.MuteChrome(tui.FormatListFooter(w, 0, 0, tui.ListHint))
+		body := tui.PadHeight(tui.FormatDetailBlock("No workflows matching "+m.filter, w), vp)
+		return edge + "\n" + filter + "\n" + edge + "\n" + m.listTail(w, body, tui.FormatDetailBlock("", w), tui.ListHint, 0, 0)
 	}
-	vp := m.listViewport()
 	end := min(m.offset+vp, len(opts))
 	var rows []string
 	for i := m.offset; i < end; i++ {
@@ -122,9 +141,16 @@ func (m Model) renderList() string {
 		rows = append(rows, "")
 	}
 	sel := opts[m.cursor]
+	body := strings.Join(rows, "\n")
 	detail := tui.FormatDetailBlock(sel.Description, w)
-	footer := tui.MuteChrome(tui.FormatListFooter(w, m.cursor, len(opts), tui.ListHint))
-	parts := []string{filter, "", strings.Join(rows, "\n"), "", detail, tui.Truncate(m.status, w), tui.FormatRule(w), footer}
+	return edge + "\n" + filter + "\n" + edge + "\n" + m.listTail(w, body, detail, tui.ListHint, m.cursor, len(opts))
+}
+
+// listTail holds the rows below the filter at fixed positions, so an empty list
+// cannot float the rule and the footer up the popup. The status row sits above
+// the detail block, so a one-line description still lands on the rule.
+func (m Model) listTail(w int, body, detail, hint string, index, total int) string {
+	parts := []string{body, "", tui.Truncate(m.status, w), detail, tui.FormatRule(w), tui.MuteChrome(tui.FormatListFooter(w, index, total, hint))}
 	return strings.Join(parts, "\n")
 }
 
@@ -136,6 +162,10 @@ func (m Model) listFilterRow(width int) string {
 	return FormatListFilterRow(m.filter, width, hint)
 }
 
+func (m Model) listFilterEdge(width int) string {
+	return tui.MuteChrome(FormatListFilterEdge(width))
+}
+
 // sensitivityLine is a compact muted note of the touched surfaces, shown only when the workflow is sensitive.
 func (m Model) sensitivityLine(width int) string {
 	if len(m.sensitivity) == 0 {
@@ -145,11 +175,7 @@ func (m Model) sensitivityLine(width int) string {
 }
 
 func (m Model) choiceFilterRow(width int) string {
-	label := m.filter
-	if label == "" {
-		label = tui.FilterOptions
-	}
-	return tui.Truncate(label, width)
+	return tui.FormatField(m.filter, tui.FilterOptions, width)
 }
 
 // promptHeader is the input name and its wrapped description, the question in focus.
@@ -177,6 +203,9 @@ func (m Model) renderChoice() string {
 	vp := m.choiceViewport()
 	cursor, offset := tui.ClampListWindow(m.cursor, m.offset, len(rows), vp)
 	var lines []string
+	if len(rows) == 0 {
+		lines = strings.Split(tui.PadHeight(tui.FormatDetailBlock("No options matching "+m.filter, w), vp), "\n")
+	}
 	end := min(offset+vp, len(rows))
 	for i := offset; i < end; i++ {
 		lines = append(lines, FormatPickerRowName(rows[i], "", false, w, i == cursor))
@@ -186,9 +215,10 @@ func (m Model) renderChoice() string {
 	}
 	parts := []string{
 		m.promptHeader(w), "",
-		strings.Join(lines, "\n"), "",
-		tui.MuteChrome(m.choiceFilterRow(w)),
-		tui.FormatRule(w),
+		strings.Join(lines, "\n"),
+		tui.MuteChrome(tui.FormatFieldEdge(w)),
+		m.choiceFilterRow(w),
+		tui.MuteChrome(tui.FormatFieldEdge(w)),
 		m.statsLine(w),
 	}
 	if line := m.sensitivityLine(w); line != "" {
@@ -202,19 +232,20 @@ func (m Model) renderChoice() string {
 
 func (m Model) renderTextPrompt() string {
 	w := m.contentWidth()
-	parts := []string{
-		m.promptHeader(w), "",
-		m.promptValue,
-		tui.FormatRule(w),
-		m.statsLine(w),
-	}
+	head := strings.Join([]string{
+		m.promptHeader(w),
+		tui.MuteChrome(tui.FormatFieldEdge(w)),
+		tui.FormatField(m.promptValue, tui.PromptPlaceholder, w),
+		tui.MuteChrome(tui.FormatFieldEdge(w)),
+	}, "\n")
+	parts := []string{m.statsLine(w)}
 	if line := m.sensitivityLine(w); line != "" {
 		parts = append(parts, line)
 	}
 	if m.status != "" {
 		parts = append(parts, tui.Truncate(m.status, w))
 	}
-	return strings.Join(parts, "\n")
+	return m.padToPopup(head, strings.Join(parts, "\n"))
 }
 
 func (m Model) values() map[string]string {

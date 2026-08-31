@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/aorumbayev/herdr-workflows/internal/caps"
 	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/history"
 	"github.com/aorumbayev/herdr-workflows/internal/host"
@@ -18,7 +19,7 @@ import (
 type screen int
 
 const (
-	listListChrome   = 7 // head, spacer, list, spacer, detail(2), rule, footer
+	listListChrome   = 8 // both field edges, head, list, spacer, detail(2), rule, footer
 	scrollViewChrome = 3 // head, scroll body, rule, footer
 
 	screenWorkflows screen = iota
@@ -97,6 +98,7 @@ type Model struct {
 	debugTab            DebugTab
 	detailScroll        int
 	status              string
+	pasteText           func() (string, error)
 	quit                bool
 }
 
@@ -215,6 +217,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
+	case tea.PasteMsg:
+		return m.handlePaste(msg.Content)
 	case tea.MouseClickMsg, tea.MouseWheelMsg:
 		return m.handleMouse(msg)
 	case watchTickMsg:
@@ -231,6 +235,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.quit = true
 		return m, tea.Quit
 	}
+	if key == "ctrl+v" {
+		return m.pasteFromClipboard()
+	}
 	switch m.screen {
 	case screenDetail:
 		return m.handleDetailKey(msg)
@@ -241,6 +248,43 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	default:
 		return m.handleWorkflowsKey(msg)
 	}
+}
+
+// pasteFromClipboard serves ctrl+v, which arrives as a keypress, not a paste.
+func (m Model) pasteFromClipboard() (tea.Model, tea.Cmd) {
+	read := m.pasteText
+	if read == nil {
+		read = tui.PasteFromClipboard
+	}
+	text, err := read()
+	if err != nil {
+		m.status = err.Error()
+		return m, nil
+	}
+	return m.handlePaste(text)
+}
+
+// handlePaste routes one sanitized paste to the field the current screen edits.
+func (m Model) handlePaste(text string) (tea.Model, tea.Cmd) {
+	if err := caps.AssertUnderFieldPasteCap("clipboard paste", text); err != nil {
+		m.status = err.Error()
+		return m, nil
+	}
+	value := tui.PasteLine(text)
+	if value == "" {
+		return m, nil
+	}
+	switch {
+	case m.screen == screenDiagram && m.diagramMode == diagramModeInstruction:
+		m.instructionDraft += value
+	case m.screen == screenRuns:
+		m.runFilter += value
+		m.runCursor, m.runOffset = 0, 0
+	case m.screen == screenWorkflows:
+		m.wfFilter += value
+		m.wfCursor, m.wfOffset = 0, 0
+	}
+	return m, nil
 }
 
 func (m Model) handleWorkflowsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {

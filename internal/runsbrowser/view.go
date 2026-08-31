@@ -55,7 +55,8 @@ func (m Model) renderList() string {
 			FilterActive:   strings.TrimSpace(m.filter) != "",
 			Unavailable:    m.state.Unavailable,
 		})
-		return filter + "\n\n" + tui.FormatDetailBlock(empty, w) + "\n" + tui.FormatRule(w) + "\n" + tui.MuteChrome(tui.FormatListFooter(w, 0, 0, RunsFooter(m.scope)))
+		body := tui.PadHeight(tui.FormatDetailBlock(empty, w), m.listViewport())
+		return filter + "\n" + body + "\n\n" + tui.FormatDetailBlock("", w) + "\n" + tui.FormatRule(w) + "\n" + tui.MuteChrome(tui.FormatListFooter(w, 0, 0, RunsFooter(m.scope)))
 	}
 	vp := m.listViewport()
 	end := min(m.offset+vp, len(m.state.Items))
@@ -72,20 +73,17 @@ func (m Model) renderList() string {
 	for len(rows) < vp {
 		rows = append(rows, "")
 	}
-	detail := ""
+	detail := tui.FormatDetailBlock("", w)
 	if item := m.selectedItem(); item != nil {
 		detail = tui.FormatDetailBlock(FormatRunSummary(*item), w)
 	}
 	footer := tui.MuteChrome(tui.FormatListFooter(w, m.cursor, len(m.state.Items), RunsFooter(m.scope)))
-	return filter + "\n\n" + strings.Join(rows, "\n") + "\n\n" + detail + "\n" + tui.FormatRule(w) + "\n" + footer
+	return filter + "\n" + strings.Join(rows, "\n") + "\n\n" + detail + "\n" + tui.FormatRule(w) + "\n" + footer
 }
 
 func (m Model) listFilterRow(width int) string {
-	label := m.filter
-	if label == "" {
-		label = tui.FilterRuns
-	}
-	return tui.Truncate(label, width)
+	edge := tui.MuteChrome(tui.FormatFieldEdge(width))
+	return edge + "\n" + tui.FormatField(m.filter, tui.FilterRuns, width) + "\n" + edge
 }
 
 func (m Model) renderDetail() string {

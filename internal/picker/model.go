@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/aorumbayev/herdr-workflows/internal/caps"
 	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/console"
 	"github.com/aorumbayev/herdr-workflows/internal/runsbrowser"
@@ -51,6 +52,7 @@ type Options struct {
 	Chdir              func(string) error
 	LoadWorkflow       func(workflow.ListEntry) (*workflow.Definition, error)
 	CopyClipboard      func(string) error
+	PasteClipboard     func() (string, error)
 	EditWorkflow       func(path, name string) workflow.ValidateResult
 	EditConfig         func(path string) error
 	OpenURL            func(url string) error
@@ -77,6 +79,7 @@ type Model struct {
 	height                int
 	load                  func(workflow.ListEntry) (*workflow.Definition, error)
 	copyText              func(string) error
+	pasteText             func() (string, error)
 	env                   config.Env
 	editWorkflow          func(path, name string) workflow.ValidateResult
 	editConfig            func(path string) error
@@ -182,6 +185,7 @@ func New(opts Options) Model {
 		height:         opts.Height,
 		load:           opts.LoadWorkflow,
 		copyText:       opts.CopyClipboard,
+		pasteText:      opts.PasteClipboard,
 		env:            opts.Env,
 		editWorkflow:   opts.EditWorkflow,
 		editConfig:     opts.EditConfig,
@@ -264,9 +268,9 @@ func (m *Model) clampCursor() {
 	m.cursor, m.offset = tui.ClampListWindow(m.cursor, m.offset, len(m.matched()), m.listViewport())
 }
 
-// listChrome is the tab bar, filter, two blanks, detail rows, the reserved
-// status row, the rule, and the footer.
-const listChrome = 9
+// listChrome is the tab bar, both field edges, filter, two blanks, detail rows,
+// the reserved status row, the rule, and the footer.
+const listChrome = 10
 
 // listViewport fills the popup with workflow rows above the six-row minimum.
 func (m Model) listViewport() int {
@@ -310,6 +314,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
+	case tea.PasteMsg:
+		return m.handlePaste(msg.Content)
 	case tea.MouseClickMsg, tea.MouseWheelMsg, tea.MouseMotionMsg:
 		return m.handleMouse(msg)
 	default:
@@ -320,12 +326,53 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// pasteFromClipboard serves ctrl+v, which the terminal delivers as a keypress
+// rather than a bracketed paste.
+func (m Model) pasteFromClipboard() (tea.Model, tea.Cmd) {
+	read := m.pasteText
+	if read == nil {
+		read = tui.PasteFromClipboard
+	}
+	text, err := read()
+	if err != nil {
+		m.status = err.Error()
+		return m, nil
+	}
+	return m.handlePaste(text)
+}
+
+// handlePaste routes one sanitized paste to the field the current mode edits.
+func (m Model) handlePaste(text string) (tea.Model, tea.Cmd) {
+	if err := caps.AssertUnderFieldPasteCap("clipboard paste", text); err != nil {
+		m.status = err.Error()
+		return m, nil
+	}
+	value := tui.PasteLine(text)
+	if value == "" {
+		return m, nil
+	}
+	if m.mode == modeRuns {
+		return m.forwardRuns(tea.PasteMsg{Content: value})
+	}
+	switch m.mode {
+	case modeList, modeInput, modeProfiles:
+		m.filter += value
+		m.cursor, m.offset = 0, 0
+	case modeNewName, modeInputText, modeNewProfileName:
+		m.promptValue += value
+	}
+	return m, nil
+}
+
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	if key == "ctrl+c" {
 		m.abortResolve()
 		m.quit = true
 		return m, tea.Quit
+	}
+	if key == "ctrl+v" {
+		return m.pasteFromClipboard()
 	}
 	switch m.mode {
 	case modeRuns:

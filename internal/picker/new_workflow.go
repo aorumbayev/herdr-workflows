@@ -14,14 +14,10 @@ var newModeOptions = []string{"build with an agent", "edit a template"}
 
 var newScopeOptions = []string{"repo (.hwf/workflows)", "global"}
 
-func formatChooserBody(title string, options []string, cursor int) string {
+func formatChooserBody(title string, options []string, cursor, width int) string {
 	lines := []string{title}
 	for i, opt := range options {
-		prefix := "  "
-		if i == cursor {
-			prefix = tui.CursorPrefix
-		}
-		lines = append(lines, prefix+opt)
+		lines = append(lines, tui.FormatRow(opt, "", false, width, i == cursor))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -166,21 +162,21 @@ func workflowCreateHandoffPrompt() string {
 
 func (m Model) renderNewMode() string {
 	w := m.contentWidth()
-	body := formatChooserBody("new workflow", newModeOptions, m.newModeCursor)
+	body := formatChooserBody("new workflow", newModeOptions, m.newModeCursor, w)
 	footer := tui.FormatListFooter(w, m.newModeCursor, len(newModeOptions), "enter select"+tui.ChromeSep+"esc back")
-	return body + "\n" + tui.FormatRule(w) + "\n" + footer
+	return m.padToPopup(body, tui.FormatRule(w)+"\n"+footer)
 }
 
 func (m Model) renderNewScope() string {
 	w := m.contentWidth()
-	body := formatChooserBody("save workflow at", newScopeOptions, m.newScopeCursor)
+	body := formatChooserBody("save workflow at", newScopeOptions, m.newScopeCursor, w)
 	footer := tui.FormatListFooter(w, m.newScopeCursor, len(newScopeOptions), "enter select"+tui.ChromeSep+"esc back")
-	return body + "\n" + tui.FormatRule(w) + "\n" + footer
+	return m.padToPopup(body, tui.FormatRule(w)+"\n"+footer)
 }
 
 func (m Model) renderNewAgentPick() string {
 	w := m.contentWidth()
 	body := console.FormatAgentPickBody(m.agentPanes, m.agentCursor, w)
 	footer := tui.FormatListFooter(w, m.agentCursor, len(m.agentPanes), "enter select"+tui.ChromeSep+"esc back"+tui.ChromeSep+tui.AgentStatusLegend)
-	return body + "\n" + tui.FormatRule(w) + "\n" + footer
+	return m.padToPopup(body, tui.FormatRule(w)+"\n"+footer)
 }

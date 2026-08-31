@@ -27,6 +27,7 @@ const (
 	CreateNameHint       = "enter create" + ChromeSep + "esc cancel"
 	EmptyCatalogMessage  = "Hi there, looks like you got no runnable workflows, start by creating a new one, browsing examples or importing an existing workflow."
 	CursorPrefix         = "> "
+	FieldCursor          = ">"
 
 	TabWorkflows = "workflows"
 	TabRuns      = "runs"
@@ -57,6 +58,7 @@ var ChromeStrings = []string{
 	Ellipsis,
 	ChromeSep,
 	CursorPrefix,
+	FieldCursor,
 	FilterWorkflows,
 	FilterRuns,
 	FilterOptions,

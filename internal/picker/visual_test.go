@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
@@ -57,17 +58,24 @@ func TestFilterRowIsFlushLeftASCIIWithoutSlashPrefix(t *testing.T) {
 	// Product Improvement: Charm flush-left ASCII filter. No OpenTUI "/ " prefix or indent.
 	m := New(Options{Entries: catalogEntries(), Width: 80})
 	body := m.View().Content
-	first := tui.StripContentPadding(strings.Split(body, "\n")[1])
+	first := tui.StripContentPadding(strings.Split(body, "\n")[2])
 	if strings.HasPrefix(first, "/ ") || strings.HasPrefix(first, "/") {
 		t.Fatalf("filter must not use OpenTUI slash prefix: %q", first)
 	}
-	if first != tui.FilterWorkflows {
-		t.Fatalf("empty filter row = %q want %q", first, tui.FilterWorkflows)
+	if first != tui.FormatField("", tui.FilterWorkflows, 78) {
+		t.Fatalf("empty filter row = %q", first)
+	}
+	edge := visibleLine(strings.Split(body, "\n")[3])
+	if edge != tui.FormatFieldEdge(78) {
+		t.Fatalf("field edge row = %q", edge)
 	}
 	m = apply(m, "d")
-	first = tui.StripContentPadding(strings.Split(m.View().Content, "\n")[1])
-	if first != "d" {
+	first = tui.StripContentPadding(strings.Split(m.View().Content, "\n")[2])
+	if first != tui.FieldCursor+"  d" {
 		t.Fatalf("typed filter must be flush-left: %q", first)
+	}
+	if !strings.HasPrefix(first, tui.FieldCursor+"  ") {
+		t.Fatalf("caret must stay at column zero: %q", first)
 	}
 	for _, r := range first {
 		if r > 127 {
@@ -153,11 +161,11 @@ func hasVisibleLine(body, want string) bool {
 
 func TestChoiceInputEchoesFilterText(t *testing.T) {
 	m := choiceInputModel(t, 18, []string{"feature", "fix", "main"}, "")
-	if !hasVisibleLine(m.View().Content, tui.FilterOptions) {
+	if !hasVisibleLine(m.View().Content, ansi.Strip(tui.FormatField("", tui.FilterOptions, m.contentWidth()))) {
 		t.Fatalf("empty choice filter row must echo %q:\n%s", tui.FilterOptions, m.View().Content)
 	}
 	m = apply(m, "f", "e")
-	if !hasVisibleLine(m.View().Content, "fe") {
+	if !hasVisibleLine(m.View().Content, tui.FieldCursor+"  fe") {
 		t.Fatalf("typed choice filter must be echoed flush-left:\n%s", m.View().Content)
 	}
 }
@@ -347,6 +355,20 @@ func TestTextPromptUsesFieldDescriptionHints(t *testing.T) {
 	if !strings.Contains(body, "type free text") || !strings.Contains(body, "min 4 chars") {
 		t.Fatalf("text prompt hints must appear on their own line:\n%s", body)
 	}
+	w := m.contentWidth()
+	if !hasVisibleLine(body, ansi.Strip(tui.FormatField("", tui.PromptPlaceholder, w))) {
+		t.Fatalf("empty text prompt must show the caret and placeholder:\n%s", body)
+	}
+	if !hasVisibleLine(body, tui.FormatFieldEdge(w)) {
+		t.Fatalf("text prompt edge missing:\n%s", body)
+	}
+	if hasVisibleLine(body, strings.TrimRight(tui.FormatRule(w), " ")) {
+		t.Fatalf("the edge replaces the inset rule:\n%s", body)
+	}
+	m = apply(m, "d", "e", "p")
+	if !hasVisibleLine(m.View().Content, tui.FieldCursor+"  dep") {
+		t.Fatalf("typed text prompt must end in the caret:\n%s", m.View().Content)
+	}
 }
 
 func TestRunsPaneViewPadsToWindowHeight(t *testing.T) {
@@ -361,5 +383,44 @@ func TestRunsPaneViewPadsToWindowHeight(t *testing.T) {
 	}
 	if strings.Contains(body, tui.FilterWorkflows) || strings.Contains(body, "Branch check") {
 		t.Fatalf("padded runs must not ghost workflow list:\n%s", body)
+	}
+}
+
+func TestChoiceFilterSitsBetweenTwoEdges(t *testing.T) {
+	// C takes the blank above the field and the row the inset rule used to hold.
+	entry := workflow.ListEntry{Name: "gated", Source: "repo", File: "/r/gated.yaml", Title: "Gated"}
+	m := New(Options{
+		Entries: []workflow.ListEntry{entry},
+		Width:   80,
+		Height:  18,
+		Config:  config.Config{Profiles: map[string]config.Profile{}, Transcripts: map[string]config.TranscriptExtractor{}},
+		LoadWorkflow: func(e workflow.ListEntry) (*workflow.Definition, error) {
+			return &workflow.Definition{
+				Name: e.Name, File: e.File, Version: workflow.Format,
+				Inputs: []workflow.InputSpec{{Name: "mode", Type: "choice", Options: []string{"intake", "review"}}},
+				Steps:  []workflow.Step{{Action: workflow.RunAction{Payload: workflow.RunPayload{Argv: []string{"true"}}}}},
+			}, nil
+		},
+	})
+	m = apply(m, "enter")
+	lines := strings.Split(m.View().Content, "\n")
+	field := -1
+	var edges []int
+	for i, line := range lines {
+		switch v := visibleLine(line); {
+		case v == ansi.Strip(tui.FormatField("", tui.FilterOptions, 78)):
+			field = i
+		case v == tui.FormatFieldEdge(78):
+			edges = append(edges, i)
+		}
+	}
+	if field < 0 || len(edges) != 2 {
+		t.Fatalf("field=%d edges=%v\n%s", field, edges, m.View().Content)
+	}
+	if edges[0] != field-1 || edges[1] != field+1 {
+		t.Fatalf("field must sit between its two edges: edges=%v field=%d", edges, field)
+	}
+	if raw := strings.Split(m.View().Content, "\n")[field]; !strings.Contains(raw, tui.DefaultTheme().Placeholder.Render(tui.FilterOptions)) {
+		t.Fatalf("only the placeholder is muted, got %q", raw)
 	}
 }

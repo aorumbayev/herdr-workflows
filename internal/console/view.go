@@ -19,10 +19,8 @@ func (m Model) View() tea.View {
 }
 
 func filterRow(filter, placeholder string, width int) string {
-	if filter == "" {
-		return tui.Truncate(placeholder, width)
-	}
-	return tui.Truncate(filter, width)
+	edge := tui.MuteChrome(tui.FormatFieldEdge(width))
+	return edge + "\n" + tui.FormatField(filter, placeholder, width) + "\n" + edge
 }
 
 func (m Model) render() string {
@@ -51,13 +49,13 @@ func (m Model) renderWorkflows() string {
 	for len(rows) < vp {
 		rows = append(rows, "")
 	}
-	detail := ""
+	detail := tui.FormatDetailBlock("", w)
 	if m.wfCursor >= 0 && m.wfCursor < len(entries) {
 		detail = tui.FormatDetailBlock(entries[m.wfCursor].Description, w)
 	}
 	footer := tui.FormatListFooter(w, m.wfCursor, len(entries), workflowsFooter())
 	head := filterRow(m.wfFilter, tui.FilterWorkflows, w)
-	return head + "\n\n" + strings.Join(rows, "\n") + "\n\n" + detail + "\n" + tui.FormatRule(w) + "\n" + footer
+	return head + "\n" + strings.Join(rows, "\n") + "\n\n" + detail + "\n" + tui.FormatRule(w) + "\n" + footer
 }
 
 func (m Model) renderDiagram() string {
@@ -115,16 +113,21 @@ func (m Model) renderDiagramInsertSide(w int) string {
 
 func (m Model) renderDiagramInstruction(w int) string {
 	bundle := m.annotationBundle(m.selectedDiagramIDs())
-	lines := []string{
+	intro := []string{
 		tui.Truncate("Tell the agent pane what to change. It edits the workflow file.", w),
 		tui.MuteChrome(tui.Truncate(composerScope(bundle), w)),
-		"",
 	}
-	lines = append(lines, wrapDraft(tui.CursorPrefix+m.instructionDraft+"_", w)...)
+	top := tui.MuteChrome(tui.FormatFieldEdge(w))
+	bottom := tui.MuteChrome(tui.FormatFieldEdge(w))
 	vp := m.scrollViewport()
-	if len(lines) > vp {
-		lines = lines[len(lines)-vp:]
+	draft := composerDraft(m.instructionDraft, w)
+	keepIntro := max(0, min(len(intro), vp-3))
+	intro = intro[len(intro)-keepIntro:]
+	if room := max(1, vp-len(intro)-2); len(draft) > room {
+		draft = draft[len(draft)-room:]
 	}
+	lines := append(append(append([]string{}, intro...), top), draft...)
+	lines = append(lines, bottom)
 	for len(lines) < vp {
 		lines = append(lines, "")
 	}
@@ -137,25 +140,12 @@ func (m Model) renderDiagramInstruction(w int) string {
 	return head + "\n" + strings.Join(lines, "\n") + "\n" + tui.FormatRule(w) + "\n" + footer
 }
 
-// wrapDraft breaks typed text on the content width. A truncation would not show
-// the typed text after the draft is longer than one row.
-func wrapDraft(s string, width int) []string {
-	if width <= 0 {
-		return []string{s}
-	}
-	var out []string
-	var line []rune
-	used := 0
-	for _, r := range s {
-		rw := tui.Columns(string(r))
-		if used+rw > width {
-			out = append(out, string(line))
-			line, used = nil, 0
-		}
-		line = append(line, r)
-		used += rw
-	}
-	return append(out, string(line))
+// composerDraft renders the draft as a field: the caret at column zero, the text
+// at RowTextIndent, and continuations hanging under it.
+func composerDraft(draft string, width int) []string {
+	lines := tui.WrapIndented(draft, width)
+	lines[0] = tui.FieldCursor + lines[0][len(tui.FieldCursor):]
+	return lines
 }
 
 func (m Model) renderDiagramAgentPick(w int) string {
@@ -195,13 +185,13 @@ func (m Model) renderRuns() string {
 	for len(rows) < vp {
 		rows = append(rows, "")
 	}
-	detail := ""
+	detail := tui.FormatDetailBlock("", w)
 	if m.runCursor >= 0 && m.runCursor < len(runs) {
 		detail = tui.FormatDetailBlock(runsbrowser.FormatRunSummary(runs[m.runCursor]), w)
 	}
 	footer := tui.FormatListFooter(w, m.runCursor, len(runs), runsFooter())
 	head := filterRow(m.runFilter, tui.FilterRuns, w)
-	return head + "\n\n" + strings.Join(rows, "\n") + "\n\n" + detail + "\n" + tui.FormatRule(w) + "\n" + footer
+	return head + "\n" + strings.Join(rows, "\n") + "\n\n" + detail + "\n" + tui.FormatRule(w) + "\n" + footer
 }
 
 func (m Model) renderDetail() string {

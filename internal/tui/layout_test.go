@@ -63,7 +63,7 @@ func TestFormatDetailLines(t *testing.T) {
 	if FormatDetailLines("hello", 60) != "   hello" {
 		t.Fatalf("short = %q", FormatDetailLines("hello", 60))
 	}
-	wrapped := FormatDetailLines("Distil this session transcript and hand it over", 31)
+	wrapped := FormatDetailLines("Distil this session transcript and hand it over", 34)
 	lines := strings.Split(wrapped, "\n")
 	if len(lines) != 2 || lines[0] != "   Distil this session" || lines[1] != "   transcript and hand it over" {
 		t.Fatalf("wrap = %q", wrapped)
@@ -74,7 +74,7 @@ func TestFormatDetailLines(t *testing.T) {
 		t.Fatalf("overlong = %q", FormatDetailLines(desc, 40))
 	}
 	unbreakable := strings.Split(FormatDetailLines(strings.Repeat("x", 80), 20), "\n")
-	if len(unbreakable) != 2 || unbreakable[0] != "   "+strings.Repeat("x", 17) || unbreakable[1] != "   "+strings.Repeat("x", 14)+"..." {
+	if len(unbreakable) != 2 || unbreakable[0] != "   "+strings.Repeat("x", 14) || unbreakable[1] != "   "+strings.Repeat("x", 11)+"..." {
 		t.Fatalf("unbreakable = %q", FormatDetailLines(strings.Repeat("x", 80), 20))
 	}
 	if FormatDetailLines("", 60) != "" || FormatDetailLines("   \n\t  ", 60) != "" {
@@ -85,5 +85,22 @@ func TestFormatDetailLines(t *testing.T) {
 	}
 	if !strings.Contains(FormatDetailLines("No workflows matching xyz", 80), "No workflows matching xyz") {
 		t.Fatal("filter-miss copy")
+	}
+}
+
+func TestFormatDetailLinesStayInsideBandB(t *testing.T) {
+	// Detail text shares band B with list row titles and FormatRule: columns 3..W-4.
+	const width = 60
+	rule := FormatRule(width)
+	last := strings.LastIndex(rule, "-")
+	for _, text := range []string{
+		strings.Repeat("word ", 40),
+		strings.Repeat("x", 200),
+	} {
+		for _, line := range strings.Split(FormatDetailLines(text, width), "\n") {
+			if Columns(line) > last+1 {
+				t.Fatalf("detail line ends at column %d, past the rule at %d: %q", Columns(line)-1, last, line)
+			}
+		}
 	}
 }

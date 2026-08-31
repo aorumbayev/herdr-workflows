@@ -102,3 +102,132 @@ func TestFitViewportFloorAndGrowth(t *testing.T) {
 		t.Fatalf("tall host = %d, want 22", got)
 	}
 }
+
+func TestTruncateStartKeepsTail(t *testing.T) {
+	// Canvas STATES panel: "narrow 12  ...er popup_  tail kept, never the head".
+	if got := TruncateStart("fixed the picker popup", 11); got != "...er popup" {
+		t.Fatalf("TruncateStart long = %q", got)
+	}
+	if got := TruncateStart("abcd", 5); got != "abcd" {
+		t.Fatalf("TruncateStart short = %q", got)
+	}
+	if got := TruncateStart("abcdefghij", 5); got != "...ij" {
+		t.Fatalf("TruncateStart exact = %q", got)
+	}
+	if got := TruncateStart("abc", 2); got != ".." {
+		t.Fatalf("TruncateStart below ellipsis = %q", got)
+	}
+	if got := TruncateStart("abc", 0); got != "" {
+		t.Fatalf("TruncateStart zero = %q", got)
+	}
+}
+
+func TestTruncateStartWideGlyphStaysWithinColumns(t *testing.T) {
+	s := strings.Repeat("中", 6)
+	for _, max := range []int{1, 2, 3, 4, 5, 7, 8} {
+		got := TruncateStart(s, max)
+		if Columns(got) > max {
+			t.Fatalf("max=%d TruncateStart cols %d > budget (%q)", max, Columns(got), got)
+		}
+		if !utf8.ValidString(got) {
+			t.Fatalf("max=%d invalid UTF-8: %q", max, got)
+		}
+	}
+	field := FormatField(s, FilterRuns, 12)
+	if Columns(field) > 12 {
+		t.Fatalf("FormatField CJK cols %d: %q", Columns(field), field)
+	}
+}
+
+func TestFormatFieldCaretAndPlaceholder(t *testing.T) {
+	// Canvas STATES panel: empty puts the caret first, typed puts it last.
+	want := FieldCursor + "  " + DefaultTheme().Placeholder.Render(FilterRuns)
+	if got := FormatField("", FilterRuns, 62); got != want {
+		t.Fatalf("FormatField empty = %q", got)
+	}
+	if got := FormatField("dep", FilterRuns, 62); got != FieldCursor+"  dep" {
+		t.Fatalf("FormatField typed = %q", got)
+	}
+	if got := FormatField("", "", 62); got != FieldCursor {
+		t.Fatalf("FormatField without a placeholder = %q", got)
+	}
+	if got := FormatField("fixed the picker popup", FilterRuns, 12); got != FieldCursor+"  ... popup" {
+		t.Fatalf("FormatField narrow = %q", got)
+	}
+	if got := Columns(FormatField("fixed the picker popup", FilterRuns, 12)); got != 12 {
+		t.Fatalf("FormatField narrow columns = %d", got)
+	}
+}
+
+func TestFieldEdgeIsOneASCIIRowNoColumns(t *testing.T) {
+	// Verified against lipgloss ASCIIBorder bottom-only: +1 row, +0 columns, no corners.
+	edge := FormatFieldEdge(10)
+	if edge != "----------" {
+		t.Fatalf("FormatFieldEdge(10) = %q", edge)
+	}
+	if lines := strings.Split(edge, "\n"); len(lines) != 1 {
+		t.Fatalf("edge spans %d rows", len(lines))
+	}
+	if strings.ContainsAny(edge, "+|") {
+		t.Fatalf("edge has corner glyphs: %q", edge)
+	}
+}
+
+func TestFieldEdgeStartsAtColumnZeroAndSpansFieldWidth(t *testing.T) {
+	// Design 4 band A: the field takes no cursor gutter, so the edge is flush left.
+	for _, width := range []int{5, 42, 62} {
+		edge := FormatFieldEdge(width)
+		if strings.HasPrefix(edge, " ") {
+			t.Fatalf("width %d edge is indented: %q", width, edge)
+		}
+		if got := Columns(edge); got != width {
+			t.Fatalf("width %d edge columns = %d", width, got)
+		}
+	}
+	if got := FormatFieldEdge(0); got != "" {
+		t.Fatalf("FormatFieldEdge(0) = %q", got)
+	}
+	if got := FormatFieldEdge(-3); got != "" {
+		t.Fatalf("FormatFieldEdge(-3) = %q", got)
+	}
+}
+
+func TestFieldEdgeIsWiderThanFormatRule(t *testing.T) {
+	// Design 4: the band difference is what stops the edge reading as a section rule.
+	const width = 62
+	edge := FormatFieldEdge(width)
+	rule := FormatRule(width)
+	if Columns(edge) <= strings.Count(rule, "-") {
+		t.Fatalf("edge %d dashes must exceed rule %d", Columns(edge), strings.Count(rule, "-"))
+	}
+	if strings.Index(rule, "-") != RowTextIndent {
+		t.Fatalf("rule starts at column %d", strings.Index(rule, "-"))
+	}
+	if strings.Index(edge, "-") != 0 {
+		t.Fatalf("edge starts at column %d", strings.Index(edge, "-"))
+	}
+}
+
+func TestWrapIndentedAdvancesPastAWideGlyph(t *testing.T) {
+	got := WrapIndented("中 rest", 4)
+	if len(got) < 2 {
+		t.Fatalf("WrapIndented did not advance: %q", got)
+	}
+	if !strings.Contains(got[0], "中") {
+		t.Fatalf("first row = %q", got[0])
+	}
+}
+
+func TestFieldIsBracketedByTwoEdges(t *testing.T) {
+	// Every field reads as a field on its own: a rule above and a rule below.
+	block := []string{FormatFieldEdge(62), FormatField("dep", FilterRuns, 62), FormatFieldEdge(62)}
+	if block[0] != block[2] {
+		t.Fatal("both edges must be the same rule")
+	}
+	if Columns(block[0]) != 62 || Columns(block[2]) != 62 {
+		t.Fatalf("edges = %d and %d columns", Columns(block[0]), Columns(block[2]))
+	}
+	if got := block[1]; got != FieldCursor+"  dep" {
+		t.Fatalf("field row = %q", got)
+	}
+}

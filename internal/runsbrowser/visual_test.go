@@ -49,7 +49,7 @@ func TestRunsViewPadsToWindowHeight(t *testing.T) {
 func TestRunRowStatusUsesIndexedSlotAndKeepsText(t *testing.T) {
 	checkout := t.TempDir()
 	m, _ := modelWithRuns(t, checkout, "alpha", "bravo")
-	row := strings.Split(m.View().Content, "\n")[2]
+	row := strings.Split(m.View().Content, "\n")[3]
 	label := rowStatusToken(m.state.Items[0], 12)
 	if !strings.Contains(ansi.Strip(row), label) {
 		t.Fatalf("status text missing from %q", ansi.Strip(row))
