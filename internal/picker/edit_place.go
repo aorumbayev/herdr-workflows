@@ -13,7 +13,7 @@ const (
 
 var editPlacementOptions = []string{"popup", "beside", "below", "tab"}
 
-func formatEditPlacementBody(cursor int) string {
+func formatEditPlacementBody(cursor, width int) string {
 	labels := make([]string, len(editPlacementOptions))
 	for i, opt := range editPlacementOptions {
 		labels[i] = opt
@@ -21,7 +21,7 @@ func formatEditPlacementBody(cursor int) string {
 			labels[i] += " (default)"
 		}
 	}
-	return formatChooserBody("open editor placement", labels, cursor)
+	return formatChooserBody("open editor placement", labels, cursor, width)
 }
 
 func (m Model) beginEditPlacement(path, name string, isProfile bool, back mode) (tea.Model, tea.Cmd) {
@@ -100,7 +100,7 @@ func (m Model) respawnForEdit() (tea.Model, tea.Cmd) {
 
 func (m Model) renderEditPlace() string {
 	w := m.contentWidth()
-	body := formatEditPlacementBody(m.editPlaceCursor)
+	body := formatEditPlacementBody(m.editPlaceCursor, w)
 	footer := tui.FormatListFooter(w, m.editPlaceCursor, len(editPlacementOptions), "enter open"+tui.ChromeSep+"esc back")
-	return body + "\n" + tui.FormatRule(w) + "\n" + footer
+	return m.padToPopup(body, tui.FormatRule(w)+"\n"+footer)
 }

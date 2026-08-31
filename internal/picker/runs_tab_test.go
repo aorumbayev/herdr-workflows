@@ -13,7 +13,7 @@ import (
 
 func TestTabSwitchesBetweenWorkflowAndRunsBrowsers(t *testing.T) {
 	m := New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: t.TempDir()})
-	if got := tui.StripContentPadding(strings.Split(m.View().Content, "\n")[1]); got != tui.FilterWorkflows {
+	if got := tui.StripContentPadding(strings.Split(m.View().Content, "\n")[2]); got != tui.FormatField("", tui.FilterWorkflows, 78) {
 		t.Fatalf("workflows filter = %q", got)
 	}
 	m = apply(m, "tab")
@@ -32,7 +32,7 @@ func TestTabSwitchesBetweenWorkflowAndRunsBrowsers(t *testing.T) {
 	if m.mode != modeList {
 		t.Fatalf("mode after return = %v", m.mode)
 	}
-	if got := tui.StripContentPadding(strings.Split(m.View().Content, "\n")[1]); got != tui.FilterWorkflows {
+	if got := tui.StripContentPadding(strings.Split(m.View().Content, "\n")[2]); got != tui.FormatField("", tui.FilterWorkflows, 78) {
 		t.Fatalf("workflows filter not restored = %q", got)
 	}
 }

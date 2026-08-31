@@ -37,7 +37,7 @@ func TestConsoleFrameFitsTerminalHeight(t *testing.T) {
 			return next.(Model)
 		}},
 	}
-	for _, height := range []int{10, 24, 40} {
+	for _, height := range []int{11, 24, 40} {
 		for _, sc := range screens {
 			m := New(Options{
 				Entries: []workflow.ListEntry{

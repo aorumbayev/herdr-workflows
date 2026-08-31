@@ -119,8 +119,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleTick(msg.epoch)
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
+	case tea.PasteMsg:
+		return m.handlePaste(msg.Content)
 	}
 	return m, nil
+}
+
+// handlePaste appends a paste to the list filter. The host checks the byte cap.
+func (m Model) handlePaste(text string) (tea.Model, tea.Cmd) {
+	value := tui.PasteLine(text)
+	if value == "" || m.screen == screenDetail {
+		return m, nil
+	}
+	m.filter += value
+	m.cursor, m.offset = 0, 0
+	return m, m.refreshCmd("")
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -316,8 +329,8 @@ func (m *Model) clampCursor() {
 	m.cursor, m.offset = tui.ClampListWindow(m.cursor, m.offset, len(m.state.Items), m.listViewport())
 }
 
-// listChrome is the filter, two blanks, detail rows, rule, and footer.
-const listChrome = 7
+// listChrome is both field edges, the filter, two blanks, detail rows, rule, and footer.
+const listChrome = 8
 
 // listViewport fills the host with run rows above the six-row minimum.
 func (m Model) listViewport() int {

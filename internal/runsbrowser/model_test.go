@@ -9,6 +9,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 )
 
@@ -151,13 +153,17 @@ func TestOverlappingDetailLatestWins(t *testing.T) {
 func TestFilterMissKeepsFilterRow(t *testing.T) {
 	checkout := t.TempDir()
 	m, _ := modelWithRuns(t, checkout, "alpha")
-	if got := tui.StripContentPadding(strings.Split(m.View().Content, "\n")[0]); got != tui.FilterRuns {
+	width := m.contentWidth()
+	if got := tui.StripContentPadding(strings.Split(m.View().Content, "\n")[1]); got != tui.FormatField("", tui.FilterRuns, width) {
 		t.Fatalf("empty filter = %q", got)
 	}
 	m = apply(m, "z", "z", "z")
 	body := m.View().Content
-	if got := tui.StripContentPadding(strings.Split(body, "\n")[0]); got != "zzz" {
+	if got := tui.StripContentPadding(strings.Split(body, "\n")[1]); got != tui.FieldCursor+"  zzz" {
 		t.Fatalf("typed filter = %q", got)
+	}
+	if got := ansi.Strip(tui.StripContentPadding(strings.Split(body, "\n")[2])); got != tui.FormatFieldEdge(width) {
+		t.Fatalf("field edge = %q", got)
 	}
 	if !strings.Contains(body, "no matching runs") {
 		t.Fatalf("miss copy:\n%s", body)

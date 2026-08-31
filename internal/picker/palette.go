@@ -87,7 +87,7 @@ func ShouldDropStdinLeakSequence(sequence string) bool {
 	}
 	b := sequence[0]
 	switch b {
-	case '\t', '\n', '\r', 0x1b, 0x0b, 0x10, 0x07:
+	case '\t', '\n', '\r', 0x1b, 0x0b, 0x10, 0x07, 0x16:
 		return false
 	}
 	return b < 0x20

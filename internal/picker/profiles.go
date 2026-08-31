@@ -248,23 +248,17 @@ func (m Model) beginProfileEdit(path, name string) tea.Cmd {
 func (m Model) renderProfiles() string {
 	w := m.contentWidth()
 	list := m.filteredProfiles()
-	filterLabel := m.filter
-	if filterLabel == "" {
-		filterLabel = tui.FilterProfiles
-	}
-	filter := tui.Truncate(filterLabel, w)
+	filter := tui.FormatField(m.filter, tui.FilterProfiles, w)
+	edge := tui.MuteChrome(tui.FormatFieldEdge(w))
+	vp := m.listViewport()
 	if len(m.profileEntries) == 0 {
-		parts := []string{tui.FormatDetailBlock(tui.ProfilesEmptyMessage, w)}
-		if m.status != "" {
-			parts = append(parts, tui.Truncate(m.status, w))
-		}
-		parts = append(parts, tui.FormatRule(w), tui.MuteChrome(tui.FormatListFooter(w, 0, 0, tui.ProfilesEmptyHint)))
-		return strings.Join(parts, "\n")
+		body := tui.PadHeight(tui.FormatDetailBlock(tui.ProfilesEmptyMessage, w), vp+3)
+		return m.listTail(w, body, tui.FormatDetailBlock("", w), tui.ProfilesEmptyHint, 0, 0)
 	}
 	if len(list) == 0 {
-		return filter + "\n\n" + tui.FormatDetailBlock("No profiles matching "+m.filter, w) + "\n" + tui.FormatRule(w) + "\n" + tui.MuteChrome(tui.FormatListFooter(w, 0, 0, tui.ProfilesListHint))
+		body := tui.PadHeight(tui.FormatDetailBlock("No profiles matching "+m.filter, w), vp)
+		return edge + "\n" + filter + "\n" + edge + "\n" + m.listTail(w, body, tui.FormatDetailBlock("", w), tui.ProfilesListHint, 0, 0)
 	}
-	vp := m.listViewport()
 	end := min(m.offset+vp, len(list))
 	var rows []string
 	for i := m.offset; i < end; i++ {
@@ -274,9 +268,7 @@ func (m Model) renderProfiles() string {
 		rows = append(rows, "")
 	}
 	detail := tui.FormatDetailBlock(m.profileDetail(list[m.cursor]), w)
-	footer := tui.MuteChrome(tui.FormatListFooter(w, m.cursor, len(list), tui.ProfilesListHint))
-	parts := []string{filter, "", strings.Join(rows, "\n"), "", detail, tui.Truncate(m.status, w), tui.FormatRule(w), footer}
-	return strings.Join(parts, "\n")
+	return edge + "\n" + filter + "\n" + edge + "\n" + m.listTail(w, strings.Join(rows, "\n"), detail, tui.ProfilesListHint, m.cursor, len(list))
 }
 
 func (m Model) profileDetail(p config.ProfileEntry) string {
@@ -290,23 +282,18 @@ func (m Model) renderProfilePalette() string {
 		rows = append(rows, paletteRow("o", "open", w))
 	}
 	body := strings.Join(rows, "\n")
-	return body + "\n" + tui.FormatRule(w) + "\n" + tui.MuteChrome(tui.FormatListFooter(w, 0, 0, tui.PaletteHint))
+	return m.padToPopup(body, tui.FormatRule(w)+"\n"+tui.MuteChrome(tui.FormatListFooter(w, 0, 0, tui.PaletteHint)))
 }
 
 func (m Model) renderNewProfileName() string {
-	w := m.contentWidth()
-	line := "Profile name: " + m.promptValue
-	if m.status != "" {
-		return tui.Truncate(line, w) + "\n" + tui.Truncate(m.status, w) + "\n" + tui.CreateNameHint
-	}
-	return tui.Truncate(line, w) + "\n" + tui.CreateNameHint
+	return m.renderNameField("Profile name")
 }
 
 func (m Model) renderNewProfileScope() string {
 	w := m.contentWidth()
-	body := formatChooserBody("save profile at", newProfileScopeOptions, m.newProfileScopeCursor)
+	body := formatChooserBody("save profile at", newProfileScopeOptions, m.newProfileScopeCursor, w)
 	footer := tui.FormatListFooter(w, m.newProfileScopeCursor, len(newProfileScopeOptions), "enter select"+tui.ChromeSep+"esc back")
-	return body + "\n" + tui.FormatRule(w) + "\n" + footer
+	return m.padToPopup(body, tui.FormatRule(w)+"\n"+footer)
 }
 
 func profileArgsSummary(p config.ProfileEntry) string {

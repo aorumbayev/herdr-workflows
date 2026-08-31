@@ -11,8 +11,8 @@ func TestPickerRunsTabPadsContentOnce(t *testing.T) {
 	m := New(Options{Entries: catalogEntries(), Width: 80, Height: 13, RepoRoot: t.TempDir()})
 	m = apply(m, "tab")
 	body := m.View().Content
-	if got := tui.StripContentPadding(strings.Split(body, "\n")[1]); got != tui.FilterRuns {
-		t.Fatalf("filter row = %q want %q", got, tui.FilterRuns)
+	if got := tui.StripContentPadding(strings.Split(body, "\n")[2]); got != tui.FormatField("", tui.FilterRuns, 78) {
+		t.Fatalf("filter row = %q", got)
 	}
 	for i, line := range strings.Split(body, "\n") {
 		stripped := tui.StripContentPadding(line)

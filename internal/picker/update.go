@@ -9,7 +9,7 @@ import (
 const UpdateIndicator = "[run hwf update]"
 
 const (
-	minFilterField    = 4
+	minFilterField    = 5
 	filterRowOverhead = 3
 )
 
@@ -32,18 +32,29 @@ func FormatFilterUpdateHint(contentWidth int) string {
 
 // FormatListFilterRow shows the typed filter or the placeholder, plus an update hint.
 func FormatListFilterRow(filter string, contentWidth int, updateHint string) string {
-	label := filter
-	if label == "" {
-		label = tui.FilterWorkflows
+	room := filterFieldWidth(contentWidth, updateHint)
+	field := tui.FormatField(filter, tui.FilterWorkflows, room)
+	if room == contentWidth {
+		return field
 	}
+	return tui.PadColumns(field, room) + " " + updateHint
+}
+
+// FormatListFilterEdge draws the filter field edge. The hint shares the field row
+// only, so both edges span the full width.
+func FormatListFilterEdge(contentWidth int) string {
+	return tui.FormatFieldEdge(contentWidth)
+}
+
+func filterFieldWidth(contentWidth int, updateHint string) int {
 	if updateHint == "" {
-		return tui.Truncate(label, contentWidth)
+		return contentWidth
 	}
 	room := contentWidth - 1 - tui.Columns(updateHint)
 	if room < minFilterField {
-		return tui.Truncate(label, contentWidth)
+		return contentWidth
 	}
-	return tui.PadColumns(tui.Truncate(label, room), room) + " " + updateHint
+	return room
 }
 
 // UpdateCheck is a latest-release probe that does not wait for the caller.

@@ -160,6 +160,20 @@ func TestModelDiagramASksInsertSide(t *testing.T) {
 	if got := AnchorLabel(m.annotationBundle(nil)); got != "before brief" {
 		t.Fatalf("anchor = %q, want before brief", got)
 	}
+	body := ansi.Strip(m.Body())
+	draftLine, edgeLine := -1, -1
+	for i, line := range strings.Split(body, "\n") {
+		trimmed := strings.TrimRight(line, " ")
+		if strings.HasPrefix(trimmed, tui.FieldCursor+" ") && strings.Contains(trimmed, "Insert a new step") {
+			draftLine = i
+		}
+		if trimmed == tui.FormatFieldEdge(m.contentWidth()) {
+			edgeLine = i
+		}
+	}
+	if draftLine < 0 || edgeLine != draftLine+1 {
+		t.Fatalf("composer draft=%d edge=%d\n%s", draftLine, edgeLine, body)
+	}
 }
 
 func TestModelDiagramInsertSideEscapes(t *testing.T) {
@@ -625,5 +639,58 @@ func TestDiagramComposerNamesAnchorAndWrapsDraft(t *testing.T) {
 	}
 	if lines := strings.Count(m.Body(), "\n") + 1; lines > 24 {
 		t.Fatalf("composer frame = %d lines, want at most 24", lines)
+	}
+}
+
+func TestComposerKeepsTheFieldOnAShortPane(t *testing.T) {
+	m := openHandoffDiagram(t, func(o *Options) { o.Height = 6 })
+	next, _ := m.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
+	next, _ = next.(Model).Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
+	m = next.(Model)
+	plain := ansi.Strip(m.Body())
+	if !strings.Contains(plain, tui.FieldCursor) {
+		t.Fatalf("caret missing:\n%s", plain)
+	}
+	if !strings.Contains(plain, "x") {
+		t.Fatalf("draft missing:\n%s", plain)
+	}
+	edges := 0
+	for _, line := range strings.Split(plain, "\n") {
+		trim := strings.TrimSpace(line)
+		if trim != "" && strings.Trim(trim, "-") == "" {
+			edges++
+		}
+	}
+	if edges < 2 {
+		t.Fatalf("want both field edges:\n%s", plain)
+	}
+	if lines := strings.Count(m.View().Content, "\n") + 1; lines > 6 {
+		t.Fatalf("composer frame = %d lines, want at most 6", lines)
+	}
+}
+
+func TestComposerDraftWrapsWithAHangingIndent(t *testing.T) {
+	// A character wrap split words and dropped continuations to column 0, so a
+	// long draft stopped reading as one block under the caret.
+	lines := composerDraft(strings.Repeat("wrap this draft across the composer. ", 6), 60)
+	if len(lines) < 3 {
+		t.Fatalf("draft did not wrap: %v", lines)
+	}
+	if !strings.HasPrefix(lines[0], tui.FieldCursor+"  ") {
+		t.Fatalf("first row = %q", lines[0])
+	}
+	for i, line := range lines {
+		if tui.Columns(line) > 60 {
+			t.Fatalf("row %d is %d columns", i, tui.Columns(line))
+		}
+		if i > 0 && !strings.HasPrefix(line, strings.Repeat(" ", tui.RowTextIndent)) {
+			t.Fatalf("row %d does not hang under the first: %q", i, line)
+		}
+		if strings.HasSuffix(strings.TrimRight(line, " "), "-") {
+			t.Fatalf("row %d looks mid-word: %q", i, line)
+		}
+	}
+	if strings.Contains(strings.Join(lines, "|"), "draf|") {
+		t.Fatalf("word split across rows: %v", lines)
 	}
 }

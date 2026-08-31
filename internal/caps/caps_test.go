@@ -65,3 +65,19 @@ func TestFormatHwfEnvBlock(t *testing.T) {
 		t.Fatal("empty values must produce an empty block")
 	}
 }
+
+func TestAssertUnderFieldPasteCap(t *testing.T) {
+	if FieldPasteByteLimit != AgentPromptByteLimit {
+		t.Fatalf("FieldPasteByteLimit = %d", FieldPasteByteLimit)
+	}
+	if err := AssertUnderFieldPasteCap("paste", strings.Repeat("x", FieldPasteByteLimit)); err != nil {
+		t.Fatalf("at limit: %v", err)
+	}
+	err := AssertUnderFieldPasteCap("paste", strings.Repeat("x", FieldPasteByteLimit+1))
+	if err == nil {
+		t.Fatal("over limit must fail")
+	}
+	if !strings.Contains(err.Error(), "paste") || !strings.Contains(err.Error(), "16384") {
+		t.Fatalf("error must name source and limit: %v", err)
+	}
+}

@@ -10,7 +10,7 @@ Press `prefix+k`.
 
 The overlay has three tabs, workflows, runs, and profiles. `Tab` cycles the three in that order and back to workflows. `Shift+Tab` cycles the other way. Neither key quits the overlay. A tab bar centers the three labels above the body and marks the active one with reverse video. The pane title stays static.
 
-The workflows footer is `enter run | ctrl+p actions | esc`. The runs footer is `ctrl+g <scope> | enter detail | esc quit`. The profiles footer is `enter open | ctrl+p actions | esc`. The filter placeholders are `filter workflows...`, `filter runs...`, and `filter profiles...`. Filter rows use flush-left ASCII without a `/ ` prefix or indent.
+The workflows footer is `enter run | ctrl+p actions | esc`. The runs footer is `ctrl+g <scope> | enter detail | esc quit`. The profiles footer is `enter open | ctrl+p actions | esc`. The filter placeholders are `filter workflows...`, `filter runs...`, and `filter profiles...`. Filter rows use flush-left ASCII without a `/ ` prefix or indent. Every free-text field shows a `>` caret with an ASCII edge above and below it, each across the width of the field. The caret stays at column zero and the text flows after it. An empty field shows a dim placeholder. A long value keeps its tail, so the newest characters stay visible. A clipboard paste lands in the field that has focus. Newline, carriage return, and tab become one space. A paste of more than 16 KiB is refused whole and the limit appears in the status line.
 
 The overlay stays compact. Switching tabs does not close and reopen the popup.
 

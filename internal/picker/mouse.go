@@ -6,7 +6,8 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 )
 
-const listBodyStartRow = 3
+// listBodyStartRow is the tab bar, the field edge, the filter, and its edge.
+const listBodyStartRow = 4
 
 func (m Model) handleMouse(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {

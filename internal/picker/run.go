@@ -18,6 +18,9 @@ func RunScreen(opts Options) (int, error) {
 	if opts.CopyClipboard == nil {
 		opts.CopyClipboard = tui.CopyToClipboard
 	}
+	if opts.PasteClipboard == nil {
+		opts.PasteClipboard = tui.PasteFromClipboard
+	}
 
 	var program *tea.Program
 	pendingNewer := false

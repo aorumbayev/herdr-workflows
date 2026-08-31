@@ -47,7 +47,7 @@ func CharmVerdicts() []CharmVerdict {
 			CandidateModule:   bubbletea,
 			CandidateVersion:  bubbleteaV,
 			Decision:          "keep-custom",
-			MissingCapability: "tea.WithFilter has no built-in herdr prefix-key C0 leak allowlist that keeps Tab, LF, CR, ESC, Ctrl+K, Ctrl+P, and Ctrl+G while dropping other controls.",
+			MissingCapability: "tea.WithFilter has no built-in herdr prefix-key C0 leak allowlist that keeps Tab, LF, CR, ESC, Ctrl+K, Ctrl+P, Ctrl+G, and Ctrl+V while dropping other controls.",
 			Test:              "TestCharmVerdicts",
 		},
 		{
@@ -131,11 +131,19 @@ func CharmVerdicts() []CharmVerdict {
 			Test:              "TestTruncateEllipsisAtMax",
 		},
 		{
+			Mechanism:         "field-edge",
+			CandidateModule:   lipgloss,
+			CandidateVersion:  lipglossV,
+			Decision:          "keep-custom",
+			MissingCapability: "lipgloss borders derive the edge width from the rendered block, so a field edge cannot be narrower than its row. Product FormatFieldEdge repeats the lipgloss ASCIIBorder bottom glyph at an explicit width. The picker update hint shares only the value row, so both edges stay full width.",
+			Test:              "TestFieldEdgeIsOneASCIIRowNoColumns",
+		},
+		{
 			Mechanism:         "theme-warn-muted",
 			CandidateModule:   lipgloss,
 			CandidateVersion:  lipglossV,
 			Decision:          "keep-custom",
-			MissingCapability: "lipgloss styles colors but has no ready Theme with indexed ANSI warn (3), muted (8), and reverse selection without OSC 4 queries.",
+			MissingCapability: "lipgloss styles colors but has no ready Theme with indexed ANSI warn (3), faint muted, color-only placeholder (8), and reverse selection without OSC 4 queries.",
 			Test:              "TestDefaultThemeUsesIndexedWarnMutedAndReverse",
 		},
 		{

@@ -21,7 +21,7 @@ func consolePlacementLabel(p console.Placement) string {
 	return string(p)
 }
 
-func formatConsolePlacementBody(cursor int, remembered console.Placement) string {
+func formatConsolePlacementBody(cursor, width int, remembered console.Placement) string {
 	labels := make([]string, len(consolePlacementOptions))
 	for i, p := range consolePlacementOptions {
 		labels[i] = consolePlacementLabel(p)
@@ -29,7 +29,7 @@ func formatConsolePlacementBody(cursor int, remembered console.Placement) string
 			labels[i] += " (default)"
 		}
 	}
-	return formatChooserBody("open console placement", labels, cursor)
+	return formatChooserBody("open console placement", labels, cursor, width)
 }
 
 func (m Model) rememberedPlacement() console.Placement {
@@ -95,9 +95,9 @@ func (m Model) consoleLandingWorkflow() string {
 
 func (m Model) renderConsolePlace() string {
 	w := m.contentWidth()
-	body := formatConsolePlacementBody(m.consolePlaceCursor, m.rememberedPlacement())
+	body := formatConsolePlacementBody(m.consolePlaceCursor, w, m.rememberedPlacement())
 	footer := tui.FormatListFooter(w, m.consolePlaceCursor, len(consolePlacementOptions), "enter open"+tui.ChromeSep+"esc back")
-	return body + "\n" + tui.FormatRule(w) + "\n" + footer
+	return m.padToPopup(body, tui.FormatRule(w)+"\n"+footer)
 }
 
 func consoleOpenStatus(err error) string {

@@ -54,6 +54,12 @@ func coveringTestExists(name string, own map[string]struct{}, external map[strin
 
 // Spec scenarios that picker.ParityBaseline owns (picker-presentation + picker-editor-actions).
 var requiredPickerParityScenarios = []string{
+	"Caret and dim placeholder",
+	"Field edge costs no list row",
+	"Clipboard paste lands in the focused field",
+	"Oversized paste is refused with its limit",
+	"Field and edge start at column 0",
+	"Edge is wider than the inset rule",
 	"Title appears only in the pane label",
 	"No runtime retitling",
 	"More workflows than the viewport",

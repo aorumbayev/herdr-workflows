@@ -26,6 +26,9 @@ const HwfEnvByteLimit = 24 * 1024
 // agent.prompt discards with no message. Oversized prompts write to a run-owned file.
 const AgentPromptByteLimit = 16 * 1024
 
+// FieldPasteByteLimit caps one clipboard paste into an interactive text field.
+const FieldPasteByteLimit = AgentPromptByteLimit
+
 // CaptureLimitError identifies a source that is more than its byte limit.
 type CaptureLimitError struct {
 	Source string
@@ -41,6 +44,14 @@ func (e *CaptureLimitError) Error() string {
 func AssertUnderCaptureCap(source, text string) error {
 	if len(text) > CaptureByteLimit {
 		return &CaptureLimitError{Source: source, Bytes: len(text), Limit: CaptureByteLimit}
+	}
+	return nil
+}
+
+// AssertUnderFieldPasteCap fails if text is more than the field paste cap.
+func AssertUnderFieldPasteCap(source, text string) error {
+	if len(text) > FieldPasteByteLimit {
+		return &CaptureLimitError{Source: source, Bytes: len(text), Limit: FieldPasteByteLimit}
 	}
 	return nil
 }

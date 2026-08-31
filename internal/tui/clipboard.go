@@ -27,4 +27,30 @@ func CopyToClipboard(text string) error {
 	return errNoClipboard
 }
 
+// PasteFromClipboard reads text with pbpaste, wl-paste, or xclip. OSC 52 is not
+// used for the same reason CopyToClipboard avoids it.
+func PasteFromClipboard() (string, error) {
+	try := func(name string, args ...string) (string, bool) {
+		out, err := exec.Command(name, args...).Output()
+		if err != nil {
+			return "", false
+		}
+		return string(out), true
+	}
+	if runtime.GOOS == "darwin" {
+		if text, ok := try("pbpaste"); ok {
+			return text, nil
+		}
+	}
+	if text, ok := try("wl-paste", "--no-newline"); ok {
+		return text, nil
+	}
+	if text, ok := try("xclip", "-o", "-selection", "clipboard"); ok {
+		return text, nil
+	}
+	return "", errNoPasteClipboard
+}
+
+var errNoPasteClipboard = errors.New("no clipboard command (pbpaste, wl-paste, or xclip)")
+
 var errNoClipboard = errors.New("no clipboard command (pbcopy, wl-copy, or xclip)")
