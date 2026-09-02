@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/aorumbayev/herdr-workflows/v0.13.0/docs/workflow.schema.json",
+  "$id": "https://raw.githubusercontent.com/aorumbayev/herdr-workflows/v0.13.1/docs/workflow.schema.json",
   "properties": {
     "version": {
       "type": "string",
