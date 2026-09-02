@@ -24,8 +24,8 @@ const initCmd = "hwf init";
         <p class="eyebrow"><span class="dot" aria-hidden="true" /> herdr plugin · linear yaml</p>
         <h1>Workflows for the herd.</h1>
         <p class="lede">
-          Write the sequence you keep retyping as one short YAML file. Commands, coding agents, and
-          herdr itself, in order. Start it from a hotkey.
+          Automate repetitive actions in herdr with simple YAML workflows. Anything you can do by
+          hand in herdr becomes a short, shareable YAML snippet.
         </p>
         <div class="actions">
           <a class="btn btn-primary" href="#install">Quick start</a>
