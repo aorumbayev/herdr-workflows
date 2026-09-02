@@ -8,14 +8,14 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/engine"
 	"github.com/aorumbayev/herdr-workflows/internal/history"
 	"github.com/aorumbayev/herdr-workflows/internal/host"
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 const launchNotifyTitle = "herdr-workflows"
 
 // isTerminalFile is a seam. A test cannot open a pseudo terminal portably.
-var isTerminalFile = func(f *os.File) bool { return term.IsTerminal(int(f.Fd())) }
+var isTerminalFile = func(f *os.File) bool { return term.IsTerminal(f.Fd()) }
 
 // runIsDetached is true when no interactive terminal reads the run output, so
 // nobody sees the printed outcome. A picker launch and a nohup run are both detached.

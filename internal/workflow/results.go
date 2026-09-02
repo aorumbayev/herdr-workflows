@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -84,10 +85,8 @@ func ParseVerdict(response string, oneOf []string) (string, bool, string) {
 			break
 		}
 	}
-	for _, token := range oneOf {
-		if token == line {
-			return line, true, ""
-		}
+	if slices.Contains(oneOf, line) {
+		return line, true, ""
 	}
 	return "", false, line
 }

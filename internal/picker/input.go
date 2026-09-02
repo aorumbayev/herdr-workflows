@@ -1,6 +1,7 @@
 package picker
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -123,10 +124,5 @@ func ShouldRestoreCustomChoiceText(hasAnswer bool, answer string, options []stri
 	if !hasAnswer || !allowCustom {
 		return false
 	}
-	for _, option := range options {
-		if option == answer {
-			return false
-		}
-	}
-	return true
+	return !slices.Contains(options, answer)
 }

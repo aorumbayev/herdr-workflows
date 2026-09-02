@@ -38,24 +38,26 @@ const (
 
 // AgentPaneEntry is one selectable agent pane for send-back.
 type AgentPaneEntry struct {
-	PaneID string
-	Tab    string
-	Kind   string
-	Status string
-	Title  string
-	Self   bool
+	PaneID    string
+	Workspace string
+	Tab       string
+	Kind      string
+	Status    string
+	Title     string
+	Self      bool
 }
 
 func AgentPaneEntriesFromHost(panes []host.AgentPane) []AgentPaneEntry {
 	out := make([]AgentPaneEntry, len(panes))
 	for i, pane := range panes {
 		out[i] = AgentPaneEntry{
-			PaneID: pane.PaneID,
-			Tab:    pane.Tab,
-			Kind:   pane.Kind,
-			Status: pane.Status,
-			Title:  pane.Title,
-			Self:   pane.Self,
+			PaneID:    pane.PaneID,
+			Workspace: pane.Workspace,
+			Tab:       pane.Tab,
+			Kind:      pane.Kind,
+			Status:    pane.Status,
+			Title:     pane.Title,
+			Self:      pane.Self,
 		}
 	}
 	return out
@@ -360,30 +362,37 @@ func (m Model) diagramMarks() DiagramMarks {
 	}
 }
 
-// FormatAgentPickBody lists agent panes as tab, status, title, and a self marker.
-// Only the title truncates, because it is the part worth reading.
+// FormatAgentPickBody lists agent panes as location, status, agent, pane id,
+// and a self marker. The pane id is always shown: two agents can share one tab.
 func FormatAgentPickBody(panes []AgentPaneEntry, cursor, width int) string {
 	lines := []string{"send-back target agent"}
-	tabW := 0
+	locationW, tailW := 0, 0
 	for _, pane := range panes {
-		tabW = max(tabW, tui.Columns(agentPaneTab(pane)))
+		locationW = max(locationW, tui.Columns(agentPaneLocation(pane)))
+		tailW = max(tailW, tui.Columns(agentPaneTail(pane)))
 	}
+	locationW = min(locationW, max(1, width-tui.Columns(tui.CursorPrefix)-3-tailW-agentTitleMinColumns))
 	for i, pane := range panes {
 		prefix := "  "
 		if i == cursor {
 			prefix = tui.CursorPrefix
 		}
-		left := prefix + tui.PadColumns(agentPaneTab(pane), tabW) + " " + AgentStatusGlyph(pane.Status) + " "
+		location := tui.PadColumns(tui.Truncate(agentPaneLocation(pane), locationW), locationW)
+		left := prefix + location + " " + AgentStatusGlyph(pane.Status) + " "
+		tail := agentPaneTail(pane)
+		titleW := max(1, width-tui.Columns(left)-tui.Columns(tail))
+		title := tui.PadColumns(tui.Truncate(agentPaneTitle(pane), titleW), titleW)
+		paneID := " " + tui.MuteChrome(pane.PaneID)
 		marker := ""
 		if pane.Self {
 			marker = " " + agentSelfMarker
 		}
-		titleW := max(1, width-tui.Columns(left)-tui.Columns(marker))
-		title := tui.PadColumns(tui.Truncate(agentPaneTitle(pane), titleW), titleW)
-		lines = append(lines, strings.TrimRight(left+title+marker, " "))
+		lines = append(lines, strings.TrimRight(left+title, " ")+paneID+marker)
 	}
 	return strings.Join(lines, "\n")
 }
+
+const agentTitleMinColumns = 8
 
 // AgentStatusGlyph is the one-column status token. The chooser footer legend
 // names the three that a reader acts on.
@@ -400,16 +409,35 @@ func AgentStatusGlyph(status string) string {
 	}
 }
 
-func agentPaneTab(pane AgentPaneEntry) string {
-	if pane.Tab != "" {
-		return pane.Tab
+func agentPaneLocation(pane AgentPaneEntry) string {
+	parts := []string{}
+	for _, part := range []string{pane.Workspace, pane.Tab} {
+		if part != "" {
+			parts = append(parts, part)
+		}
 	}
-	return "?"
+	if len(parts) == 0 {
+		return "?"
+	}
+	return strings.Join(parts, " › ")
 }
 
 func agentPaneTitle(pane AgentPaneEntry) string {
-	if pane.Title != "" {
-		return pane.Title
+	parts := []string{}
+	for _, part := range []string{pane.Kind, pane.Title} {
+		if part != "" {
+			parts = append(parts, part)
+		}
 	}
-	return pane.PaneID
+	return strings.Join(parts, " · ")
+}
+
+// agentPaneTail is the unstyled pane id and self marker, the columns a row
+// reserves before the title truncates.
+func agentPaneTail(pane AgentPaneEntry) string {
+	tail := " " + pane.PaneID
+	if pane.Self {
+		tail += " " + agentSelfMarker
+	}
+	return tail
 }

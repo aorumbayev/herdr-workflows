@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -165,16 +166,7 @@ func ApplyVerdict(response string, expect workflow.ExpectSpec, details map[strin
 	}
 
 	if len(expect.Require) > 0 {
-		// Examine whether the parsed verdict is in the require list
-		found := false
-		for _, req := range expect.Require {
-			if req == parsed {
-				found = true
-				break
-			}
-		}
-
-		if !found {
+		if !slices.Contains(expect.Require, parsed) {
 			// Build merged details with the verdict key
 			merged := make(map[string]any)
 			for k, v := range details {

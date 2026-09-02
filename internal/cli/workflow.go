@@ -13,8 +13,8 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/update"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 func runWorkflowImport(cmd *cobra.Command, args []string) error {
@@ -37,10 +37,10 @@ func runWorkflowImport(cmd *cobra.Command, args []string) error {
 	stdinTTY := false
 	stdoutTTY := false
 	if f, ok := cmd.InOrStdin().(*os.File); ok {
-		stdinTTY = term.IsTerminal(int(f.Fd()))
+		stdinTTY = term.IsTerminal(f.Fd())
 	}
 	if f, ok := cmd.OutOrStdout().(*os.File); ok {
-		stdoutTTY = term.IsTerminal(int(f.Fd()))
+		stdoutTTY = term.IsTerminal(f.Fd())
 	}
 	tty := stdinTTY && stdoutTTY
 	preapproved := yes

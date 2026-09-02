@@ -1,28 +1,22 @@
 # Examples
 
-Workflows that run in less than a minute. Each card copies a `hwf workflow import "<bundle>"` command.
-
-Paste it into a terminal and run `hwf workflow import`. The CLI shows the full YAML and any warnings before it writes anything, then you pick one destination: this repo or global. Refer to [Run and manage · Import](/surfaces#import-a-workflow).
+Workflows that run in less than a minute. Each card copies a `hwf workflow import "<bundle>"` command. Paste it into a terminal. The CLI shows the YAML and any warnings, then prompts for a destination. Refer to [Import a workflow](/surfaces#import-a-workflow).
 
 <ExampleCards />
 
-The files themselves live in [`examples/`](https://github.com/aorumbayev/herdr-workflows/tree/main/examples).
+The files live in [`examples/`](https://github.com/aorumbayev/herdr-workflows/tree/main/examples).
 
-## What to copy from them
+## What each one shows
 
-- **`branch-check`** is the one to read first. It shows guarded inputs, a custom-value choice, ordered `when:` conditions, and `success_codes` for a command that reports its answer through the exit code.
-- **`remote-branch-log`** shows a cascading choice: the second input's options come from a command that reads the first input's answer.
-- **`handoff`** shows how to pass your session transcript to an agent.
-- **`prompt-enhance`** shows how to read a result back from an agent and use it, and how to pick a clipboard command from the ones the host has.
-- **`review-gate`** shows `expect:` on an agent step. The agent ends with one token from `one_of:`, and `{{steps.review.verdict}}` branches the steps after it.
-- **`adversarial-revise`** shows two profiles in one run. An author drafts, a critic returns a verdict, and one revision step runs only when the verdict requires it.
-- **`worktree`** shows dynamic choice options from commands, raw `herdr:` worktree and tab calls, and a hidden child workflow shared by two paths.
-- **`worktree-layout`** is that hidden child. It shows how prior `run:` steps derive a unique agent name for each pane. It shows `retry:` on a herdr `agent.start` call while the shell of the new pane becomes ready. A `when:` guard skips the start when the pane already holds a named agent.
+| Example              | Shows                                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------------------------ |
+| `branch-check`       | Read this one first. Guarded inputs, a custom-value choice, ordered `when:`, and `success_codes`        |
+| `remote-branch-log`  | A cascading choice. The options of the second input come from the answer to the first                  |
+| `handoff`            | Passes your session transcript to an agent                                                             |
+| `prompt-enhance`     | Reads the response of an agent and uses it, and selects a clipboard command from the ones the host has |
+| `review-gate`        | `expect:` on an agent step. `{{steps.review.verdict}}` branches the steps after it                     |
+| `adversarial-revise` | Two profiles in one run. An author drafts, a critic returns a verdict, and a `when:` guard on one revision step |
+| `worktree`           | Dynamic options from commands, raw `herdr:` worktree and tab calls, and a hidden child shared by two paths |
+| `worktree-layout`    | That hidden child. A unique agent name per pane, `retry:` on `agent.start`, and a `when:` guard        |
 
-## Tips
-
-- Prefer `run: [cmd, arg]` to the string form. Each item stays one argument, and templates work.
-- Read results with `{{steps.id.stdout}}` or `{{steps.id.response}}`. Nothing to declare.
-- Add `expect: {one_of: [...]}` to an agent step to get `{{steps.id.verdict}}` as well.
-- A background step needs a `pane:` of its own, or a `target:` that points at an agent that already has one.
-- Keep `on_failure:` on the workflow you start. A child's own recovery does not run.
+The [guide](/guide) explains each pattern.

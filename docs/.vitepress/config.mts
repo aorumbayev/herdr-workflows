@@ -29,6 +29,7 @@ export default defineConfig({
     },
   },
   themeConfig: {
+    logo: "/favicon.svg",
     siteTitle: "herdr-workflows",
     nav: [
       { text: "Install", link: "/install" },
