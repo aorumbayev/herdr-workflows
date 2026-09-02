@@ -189,12 +189,7 @@ func (s *validationScope) checkStringMap(m map[string]any, key string) {
 }
 
 func sortedKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	return keys
+	return slices.Sorted(maps.Keys(m))
 }
 
 func (s *validationScope) checkWhen(m map[string]any, key string) {

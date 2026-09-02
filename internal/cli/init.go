@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 // HerdrAgentKinds lists types that herdr agent start --kind accepts (herdr 0.8.2).
@@ -146,7 +146,8 @@ func RunInit(repoRoot string, opts InitOpts) (InitResult, error) {
 	} else {
 		path = config.RepoConfigPath(repoRoot)
 	}
-	existed := fileExists(path)
+	_, statErr := os.Stat(path)
+	existed := statErr == nil
 	if existed && !opts.Force {
 		if opts.Confirm == nil {
 			return InitResult{Kind: "exists", Path: path}, nil
@@ -209,11 +210,6 @@ func readPreservedTranscripts(path string) map[string]config.TranscriptExtractor
 	return cfg.Transcripts
 }
 
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
-
 func runInitCmd(cmd *cobra.Command, _ []string) error {
 	force, _ := cmd.Flags().GetBool("force")
 	global, _ := cmd.Flags().GetBool("global")
@@ -229,7 +225,7 @@ func runInitCmd(cmd *cobra.Command, _ []string) error {
 
 	stdinTTY := false
 	if f, ok := cmd.InOrStdin().(*os.File); ok {
-		stdinTTY = term.IsTerminal(int(f.Fd()))
+		stdinTTY = term.IsTerminal(f.Fd())
 	}
 	prompted := false
 	result, err := RunInit(repoRoot, InitOpts{

@@ -106,12 +106,6 @@ func (StringRecord) JSONSchema() *jsonschema.Schema {
 	return recordSchema(&jsonschema.Schema{Type: "string"}, &jsonschema.Schema{Type: "string"})
 }
 
-type NonEmptyStringList []string
-
-func (NonEmptyStringList) JSONSchema() *jsonschema.Schema {
-	return arraySchema(stringSchema(1), 1)
-}
-
 type SuccessCodes []int
 
 func (SuccessCodes) JSONSchema() *jsonschema.Schema {

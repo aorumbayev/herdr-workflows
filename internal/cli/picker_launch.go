@@ -12,8 +12,8 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/host"
 	"github.com/aorumbayev/herdr-workflows/internal/picker"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 func runLaunch(_ *cobra.Command, _ []string) error {
@@ -156,5 +156,5 @@ func cmdHasTTY(cmd *cobra.Command) bool {
 	if !okIn || !okOut {
 		return false
 	}
-	return term.IsTerminal(int(in.Fd())) && term.IsTerminal(int(out.Fd()))
+	return term.IsTerminal(in.Fd()) && term.IsTerminal(out.Fd())
 }

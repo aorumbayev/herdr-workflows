@@ -11,8 +11,8 @@ import (
 
 	assets "github.com/aorumbayev/herdr-workflows/embed"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 var errUsage = errors.New("usage")
@@ -28,10 +28,10 @@ type streams struct {
 func stdIO(in io.Reader, out, err io.Writer) streams {
 	s := streams{in: in, out: out, err: err}
 	if f, ok := in.(*os.File); ok {
-		s.stdinTTY = term.IsTerminal(int(f.Fd()))
+		s.stdinTTY = term.IsTerminal(f.Fd())
 	}
 	if f, ok := out.(*os.File); ok {
-		s.stdoutTTY = term.IsTerminal(int(f.Fd()))
+		s.stdoutTTY = term.IsTerminal(f.Fd())
 	}
 	return s
 }
