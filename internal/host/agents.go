@@ -5,36 +5,54 @@ import (
 	"fmt"
 	"os"
 	"slices"
-	"strconv"
 	"strings"
 )
 
-// AgentPane is one live agent pane from agent.list.
+// AgentPane is one live agent pane from agent.list, located by the workspace
+// and tab labels that workspace.list and tab.list carry.
 type AgentPane struct {
-	PaneID string
-	Tab    string
-	Kind   string
-	Status string
-	Title  string
-	Self   bool
+	PaneID          string
+	Workspace       string
+	Tab             string
+	TabNumber       int
+	Kind            string
+	Status          string
+	Title           string
+	Self            bool
+	workspaceNumber int
 }
 
 // ListAgentPanes gives agent panes from the herdr socket.
 func ListAgentPanes() ([]AgentPane, error) {
-	result, err := HerdrCall("agent.list", map[string]any{})
+	agents, err := HerdrCall("agent.list", map[string]any{})
 	if err != nil {
 		return nil, err
 	}
-	return ParseAgentPanes(result, os.Getenv("HERDR_PANE_ID"))
+	workspaces, err := HerdrCall("workspace.list", map[string]any{})
+	if err != nil {
+		return nil, err
+	}
+	tabs, err := HerdrCall("tab.list", map[string]any{})
+	if err != nil {
+		return nil, err
+	}
+	return ParseAgentPanes(agents, workspaces, tabs, os.Getenv("HERDR_PANE_ID"))
 }
 
-// ParseAgentPanes decodes an agent.list result map. An agent.list record carries
-// no title of its own unless agent.rename set a name, so the title degrades.
-func ParseAgentPanes(result map[string]any, selfPaneID string) ([]AgentPane, error) {
-	if result == nil {
+type location struct {
+	label  string
+	number int
+}
+
+// ParseAgentPanes joins an agent.list result with workspace.list and tab.list
+// results by id. Ids are opaque, so a tab number never comes from the id.
+func ParseAgentPanes(agents, workspaces, tabs map[string]any, selfPaneID string) ([]AgentPane, error) {
+	if agents == nil {
 		return nil, fmt.Errorf("empty agent list")
 	}
-	raw, _ := result["agents"].([]any)
+	workspaceByID := locations(workspaces, "workspaces", "workspace_id")
+	tabByID := locations(tabs, "tabs", "tab_id")
+	raw, _ := agents["agents"].([]any)
 	out := make([]AgentPane, 0, len(raw))
 	for _, item := range raw {
 		entry, _ := item.(map[string]any)
@@ -45,57 +63,58 @@ func ParseAgentPanes(result map[string]any, selfPaneID string) ([]AgentPane, err
 		if paneID == "" {
 			continue
 		}
+		workspaceID, _ := entry["workspace_id"].(string)
 		tabID, _ := entry["tab_id"].(string)
 		kind, _ := entry["agent"].(string)
 		status, _ := entry["agent_status"].(string)
+		workspace, tab := workspaceByID[workspaceID], tabByID[tabID]
 		out = append(out, AgentPane{
-			PaneID: paneID,
-			Tab:    tabNumber(tabID),
-			Kind:   kind,
-			Status: status,
-			Title:  agentPaneTitle(entry, paneID),
-			Self:   selfPaneID != "" && paneID == selfPaneID,
+			PaneID:          paneID,
+			Workspace:       workspace.label,
+			Tab:             tab.label,
+			TabNumber:       tab.number,
+			Kind:            kind,
+			Status:          status,
+			Title:           agentPaneTitle(entry),
+			Self:            selfPaneID != "" && paneID == selfPaneID,
+			workspaceNumber: workspace.number,
 		})
 	}
 	slices.SortFunc(out, func(a, b AgentPane) int {
-		if c := cmp.Compare(tabOrder(a.Tab), tabOrder(b.Tab)); c != 0 {
-			return c
-		}
-		return cmp.Compare(a.PaneID, b.PaneID)
+		return cmp.Or(
+			cmp.Compare(a.workspaceNumber, b.workspaceNumber),
+			cmp.Compare(a.TabNumber, b.TabNumber),
+			cmp.Compare(a.PaneID, b.PaneID),
+		)
 	})
 	return out, nil
 }
 
+func locations(result map[string]any, listKey, idKey string) map[string]location {
+	out := map[string]location{}
+	raw, _ := result[listKey].([]any)
+	for _, item := range raw {
+		entry, _ := item.(map[string]any)
+		id, _ := entry[idKey].(string)
+		if id == "" {
+			continue
+		}
+		label, _ := entry["label"].(string)
+		number, _ := entry["number"].(float64)
+		out[id] = location{label: strings.TrimSpace(label), number: int(number)}
+	}
+	return out
+}
+
 // agentPaneTitle prefers a renamed agent, then the stripped terminal title, which
-// herdr loses on a cold restart. The pane id is the last resort, never an empty row.
-func agentPaneTitle(entry map[string]any, paneID string) string {
+// herdr loses on a cold restart. The pane id is shown beside every row instead.
+func agentPaneTitle(entry map[string]any) string {
 	for _, key := range []string{"name", "terminal_title_stripped"} {
 		if text, _ := entry[key].(string); strings.TrimSpace(text) != "" {
 			return strings.TrimSpace(text)
 		}
 	}
-	return paneID
-}
-
-// tabNumber is the digits of a `w1:t3` tab id. Any other shape keeps the whole id.
-func tabNumber(tabID string) string {
-	_, after, found := strings.Cut(tabID, ":t")
-	if !found || after == "" {
-		return tabID
-	}
-	if _, err := strconv.Atoi(after); err != nil {
-		return tabID
-	}
-	return after
-}
-
-// tabOrder sorts numeric tabs ahead of anything else, so tab 10 follows tab 9.
-func tabOrder(tab string) int {
-	n, err := strconv.Atoi(tab)
-	if err != nil {
-		return 1 << 30
-	}
-	return n
+	return ""
 }
 
 // PaneSendText writes text into a pane input and does not submit the text.

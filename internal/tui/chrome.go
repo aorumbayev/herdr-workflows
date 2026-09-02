@@ -23,6 +23,7 @@ const (
 	ProfilesEmptyMessage = "No profiles yet. Press ctrl+p then n to add one."
 	FilterOptions        = "filter options..."
 	PromptPlaceholder    = "prompt..."
+	ComposerPlaceholder  = "describe the change, enter sends, esc goes back"
 	SubmitHint           = "enter submit" + ChromeSep + "esc back"
 	CreateNameHint       = "enter create" + ChromeSep + "esc cancel"
 	EmptyCatalogMessage  = "Hi there, looks like you got no runnable workflows, start by creating a new one, browsing examples or importing an existing workflow."
@@ -63,6 +64,7 @@ var ChromeStrings = []string{
 	FilterRuns,
 	FilterOptions,
 	PromptPlaceholder,
+	ComposerPlaceholder,
 	SubmitHint,
 	CreateNameHint,
 	EmptyCatalogMessage,

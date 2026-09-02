@@ -141,8 +141,11 @@ func (m Model) renderDiagramInstruction(w int) string {
 }
 
 // composerDraft renders the draft as a field: the caret at column zero, the text
-// at RowTextIndent, and continuations hanging under it.
+// at RowTextIndent, and continuations hanging under it. An empty draft shows the placeholder.
 func composerDraft(draft string, width int) []string {
+	if draft == "" {
+		return []string{tui.FormatField("", tui.ComposerPlaceholder, width)}
+	}
 	lines := tui.WrapIndented(draft, width)
 	lines[0] = tui.FieldCursor + lines[0][len(tui.FieldCursor):]
 	return lines

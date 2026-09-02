@@ -694,3 +694,20 @@ func TestComposerDraftWrapsWithAHangingIndent(t *testing.T) {
 		t.Fatalf("word split across rows: %v", lines)
 	}
 }
+
+func TestComposerDraftShowsPlaceholderOnlyWhenEmpty(t *testing.T) {
+	empty := composerDraft("", 60)
+	if len(empty) != 1 || empty[0] != tui.FormatField("", tui.ComposerPlaceholder, 60) {
+		t.Fatalf("an empty draft must render the dim placeholder field: %q", empty)
+	}
+	if !strings.Contains(ansi.Strip(empty[0]), tui.ComposerPlaceholder) {
+		t.Fatalf("placeholder text missing: %q", empty[0])
+	}
+	typed := composerDraft("rename brief", 60)
+	if strings.Contains(strings.Join(typed, "\n"), tui.ComposerPlaceholder) {
+		t.Fatalf("a typed draft must hide the placeholder: %q", typed)
+	}
+	if !strings.HasPrefix(typed[0], tui.FieldCursor) || !strings.Contains(typed[0], "rename brief") {
+		t.Fatalf("typed draft = %q", typed)
+	}
+}
