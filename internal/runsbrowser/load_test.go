@@ -1,7 +1,6 @@
 package runsbrowser
 
 import (
-	"os"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -9,22 +8,17 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/history"
 )
 
-func testLoadEnv(t *testing.T) (stateDir, checkout string, getenv func(string) string) {
+func testLoadEnv(t *testing.T) (stateDir, checkout string) {
 	t.Helper()
 	stateDir = t.TempDir()
 	checkout = t.TempDir()
-	getenv = func(key string) string {
-		if key == "HERDR_PLUGIN_STATE_DIR" {
-			return stateDir
-		}
-		return os.Getenv(key)
-	}
-	return stateDir, checkout, getenv
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
+	return stateDir, checkout
 }
 
-func writeSucceededRun(t *testing.T, getenv func(string) string, checkout, workflow, startedAt string) string {
+func writeSucceededRun(t *testing.T, checkout, workflow, startedAt string) string {
 	t.Helper()
-	w := history.NewWriter(getenv)
+	w := history.NewWriter()
 	t.Cleanup(w.Dispose)
 	meta := history.ClaimMeta{
 		Workflow:     workflow,
@@ -43,11 +37,11 @@ func writeSucceededRun(t *testing.T, getenv func(string) string, checkout, workf
 }
 
 func TestLoadPreservesSelection(t *testing.T) {
-	_, checkout, getenv := testLoadEnv(t)
-	keepFirstID := writeSucceededRun(t, getenv, checkout, "one", "2026-01-01T00:00:00.000Z")
-	writeSucceededRun(t, getenv, checkout, "two", "2026-01-01T00:00:01.000Z")
+	_, checkout := testLoadEnv(t)
+	keepFirstID := writeSucceededRun(t, checkout, "one", "2026-01-01T00:00:00.000Z")
+	writeSucceededRun(t, checkout, "two", "2026-01-01T00:00:01.000Z")
 
-	state := Load(checkout, ScopeCurrent, "", keepFirstID, getenv)
+	state := Load(checkout, ScopeCurrent, "", keepFirstID)
 	if state.SelectedID != keepFirstID {
 		t.Fatalf("SelectedID = %q, want %q", state.SelectedID, keepFirstID)
 	}
@@ -57,35 +51,35 @@ func TestLoadPreservesSelection(t *testing.T) {
 }
 
 func TestLoadCurrentScopeExact(t *testing.T) {
-	_, checkoutA, getenv := testLoadEnv(t)
+	_, checkoutA := testLoadEnv(t)
 	checkoutB := t.TempDir()
-	writeSucceededRun(t, getenv, checkoutA, "here", "")
-	writeSucceededRun(t, getenv, checkoutB, "there", "")
+	writeSucceededRun(t, checkoutA, "here", "")
+	writeSucceededRun(t, checkoutB, "there", "")
 
 	canonicalA, err := filepath.EvalSymlinks(checkoutA)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	current := Load(checkoutA, ScopeCurrent, "", "", getenv)
+	current := Load(checkoutA, ScopeCurrent, "", "")
 	for _, item := range current.Items {
 		if item.CheckoutRoot != canonicalA {
 			t.Fatalf("current item checkout_root = %q, want %q", item.CheckoutRoot, canonicalA)
 		}
 	}
 
-	all := Load(checkoutA, ScopeAll, "", "", getenv)
+	all := Load(checkoutA, ScopeAll, "", "")
 	if len(all.Items) < 2 {
 		t.Fatalf("all scope Items len = %d, want >= 2", len(all.Items))
 	}
 }
 
 func TestLoadCurrentWithOnlyForeignRuns(t *testing.T) {
-	_, checkout, getenv := testLoadEnv(t)
+	_, checkout := testLoadEnv(t)
 	foreign := t.TempDir()
-	writeSucceededRun(t, getenv, foreign, "there", "")
+	writeSucceededRun(t, foreign, "there", "")
 
-	state := Load(checkout, ScopeCurrent, "", "", getenv)
+	state := Load(checkout, ScopeCurrent, "", "")
 	if state.Unavailable {
 		t.Fatal("Unavailable = true, want false")
 	}

@@ -39,17 +39,16 @@ type ctxJSON struct {
 	} `json:"pane"`
 }
 
-func readInvocationContext(getenv Env) InvocationContext {
-	env := envOr(getenv)
+func readInvocationContext() InvocationContext {
 	var injected ctxJSON
-	if raw := env("HERDR_PLUGIN_CONTEXT_JSON"); raw != "" {
+	if raw := os.Getenv("HERDR_PLUGIN_CONTEXT_JSON"); raw != "" {
 		_ = json.Unmarshal([]byte(raw), &injected)
 	}
 	cwd, _ := os.Getwd()
 	return InvocationContext{
-		WorkspaceID:  cmp.Or(env("HERDR_WORKSPACE_ID"), injected.WorkspaceID, injected.Workspace.WorkspaceID),
-		TabID:        cmp.Or(env("HERDR_TAB_ID"), injected.TabID, injected.Tab.TabID),
-		PaneID:       cmp.Or(env("HERDR_PANE_ID"), injected.FocusedPaneID, injected.PaneID, injected.Pane.PaneID),
+		WorkspaceID:  cmp.Or(os.Getenv("HERDR_WORKSPACE_ID"), injected.WorkspaceID, injected.Workspace.WorkspaceID),
+		TabID:        cmp.Or(os.Getenv("HERDR_TAB_ID"), injected.TabID, injected.Tab.TabID),
+		PaneID:       cmp.Or(os.Getenv("HERDR_PANE_ID"), injected.FocusedPaneID, injected.PaneID, injected.Pane.PaneID),
 		WorktreePath: injected.Worktree.CheckoutPath,
 		Selection:    injected.SelectedText,
 		Cwd:          cmp.Or(injected.Worktree.CheckoutPath, injected.FocusedPaneCwd, injected.WorkspaceCwd, cwd),
@@ -59,7 +58,7 @@ func readInvocationContext(getenv Env) InvocationContext {
 // ResolveRepoRoot finds .git in parent directories from start, or .hwf that is
 // not in the home directory. .hwf is the global directory of the plugin.
 func ResolveRepoRoot(start string) string {
-	home, _ := HomeDir(nil)
+	home, _ := HomeDir()
 	dir := start
 	for {
 		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
@@ -90,13 +89,11 @@ type LoadOptions struct {
 	Start          string
 	RepoRoot       string
 	FromInvocation bool
-	Env            Env
 }
 
 // LoadContext finds config layers, repo root, and invocation context one time.
 func LoadContext(opts LoadOptions) (AppContext, error) {
-	env := envOr(opts.Env)
-	invocation := readInvocationContext(env)
+	invocation := readInvocationContext()
 	start := opts.Start
 	if start == "" {
 		if opts.FromInvocation {
@@ -107,14 +104,14 @@ func LoadContext(opts LoadOptions) (AppContext, error) {
 	}
 	repoRoot := opts.RepoRoot
 	if repoRoot == "" {
-		repoRoot = env("HERDR_WORKFLOWS_REPO_ROOT")
+		repoRoot = os.Getenv("HERDR_WORKFLOWS_REPO_ROOT")
 	}
 	if repoRoot == "" {
 		repoRoot = ResolveRepoRoot(start)
 	}
 	ctx := invocation
 	ctx.Cwd = repoRoot
-	cfg, err := LoadConfig(repoRoot, env)
+	cfg, err := LoadConfig(repoRoot)
 	if err != nil {
 		return AppContext{}, err
 	}

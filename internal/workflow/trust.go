@@ -53,7 +53,7 @@ func Path(scope, repoRoot, name string) (string, error) {
 		return filepath.Join(repoRoot, ".hwf", "workflows", validated+".yaml"), nil
 	}
 	if scope == "global" {
-		home, err := config.HomeDir(nil)
+		home, err := config.HomeDir()
 		if err != nil {
 			return "", err
 		}
@@ -209,9 +209,7 @@ func appendUnique(values []string, value string) []string {
 func ReferencedWorkflowChildren(raw Document) []string {
 	var names []string
 	for _, name := range childWorkflowNames(raw.Steps, raw.OnFailure) {
-		if !slices.Contains(names, name) {
-			names = append(names, name)
-		}
+		names = appendUnique(names, name)
 	}
 	slices.Sort(names)
 	return names

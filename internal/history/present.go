@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"slices"
 	"time"
-
-	"github.com/aorumbayev/herdr-workflows/internal/config"
 )
 
 type Detail struct {
@@ -369,16 +367,16 @@ func PresentDetail(detail Detail) PresentedDetail {
 	return PresentedDetail{Detail: detail, Blocks: PresentRunDetail(detail)}
 }
 
-func RunDetail(id string, getenv config.Env, now time.Time) PresentedDetail {
-	return PresentDetail(loadRunDetail(id, getenv, now))
+func RunDetail(id string, now time.Time) PresentedDetail {
+	return PresentDetail(loadRunDetail(id, now))
 }
 
-func loadRunDetail(id string, getenv config.Env, now time.Time) Detail {
+func loadRunDetail(id string, now time.Time) Detail {
 	normalized, ok := NormalizeRunUUID(id)
 	if !ok {
 		return Detail{Kind: "invalid", Message: "run link is not a complete UUID"}
 	}
-	loaded, err := loadSnapshot(normalized, getenv)
+	loaded, err := loadSnapshot(normalized)
 	if err != nil {
 		return Detail{Kind: "unavailable", ID: normalized, Message: "run history storage is unavailable"}
 	}

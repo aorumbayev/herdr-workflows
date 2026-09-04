@@ -81,7 +81,6 @@ func TestPrepareWiresHooksFromOptions(t *testing.T) {
 		},
 		CopyClipboard: func(string) error { return nil },
 		Chdir:         func(string) error { return nil },
-		Env:           func(string) string { return "" },
 	})
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)

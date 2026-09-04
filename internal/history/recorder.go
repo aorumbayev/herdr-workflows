@@ -13,7 +13,6 @@ type CreateRecorderOpts struct {
 	RunID        string
 	CheckoutRoot string
 	OnAck        func(string)
-	Getenv       func(string) string
 }
 
 type recorder struct {
@@ -21,7 +20,6 @@ type recorder struct {
 	runID  string
 	scope  engine.RecorderScope
 	state  *recorderState
-	getenv func(string) string
 }
 
 type recorderState struct {
@@ -29,7 +27,7 @@ type recorderState struct {
 }
 
 func CreateRunRecorder(opts CreateRecorderOpts) (engine.Recorder, error) {
-	w := NewWriter(opts.Getenv)
+	w := NewWriter()
 	claim := w.Claim(ClaimMeta{
 		ID:           opts.RunID,
 		Workflow:     opts.Workflow.Name,
@@ -41,15 +39,15 @@ func CreateRunRecorder(opts CreateRecorderOpts) (engine.Recorder, error) {
 	if !claim.OK {
 		emitAck(opts.OnAck, FormatHistoryAck(Ack{State: "rejected", ID: claim.ID, Error: claim.Error}))
 		w.Dispose()
-		return nil, errClaim(claim.Error)
+		return nil, claimError(claim.Error)
 	}
 	if claim.State == "unavailable" {
 		emitAck(opts.OnAck, FormatHistoryAck(Ack{State: "unavailable", ID: claim.ID}))
 		w.Dispose()
-		return &recorder{runID: claim.ID, scope: scope, state: &recorderState{}, getenv: opts.Getenv}, nil
+		return &recorder{runID: claim.ID, scope: scope, state: &recorderState{}}, nil
 	}
 	emitAck(opts.OnAck, FormatHistoryAck(Ack{State: "claimed", ID: claim.ID}))
-	rec := &recorder{writer: w, runID: claim.ID, scope: scope, state: &recorderState{}, getenv: opts.Getenv}
+	rec := &recorder{writer: w, runID: claim.ID, scope: scope, state: &recorderState{}}
 	rec.persistEntryYAML(opts.Workflow.File)
 	return rec, nil
 }
@@ -62,7 +60,7 @@ func (r *recorder) persistEntryYAML(path string) {
 	if err != nil || len(body) == 0 {
 		return
 	}
-	_ = WriteDebugArtifacts(r.runID, DebugArtifacts{EntryYAML: string(body)}, r.getenv)
+	_ = WriteDebugArtifacts(r.runID, DebugArtifacts{EntryYAML: string(body)})
 }
 
 // RecordTranscript keeps the captured transcript of the run for console debug views.
@@ -70,14 +68,12 @@ func (r *recorder) RecordTranscript(text string) {
 	if r.writer == nil || text == "" {
 		return
 	}
-	_ = WriteDebugArtifacts(r.runID, DebugArtifacts{Transcript: text}, r.getenv)
+	_ = WriteDebugArtifacts(r.runID, DebugArtifacts{Transcript: text})
 }
 
 type claimError string
 
 func (e claimError) Error() string { return string(e) }
-
-func errClaim(msg string) error { return claimError(msg) }
 
 func sourceOf(wf workflow.Definition) string {
 	return wf.SourceKind()
@@ -94,7 +90,7 @@ func emitAck(fn func(string), line string) {
 func (r *recorder) RunID() string { return r.runID }
 
 func (r *recorder) Child(scope engine.RecorderScope) engine.Recorder {
-	return &recorder{writer: r.writer, runID: r.runID, scope: scope, state: r.state, getenv: r.getenv}
+	return &recorder{writer: r.writer, runID: r.runID, scope: scope, state: r.state}
 }
 
 func (r *recorder) StepStarted(step workflow.Step, ordinal, total int, label string, phase engine.StepPhase) error {

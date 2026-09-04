@@ -24,11 +24,8 @@ func (e *exitCodeError) ExitCode() int { return e.code }
 
 var pluginListMissingRE = regexp.MustCompile(`(?i)not found|no such|unknown plugin`)
 
-func resolvePluginSource(getenv func(string) string) (update.PluginSourceInfo, error) {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-	herdr := host.BinPath(getenv)
+func resolvePluginSource() (update.PluginSourceInfo, error) {
+	herdr := host.BinPath()
 	cmd := exec.Command(herdr, "plugin", "list", "--json", "--plugin", "herdr-workflows")
 	cmd.Env = os.Environ()
 	var stderrBuf strings.Builder
@@ -56,9 +53,9 @@ func resolvePluginSource(getenv func(string) string) (update.PluginSourceInfo, e
 	return update.PluginSourceInfo{}, fmt.Errorf("herdr plugin list failed: %s", msg)
 }
 
-func defaultHerdrInstall(getenv func(string) string) func([]string, string) (int, error) {
+func defaultHerdrInstall() func([]string, string) (int, error) {
 	return func(args []string, cwd string) (int, error) {
-		herdr := host.BinPath(getenv)
+		herdr := host.BinPath()
 		cmd := exec.Command(herdr, args...)
 		cmd.Dir = cwd
 		cmd.Stdout = os.Stdout
@@ -77,10 +74,10 @@ func defaultHerdrInstall(getenv func(string) string) func([]string, string) (int
 	}
 }
 
-func pluginRootFor(getenv func(string) string) string {
+func pluginRootFor() string {
 	execPath, _ := os.Executable()
 	cwd, _ := os.Getwd()
-	return resolvePluginRoot(getenv, execPath, cwd)
+	return resolvePluginRoot(execPath, cwd)
 }
 
 func refVersionFromInstallArgs(args []string) string {
@@ -94,17 +91,14 @@ func refVersionFromInstallArgs(args []string) string {
 }
 
 func executeUpdate(deps update.Deps, stdout, stderr io.Writer) error {
-	if deps.Getenv == nil {
-		deps.Getenv = os.Getenv
-	}
 	if deps.FetchLatest == nil {
 		deps.FetchLatest = func() (update.LatestRelease, error) { return update.CheckForUpdate(update.CheckOpts{}) }
 	}
 	if deps.ListSource == nil {
-		deps.ListSource = func() (update.PluginSourceInfo, error) { return resolvePluginSource(deps.Getenv) }
+		deps.ListSource = func() (update.PluginSourceInfo, error) { return resolvePluginSource() }
 	}
 	if deps.RunInstall == nil {
-		deps.RunInstall = defaultHerdrInstall(deps.Getenv)
+		deps.RunInstall = defaultHerdrInstall()
 	}
 	if deps.Executable == nil {
 		deps.Executable = os.Executable
@@ -113,7 +107,7 @@ func executeUpdate(deps update.Deps, stdout, stderr io.Writer) error {
 		deps.InstallRelease = update.InstallRelease
 	}
 	if deps.PluginRoot == "" {
-		deps.PluginRoot = pluginRootFor(deps.Getenv)
+		deps.PluginRoot = pluginRootFor()
 	}
 	current := deps.Version
 	if current == "" {

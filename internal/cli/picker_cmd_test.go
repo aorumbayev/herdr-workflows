@@ -34,9 +34,6 @@ func TestBuildPickerOptionsWiresLiveHooks(t *testing.T) {
 	if opts.ExportShare == nil {
 		t.Fatal("ExportShare must be wired")
 	}
-	if opts.Env == nil {
-		t.Fatal("Env must be wired")
-	}
 	if opts.LoadWorkflow == nil {
 		t.Fatal("LoadWorkflow must be wired")
 	}

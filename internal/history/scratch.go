@@ -4,21 +4,16 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/aorumbayev/herdr-workflows/internal/caps"
-	"github.com/aorumbayev/herdr-workflows/internal/config"
 )
 
-func ScratchGet(key string, getenv config.Env) (string, error) {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
+func ScratchGet(key string) (string, error) {
 	if key == "" {
 		return "", fmt.Errorf("scratch key is required")
 	}
-	db, err := openHistory(getenv)
+	db, err := openHistory()
 	if err != nil {
 		return "", err
 	}
@@ -30,17 +25,14 @@ func ScratchGet(key string, getenv config.Env) (string, error) {
 	return value, err
 }
 
-func ScratchSet(key, value string, getenv config.Env) error {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
+func ScratchSet(key, value string) error {
 	if key == "" {
 		return fmt.Errorf("scratch key is required")
 	}
 	if err := caps.AssertUnderCaptureCap("scratch", value); err != nil {
 		return err
 	}
-	db, err := openHistory(getenv)
+	db, err := openHistory()
 	if err != nil {
 		return err
 	}
@@ -50,11 +42,8 @@ func ScratchSet(key, value string, getenv config.Env) error {
 	return err
 }
 
-func ScratchList(getenv config.Env) ([]string, error) {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-	db, err := openHistory(getenv)
+func ScratchList() ([]string, error) {
+	db, err := openHistory()
 	if err != nil {
 		return nil, err
 	}
@@ -74,14 +63,11 @@ func ScratchList(getenv config.Env) ([]string, error) {
 	return out, rows.Err()
 }
 
-func ScratchDelete(key string, getenv config.Env) error {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
+func ScratchDelete(key string) error {
 	if key == "" {
 		return fmt.Errorf("scratch key is required")
 	}
-	db, err := openHistory(getenv)
+	db, err := openHistory()
 	if err != nil {
 		return err
 	}

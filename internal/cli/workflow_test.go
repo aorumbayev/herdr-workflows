@@ -44,9 +44,6 @@ func captureExecuteUpdate(t *testing.T, deps update.Deps, extraEnv map[string]st
 	t.Helper()
 	var outBuf, errBuf bytes.Buffer
 	run := func() error {
-		if deps.Getenv == nil {
-			deps.Getenv = os.Getenv
-		}
 		return executeUpdate(deps, &outBuf, &errBuf)
 	}
 	var runErr error
@@ -392,12 +389,7 @@ func TestUpdateOtherFailuresUseUpdateFailed(t *testing.T) {
 			return update.LatestRelease{Tag: "v" + updateNewer, Version: updateNewer}, nil
 		},
 		ListSource: func() (update.PluginSourceInfo, error) {
-			return resolvePluginSource(func(key string) string {
-				if key == "HERDR_BIN_PATH" {
-					return herdr
-				}
-				return os.Getenv(key)
-			})
+			return resolvePluginSource()
 		},
 	}, map[string]string{"HERDR_BIN_PATH": herdr})
 	if code != 1 {

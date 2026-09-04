@@ -29,12 +29,9 @@ steps:
 `
 
 // ResolveEditor returns $EDITOR, then $VISUAL.
-func ResolveEditor(getenv func(string) string) (string, error) {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
+func ResolveEditor() (string, error) {
 	for _, key := range []string{"EDITOR", "VISUAL"} {
-		if v := strings.TrimSpace(getenv(key)); v != "" {
+		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
 			return v, nil
 		}
 	}
@@ -53,7 +50,7 @@ func CreateRepoWorkflow(repoRoot, name string) (string, error) {
 
 // CreateGlobalWorkflow writes a new stub under the global $HOME/.hwf/workflows.
 func CreateGlobalWorkflow(name string) (string, error) {
-	home, err := config.HomeDir(nil)
+	home, err := config.HomeDir()
 	if err != nil {
 		return "", err
 	}

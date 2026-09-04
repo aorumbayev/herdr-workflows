@@ -119,7 +119,6 @@ type InitOpts struct {
 	Force    bool
 	Global   bool
 	Confirm  func() (bool, error)
-	Env      config.Env
 	LookPath lookPath
 }
 
@@ -132,14 +131,10 @@ type InitResult struct {
 
 // RunInit writes repo or global plugin config. It uses the profiles that it finds.
 func RunInit(repoRoot string, opts InitOpts) (InitResult, error) {
-	getenv := opts.Env
-	if getenv == nil {
-		getenv = os.Getenv
-	}
 	var path string
 	var err error
 	if opts.Global {
-		path, err = config.GlobalConfigPath(getenv)
+		path, err = config.GlobalConfigPath()
 		if err != nil {
 			return InitResult{}, err
 		}

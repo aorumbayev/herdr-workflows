@@ -1,7 +1,6 @@
 package runsbrowser
 
 import (
-	"os"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -23,7 +22,6 @@ type Options struct {
 	RepoRoot   string
 	Width      int
 	Height     int
-	Env        config.Env
 	SelectedID string
 	Now        func() time.Time
 }
@@ -33,7 +31,6 @@ type Model struct {
 	repoRoot     string
 	width        int
 	height       int
-	getenv       config.Env
 	screen       screen
 	scope        Scope
 	filter       string
@@ -76,10 +73,6 @@ func New(opts Options) Model {
 	if width <= 0 {
 		width = 80
 	}
-	getenv := opts.Env
-	if getenv == nil {
-		getenv = os.Getenv
-	}
 	nowFn := opts.Now
 	if nowFn == nil {
 		nowFn = time.Now
@@ -88,7 +81,6 @@ func New(opts Options) Model {
 		repoRoot:   opts.RepoRoot,
 		width:      width,
 		height:     opts.Height,
-		getenv:     getenv,
 		screen:     screenList,
 		scope:      ScopeCurrent,
 		detailGen:  &config.Generation{},
@@ -246,9 +238,8 @@ func (m Model) OpenDetail(id string) (Model, tea.Cmd) {
 
 func (m Model) detailLoadCmd(id string) tea.Cmd {
 	gen := m.detailGen.Begin()
-	getenv := m.getenv
 	return func() tea.Msg {
-		presented := history.RunDetail(id, getenv, time.Time{})
+		presented := history.RunDetail(id, time.Time{})
 		return detailLoadedMsg{
 			gen: gen,
 			id:  id,
@@ -299,7 +290,7 @@ func (m Model) applyDetailLoaded(msg detailLoadedMsg) (Model, tea.Cmd) {
 		m.yamlScroll = 0
 		m.stepFocus = defaultStepFocus(msg.view.Detail)
 	}
-	arts, _ := history.LoadDebugArtifacts(msg.id, m.getenv)
+	arts, _ := history.LoadDebugArtifacts(msg.id)
 	m.yamlChunks = tui.SplitStepYAML(arts.EntryYAML)
 	return m.armTick()
 }
@@ -309,9 +300,8 @@ func (m Model) refreshCmd(preserveID string) tea.Cmd {
 	scope := m.scope
 	filter := m.filter
 	repoRoot := m.repoRoot
-	getenv := m.getenv
 	return func() tea.Msg {
-		state := Load(repoRoot, scope, filter, preserveID, getenv)
+		state := Load(repoRoot, scope, filter, preserveID)
 		return listLoadedMsg{gen: gen, scope: scope, filter: filter, state: state}
 	}
 }

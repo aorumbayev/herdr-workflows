@@ -1,14 +1,12 @@
 package runsbrowser
 
 import (
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
@@ -58,27 +56,22 @@ func apply(m Model, keys ...string) Model {
 	return m
 }
 
-func testGetenv(t *testing.T, stateDir string) config.Env {
+func testGetenv(t *testing.T, stateDir string) {
 	t.Helper()
-	return func(key string) string {
-		if key == "HERDR_PLUGIN_STATE_DIR" {
-			return stateDir
-		}
-		return os.Getenv(key)
-	}
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
 }
 
 func modelWithRuns(t *testing.T, checkout string, workflows ...string) (Model, []string) {
 	t.Helper()
 	stateDir := t.TempDir()
-	getenv := testGetenv(t, stateDir)
+	testGetenv(t, stateDir)
 	ids := make([]string, len(workflows))
 	for i, name := range workflows {
 		started := time.Now().Add(-time.Duration(i) * time.Second).UTC().Format("2006-01-02T15:04:05.000Z")
-		id := writeSucceededRun(t, getenv, checkout, name, started)
+		id := writeSucceededRun(t, checkout, name, started)
 		ids[i] = id
 	}
-	m := New(Options{RepoRoot: checkout, Width: 80, Env: getenv})
+	m := New(Options{RepoRoot: checkout, Width: 80})
 	m = runCmd(m, m.Init())
 	return m, ids
 }
@@ -172,11 +165,11 @@ func TestFilterMissKeepsFilterRow(t *testing.T) {
 
 func TestEmptyCurrentShowsCtrlGHint(t *testing.T) {
 	stateDir := t.TempDir()
-	getenv := testGetenv(t, stateDir)
+	testGetenv(t, stateDir)
 	other := t.TempDir()
 	checkout := t.TempDir()
-	writeSucceededRun(t, getenv, other, "foreign", time.Now().UTC().Format("2006-01-02T15:04:05.000Z"))
-	m := New(Options{RepoRoot: checkout, Width: 80, Env: getenv})
+	writeSucceededRun(t, other, "foreign", time.Now().UTC().Format("2006-01-02T15:04:05.000Z"))
+	m := New(Options{RepoRoot: checkout, Width: 80})
 	m = runCmd(m, m.Init())
 	body := m.View().Content
 	if !strings.Contains(body, "no runs in this worktree") || !strings.Contains(body, "Ctrl+G for All") {

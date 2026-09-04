@@ -4,7 +4,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/engine"
 	"github.com/aorumbayev/herdr-workflows/internal/history"
 	"github.com/aorumbayev/herdr-workflows/internal/host"
@@ -29,8 +28,8 @@ func runIsDetached(cmd *cobra.Command) bool {
 
 // notifyRunOutcome toasts the outcome of a detached run. The picker closes on the
 // claim, so the child is the only process left to report it.
-func notifyRunOutcome(runID, title string, getenv config.Env) {
-	detail := history.RunDetail(runID, getenv, time.Time{}).Detail
+func notifyRunOutcome(runID, title string) {
+	detail := history.RunDetail(runID, time.Time{}).Detail
 	elapsed := history.FormatElapsed(detail.ElapsedMs)
 	if detail.Status == string(engine.StatusSucceeded) {
 		_ = host.NotificationShowSound(launchNotifyTitle, title+" succeeded in "+elapsed, "done")

@@ -6,8 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/aorumbayev/herdr-workflows/internal/config"
 )
 
 const (
@@ -57,12 +55,12 @@ type Progress struct {
 	Total int `json:"total"`
 }
 
-func ListRuns(filter ListFilter, getenv config.Env) ListResult {
+func ListRuns(filter ListFilter) ListResult {
 	now := filter.Now
 	if now.IsZero() {
 		now = time.Now()
 	}
-	items, incompat, roots, err := listRunSummaries(now, getenv)
+	items, incompat, roots, err := listRunSummaries(now)
 	if err != nil {
 		return ListResult{Unavailable: true}
 	}

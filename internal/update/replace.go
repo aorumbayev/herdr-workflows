@@ -2,15 +2,17 @@ package update
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
 
 func ReplaceExecutable(src, dest string) error {
-	data, err := os.ReadFile(src)
+	in, err := os.Open(src)
 	if err != nil {
 		return err
 	}
+	defer func() { _ = in.Close() }()
 	dir := filepath.Dir(dest)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -26,7 +28,7 @@ func ReplaceExecutable(src, dest string) error {
 			_ = os.Remove(tmpName)
 		}
 	}()
-	if _, err := tmp.Write(data); err != nil {
+	if _, err := io.Copy(tmp, in); err != nil {
 		_ = tmp.Close()
 		return err
 	}

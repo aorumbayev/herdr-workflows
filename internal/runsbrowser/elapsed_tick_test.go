@@ -7,20 +7,19 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/history"
 )
 
-func writeRunningRun(t *testing.T, getenv config.Env, checkout, workflow, startedAt string) string {
+func writeRunningRun(t *testing.T, checkout, workflow, startedAt string) string {
 	t.Helper()
-	w := claimRunningRun(t, getenv, checkout, workflow, startedAt)
+	w := claimRunningRun(t, checkout, workflow, startedAt)
 	w.Dispose()
 	return w.ID()
 }
 
-func claimRunningRun(t *testing.T, getenv config.Env, checkout, workflow, startedAt string) *history.Writer {
+func claimRunningRun(t *testing.T, checkout, workflow, startedAt string) *history.Writer {
 	t.Helper()
-	w := history.NewWriter(getenv)
+	w := history.NewWriter()
 	t.Cleanup(w.Dispose)
 	meta := history.ClaimMeta{Workflow: workflow, Source: "repo", CheckoutRoot: checkout}
 	if startedAt != "" {
@@ -70,13 +69,13 @@ func loadListOnce(t *testing.T, m Model) (Model, tea.Cmd) {
 func TestRunningRunElapsedTicksInView(t *testing.T) {
 	stateDir := t.TempDir()
 	checkout := t.TempDir()
-	getenv := testGetenv(t, stateDir)
+	testGetenv(t, stateDir)
 	started := time.Now().UTC()
 	startISO := started.Format("2006-01-02T15:04:05.000Z")
-	writeRunningRun(t, getenv, checkout, "live", startISO)
+	writeRunningRun(t, checkout, "live", startISO)
 
 	var now time.Time
-	m := New(Options{RepoRoot: checkout, Width: 80, Env: getenv, Now: func() time.Time { return now }})
+	m := New(Options{RepoRoot: checkout, Width: 80, Now: func() time.Time { return now }})
 	now = started.Add(2 * time.Second)
 	m, follow := loadListOnce(t, m)
 	if follow == nil {
@@ -104,21 +103,21 @@ func TestRunningRunElapsedTicksInView(t *testing.T) {
 
 func TestRunsTickArmsForRunningStopsForTerminal(t *testing.T) {
 	stateDir := t.TempDir()
-	getenv := testGetenv(t, stateDir)
+	testGetenv(t, stateDir)
 	now := time.Now().UTC()
 	nowISO := now.Format("2006-01-02T15:04:05.000Z")
 
 	running := t.TempDir()
-	writeRunningRun(t, getenv, running, "live", nowISO)
-	mr := New(Options{RepoRoot: running, Width: 80, Env: getenv})
+	writeRunningRun(t, running, "live", nowISO)
+	mr := New(Options{RepoRoot: running, Width: 80})
 	mr, follow := loadListOnce(t, mr)
 	if follow == nil || !mr.ticking {
 		t.Fatalf("running run must arm the ticker: follow=%v ticking=%v", follow != nil, mr.ticking)
 	}
 
 	terminal := t.TempDir()
-	writeSucceededRun(t, getenv, terminal, "done", nowISO)
-	mt := New(Options{RepoRoot: terminal, Width: 80, Env: getenv})
+	writeSucceededRun(t, terminal, "done", nowISO)
+	mt := New(Options{RepoRoot: terminal, Width: 80})
 	mt, followTerm := loadListOnce(t, mt)
 	if followTerm != nil || mt.ticking {
 		t.Fatalf("terminal-only list must not arm the ticker: follow=%v ticking=%v", followTerm != nil, mt.ticking)
@@ -128,13 +127,13 @@ func TestRunsTickArmsForRunningStopsForTerminal(t *testing.T) {
 func TestRunsTickStopsWhenRunFinishes(t *testing.T) {
 	stateDir := t.TempDir()
 	checkout := t.TempDir()
-	getenv := testGetenv(t, stateDir)
+	testGetenv(t, stateDir)
 	started := time.Now().UTC().Add(-3 * time.Second)
 	startISO := started.Format("2006-01-02T15:04:05.000Z")
-	w := claimRunningRun(t, getenv, checkout, "live", startISO)
+	w := claimRunningRun(t, checkout, "live", startISO)
 
 	var now time.Time
-	m := New(Options{RepoRoot: checkout, Width: 80, Env: getenv, Now: func() time.Time { return now }})
+	m := New(Options{RepoRoot: checkout, Width: 80, Now: func() time.Time { return now }})
 	now = started.Add(2 * time.Second)
 	m, _ = loadListOnce(t, m)
 	if !m.ticking {
@@ -173,11 +172,11 @@ func TestRunsTickStopsWhenRunFinishes(t *testing.T) {
 func TestRunsTickIgnoresStaleEpoch(t *testing.T) {
 	stateDir := t.TempDir()
 	checkout := t.TempDir()
-	getenv := testGetenv(t, stateDir)
+	testGetenv(t, stateDir)
 	nowISO := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
-	writeRunningRun(t, getenv, checkout, "live", nowISO)
+	writeRunningRun(t, checkout, "live", nowISO)
 
-	m := New(Options{RepoRoot: checkout, Width: 80, Env: getenv})
+	m := New(Options{RepoRoot: checkout, Width: 80})
 	m, _ = loadListOnce(t, m)
 	if m.tickEpoch == 0 {
 		t.Fatal("epoch must advance when the ticker arms")

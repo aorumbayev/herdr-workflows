@@ -54,7 +54,6 @@ type StepFailureDetails struct {
 const (
 	AgentInfoField    = "agent"
 	AgentVerdictField = "verdict"
-	CommandExitField  = "exit_code"
 )
 
 var (

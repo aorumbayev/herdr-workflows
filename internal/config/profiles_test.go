@@ -15,7 +15,7 @@ func TestListProfilesReportsHighestPriorityLayer(t *testing.T) {
 		"profiles:\n  repo_only:\n    kind: codex\n  shared:\n    kind: codex\n")
 	write(t, filepath.Join(root, ".hwf", "config.local.yaml"),
 		"profiles:\n  shared:\n    kind: gemini\n")
-	got, err := ListProfiles(root, nil)
+	got, err := ListProfiles(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,19 +144,19 @@ func TestAppendProfileSkeletonRejectsDuplicate(t *testing.T) {
 
 func TestConfigPathForScope(t *testing.T) {
 	plugin, root := fixture(t)
-	global, err := ConfigPathForScope("global", root, nil)
+	global, err := ConfigPathForScope("global", root)
 	if err != nil || global != filepath.Join(plugin, "config.yaml") {
 		t.Fatalf("global = %q err=%v", global, err)
 	}
-	repo, _ := ConfigPathForScope("repo", root, nil)
+	repo, _ := ConfigPathForScope("repo", root)
 	if repo != filepath.Join(root, ".hwf", "config.yaml") {
 		t.Fatalf("repo = %q", repo)
 	}
-	local, _ := ConfigPathForScope("local", root, nil)
+	local, _ := ConfigPathForScope("local", root)
 	if local != filepath.Join(root, ".hwf", "config.local.yaml") {
 		t.Fatalf("local = %q", local)
 	}
-	if _, err := ConfigPathForScope("bogus", root, nil); err == nil {
+	if _, err := ConfigPathForScope("bogus", root); err == nil {
 		t.Fatal("bogus scope must error")
 	}
 }

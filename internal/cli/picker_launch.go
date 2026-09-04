@@ -79,7 +79,6 @@ func buildPickerOptions(app config.AppContext, entries []workflow.ListEntry) pic
 		Entries:  entries,
 		RepoRoot: repoRoot,
 		Config:   cfg,
-		Env:      os.Getenv,
 		LoadWorkflow: func(entry workflow.ListEntry) (*workflow.Definition, error) {
 			return workflow.LoadWorkflowEntry(entry, repoRoot, cfg)
 		},

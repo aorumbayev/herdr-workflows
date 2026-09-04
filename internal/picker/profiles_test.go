@@ -10,15 +10,11 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
 )
 
-func profileEnv(t *testing.T) (config.Env, string) {
+func profileEnv(t *testing.T) string {
 	t.Helper()
 	plugin := t.TempDir()
-	return func(key string) string {
-		if key == "HERDR_PLUGIN_CONFIG_DIR" {
-			return plugin
-		}
-		return ""
-	}, plugin
+	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", plugin)
+	return plugin
 }
 
 func toProfiles(m Model) Model {
@@ -26,7 +22,7 @@ func toProfiles(m Model) Model {
 }
 
 func TestProfilesTabListsProfilesWithSourceColumn(t *testing.T) {
-	env, plugin := profileEnv(t)
+	plugin := profileEnv(t)
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, ".hwf"), 0o755); err != nil {
 		t.Fatal(err)
@@ -37,7 +33,7 @@ func TestProfilesTabListsProfilesWithSourceColumn(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, ".hwf", "config.yaml"), []byte("profiles:\n  builder:\n    kind: codex\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	m := toProfiles(New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: root, Env: env}))
+	m := toProfiles(New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: root}))
 	if m.mode != modeProfiles {
 		t.Fatalf("mode = %v, want profiles", m.mode)
 	}
@@ -57,7 +53,7 @@ func TestProfilesTabListsProfilesWithSourceColumn(t *testing.T) {
 }
 
 func TestProfilesBrowserFiltersByTypedText(t *testing.T) {
-	env, _ := profileEnv(t)
+	profileEnv(t)
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, ".hwf"), 0o755); err != nil {
 		t.Fatal(err)
@@ -66,7 +62,7 @@ func TestProfilesBrowserFiltersByTypedText(t *testing.T) {
 		[]byte("profiles:\n  reviewer:\n    kind: claude\n  builder:\n    kind: codex\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	m := toProfiles(New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: root, Env: env}))
+	m := toProfiles(New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: root}))
 	m = apply(m, "b", "u", "i")
 	list := m.filteredProfiles()
 	if len(list) != 1 || list[0].Name != "builder" {
@@ -79,9 +75,9 @@ func TestProfilesBrowserFiltersByTypedText(t *testing.T) {
 }
 
 func TestProfilesEmptyStatePointsToPalette(t *testing.T) {
-	env, _ := profileEnv(t)
+	profileEnv(t)
 	root := t.TempDir()
-	m := toProfiles(New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: root, Env: env}))
+	m := toProfiles(New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: root}))
 	body := m.View().Content
 	if !strings.Contains(body, tui.ProfilesEmptyMessage) {
 		t.Fatalf("empty profiles must guide to the palette:\n%s", body)
@@ -89,14 +85,13 @@ func TestProfilesEmptyStatePointsToPalette(t *testing.T) {
 }
 
 func TestNewProfileWritesSkeletonToChosenScope(t *testing.T) {
-	env, _ := profileEnv(t)
+	profileEnv(t)
 	root := t.TempDir()
 	var edited string
 	m := toProfiles(New(Options{
 		Entries:    catalogEntries(),
 		Width:      80,
 		RepoRoot:   root,
-		Env:        env,
 		EditConfig: func(path string) error { edited = path; return nil },
 	}))
 	m = apply(m, "ctrl+p", "n", "i", "n", "t", "a", "k", "e", "enter")
@@ -129,7 +124,7 @@ func TestNewProfileWritesSkeletonToChosenScope(t *testing.T) {
 }
 
 func TestNewProfileRejectsDuplicate(t *testing.T) {
-	env, _ := profileEnv(t)
+	profileEnv(t)
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, ".hwf"), 0o755); err != nil {
 		t.Fatal(err)
@@ -139,7 +134,7 @@ func TestNewProfileRejectsDuplicate(t *testing.T) {
 	if err := os.WriteFile(repoPath, []byte(original), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	m := toProfiles(New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: root, Env: env}))
+	m := toProfiles(New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: root}))
 	m = apply(m, "ctrl+p", "n", "i", "n", "t", "a", "k", "e", "enter", "down", "enter")
 	if m.mode != modeProfiles {
 		t.Fatalf("duplicate must return to the profiles list, mode=%v", m.mode)
@@ -154,7 +149,7 @@ func TestNewProfileRejectsDuplicate(t *testing.T) {
 }
 
 func TestOpenProfileOpensDefiningFileViaPlacementChooser(t *testing.T) {
-	env, plugin := profileEnv(t)
+	plugin := profileEnv(t)
 	root := t.TempDir()
 	globalPath := filepath.Join(plugin, "config.yaml")
 	if err := os.WriteFile(globalPath, []byte("profiles:\n  reviewer:\n    kind: claude\n"), 0o644); err != nil {
@@ -165,7 +160,6 @@ func TestOpenProfileOpensDefiningFileViaPlacementChooser(t *testing.T) {
 		Entries:    catalogEntries(),
 		Width:      80,
 		RepoRoot:   root,
-		Env:        env,
 		EditConfig: func(path string) error { edited = path; return nil },
 	}))
 	m = apply(m, "enter")
@@ -182,14 +176,13 @@ func TestOpenProfileOpensDefiningFileViaPlacementChooser(t *testing.T) {
 }
 
 func TestNewProfilePopupResizesAndCarriesProfileKind(t *testing.T) {
-	env, _ := profileEnv(t)
+	profileEnv(t)
 	root := t.TempDir()
 	var states []PopupState
 	m := toProfiles(New(Options{
 		Entries:     catalogEntries(),
 		Width:       80,
 		RepoRoot:    root,
-		Env:         env,
 		EditConfig:  func(string) error { t.Fatal("compact popup must not run the editor"); return nil },
 		ReopenPopup: func(state PopupState) error { states = append(states, state); return nil },
 	}))

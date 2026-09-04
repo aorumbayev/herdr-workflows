@@ -5,8 +5,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/aorumbayev/herdr-workflows/internal/config"
 )
 
 func TestSummaryIsPrivacyFilteredListProjection(t *testing.T) {
@@ -76,13 +74,13 @@ func TestToDetailReportsRemainingWithoutInventedIdentities(t *testing.T) {
 }
 
 func TestUnknownSnapshotVersionIsReportedAndLeftUntouched(t *testing.T) {
-	_, _, getenv := testWriterEnv(t)
+	testWriterEnv(t)
 	id := AllocateRunID()
 	blob := `{"version":99,"id":"` + id + `","workflow":"old","source":"repo","checkout_root":"/repo/a","started_at":"2026-08-20T12:00:00.000Z","heartbeat_at":"2026-08-20T12:00:00.000Z","steps":[]}`
-	if err := insertIncompatibleForTest(id, 99, blob, getenv); err != nil {
+	if err := insertIncompatibleForTest(id, 99, blob); err != nil {
 		t.Fatal(err)
 	}
-	listed := ListRuns(ListFilter{}, getenv)
+	listed := ListRuns(ListFilter{})
 	if !listed.OK {
 		t.Fatalf("list = %+v", listed)
 	}
@@ -94,7 +92,7 @@ func TestUnknownSnapshotVersionIsReportedAndLeftUntouched(t *testing.T) {
 	if len(listed.Incompatible) != 1 || listed.Incompatible[0].ID != id || listed.Incompatible[0].Version != 99 {
 		t.Fatalf("incompatible = %+v", listed.Incompatible)
 	}
-	db, err := openHistory(getenv)
+	db, err := openHistory()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +104,7 @@ func TestUnknownSnapshotVersionIsReportedAndLeftUntouched(t *testing.T) {
 	if version != 99 || stored != blob {
 		t.Fatalf("row mutated version=%d blob=%q", version, stored)
 	}
-	presented := RunDetail(id, getenv, time.Time{})
+	presented := RunDetail(id, time.Time{})
 	if presented.Detail.Kind != "incompatible" {
 		t.Fatalf("detail kind = %q", presented.Detail.Kind)
 	}
@@ -115,8 +113,8 @@ func TestUnknownSnapshotVersionIsReportedAndLeftUntouched(t *testing.T) {
 	}
 }
 
-func insertIncompatibleForTest(id string, version int, blob string, getenv config.Env) error {
-	db, err := openHistory(getenv)
+func insertIncompatibleForTest(id string, version int, blob string) error {
+	db, err := openHistory()
 	if err != nil {
 		return err
 	}

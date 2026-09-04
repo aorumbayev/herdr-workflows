@@ -10,22 +10,17 @@ func TestDebugArtifactsRoundTrip(t *testing.T) {
 	if err := os.Chmod(state, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	getenv := func(k string) string {
-		if k == "HERDR_PLUGIN_STATE_DIR" {
-			return state
-		}
-		return ""
-	}
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", state)
 	id := AllocateRunID()
 	yamlBody := "version: v1alpha1\nsteps:\n  - run: [echo, hi]\n"
 	transcript := "user: hello\nassistant: world\n"
 	if err := WriteDebugArtifacts(id, DebugArtifacts{
 		EntryYAML:  yamlBody,
 		Transcript: transcript,
-	}, getenv); err != nil {
+	}); err != nil {
 		t.Fatal(err)
 	}
-	got, err := LoadDebugArtifacts(id, getenv)
+	got, err := LoadDebugArtifacts(id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,13 +40,8 @@ func TestLoadDebugArtifactsMissing(t *testing.T) {
 	if err := os.Chmod(state, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	getenv := func(k string) string {
-		if k == "HERDR_PLUGIN_STATE_DIR" {
-			return state
-		}
-		return ""
-	}
-	got, err := LoadDebugArtifacts(AllocateRunID(), getenv)
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", state)
+	got, err := LoadDebugArtifacts(AllocateRunID())
 	if err != nil {
 		t.Fatal(err)
 	}

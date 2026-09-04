@@ -12,7 +12,7 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/config"
 )
 
-func writeListedSnapshot(t *testing.T, getenv config.Env, snap map[string]any) {
+func writeListedSnapshot(t *testing.T, snap map[string]any) {
 	t.Helper()
 	raw, err := json.Marshal(snap)
 	if err != nil {
@@ -25,15 +25,15 @@ func writeListedSnapshot(t *testing.T, getenv config.Env, snap map[string]any) {
 	parsed, ok := parseSnapshotValue(v)
 	if !ok {
 		id, _ := snap["id"].(string)
-		if err := os.MkdirAll(legacyRunsDir(getenv), 0o700); err != nil {
+		if err := os.MkdirAll(legacyRunsDir(), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(legacySnapshotPath(id, getenv), append(raw, '\n'), 0o600); err != nil {
+		if err := os.WriteFile(legacySnapshotPath(id), append(raw, '\n'), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		return
 	}
-	if err := insertClaim(parsed, getenv); err != nil {
+	if err := insertClaim(parsed); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -60,19 +60,19 @@ func terminalSnapshot(id, workflow, root string, started time.Time, title string
 
 func TestFiltersApplyBeforeFortyResultLimit(t *testing.T) {
 	// This case is the same as test/history/history-store.test.ts "filters apply before forty-result limit".
-	_, _, getenv := testWriterEnv(t)
+	testWriterEnv(t)
 	now := time.Now()
 	for i := range 45 {
-		writeListedSnapshot(t, getenv, terminalSnapshot(
+		writeListedSnapshot(t, terminalSnapshot(
 			AllocateRunID(), "foreign", "/repo/other", now.Add(-time.Duration(i)*time.Second), "",
 		))
 	}
 	currentID := AllocateRunID()
-	writeListedSnapshot(t, getenv, terminalSnapshot(
+	writeListedSnapshot(t, terminalSnapshot(
 		currentID, "mine", "/repo/a", now.Add(-50*time.Second), "",
 	))
 	root := "/repo/a"
-	listed := ListRuns(ListFilter{CheckoutRoot: &root, Now: now}, getenv)
+	listed := ListRuns(ListFilter{CheckoutRoot: &root, Now: now})
 	if !listed.OK {
 		t.Fatalf("list = %+v", listed)
 	}
@@ -92,8 +92,8 @@ func TestFiltersApplyBeforeFortyResultLimit(t *testing.T) {
 
 func TestMalformedSnapshotsAreSkipped(t *testing.T) {
 	// This case is the same as test/history/history-store.test.ts "malformed snapshots are skipped".
-	_, _, getenv := testWriterEnv(t)
-	writeListedSnapshot(t, getenv, map[string]any{
+	testWriterEnv(t)
+	writeListedSnapshot(t, map[string]any{
 		"version": 1, "id": AllocateRunID(), "workflow": "ok", "source": "repo",
 		"checkout_root": "/repo/a",
 		"started_at":    time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
@@ -102,15 +102,15 @@ func TestMalformedSnapshotsAreSkipped(t *testing.T) {
 		"status":        "succeeded",
 		"steps":         []any{},
 	})
-	if err := os.MkdirAll(legacyRunsDir(getenv), 0o700); err != nil {
+	if err := os.MkdirAll(legacyRunsDir(), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(legacyRunsDir(getenv), "not-a-uuid.json"), []byte("{\"version\":1}\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(legacyRunsDir(), "not-a-uuid.json"), []byte("{\"version\":1}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	nestedID := AllocateRunID()
 	iso := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
-	writeListedSnapshot(t, getenv, map[string]any{
+	writeListedSnapshot(t, map[string]any{
 		"version": 1, "id": nestedID, "workflow": "demo", "source": "repo",
 		"checkout_root": "/repo/a", "started_at": iso, "heartbeat_at": iso,
 		"finished_at": iso, "status": "succeeded",
@@ -120,7 +120,7 @@ func TestMalformedSnapshotsAreSkipped(t *testing.T) {
 			"finished_at": iso, "outcome": "succeeded",
 		}},
 	})
-	listed := ListRuns(ListFilter{}, getenv)
+	listed := ListRuns(ListFilter{})
 	if !listed.OK {
 		t.Fatalf("list = %+v", listed)
 	}
@@ -133,7 +133,7 @@ func TestMalformedSnapshotsAreSkipped(t *testing.T) {
 
 func TestPriorSharedLogIsIgnored(t *testing.T) {
 	// This case is the same as test/history/history-store.test.ts "prior shared runs.jsonl is ignored and left unchanged".
-	stateDir, _, getenv := testWriterEnv(t)
+	stateDir, _ := testWriterEnv(t)
 	if err := os.Chmod(stateDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestPriorSharedLogIsIgnored(t *testing.T) {
 	if err := os.WriteFile(prior, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	listed := ListRuns(ListFilter{}, getenv)
+	listed := ListRuns(ListFilter{})
 	if !listed.OK {
 		t.Fatalf("list = %+v", listed)
 	}
@@ -162,8 +162,8 @@ func TestPriorSharedLogIsIgnored(t *testing.T) {
 
 func TestSearchMatchesSafeLabelsNotExplanations(t *testing.T) {
 	// These cases are the same as "search matches completed safe step labels" and "failure explanation is detail-only and not searchable".
-	_, checkout, getenv := testWriterEnv(t)
-	w := NewWriter(getenv)
+	_, checkout := testWriterEnv(t)
+	w := NewWriter()
 	defer w.Dispose()
 	if w.Claim(ClaimMeta{Workflow: "demo", Source: "repo", CheckoutRoot: checkout}).State != "claimed" {
 		t.Fatal("claim")
@@ -184,15 +184,15 @@ func TestSearchMatchesSafeLabelsNotExplanations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	byLabel := ListRuns(ListFilter{Text: "unique-shell-label", CheckoutRoot: &canonical}, getenv)
+	byLabel := ListRuns(ListFilter{Text: "unique-shell-label", CheckoutRoot: &canonical})
 	if !byLabel.OK || len(byLabel.Runs) != 1 {
 		t.Fatalf("label search = %+v", byLabel)
 	}
-	secret := ListRuns(ListFilter{Text: "secret-token-xyz"}, getenv)
+	secret := ListRuns(ListFilter{Text: "secret-token-xyz"})
 	if !secret.OK || len(secret.Runs) != 0 {
 		t.Fatalf("explanation leaked into search: %+v", secret)
 	}
-	byExit := ListRuns(ListFilter{Text: "3", CheckoutRoot: &canonical}, getenv)
+	byExit := ListRuns(ListFilter{Text: "3", CheckoutRoot: &canonical})
 	if !byExit.OK || len(byExit.Runs) != 1 {
 		t.Fatalf("exit search = %+v", byExit)
 	}
@@ -206,8 +206,8 @@ func TestSearchMatchesSafeLabelsNotExplanations(t *testing.T) {
 }
 
 func TestRetentionCountsOnlyTerminalAndPreservesActive(t *testing.T) {
-	_, checkout, getenv := testWriterEnv(t)
-	active := NewWriter(getenv)
+	_, checkout := testWriterEnv(t)
+	active := NewWriter()
 	defer active.Dispose()
 	if active.Claim(ClaimMeta{Workflow: "demo", Source: "repo", CheckoutRoot: checkout}).State != "claimed" {
 		t.Fatal("active claim")
@@ -219,47 +219,47 @@ func TestRetentionCountsOnlyTerminalAndPreservesActive(t *testing.T) {
 		if i == 0 {
 			oldest = id
 		}
-		writeListedSnapshot(t, getenv, terminalSnapshot(id, "old", "/repo/a", now.Add(-time.Duration(RetentionKeep+2-i)*time.Second), ""))
+		writeListedSnapshot(t, terminalSnapshot(id, "old", "/repo/a", now.Add(-time.Duration(RetentionKeep+2-i)*time.Second), ""))
 	}
-	if err := ScratchSet(oldest+".note", "gone", getenv); err != nil {
+	if err := ScratchSet(oldest+".note", "gone"); err != nil {
 		t.Fatal(err)
 	}
-	if err := ScratchSet("shared.note", "keep", getenv); err != nil {
+	if err := ScratchSet("shared.note", "keep"); err != nil {
 		t.Fatal(err)
 	}
-	trigger := NewWriter(getenv)
+	trigger := NewWriter()
 	defer trigger.Dispose()
 	if trigger.Claim(ClaimMeta{Workflow: "trigger", Source: "repo", CheckoutRoot: checkout}).State != "claimed" {
 		t.Fatal("trigger claim")
 	}
 	trigger.Finalize("succeeded", FinalizeOpts{})
-	if got, _ := ReadSnapshot(active.ID(), getenv); got == nil {
+	if got, _ := readSnapshot(active.ID()); got == nil {
 		t.Fatal("active snapshot deleted")
 	}
-	loaded, err := loadSnapshot(oldest, getenv)
+	loaded, err := loadSnapshot(oldest)
 	if err != nil || !loaded.Expired {
 		t.Fatalf("oldest expired = %+v err=%v", loaded, err)
 	}
-	detail := RunDetail(oldest, getenv, time.Time{})
+	detail := RunDetail(oldest, time.Time{})
 	if detail.Detail.Kind != "expired" || !strings.Contains(detail.Detail.Message, "expired") {
 		t.Fatalf("detail = %+v", detail.Detail)
 	}
-	if _, err := ScratchGet(oldest+".note", getenv); err == nil {
+	if _, err := ScratchGet(oldest + ".note"); err == nil {
 		t.Fatal("prefixed scratch survived expire")
 	}
-	if v, err := ScratchGet("shared.note", getenv); err != nil || v != "keep" {
+	if v, err := ScratchGet("shared.note"); err != nil || v != "keep" {
 		t.Fatalf("shared scratch = %q err=%v", v, err)
 	}
 }
 
 func TestDeletedCheckoutRemainsListable(t *testing.T) {
 	// This case is the same as "deleted checkout remains listable under soft canonical filter".
-	_, checkout, getenv := testWriterEnv(t)
+	_, checkout := testWriterEnv(t)
 	canonical, err := filepath.EvalSymlinks(checkout)
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := NewWriter(getenv)
+	w := NewWriter()
 	if w.Claim(ClaimMeta{Workflow: "demo", Source: "repo", CheckoutRoot: checkout}).State != "claimed" {
 		t.Fatal("claim")
 	}
@@ -269,7 +269,7 @@ func TestDeletedCheckoutRemainsListable(t *testing.T) {
 	if err := os.RemoveAll(checkout); err != nil {
 		t.Fatal(err)
 	}
-	listed := ListRuns(ListFilter{CheckoutRoot: &canonical}, getenv)
+	listed := ListRuns(ListFilter{CheckoutRoot: &canonical})
 	if !listed.OK {
 		t.Fatalf("list = %+v", listed)
 	}
@@ -289,17 +289,17 @@ func TestUnsafeSnapshotFileACLIsUnavailable(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("posix modes")
 	}
-	_, checkout, getenv := testWriterEnv(t)
-	w := NewWriter(getenv)
+	_, checkout := testWriterEnv(t)
+	w := NewWriter()
 	defer w.Dispose()
 	if w.Claim(ClaimMeta{Workflow: "demo", Source: "repo", CheckoutRoot: checkout}).State != "claimed" {
 		t.Fatal("claim")
 	}
 	w.Finalize("succeeded", FinalizeOpts{})
-	if err := os.Chmod(historyDBPath(getenv), 0o644); err != nil {
+	if err := os.Chmod(historyDBPath(), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	listed := ListRuns(ListFilter{}, getenv)
+	listed := ListRuns(ListFilter{})
 	if listed.OK || !listed.Unavailable {
 		t.Fatalf("list = %+v", listed)
 	}
@@ -307,31 +307,31 @@ func TestUnsafeSnapshotFileACLIsUnavailable(t *testing.T) {
 
 func intPtr(n int) *int { return &n }
 
-func legacyRunsDir(getenv config.Env) string {
-	dir, err := config.PluginStateDir(getenv)
+func legacyRunsDir() string {
+	dir, err := config.PluginStateDir()
 	if err != nil {
 		return ""
 	}
 	return filepath.Join(dir, "runs")
 }
 
-func legacySnapshotPath(id string, getenv config.Env) string {
-	return filepath.Join(legacyRunsDir(getenv), id+".json")
+func legacySnapshotPath(id string) string {
+	return filepath.Join(legacyRunsDir(), id+".json")
 }
 
 func TestLeftoverJSONSnapshotsAreIgnored(t *testing.T) {
-	_, _, getenv := testWriterEnv(t)
+	testWriterEnv(t)
 	id := AllocateRunID()
-	writeListedSnapshot(t, getenv, terminalSnapshot(id, "db", "/repo/a", time.Now(), ""))
+	writeListedSnapshot(t, terminalSnapshot(id, "db", "/repo/a", time.Now(), ""))
 	orphan := AllocateRunID()
 	body := []byte(`{"version":1,"id":"` + orphan + `","workflow":"json-only","source":"repo","checkout_root":"/repo/a","started_at":"2026-08-20T12:00:00.000Z","heartbeat_at":"2026-08-20T12:00:00.000Z","finished_at":"2026-08-20T12:00:00.000Z","status":"succeeded","steps":[]}` + "\n")
-	if err := os.MkdirAll(legacyRunsDir(getenv), 0o700); err != nil {
+	if err := os.MkdirAll(legacyRunsDir(), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(legacySnapshotPath(orphan, getenv), body, 0o600); err != nil {
+	if err := os.WriteFile(legacySnapshotPath(orphan), body, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	listed := ListRuns(ListFilter{}, getenv)
+	listed := ListRuns(ListFilter{})
 	if !listed.OK {
 		t.Fatalf("list = %+v", listed)
 	}
@@ -340,10 +340,10 @@ func TestLeftoverJSONSnapshotsAreIgnored(t *testing.T) {
 			t.Fatal("leftover JSON snapshot leaked into list")
 		}
 	}
-	if snap, _ := ReadSnapshot(orphan, getenv); snap != nil {
+	if snap, _ := readSnapshot(orphan); snap != nil {
 		t.Fatal("leftover JSON snapshot was loaded")
 	}
-	got, err := os.ReadFile(legacySnapshotPath(orphan, getenv))
+	got, err := os.ReadFile(legacySnapshotPath(orphan))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,15 +353,15 @@ func TestLeftoverJSONSnapshotsAreIgnored(t *testing.T) {
 }
 
 func TestIndexedListIsSubsecond(t *testing.T) {
-	_, _, getenv := testWriterEnv(t)
+	testWriterEnv(t)
 	now := time.Now()
 	for i := range 200 {
-		writeListedSnapshot(t, getenv, terminalSnapshot(
+		writeListedSnapshot(t, terminalSnapshot(
 			AllocateRunID(), "bulk", "/repo/a", now.Add(-time.Duration(i)*time.Millisecond), "",
 		))
 	}
 	start := time.Now()
-	listed := ListRuns(ListFilter{Now: now}, getenv)
+	listed := ListRuns(ListFilter{Now: now})
 	elapsed := time.Since(start)
 	if !listed.OK {
 		t.Fatalf("list = %+v", listed)

@@ -140,7 +140,7 @@ func TestLeavePluginRootOutsideCheckout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	outside, err := LeavePluginRoot(before, os.Getenv)
+	outside, err := LeavePluginRoot(before)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,6 @@ func TestPluginOutcomes(t *testing.T) {
 			}{args, cwd})
 			return 7, nil
 		},
-		Getenv: os.Getenv,
 	})
 	if err != nil || fail.Kind != "install_failed" || fail.Code != 7 {
 		t.Fatalf("%+v %v", fail, err)
@@ -236,7 +235,6 @@ func TestPluginOutcomes(t *testing.T) {
 		FetchLatest: func() (LatestRelease, error) { return LatestRelease{Tag: "v" + newer, Version: newer}, nil },
 		ListSource:  func() (PluginSourceInfo, error) { src, _ := ParsePluginListSource(githubListJSON()); return src, nil },
 		RunInstall:  func(args []string, cwd string) (int, error) { return 0, nil },
-		Getenv:      os.Getenv,
 	})
 	if err != nil || ok.Kind != "updated" || ok.To != newer {
 		t.Fatalf("%+v %v", ok, err)

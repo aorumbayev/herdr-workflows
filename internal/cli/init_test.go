@@ -72,7 +72,7 @@ func TestRunInitFreshWritesProfilesAndGitignore(t *testing.T) {
 	if !strings.Contains(string(ignore), "config.local.yaml") {
 		t.Fatalf("gitignore = %q", ignore)
 	}
-	cfg, err := config.LoadConfig(root, os.Getenv)
+	cfg, err := config.LoadConfig(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestRunInitForcePreservesTranscripts(t *testing.T) {
 	if !strings.Contains(body, "transcripts:") || !strings.Contains(body, "claude:") {
 		t.Fatalf("yaml = %q", body)
 	}
-	cfg, err := config.LoadConfig(root, os.Getenv)
+	cfg, err := config.LoadConfig(root)
 	if err != nil {
 		t.Fatal(err)
 	}

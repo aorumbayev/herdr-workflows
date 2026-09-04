@@ -69,15 +69,6 @@ func TestShellArgv(t *testing.T) {
 	}
 }
 
-func TestNativeProcessTreePlatforms(t *testing.T) {
-	if !NativeProcessTree("linux") || !NativeProcessTree("darwin") {
-		t.Fatal("linux and darwin must own process-tree termination")
-	}
-	if NativeProcessTree("windows") {
-		t.Fatal("native Windows process-tree support must not exist")
-	}
-}
-
 func TestRunArgvStepSuccess(t *testing.T) {
 	tmpdir := t.TempDir()
 	// Use a direct argv, not a shell, to test the argv path

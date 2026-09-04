@@ -1,7 +1,6 @@
 package picker
 
 import (
-	"os"
 	"testing"
 
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
@@ -78,20 +77,14 @@ func TestRestoredPickerMountsItsTabWithoutRespawning(t *testing.T) {
 func TestRunDetailExpandsThenRespawnsCompact(t *testing.T) {
 	checkout := t.TempDir()
 	stateDir := t.TempDir()
-	getenv := func(key string) string {
-		if key == "HERDR_PLUGIN_STATE_DIR" {
-			return stateDir
-		}
-		return os.Getenv(key)
-	}
-	seedFailedRun(t, getenv, checkout)
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
+	seedFailedRun(t, checkout)
 	var states []PopupState
 	m := New(Options{
 		Entries:     eightEntries(),
 		RepoRoot:    checkout,
 		Width:       64,
 		Height:      18,
-		Env:         getenv,
 		ReopenPopup: func(state PopupState) error { states = append(states, state); return nil },
 	})
 	m = apply(m, "tab", "enter")
@@ -114,7 +107,6 @@ func TestRunDetailExpandsThenRespawnsCompact(t *testing.T) {
 		RepoRoot: checkout,
 		Width:    120,
 		Height:   40,
-		Env:      getenv,
 		Restore:  &states[0],
 		ReopenPopup: func(state PopupState) error {
 			back = append(back, state)
@@ -151,7 +143,6 @@ func TestRunDetailExpandsThenRespawnsCompact(t *testing.T) {
 		RepoRoot:    checkout,
 		Width:       64,
 		Height:      18,
-		Env:         getenv,
 		Restore:     &back[0],
 		ReopenPopup: func(PopupState) error { t.Fatal("compact runs list must not respawn"); return nil },
 	})

@@ -48,7 +48,6 @@ type Options struct {
 	Config             config.Config
 	Width              int
 	Height             int
-	Env                config.Env
 	Chdir              func(string) error
 	LoadWorkflow       func(workflow.ListEntry) (*workflow.Definition, error)
 	CopyClipboard      func(string) error
@@ -72,15 +71,15 @@ type Options struct {
 
 // Model is the picker Bubble Tea model.
 type Model struct {
-	entries               []workflow.ListEntry
-	repoRoot              string
-	config                config.Config
-	width                 int
-	height                int
-	load                  func(workflow.ListEntry) (*workflow.Definition, error)
-	copyText              func(string) error
-	pasteText             func() (string, error)
-	env                   config.Env
+	entries   []workflow.ListEntry
+	repoRoot  string
+	config    config.Config
+	width     int
+	height    int
+	load      func(workflow.ListEntry) (*workflow.Definition, error)
+	copyText  func(string) error
+	pasteText func() (string, error)
+
 	editWorkflow          func(path, name string) workflow.ValidateResult
 	editConfig            func(path string) error
 	openURL               func(string) error
@@ -186,7 +185,6 @@ func New(opts Options) Model {
 		load:           opts.LoadWorkflow,
 		copyText:       opts.CopyClipboard,
 		pasteText:      opts.PasteClipboard,
-		env:            opts.Env,
 		editWorkflow:   opts.EditWorkflow,
 		editConfig:     opts.EditConfig,
 		openURL:        opts.OpenURL,
@@ -561,11 +559,7 @@ func (m Model) beginEdit(path, name string) tea.Cmd {
 			return editorDoneMsg{name: name, result: m.editWorkflow(path, name)}
 		}
 	}
-	getenv := m.env
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-	editor, err := workflow.ResolveEditor(getenv)
+	editor, err := workflow.ResolveEditor()
 	if err != nil {
 		return func() tea.Msg {
 			return editorDoneMsg{name: name, result: workflow.ValidateResult{Error: err.Error()}}

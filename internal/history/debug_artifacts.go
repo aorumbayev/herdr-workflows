@@ -2,10 +2,8 @@ package history
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/aorumbayev/herdr-workflows/internal/caps"
-	"github.com/aorumbayev/herdr-workflows/internal/config"
 )
 
 const (
@@ -20,15 +18,12 @@ type DebugArtifacts struct {
 	HasTranscript bool
 }
 
-func WriteDebugArtifacts(id string, arts DebugArtifacts, getenv config.Env) error {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
+func WriteDebugArtifacts(id string, arts DebugArtifacts) error {
 	normalized, ok := NormalizeRunUUID(id)
 	if !ok {
 		return fmt.Errorf("run identity must be a complete UUID")
 	}
-	db, err := openHistory(getenv)
+	db, err := openHistory()
 	if err != nil {
 		return err
 	}
@@ -51,15 +46,12 @@ func WriteDebugArtifacts(id string, arts DebugArtifacts, getenv config.Env) erro
 	return nil
 }
 
-func LoadDebugArtifacts(id string, getenv config.Env) (DebugArtifacts, error) {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
+func LoadDebugArtifacts(id string) (DebugArtifacts, error) {
 	normalized, ok := NormalizeRunUUID(id)
 	if !ok {
 		return DebugArtifacts{}, fmt.Errorf("run identity must be a complete UUID")
 	}
-	db, err := openHistory(getenv)
+	db, err := openHistory()
 	if err != nil {
 		return DebugArtifacts{}, err
 	}

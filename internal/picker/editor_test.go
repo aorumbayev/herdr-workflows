@@ -85,17 +85,12 @@ func TestOpenEditorDoesNotRunInsideUpdate(t *testing.T) {
 }
 
 func TestLiveOpenEditorReturnsExecProcess(t *testing.T) {
+	t.Setenv("EDITOR", "true")
 	m := New(Options{
 		Entries: []workflow.ListEntry{
 			{Name: "deploy", Source: "repo", File: "/r/deploy.yaml", Title: "Deploy"},
 		},
 		Width: 80,
-		Env: func(key string) string {
-			if key == "EDITOR" {
-				return "true"
-			}
-			return ""
-		},
 	})
 	m = apply(m, "ctrl+p")
 	next, _ := m.Update(press("e"))

@@ -1,8 +1,6 @@
 package picker
 
 import (
-	"os"
-
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/aorumbayev/herdr-workflows/internal/runsbrowser"
@@ -42,10 +40,6 @@ func (m Model) cycleRootTabBack() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) openRunsTab() (tea.Model, tea.Cmd) {
-	getenv := m.env
-	if getenv == nil {
-		getenv = os.Getenv
-	}
 	selected := ""
 	if !m.restoreDetail {
 		selected = m.restoreRunID
@@ -55,7 +49,6 @@ func (m Model) openRunsTab() (tea.Model, tea.Cmd) {
 		RepoRoot:   m.repoRoot,
 		Width:      m.width,
 		Height:     m.tabBodyHeight(),
-		Env:        getenv,
 		SelectedID: selected,
 		Now:        m.now,
 	})

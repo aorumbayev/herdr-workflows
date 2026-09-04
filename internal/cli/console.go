@@ -58,7 +58,6 @@ func runConsoleScreen(_ *cobra.Command) error {
 		Entries:         entries,
 		RepoRoot:        app.RepoRoot,
 		Config:          app.Config,
-		Env:             os.Getenv,
 		LandingWorkflow: os.Getenv(consoleWorkflowEnv),
 	})
 	if err != nil {

@@ -36,28 +36,22 @@ exit 1
 
 func TestResolveBinDirPrefersXDGBinHome(t *testing.T) {
 	custom := filepath.Join(t.TempDir(), "hwf-custom-bin")
-	got := ResolveBinDir(func(string) string { return custom })
+	t.Setenv("XDG_BIN_HOME", custom)
+	got := ResolveBinDir()
 	if got != custom {
 		t.Fatalf("ResolveBinDir() = %q, want %q", got, custom)
 	}
 }
 
 func TestResolveHerdrConfigPath(t *testing.T) {
-	if got := ResolveHerdrConfigPath(func(k string) string {
-		if k == "HERDR_CONFIG_PATH" {
-			return "/tmp/c.toml"
-		}
-		return ""
-	}); got != "/tmp/c.toml" {
+	t.Setenv("HERDR_CONFIG_PATH", "/tmp/c.toml")
+	if got := ResolveHerdrConfigPath(); got != "/tmp/c.toml" {
 		t.Fatalf("HERDR_CONFIG_PATH = %q", got)
 	}
 	want := filepath.Join("/xdg", "herdr", "config.toml")
-	if got := ResolveHerdrConfigPath(func(k string) string {
-		if k == "XDG_CONFIG_HOME" {
-			return "/xdg"
-		}
-		return ""
-	}); got != want {
+	t.Setenv("HERDR_CONFIG_PATH", "")
+	t.Setenv("XDG_CONFIG_HOME", "/xdg")
+	if got := ResolveHerdrConfigPath(); got != want {
 		t.Fatalf("XDG path = %q, want %q", got, want)
 	}
 }
@@ -313,16 +307,9 @@ func TestInstallKeybindingsIdempotent(t *testing.T) {
 	if err := os.WriteFile(logPath, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	getenv := func(k string) string {
-		switch k {
-		case "HERDR_CONFIG_PATH":
-			return path
-		case "HERDR_BIN_PATH":
-			return herdrBin
-		}
-		return os.Getenv(k)
-	}
-	first := InstallKeybindings(KeybindingInstallOpts{Getenv: getenv})
+	t.Setenv("HERDR_CONFIG_PATH", path)
+	t.Setenv("HERDR_BIN_PATH", herdrBin)
+	first := InstallKeybindings(KeybindingInstallOpts{})
 	joined := strings.Join(first.Messages, "\n")
 	if !strings.Contains(joined, "herdr-workflows.launch") {
 		t.Fatalf("messages = %q", joined)
@@ -355,7 +342,7 @@ func TestInstallKeybindingsIdempotent(t *testing.T) {
 	if err := os.WriteFile(logPath, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	again := InstallKeybindings(KeybindingInstallOpts{Getenv: getenv})
+	again := InstallKeybindings(KeybindingInstallOpts{})
 	if !strings.Contains(strings.Join(again.Messages, "\n"), "already present") {
 		t.Fatalf("again messages = %v", again.Messages)
 	}
@@ -405,16 +392,9 @@ description = "view completed herdr-workflows job results"
 	if err := os.WriteFile(logPath, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	getenv := func(k string) string {
-		switch k {
-		case "HERDR_CONFIG_PATH":
-			return path
-		case "HERDR_BIN_PATH":
-			return herdrBin
-		}
-		return os.Getenv(k)
-	}
-	result := InstallKeybindings(KeybindingInstallOpts{Getenv: getenv})
+	t.Setenv("HERDR_CONFIG_PATH", path)
+	t.Setenv("HERDR_BIN_PATH", herdrBin)
+	result := InstallKeybindings(KeybindingInstallOpts{})
 	if !strings.Contains(strings.Join(result.Messages, "\n"), "removed dead") {
 		t.Fatalf("messages = %v", result.Messages)
 	}
@@ -435,7 +415,7 @@ description = "view completed herdr-workflows job results"
 	if err != nil || string(bak) != stale {
 		t.Fatalf("backup = %q err=%v", bak, err)
 	}
-	again := InstallKeybindings(KeybindingInstallOpts{Getenv: getenv})
+	again := InstallKeybindings(KeybindingInstallOpts{})
 	if !strings.Contains(strings.Join(again.Messages, "\n"), "already present") {
 		t.Fatalf("again = %v", again.Messages)
 	}
@@ -470,16 +450,9 @@ func TestInstallKeybindingsMissingValidator(t *testing.T) {
 		t.Fatal(err)
 	}
 	reload := false
+	t.Setenv("HERDR_CONFIG_PATH", path)
+	t.Setenv("HERDR_BIN_PATH", filepath.Join(dir, "missing-herdr"))
 	result := InstallKeybindings(KeybindingInstallOpts{
-		Getenv: func(k string) string {
-			switch k {
-			case "HERDR_CONFIG_PATH":
-				return path
-			case "HERDR_BIN_PATH":
-				return filepath.Join(dir, "missing-herdr")
-			}
-			return os.Getenv(k)
-		},
 		Reload: &reload,
 	})
 	if !strings.Contains(strings.Join(result.Messages, "\n"), "config check failed") {
@@ -513,16 +486,9 @@ exit 1
 	if err := os.WriteFile(path, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	getenv := func(k string) string {
-		switch k {
-		case "HERDR_CONFIG_PATH":
-			return path
-		case "HERDR_BIN_PATH":
-			return herdrBin
-		}
-		return os.Getenv(k)
-	}
-	result := InstallKeybindings(KeybindingInstallOpts{Getenv: getenv})
+	t.Setenv("HERDR_CONFIG_PATH", path)
+	t.Setenv("HERDR_BIN_PATH", herdrBin)
+	result := InstallKeybindings(KeybindingInstallOpts{})
 	joined := strings.Join(result.Messages, "\n")
 	for _, want := range []string{"herdr-workflows.launch", "reload-config failed", "may not have loaded the binding"} {
 		if !strings.Contains(joined, want) {
@@ -539,12 +505,8 @@ exit 1
 }
 
 func TestResolveBinDirPathWarningShape(t *testing.T) {
-	missing := ResolveBinDir(func(k string) string {
-		if k == "XDG_BIN_HOME" {
-			return filepath.Join(t.TempDir(), "hwf-missing-bin-xyz")
-		}
-		return ""
-	})
+	t.Setenv("XDG_BIN_HOME", filepath.Join(t.TempDir(), "hwf-missing-bin-xyz"))
+	missing := ResolveBinDir()
 	if !strings.Contains(missing, "hwf-missing-bin-xyz") {
 		t.Fatalf("bin dir = %q", missing)
 	}

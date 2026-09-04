@@ -18,7 +18,7 @@ type cliResult struct {
 }
 
 func herdrCLI(args []string) (cliResult, error) {
-	bin := BinPath(os.Getenv)
+	bin := BinPath()
 	cmd := exec.Command(bin, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

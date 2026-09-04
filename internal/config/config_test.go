@@ -36,7 +36,7 @@ func TestLocalReplacesWholeCommittedProfileEntry(t *testing.T) {
 		"profiles:\n  implementation:\n    kind: claude\n    args: [\"--model\", \"repo\"]\n")
 	write(t, filepath.Join(root, ".hwf", "config.local.yaml"),
 		"profiles:\n  implementation:\n    kind: codex\n")
-	cfg, err := LoadConfig(root, nil)
+	cfg, err := LoadConfig(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestHighestPrecedenceDefaultProfileMustResolveAfterMerge(t *testing.T) {
 		"profiles:\n  claude:\n    kind: claude\ndefault_profile: claude\n")
 	local := filepath.Join(root, ".hwf", "config.local.yaml")
 	write(t, local, "default_profile: missing\n")
-	_, err := LoadConfig(root, nil)
+	_, err := LoadConfig(root)
 	if err == nil ||
 		!strings.Contains(err.Error(), local) ||
 		!strings.Contains(err.Error(), "default_profile 'missing' is not a merged profile") {
@@ -67,7 +67,7 @@ func TestUnresolvableDefaultProfileBlamesDeclaringLocalLayer(t *testing.T) {
 	write(t, filepath.Join(root, ".hwf", "config.yaml"), "profiles:\n  claude:\n    kind: claude\n")
 	local := filepath.Join(root, ".hwf", "config.local.yaml")
 	write(t, local, "default_profile: nowhere\n")
-	_, err := LoadConfig(root, nil)
+	_, err := LoadConfig(root)
 	if err == nil || !strings.Contains(err.Error(), local+", default_profile:") {
 		t.Fatalf("err = %v", err)
 	}
@@ -142,17 +142,13 @@ func TestValidationErrorIsDeterministic(t *testing.T) {
 }
 
 func TestPluginStateDirFailsWithoutHome(t *testing.T) {
-	env := func(name string) string { return "" }
 	t.Setenv("HOME", "")
-	if _, err := PluginStateDir(env); err == nil {
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", "")
+	if _, err := PluginStateDir(); err == nil {
 		t.Fatal("PluginStateDir must fail loud when the home directory is unknown")
 	}
-	dir, err := PluginStateDir(func(name string) string {
-		if name == "HERDR_PLUGIN_STATE_DIR" {
-			return "/tmp/state"
-		}
-		return ""
-	})
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", "/tmp/state")
+	dir, err := PluginStateDir()
 	if err != nil || dir != "/tmp/state" {
 		t.Fatalf("dir = %q, err = %v", dir, err)
 	}
@@ -171,7 +167,7 @@ func TestTranscriptExtractorsReplaceByKindName(t *testing.T) {
 		"transcripts:\n  claude:\n    command: [echo, global]\n  codex:\n    command: [echo, keep]\n")
 	write(t, filepath.Join(root, ".hwf", "config.yaml"),
 		"transcripts:\n  claude:\n    command: [echo, repo]\n")
-	cfg, err := LoadConfig(root, nil)
+	cfg, err := LoadConfig(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +187,7 @@ func TestTranscriptExtractorsReplaceByKindName(t *testing.T) {
 
 func TestResolvePluginConfigDirEnvWinsWithoutCallingHerdr(t *testing.T) {
 	plugin, _ := fixture(t)
-	dir, err := ResolvePluginConfigDir(nil)
+	dir, err := ResolvePluginConfigDir()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,13 +204,8 @@ func TestResolvePluginConfigDirDiscoversViaHerdrCLI(t *testing.T) {
 	if err := os.Chmod(fakeBin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	getenv := func(key string) string {
-		if key == "HERDR_BIN_PATH" {
-			return fakeBin
-		}
-		return os.Getenv(key)
-	}
-	dir, err := ResolvePluginConfigDir(getenv)
+	t.Setenv("HERDR_BIN_PATH", fakeBin)
+	dir, err := ResolvePluginConfigDir()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,13 +216,8 @@ func TestResolvePluginConfigDirDiscoversViaHerdrCLI(t *testing.T) {
 
 func TestResolvePluginConfigDirDiscoveryFailure(t *testing.T) {
 	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", "")
-	getenv := func(key string) string {
-		if key == "HERDR_BIN_PATH" {
-			return filepath.Join(t.TempDir(), "missing-herdr")
-		}
-		return os.Getenv(key)
-	}
-	_, err := ResolvePluginConfigDir(getenv)
+	t.Setenv("HERDR_BIN_PATH", filepath.Join(t.TempDir(), "missing-herdr"))
+	_, err := ResolvePluginConfigDir()
 	if err == nil || !strings.Contains(err.Error(), "failed to discover plugin config directory") {
 		t.Fatalf("err = %v", err)
 	}
@@ -359,7 +345,7 @@ func TestResolveRepoRootIgnoresHomeHwf(t *testing.T) {
 
 func TestReadInvocationContextUsesHerdrFields(t *testing.T) {
 	t.Setenv("HERDR_PLUGIN_CONTEXT_JSON", `{"workspace_cwd":"/ws","focused_pane_cwd":"/pane","worktree":{"checkout_path":"/wt"}}`)
-	ctx := readInvocationContext(nil)
+	ctx := readInvocationContext()
 	if ctx.WorktreePath != "/wt" {
 		t.Fatalf("worktree path = %q", ctx.WorktreePath)
 	}
@@ -368,19 +354,19 @@ func TestReadInvocationContextUsesHerdrFields(t *testing.T) {
 	}
 
 	t.Setenv("HERDR_PLUGIN_CONTEXT_JSON", `{"workspace_cwd":"/ws","focused_pane_cwd":"/pane"}`)
-	if ctx := readInvocationContext(nil); ctx.Cwd != "/pane" {
+	if ctx := readInvocationContext(); ctx.Cwd != "/pane" {
 		t.Fatalf("focused_pane_cwd must win over workspace_cwd: cwd = %q", ctx.Cwd)
 	}
 
 	t.Setenv("HERDR_PLUGIN_CONTEXT_JSON", `{"workspace_cwd":"/ws"}`)
-	if ctx := readInvocationContext(nil); ctx.Cwd != "/ws" {
+	if ctx := readInvocationContext(); ctx.Cwd != "/ws" {
 		t.Fatalf("workspace_cwd must be the last injected fallback: cwd = %q", ctx.Cwd)
 	}
 
 	dir := t.TempDir()
 	t.Chdir(dir)
 	t.Setenv("HERDR_PLUGIN_CONTEXT_JSON", `{"selected_text":"x"}`)
-	got, err := filepath.EvalSymlinks(readInvocationContext(nil).Cwd)
+	got, err := filepath.EvalSymlinks(readInvocationContext().Cwd)
 	if err != nil {
 		t.Fatal(err)
 	}

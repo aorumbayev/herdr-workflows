@@ -10,29 +10,20 @@ import (
 )
 
 func TestResolveEditorPrefersEDITORThenVISUAL(t *testing.T) {
-	got, err := workflow.ResolveEditor(func(key string) string {
-		switch key {
-		case "EDITOR":
-			return "ed"
-		case "VISUAL":
-			return "vi"
-		default:
-			return ""
-		}
-	})
+	t.Setenv("EDITOR", "ed")
+	t.Setenv("VISUAL", "vi")
+	got, err := workflow.ResolveEditor()
 	if err != nil || got != "ed" {
 		t.Fatalf("got %q err=%v", got, err)
 	}
-	got, err = workflow.ResolveEditor(func(key string) string {
-		if key == "VISUAL" {
-			return "vim"
-		}
-		return ""
-	})
+	t.Setenv("EDITOR", "")
+	t.Setenv("VISUAL", "vim")
+	got, err = workflow.ResolveEditor()
 	if err != nil || got != "vim" {
 		t.Fatalf("visual got %q err=%v", got, err)
 	}
-	_, err = workflow.ResolveEditor(func(string) string { return "" })
+	t.Setenv("VISUAL", "")
+	_, err = workflow.ResolveEditor()
 	if err == nil || !strings.Contains(err.Error(), "EDITOR") {
 		t.Fatalf("err = %v", err)
 	}

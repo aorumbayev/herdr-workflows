@@ -231,7 +231,7 @@ func (s *InputSession) resolveOptions(ctx context.Context, input InputSpec) ([]s
 	if input.Type == "profile" {
 		options := config.ProfileNames(s.opts.Config)
 		if len(options) == 0 {
-			global, _ := config.GlobalConfigPath(nil)
+			global, _ := config.GlobalConfigPath()
 			return nil, fmt.Errorf("input '%s': %s", input.Name, config.NoProfilesConfiguredMessage(global, config.RepoConfigPath(s.opts.RepoRoot)))
 		}
 		return options, nil
@@ -667,7 +667,7 @@ func configFor(repoRoot string, supplied []config.Config) (config.Config, error)
 	if len(supplied) > 0 {
 		return supplied[0], nil
 	}
-	return config.LoadConfig(repoRoot, nil)
+	return config.LoadConfig(repoRoot)
 }
 
 // ParseWorkflowText parses and validates a workflow body.
@@ -747,7 +747,7 @@ func ListWorkflows(repoRoot string, supplied ...config.Config) ([]ListEntry, err
 	if err != nil {
 		return nil, err
 	}
-	home, err := config.HomeDir(nil)
+	home, err := config.HomeDir()
 	if err != nil {
 		return nil, err
 	}

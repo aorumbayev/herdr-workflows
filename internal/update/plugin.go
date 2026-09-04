@@ -27,7 +27,6 @@ type Deps struct {
 	PluginRoot     string
 	Version        string
 	ListSource     func() (PluginSourceInfo, error)
-	Getenv         func(string) string
 	Executable     func() (string, error)
 	InstallRelease func(InstallOpts) error
 }
@@ -68,9 +67,9 @@ func Plugin(deps Deps) (Result, error) {
 	}
 	root := deps.PluginRoot
 	if root == "" {
-		root = defaultPluginRoot(deps.Getenv)
+		root = defaultPluginRoot()
 	}
-	cwd, err := LeavePluginRoot(root, deps.Getenv)
+	cwd, err := LeavePluginRoot(root)
 	if err != nil {
 		return Result{}, err
 	}
@@ -112,11 +111,8 @@ func updateStandalone(deps Deps, current string, latest LatestRelease) (Result, 
 	return Result{Kind: "updated", From: current, To: latest.Version, Repo: ReleaseRepo}, nil
 }
 
-func defaultPluginRoot(getenv func(string) string) string {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-	if injected := strings.TrimSpace(getenv("HERDR_PLUGIN_ROOT")); injected != "" {
+func defaultPluginRoot() string {
+	if injected := strings.TrimSpace(os.Getenv("HERDR_PLUGIN_ROOT")); injected != "" {
 		return filepath.Clean(injected)
 	}
 	wd, err := os.Getwd()
@@ -126,12 +122,9 @@ func defaultPluginRoot(getenv func(string) string) string {
 	return wd
 }
 
-func LeavePluginRoot(pluginRoot string, getenv func(string) string) (string, error) {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
+func LeavePluginRoot(pluginRoot string) (string, error) {
 	home, _ := os.UserHomeDir()
-	candidates := []string{home, os.TempDir(), getenv("HOME")}
+	candidates := []string{home, os.TempDir(), os.Getenv("HOME")}
 	normalized := filepath.Clean(pluginRoot)
 	for _, candidate := range candidates {
 		if candidate == "" {
