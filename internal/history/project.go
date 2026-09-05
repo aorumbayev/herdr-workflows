@@ -61,25 +61,20 @@ func ToSummary(snap Snapshot, now time.Time) Summary {
 		CheckoutRoot: snap.CheckoutRoot,
 		Status:       status,
 		StartedAt:    snap.StartedAt,
+		HeartbeatAt:  snap.HeartbeatAt,
 		FinishedAt:   snap.FinishedAt,
 		ElapsedMs:    elapsedMs(snap, status, now),
+		Progress:     progressOf(snap),
 		Failure:      failureFactOf(snap.Steps),
+		StepLabels:   make([]string, 0, len(snap.Steps)+1),
 	}
-	if p := progressOf(snap); p != nil {
-		item.Progress = p
-	}
-	if snap.CurrentStep != nil {
-		item.CurrentLabel = snap.CurrentStep.Label
-	}
-	var labels []string
 	for _, step := range snap.Steps {
-		labels = append(labels, step.Label)
+		item.StepLabels = append(item.StepLabels, step.Label)
 	}
 	if snap.CurrentStep != nil {
-		labels = append(labels, snap.CurrentStep.Label)
-	}
-	if len(labels) > 0 {
-		item.StepLabels = labels
+		cur := *snap.CurrentStep
+		item.CurrentStep = &cur
+		item.StepLabels = append(item.StepLabels, cur.Label)
 	}
 	return item
 }

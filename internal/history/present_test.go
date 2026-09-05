@@ -11,14 +11,14 @@ func TestPresentRunDetailInvalidAndEmpty(t *testing.T) {
 	if len(got) != 1 || got[0].Kind != "error" || got[0].Text != "bad id" {
 		t.Fatalf("%+v", got)
 	}
-	got = PresentRunDetail(Detail{Kind: "missing", ID: "x", Message: "gone"})
+	got = PresentRunDetail(Detail{Kind: "missing", Summary: Summary{ID: "x"}, Message: "gone"})
 	if len(got) != 1 || got[0].Text != "gone" {
 		t.Fatalf("%+v", got)
 	}
-	blocks := PresentRunDetail(Detail{
-		Kind: "snapshot", ID: "550e8400-e29b-41d4-a716-446655440099", DisplayID: "550e8400",
+	blocks := PresentRunDetail(Detail{Kind: "snapshot", Summary: Summary{
+		ID: "550e8400-e29b-41d4-a716-446655440099", DisplayID: "550e8400",
 		Workflow: "demo", Source: "repo", CheckoutRoot: "/repo", Status: "succeeded", ElapsedMs: 1200,
-	})
+	}})
 	found := false
 	for _, b := range blocks {
 		if b.Kind == "note" && b.Text == "no step outcomes yet" {
@@ -32,10 +32,10 @@ func TestPresentRunDetailInvalidAndEmpty(t *testing.T) {
 
 func TestPresentStaleRemainingTruncated(t *testing.T) {
 	id := "550e8400-e29b-41d4-a716-446655440000"
-	stale := PresentRunDetail(Detail{
-		Kind: "snapshot", ID: id, DisplayID: id[:8], Workflow: "live", Source: "repo",
+	stale := PresentRunDetail(Detail{Kind: "snapshot", Summary: Summary{
+		ID: id, DisplayID: id[:8], Workflow: "live", Source: "repo",
 		CheckoutRoot: "/repo", Status: "stale",
-	})
+	}})
 	found := false
 	for _, b := range stale {
 		if b.Kind == "note" && b.Text == "writer heartbeat stale - not a failure" {
@@ -47,8 +47,9 @@ func TestPresentStaleRemainingTruncated(t *testing.T) {
 	}
 	two := 2
 	remaining := PresentRunDetail(Detail{
-		Kind: "snapshot", ID: id, DisplayID: id[:8], Workflow: "partial", Source: "repo",
-		CheckoutRoot: "/repo", Status: "failed", Remaining: &two, FailureExplanation: "boom",
+		Kind:      "snapshot",
+		Summary:   Summary{ID: id, DisplayID: id[:8], Workflow: "partial", Source: "repo", CheckoutRoot: "/repo", Status: "failed"},
+		Remaining: &two, FailureExplanation: "boom",
 		Steps: []DetailStep{{StepRecord: StepRecord{
 			StepIdentity: StepIdentity{Phase: "main", Workflow: "partial", WorkflowPath: []string{"partial"}, Ordinal: 1, Total: 3, Action: "run", Label: "one"},
 			Outcome:      "succeeded",
@@ -64,8 +65,8 @@ func TestPresentStaleRemainingTruncated(t *testing.T) {
 		t.Fatalf("%+v", remaining)
 	}
 	truncated := PresentRunDetail(Detail{
-		Kind: "snapshot", ID: "550e8400-e29b-41d4-a716-446655440777", DisplayID: "550e8400",
-		Workflow: "reads", Source: "repo", CheckoutRoot: "/repo", Status: "succeeded",
+		Kind:    "snapshot",
+		Summary: Summary{ID: "550e8400-e29b-41d4-a716-446655440777", DisplayID: "550e8400", Workflow: "reads", Source: "repo", CheckoutRoot: "/repo", Status: "succeeded"},
 		Steps: []DetailStep{{StepRecord: StepRecord{
 			StepIdentity: StepIdentity{Phase: "main", Workflow: "reads", WorkflowPath: []string{"reads"}, Ordinal: 1, Total: 1, Action: "herdr", Label: "herdr pane.read"},
 			Outcome:      "succeeded", Truncated: true,

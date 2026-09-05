@@ -18,30 +18,36 @@ import (
 )
 
 func runRun(cmd *cobra.Command, args []string) error {
+	name := args[0]
+	rawInputs, err := cmd.Flags().GetStringArray("input")
+	if err != nil {
+		return err
+	}
+	detach, _ := cmd.Flags().GetBool("detach")
+	jsonOut, _ := cmd.Flags().GetBool("json")
+	if detach != jsonOut {
+		return errors.New("--detach and --json must be used together")
+	}
+	if detach {
+		return runDetachedJSON(cmd, name, rawInputs)
+	}
 	if err := host.EnsureHerdrProtocol(); err != nil {
 		return err
 	}
 
-	name := args[0]
 	launchPayload, err := cmd.Flags().GetBool("launch-payload")
-	if err != nil {
-		return err
-	}
-	rawInputs, err := cmd.Flags().GetStringArray("input")
 	if err != nil {
 		return err
 	}
 
 	inputs := map[string]string{}
-	var domains map[string][]string
-	var runID string
-
+	var payload engine.LaunchPayload
 	if launchPayload {
-		var err error
-		inputs, domains, runID, err = loadLaunchPayload(cmd, name)
+		payload, err = loadLaunchPayload(cmd, name)
 		if err != nil {
 			return err
 		}
+		inputs = payload.Inputs
 	}
 
 	flagInputs, err := parseInputs(rawInputs)
@@ -66,9 +72,10 @@ func runRun(cmd *cobra.Command, args []string) error {
 	stderr := cmd.ErrOrStderr()
 
 	recorder, err := history.CreateRunRecorder(history.CreateRecorderOpts{
-		Workflow:     *loaded,
-		RunID:        runID,
-		CheckoutRoot: app.RepoRoot,
+		Workflow:       *loaded,
+		RunID:          payload.RunID,
+		CheckoutRoot:   app.RepoRoot,
+		RequireHistory: payload.RequireHistory,
 		OnAck: func(line string) {
 			writeRunLine(stdout, line)
 		},
@@ -84,7 +91,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 		Ctx:      app.Ctx,
 		Deps:     liveRunnerDeps(),
 		Inputs:   inputs,
-		Domains:  domains,
+		Domains:  payload.Domains,
 		Recorder: recorder,
 		Workflow: loaded,
 		OnProgress: func(step, total int, label string, outcome *engine.ProgressOutcome) {
@@ -152,20 +159,20 @@ func isClosedPipe(err error) bool {
 	return errors.As(err, &pathErr) && errors.Is(pathErr.Err, syscall.EPIPE)
 }
 
-func loadLaunchPayload(cmd *cobra.Command, name string) (map[string]string, map[string][]string, string, error) {
+func loadLaunchPayload(cmd *cobra.Command, name string) (engine.LaunchPayload, error) {
 	stdin, err := io.ReadAll(io.LimitReader(cmd.InOrStdin(), int64(caps.CaptureByteLimit)+1))
 	if err != nil {
-		return nil, nil, "", err
+		return engine.LaunchPayload{}, err
 	}
 	if err := caps.AssertUnderCaptureCap("launch payload", string(stdin)); err != nil {
-		return nil, nil, "", err
+		return engine.LaunchPayload{}, err
 	}
 	payload, err := engine.ParseLaunchPayload(string(stdin))
 	if err != nil {
-		return nil, nil, "", err
+		return engine.LaunchPayload{}, err
 	}
 	if payload.Name != name {
-		return nil, nil, "", fmt.Errorf("launch payload name '%s' does not match run name '%s'", payload.Name, name)
+		return engine.LaunchPayload{}, fmt.Errorf("launch payload name '%s' does not match run name '%s'", payload.Name, name)
 	}
-	return payload.Inputs, payload.Domains, payload.RunID, nil
+	return payload, nil
 }

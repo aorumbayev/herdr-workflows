@@ -2,34 +2,27 @@ package history
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
 )
 
+// Detail is the Summary plus ordered step records. Kind names an error
+// state instead of a snapshot, and its own CurrentStep view stays out of JSON.
 type Detail struct {
-	Kind               string
-	Message            string
-	ID                 string
-	DisplayID          string
-	Workflow           string
-	Title              string
-	Source             string
-	CheckoutRoot       string
-	Status             string
-	StartedAt          string
-	FinishedAt         string
-	HeartbeatAt        string
-	ElapsedMs          int64
-	CurrentStep        *DetailStep
-	Steps              []DetailStep
-	Remaining          *int
-	FailureExplanation string
+	Summary
+	Kind               string       `json:"-"`
+	Message            string       `json:"-"`
+	CurrentStep        *DetailStep  `json:"-"`
+	Steps              []DetailStep `json:"steps"`
+	Remaining          *int         `json:"remaining_steps,omitempty"`
+	FailureExplanation string       `json:"failure_explanation,omitempty"`
 }
 
 type DetailStep struct {
 	StepRecord
-	Active bool
+	Active bool `json:"active,omitempty"`
 }
 
 type Block struct {
@@ -56,7 +49,6 @@ func ToDetail(snap Snapshot, now time.Time) Detail {
 	if now.IsZero() {
 		now = time.Now()
 	}
-	status := ProjectStatus(snap, now)
 	steps := orderDetailSteps(detailStepsFromRecords(snap.Steps))
 	var current *DetailStep
 	if snap.CurrentStep != nil {
@@ -73,27 +65,14 @@ func ToDetail(snap Snapshot, now time.Time) Detail {
 			break
 		}
 	}
-	d := Detail{
+	return Detail{
+		Summary:            ToSummary(snap, now),
 		Kind:               "snapshot",
-		ID:                 snap.ID,
-		DisplayID:          DisplayRunID(snap.ID),
-		Workflow:           snap.Workflow,
-		Title:              snap.Title,
-		Source:             snap.Source,
-		CheckoutRoot:       snap.CheckoutRoot,
-		Status:             status,
-		StartedAt:          snap.StartedAt,
-		FinishedAt:         snap.FinishedAt,
-		HeartbeatAt:        snap.HeartbeatAt,
-		ElapsedMs:          elapsedMs(snap, status, now),
 		CurrentStep:        current,
 		Steps:              steps,
+		Remaining:          remainingCount(snap),
 		FailureExplanation: expl,
 	}
-	if rem := remainingCount(snap); rem != nil {
-		d.Remaining = rem
-	}
-	return d
 }
 
 func remainingCount(snap Snapshot) *int {
@@ -376,22 +355,27 @@ func loadRunDetail(id string, now time.Time) Detail {
 	if !ok {
 		return Detail{Kind: "invalid", Message: "run link is not a complete UUID"}
 	}
+	only := Summary{ID: normalized}
 	loaded, err := loadSnapshot(normalized)
+	var incompatible *IncompatibleHistoryError
+	if errors.As(err, &incompatible) {
+		return Detail{Kind: "incompatible", Summary: only, Message: incompatible.Error()}
+	}
 	if err != nil {
-		return Detail{Kind: "unavailable", ID: normalized, Message: "run history storage is unavailable"}
+		return Detail{Kind: "unavailable", Summary: only, Message: "run history storage is unavailable"}
 	}
 	if loaded.Incompatible != nil {
 		return Detail{
 			Kind:    "incompatible",
-			ID:      normalized,
+			Summary: only,
 			Message: fmt.Sprintf("run snapshot version %d is incompatible", loaded.Incompatible.Version),
 		}
 	}
 	if loaded.Expired {
-		return Detail{Kind: "expired", ID: normalized, Message: "run record expired"}
+		return Detail{Kind: "expired", Summary: only, Message: "run record expired"}
 	}
 	if loaded.Snap == nil {
-		return Detail{Kind: "missing", ID: normalized, Message: "run record not found"}
+		return Detail{Kind: "missing", Summary: only, Message: "run record not found"}
 	}
 	return ToDetail(*loaded.Snap, now)
 }
