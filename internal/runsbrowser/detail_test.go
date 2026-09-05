@@ -59,7 +59,7 @@ func TestDetailPaneSplitsMultiLineOutputTail(t *testing.T) {
 		Outcome:      "failed",
 		Explanation:  "first line\nsecond line\nthird line",
 	}}
-	lines := detailPaneLines(history.Detail{Status: "failed", Workflow: "demo"}, step, nil, 40)
+	lines := detailPaneLines(history.Detail{Summary: history.Summary{Status: "failed", Workflow: "demo"}}, step, nil, 40)
 	for _, line := range lines {
 		if strings.Contains(line, "\n") {
 			t.Fatalf("pane line carries a newline: %q", line)

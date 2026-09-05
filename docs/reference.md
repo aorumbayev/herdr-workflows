@@ -332,6 +332,91 @@ A flat key-value store shared by every run. The key is the whole identifier. No 
 
 A value uses the 8 MiB cap. A write that crosses it fails and leaves the previous value unchanged. hwf deletes keys that match `<run-id>.*` when that run expires. Other keys stay until you delete them.
 
+## Runs
+
+Machine-readable run history for scripts and other plugins. Every command prints exactly one JSON object followed by a newline on standard output and always includes `"schema_version": 1`. A failure prints one JSON object with `"ok": false` and exits 1. Human diagnostics go to standard error. Schema version 1 can gain optional fields. A removed field, a changed type, or a changed status meaning gets a new schema version.
+
+| Command                                                   | Result                                                                             |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `hwf runs list --json`                                    | One page of runs, newest first. `--checkout-root`, `--status`, `--limit`, `--cursor` |
+| `hwf runs get <run-id> --json`                            | One run with ordered step records. The id is the full UUID                         |
+| `hwf run <name> --detach --json [--input name=value ...]` | Starts a run in the background and prints its summary once history has claimed it |
+
+Reads open history read-only. They never create, migrate, or repair `history.db`, never open a TUI, never resolve dynamic inputs, and never scan repositories. Polling every few seconds is safe while workflows run.
+
+### `hwf runs list --json`
+
+| Flag                     | Result                                                                                       |
+| ------------------------ | -------------------------------------------------------------------------------------------- |
+| `--checkout-root <path>` | Only runs from that checkout. Absolute path, symlinks resolved. Default: every checkout      |
+| `--status <status>`      | Only runs in that status. Repeatable                                                         |
+| `--limit <n>`            | Page size, 1 to 200. Default 40                                                              |
+| `--cursor <token>`       | `next_cursor` from the previous page. Repeat the same filters                                |
+
+Success:
+
+```json
+{"schema_version": 1, "ok": true, "runs": [], "next_cursor": null, "warnings": []}
+```
+
+Sort order is `started_at` descending, then full `id` descending. The cursor is an opaque keyset position, so a run that starts between two page requests neither duplicates nor hides a record in the sequence you are paging. A run whose status changes between pages, for example `running` to `stale`, can move across a page boundary when `--status` filters it. `next_cursor` is `null` on the last page. History keeps the newest 50 finished runs plus every live run, so a consumer that needs longer memory copies records as they finish.
+
+Warnings carry `code`, `message`, and `count`. `malformed_run_skipped` counts stored records that did not parse. `incompatible_run_skipped` counts records written in a snapshot version this build does not read. Valid runs still return next to either warning.
+
+### `hwf runs get <run-id> --json`
+
+Success:
+
+```json
+{"schema_version": 1, "ok": true, "run": {}}
+```
+
+`run` holds every summary field plus `steps`, an ordered list of step records. Each record has `phase`, `workflow`, `workflow_path`, `ordinal`, `total`, `parent_ordinal` (nested steps), `step_id`, `action`, `label`, `started_at`, `finished_at`, `outcome`, `truncated`, `failure`, and `explanation`. Optional `remaining_steps` counts entry steps that did not run. Optional `failure_explanation` is the run-level explanation when no step carries one. The console shows the same records.
+
+### `hwf run <name> --detach --json`
+
+`--detach` and `--json` go together. The command allocates the run UUID, starts the workflow in a separate process, and waits for that process to claim the run in history. It then prints the `run` envelope with the initial summary and exits while the workflow continues. When history is unavailable or refuses the claim, the child stops before step 1 and the command fails with `launch_rejected`. A run is never reported as accepted unless `hwf runs get` can read it. Inputs never appear in output, errors, warnings, or notifications. Without these flags `hwf run` behaves as before.
+
+### Run summary
+
+| Field           | Meaning                                                                                  |
+| --------------- | ---------------------------------------------------------------------------------------- |
+| `id`            | Full lowercase UUID. The identity                                                        |
+| `display_id`    | First 8 characters, for people only                                                      |
+| `workflow`      | Workflow name                                                                            |
+| `title`         | Workflow title, when set                                                                 |
+| `source`        | `repo` or `global`                                                                       |
+| `checkout_root` | Canonical checkout path                                                                  |
+| `status`        | One of the statuses in the next table                                                    |
+| `started_at`    | UTC RFC 3339                                                                             |
+| `heartbeat_at`  | Last writer heartbeat, UTC RFC 3339                                                      |
+| `finished_at`   | UTC RFC 3339, terminal runs only                                                         |
+| `elapsed_ms`    | Wall-clock time at read time for live runs, recorded time for finished runs             |
+| `progress`      | `done` and `total` entry steps. Absent until the first step starts                       |
+| `current_step`  | Running step: `phase`, `workflow`, `workflow_path`, `ordinal`, `total`, `action`, `label`, `started_at`. Absent between steps |
+| `step_labels`   | Ordered labels of finished steps plus the current step                                   |
+| `failure`       | Structured failure fact of the last failed step: `action`, `exit_code`, `method`, `step_id`, `verdict`, `stream` |
+
+| Status        | Meaning                                                                     |
+| ------------- | --------------------------------------------------------------------------- |
+| `running`     | The writer heartbeat is fresh. A claimed run with no step yet is `running` |
+| `stale`       | The heartbeat is more than 15 seconds old. Not a failure                    |
+| `succeeded`   | Finished, every step ok                                                     |
+| `failed`      | Finished with a failed step or a run error                                  |
+| `interrupted` | Finished because coordination with herdr was lost                           |
+
+### Errors and exit codes
+
+| Code                   | Meaning                                                                          |
+| ---------------------- | -------------------------------------------------------------------------------- |
+| `invalid_request`      | A flag, cursor, limit, status, path, or run id did not validate                  |
+| `history_unavailable`  | The state directory or database cannot be opened. Temporary contention retries first |
+| `run_not_found`        | No record for that UUID, or the record expired under retention                   |
+| `incompatible_history` | The database schema or that run's snapshot version is from a different build     |
+| `launch_rejected`      | The detached child stopped before it claimed the run                             |
+
+Success exits 0. A machine failure exits 1 with the error object on standard output. A missing `history.db` is an empty list, not an error.
+
 ## Limits
 
 | What                                                                                         | Limit   |

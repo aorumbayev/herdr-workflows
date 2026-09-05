@@ -64,6 +64,9 @@ hwf init
 | `prefix+k`       | Pick and run a workflow. `Ctrl+P` opens the actions palette |
 | `hwf run <name>` | Run from a terminal or a script, with `--input name=value`  |
 | `hwf retry <id>` | Run a failed run again, or resume it with `--from-failed`   |
+| `hwf run <name> --detach --json` | Start a run in the background and print its JSON summary |
+| `hwf runs list --json` | One page of run history as JSON, newest first          |
+| `hwf runs get <run-id> --json` | One run with its step records as JSON            |
 | `hwf console`    | Full-screen console with diagrams and run history           |
 | `hwf help`       | List every command                                          |
 

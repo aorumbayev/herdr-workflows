@@ -94,6 +94,85 @@ func historyDSN(path string) string {
 	return "file:" + uriPath(path) + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
 }
 
+var errNoHistory = errors.New("run history has no database yet")
+
+// IncompatibleHistoryError is a stored schema this build does not read.
+type IncompatibleHistoryError struct{ Version int }
+
+func (e *IncompatibleHistoryError) Error() string {
+	return fmt.Sprintf("run history schema version %d is incompatible", e.Version)
+}
+
+// openHistoryReadOnly never creates, migrates, or rebuilds the database.
+func openHistoryReadOnly() (*sql.DB, error) {
+	state, err := config.PluginStateDir()
+	if err != nil {
+		return nil, err
+	}
+	path := filepath.Join(state, historyDBName)
+	if _, err := os.Stat(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, errNoHistory
+		}
+		return nil, err
+	}
+	if err := credentials.AssertCredentialStoreSafe(state, historyACLOpts()); err != nil {
+		return nil, err
+	}
+	if err := credentials.AssertPrivateCredentialFile(path, historyACLOpts()); err != nil {
+		return nil, err
+	}
+	dbsMu.Lock()
+	defer dbsMu.Unlock()
+	key := path + ":ro"
+	if db := dbs[key]; db != nil {
+		return db, assertSchemaVersion(db)
+	}
+	db, err := sql.Open("sqlite", "file:"+uriPath(path)+"?mode=ro&_pragma=busy_timeout(5000)")
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(4)
+	if err := pingBusy(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if err := assertSchemaVersion(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	dbs[key] = db
+	return db, nil
+}
+
+func pingBusy(db *sql.DB) error {
+	var last error
+	for range 8 {
+		last = db.Ping()
+		if last == nil || !isBusy(last) {
+			return last
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	return last
+}
+
+// A version of 0 is a file a writer has not initialized yet. It holds no runs.
+func assertSchemaVersion(db *sql.DB) error {
+	var stored int
+	if err := db.QueryRow("PRAGMA user_version").Scan(&stored); err != nil {
+		return err
+	}
+	switch stored {
+	case schemaVersion:
+		return nil
+	case 0:
+		return errNoHistory
+	default:
+		return &IncompatibleHistoryError{Version: stored}
+	}
+}
+
 // SQLite stops a file: URI path at '?' or '#' and decodes percent sequences.
 // Escape those bytes, or SQLite opens a database that is not on the ACL path.
 func uriPath(path string) string {
@@ -266,7 +345,10 @@ func updateHeartbeat(id, at string) error {
 }
 
 func loadRunRow(id string) (snapshotLoad, error) {
-	db, err := openHistory()
+	db, err := openHistoryReadOnly()
+	if errors.Is(err, errNoHistory) {
+		return snapshotLoad{}, nil
+	}
 	if err != nil {
 		return snapshotLoad{}, err
 	}
@@ -305,45 +387,56 @@ func snapshotFromBlob(blob sql.NullString) (Snapshot, bool) {
 	return parseSnapshotValue(v)
 }
 
-func listRunSummaries(now time.Time) ([]Summary, []IncompatibleSnapshot, []string, error) {
-	db, err := openHistory()
+type runRows struct {
+	Items         []Summary
+	Incompatible  []IncompatibleSnapshot
+	Malformed     int
+	CheckoutRoots []string
+}
+
+func listRunSummaries(now time.Time) (runRows, error) {
+	db, err := openHistoryReadOnly()
+	if errors.Is(err, errNoHistory) {
+		return runRows{}, nil
+	}
 	if err != nil {
-		return nil, nil, nil, err
+		return runRows{}, err
 	}
 	incompat, err := listIncompatible(db)
 	if err != nil {
-		return nil, nil, nil, err
+		return runRows{}, err
 	}
 	rows, err := db.Query(`SELECT heartbeat_at, snapshot FROM runs WHERE expired=0 AND version=?`, SnapshotVersion)
 	if err != nil {
-		return nil, nil, nil, err
+		return runRows{}, err
 	}
 	defer func() { _ = rows.Close() }()
-	var items []Summary
+	out := runRows{Incompatible: incompat}
 	roots := map[string]struct{}{}
 	for rows.Next() {
 		var heartbeat string
 		var blob sql.NullString
 		if err := rows.Scan(&heartbeat, &blob); err != nil {
+			out.Malformed++
 			continue
 		}
 		snap, ok := snapshotFromBlob(blob)
 		if !ok {
+			out.Malformed++
 			continue
 		}
 		snap.HeartbeatAt = heartbeat
 		item := ToSummary(snap, now)
-		items = append(items, item)
+		out.Items = append(out.Items, item)
 		roots[item.CheckoutRoot] = struct{}{}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, nil, nil, err
+		return runRows{}, err
 	}
-	checkoutRoots := make([]string, 0, len(roots))
 	for r := range roots {
-		checkoutRoots = append(checkoutRoots, r)
+		out.CheckoutRoots = append(out.CheckoutRoots, r)
 	}
-	return items, incompat, checkoutRoots, nil
+	return out, nil
 }
 
 func listIncompatible(db *sql.DB) ([]IncompatibleSnapshot, error) {

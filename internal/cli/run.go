@@ -27,6 +27,19 @@ type runRequest struct {
 }
 
 func runRun(cmd *cobra.Command, args []string) error {
+	name := args[0]
+	rawInputs, err := cmd.Flags().GetStringArray("input")
+	if err != nil {
+		return err
+	}
+	detach, _ := cmd.Flags().GetBool("detach")
+	jsonOut, _ := cmd.Flags().GetBool("json")
+	if detach != jsonOut {
+		return errors.New("--detach and --json must be used together")
+	}
+	if detach {
+		return runDetachedJSON(cmd, name, rawInputs)
+	}
 	if err := host.EnsureHerdrProtocol(); err != nil {
 		return err
 	}
@@ -36,13 +49,10 @@ func runRun(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	rawInputs, err := cmd.Flags().GetStringArray("input")
-	if err != nil {
-		return err
-	}
 
+	var payload engine.LaunchPayload
 	if launchPayload {
-		payload, err := loadLaunchPayload(cmd, req.name)
+		payload, err = loadLaunchPayload(cmd, req.name)
 		if err != nil {
 			return err
 		}
@@ -90,10 +100,11 @@ func executeRun(cmd *cobra.Command, req runRequest) error {
 	stderr := cmd.ErrOrStderr()
 
 	recorder, err := history.CreateRunRecorder(history.CreateRecorderOpts{
-		Workflow:     *loaded,
-		RunID:        req.runID,
-		CheckoutRoot: app.RepoRoot,
-		RetryOf:      retryOf,
+		Workflow:       *loaded,
+		RunID:          req.runID,
+		CheckoutRoot:   app.RepoRoot,
+		RetryOf:        retryOf,
+		RequireHistory: payload.RequireHistory,
 		OnAck: func(line string) {
 			writeRunLine(stdout, line)
 		},
