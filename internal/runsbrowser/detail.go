@@ -22,8 +22,8 @@ func detailCards(detail history.Detail, focus int) []tui.CardSpec {
 		}
 		cards = append(cards, stepCard(step, outcome, i == focus))
 	}
-	if detail.CurrentStep != nil && detail.CurrentStep.Active {
-		cards = append(cards, stepCard(*detail.CurrentStep, "running", focus == len(detail.Steps)))
+	if detail.ActiveStep != nil && detail.ActiveStep.Active {
+		cards = append(cards, stepCard(*detail.ActiveStep, "running", focus == len(detail.Steps)))
 	}
 	return cards
 }
@@ -54,7 +54,7 @@ func defaultStepFocus(detail history.Detail) int {
 
 func stepCount(detail history.Detail) int {
 	n := len(detail.Steps)
-	if detail.CurrentStep != nil && detail.CurrentStep.Active {
+	if detail.ActiveStep != nil && detail.ActiveStep.Active {
 		n++
 	}
 	return n
@@ -64,8 +64,8 @@ func focusedStep(detail history.Detail, focus int) (history.DetailStep, bool) {
 	if focus >= 0 && focus < len(detail.Steps) {
 		return detail.Steps[focus], true
 	}
-	if detail.CurrentStep != nil && detail.CurrentStep.Active && focus == len(detail.Steps) {
-		return *detail.CurrentStep, true
+	if detail.ActiveStep != nil && detail.ActiveStep.Active && focus == len(detail.Steps) {
+		return *detail.ActiveStep, true
 	}
 	return history.DetailStep{}, false
 }

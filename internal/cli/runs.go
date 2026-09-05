@@ -130,8 +130,8 @@ func runRunsList(cmd *cobra.Command, _ []string) error {
 	switch {
 	case listed.Unavailable:
 		return machineErr("history_unavailable", "run history storage is unavailable")
-	case listed.SchemaVersion != 0:
-		return machineErr("incompatible_history", fmt.Sprintf("run history schema version %d is incompatible", listed.SchemaVersion))
+	case listed.IncompatibleSchema != 0:
+		return machineErr("incompatible_history", fmt.Sprintf("run history schema version %d is incompatible", listed.IncompatibleSchema))
 	}
 	resp := runsListResponse{SchemaVersion: machineSchemaVersion, OK: true, Runs: listed.Runs, Warnings: []machineWarning{}}
 	if resp.Runs == nil {

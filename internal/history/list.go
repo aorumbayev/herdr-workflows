@@ -29,14 +29,14 @@ type ListFilter struct {
 }
 
 type ListResult struct {
-	OK            bool
-	Unavailable   bool
-	SchemaVersion int
-	Runs          []Summary
-	NextCursor    *Cursor
-	Malformed     int
-	Incompatible  []IncompatibleSnapshot
-	CheckoutRoots []string
+	OK                 bool
+	Unavailable        bool
+	IncompatibleSchema int
+	Runs               []Summary
+	NextCursor         *Cursor
+	Malformed          int
+	Incompatible       []IncompatibleSnapshot
+	CheckoutRoots      []string
 }
 
 type IncompatibleSnapshot struct {
@@ -102,7 +102,7 @@ func ListRuns(filter ListFilter) ListResult {
 	if err != nil {
 		var incompatible *IncompatibleHistoryError
 		if errors.As(err, &incompatible) {
-			return ListResult{SchemaVersion: incompatible.Version}
+			return ListResult{IncompatibleSchema: incompatible.Version}
 		}
 		return ListResult{Unavailable: true}
 	}

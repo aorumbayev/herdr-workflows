@@ -112,8 +112,18 @@ func TestDecodeCursorRejectsGarbage(t *testing.T) {
 
 func TestReadsNeverCreateOrMigrateHistory(t *testing.T) {
 	stateDir, _ := testWriterEnv(t)
-	path := filepath.Join(stateDir, historyDBName)
+	absent := filepath.Join(stateDir, "absent")
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", absent)
 	listed := ListRuns(ListFilter{})
+	if !listed.OK || len(listed.Runs) != 0 {
+		t.Fatalf("missing state dir = %+v", listed)
+	}
+	if _, err := os.Stat(absent); !os.IsNotExist(err) {
+		t.Fatalf("read created %s: %v", absent, err)
+	}
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
+	path := filepath.Join(stateDir, historyDBName)
+	listed = ListRuns(ListFilter{})
 	if !listed.OK || len(listed.Runs) != 0 {
 		t.Fatalf("missing db = %+v", listed)
 	}
@@ -136,7 +146,7 @@ func TestReadsNeverCreateOrMigrateHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	listed = ListRuns(ListFilter{})
-	if listed.OK || listed.Unavailable || listed.SchemaVersion != 9 {
+	if listed.OK || listed.Unavailable || listed.IncompatibleSchema != 9 {
 		t.Fatalf("old schema = %+v", listed)
 	}
 	detail := RunDetail(validRunID, time.Time{}).Detail

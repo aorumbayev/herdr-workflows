@@ -9,12 +9,12 @@ import (
 )
 
 // Detail is the Summary plus ordered step records. Kind names an error
-// state instead of a snapshot, and its own CurrentStep view stays out of JSON.
+// state instead of a snapshot. ActiveStep is the console view of the current step.
 type Detail struct {
 	Summary
 	Kind               string       `json:"-"`
 	Message            string       `json:"-"`
-	CurrentStep        *DetailStep  `json:"-"`
+	ActiveStep         *DetailStep  `json:"-"`
 	Steps              []DetailStep `json:"steps"`
 	Remaining          *int         `json:"remaining_steps,omitempty"`
 	FailureExplanation string       `json:"failure_explanation,omitempty"`
@@ -68,7 +68,7 @@ func ToDetail(snap Snapshot, now time.Time) Detail {
 	return Detail{
 		Summary:            ToSummary(snap, now),
 		Kind:               "snapshot",
-		CurrentStep:        current,
+		ActiveStep:         current,
 		Steps:              steps,
 		Remaining:          remainingCount(snap),
 		FailureExplanation: expl,
@@ -290,7 +290,7 @@ func PresentRunDetail(detail Detail) []Block {
 	if detail.Status == "stale" {
 		blocks = append(blocks, Block{Kind: "note", Text: "writer heartbeat stale - not a failure"})
 	}
-	hasSteps := len(detail.Steps) > 0 || (detail.CurrentStep != nil && detail.CurrentStep.Active)
+	hasSteps := len(detail.Steps) > 0 || (detail.ActiveStep != nil && detail.ActiveStep.Active)
 	hasRemaining := detail.Remaining != nil && *detail.Remaining > 0
 	hasFailure := detail.FailureExplanation != ""
 	for _, step := range detail.Steps {
@@ -318,8 +318,8 @@ func PresentRunDetail(detail Detail) []Block {
 		}
 		blocks = append(blocks, b)
 	}
-	if detail.CurrentStep != nil && detail.CurrentStep.Active {
-		step := detail.CurrentStep
+	if detail.ActiveStep != nil && detail.ActiveStep.Active {
+		step := detail.ActiveStep
 		depth := len(step.WorkflowPath) - 1
 		if depth < 0 {
 			depth = 0
