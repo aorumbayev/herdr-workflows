@@ -1,6 +1,6 @@
 ---
 name: herdr-release-review
-description: Evidence-backed review of a new herdr release against this plugin — break verdict first, then every API, protocol, and behavior change that touches this codebase, then new features worth adopting. Use when herdr X.Y.Z is out, when asked "does the new herdr break us", to review the new herdr release, or to run the protocol upgrade path. For development of this herdr-workflows repository.
+description: Evidence-backed review of a new herdr release against this plugin — break verdict first, then every API, protocol, and behavior change that touches this codebase, then new features worth adopting. Raise min_herdr_version only when a sandbox or CLI run reproduces a regression that the old server cannot keep speaking. Use when herdr X.Y.Z is out, when asked "does the new herdr break us", to review the new herdr release, or to run the protocol upgrade path. For development of this herdr-workflows repository.
 ---
 
 # herdr release review
@@ -46,11 +46,14 @@ git -C .agents/references/herdr diff v<floor> vX.Y.Z -- src/protocol/wire.rs
 ```
 
 Run the diff — reading a file at whatever commit the checkout sits on is not evidence of what
-changed between the tags. Compare `PROTOCOL_VERSION` between the tags. The plugin pins `HERDR_PROTOCOL` in
-`internal/host/herdr_methods.gen.go` and `internal/host` compares it with strict equality against the
-`ping` response. Any protocol bump therefore means the plugin refuses every socket call
-(`herdr protocol mismatch: connected=…, pinned=…`) while CLI-mediated paths keep working. A bump is
-an automatic break verdict. State it as such.
+changed between the tags. Compare `PROTOCOL_VERSION` between the tags. Ping reports that integer.
+The plugin accepts an integer `connected >= Protocol`, where `Protocol` in
+`internal/host/herdr_methods.gen.go` is the generated floor from `schemas/herdr-api.schema.json`.
+A higher number is not a break verdict and does not refuse socket calls. A lower number than the
+floor still fails (`herdr protocol mismatch: connected=…, pinned=…`). CLI-mediated paths do not
+use this gate.
+
+Record both integers. Do not raise `min_herdr_version` from this diff alone.
 
 ## Phase 3: Diff the API schema surface
 
@@ -69,34 +72,56 @@ or the workflow grammar names it — grep before claiming impact.
 
 ## Phase 4: Upgrade path
 
-Run this phase when the protocol bumped. Run steps 1, 2, and 6 alone when the schema gained
-methods or enum values without a protocol bump and the plugin should adopt them — the floor and
-the pin stay put in that case.
+Default: keep `min_herdr_version` and the generated `Protocol`. The running plugin already accepts
+a newer ping protocol. A `PROTOCOL_VERSION` bump, a changelog "breaking" line, or an unused schema
+change is not a floor bump.
 
-1. Copy the captured schema into `schemas/herdr-api.schema.json`.
+### Adopt methods without moving the floor
+
+Run steps 1, 2, and 6 when the plugin should expose new methods or enum values. When you copy a
+newer `herdr api schema --json`, leave the file's `protocol` field at the current floor `Protocol`.
+The generator writes that field to `const Protocol`. Raising it makes `connected >= Protocol` refuse
+every older server, which is a silent floor bump.
+
+### Raise the floor only with a reproduced regression
+
+Run steps 3 and 4 only when a sandbox or quoted CLI run shows a genuine failure that you cannot
+fix while the plugin still speaks the other herdr:
+
+- The current plugin fails on the new herdr, and the fix needs a call or param the floor server
+  rejects.
+- After that required fix, the new plugin fails on the floor herdr.
+
+Quote the command and the error. No quote, no floor bump. Then raise `min_herdr_version` and the
+schema `protocol` field together, regen, and sweep floor prose.
+
+1. Copy the captured schema into `schemas/herdr-api.schema.json`. Keep `protocol` at the floor
+   unless this run is a proven floor bump.
 2. `go run ./scripts/gen-herdr-methods`. The generator fails naming any unmapped method
    (`no success result type mapped for method '…'`). Add the mapping in
    `METHOD_RESULT_TYPE_OVERRIDES` in `scripts/gen-herdr-methods/main.go`, taking the real result
    variant from the herdr handler source (for example `workspace.move_block` returns
    `workspace_list`), then rerun.
-3. Raise `min_herdr_version` in `herdr-plugin.toml` — a plugin pinned to the new protocol cannot
-   speak to the old server, so the floor moves with the pin.
-4. Update the protocol pin test in `internal/host/methods_test.go` and the fake-herdr `ping`
-   fixture in `e2e/` when examples still run there.
-5. `go tool verify` must pass before the review is done.
+3. Raise `min_herdr_version` in `herdr-plugin.toml` only after that reproduced failure.
+4. Floor-bump only: update the protocol floor test in `internal/host/startup_test.go` and
+   `internal/host/result_paths_test.go` (`Protocol` still names the floor) and the fake-herdr
+   `ping` fixture in `e2e/` when examples still run there.
+5. `go tool verify` must pass before the review is done when you changed code.
 6. Refresh what the regenerated table feeds. `skills/herdr-workflow-create/reference/herdr-api.md`
    hand-lists the allowed methods with their counts, version pin, and per-method selectors — a
    regen without this refresh teaches authors a stale API. Take new selectors from
-   `HERDR_FOCUS_POLICY` in the regenerated file. Then sweep prose for the old floor:
-   `grep -rn "<old version>" README.md AGENTS.md CONTRIBUTING.md docs skills` and move
-   every stated floor, docs pin, and "as of herdr X.Y.Z" sentence to the new release.
+   `HERDR_FOCUS_POLICY` in the regenerated file. After a proven floor bump, sweep prose for the
+   old floor: `grep -rn "<old version>" README.md AGENTS.md CONTRIBUTING.md docs skills` and move
+   every stated floor, docs pin, and "as of herdr X.Y.Z" sentence to the new release. Skip that
+   sweep when the floor stayed.
 
 ## Phase 5: Prove it live
 
 Use the `.agents/skills/herdr-workflows-smoke-test/` sandbox — never bare `herdr`/`hwf`, always
-`hsb`, and never stop the user's live herdr server. Bring the sandbox up on the new herdr. Expect
-the old plugin build to fail with `protocol_mismatch` — that failure is evidence, capture it. Then
-rebuild and rerun:
+`hsb`, and never stop the user's live herdr server. Bring the sandbox up on the new herdr. Do not
+expect `protocol_mismatch` from a newer ping protocol. A pass on the current plugin is evidence
+the floor stays. A fail is the only evidence that may move the floor. Capture the output either
+way. Then rebuild if you changed the plugin and rerun:
 
 - the sandbox self-check;
 - a workflow with a `herdr:` action;
@@ -123,7 +148,9 @@ The procedure itself creates windows where things look broken. Warn the user bef
 
 Lead with the break verdict, then five sections:
 
-1. **Breaking** — each with its fix (usually Phase 4).
+1. **Breaking** — each with a reproduced run or a schema change the plugin sends, and its fix.
+   A protocol integer bump without a failed run is not Breaking. Put it under Behavior changes
+   to watch. A floor bump belongs here only with the quoted error from Phase 4.
 2. **API additions** — as opportunities to simplify or refine the plugin, each naming the plugin
    code it could replace or improve.
 3. **Behavior changes to watch** — no code change now, but a contract this plugin relies on moved.

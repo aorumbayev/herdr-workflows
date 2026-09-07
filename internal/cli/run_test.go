@@ -232,7 +232,7 @@ func TestRunRejectsHerdrProtocolBeforeMissingInputFailure(t *testing.T) {
 		"",
 	}, "\n"))
 
-	withPingSocket(t, host.Protocol+1, host.MinHerdrVersion, func(socketPath string) {
+	withPingSocket(t, host.Protocol-1, host.MinHerdrVersion, func(socketPath string) {
 		got := runCLIEnv(t, []string{"run", "needs"}, root, map[string]string{
 			"HERDR_WORKFLOWS_REPO_ROOT": root,
 			"HERDR_SOCKET_PATH":         socketPath,

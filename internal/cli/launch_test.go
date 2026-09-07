@@ -15,7 +15,7 @@ func TestLaunchRejectsProtocolMismatch(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, ".hwf", "workflows"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	sockPath := listenPingSocket(t, host.Protocol+1, host.MinHerdrVersion)
+	sockPath := listenPingSocket(t, host.Protocol-1, host.MinHerdrVersion)
 	got := runCLI([]string{"launch"}, root, testCLIEnv(t, map[string]string{
 		"HERDR_SOCKET_PATH": sockPath,
 	}), "")

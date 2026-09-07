@@ -215,7 +215,7 @@ func TestEnsureHerdrProtocol(t *testing.T) {
 		resetProtocolChecked(t)
 		listen(t, "proto-bad", func(conn net.Conn) {
 			readRequest(t, conn)
-			_, _ = conn.Write([]byte(fmt.Sprintf(`{"id":"x","result":{"protocol":%d,"version":%q}}`, Protocol+1, MinHerdrVersion) + "\n"))
+			_, _ = conn.Write([]byte(fmt.Sprintf(`{"id":"x","result":{"protocol":%d,"version":%q}}`, Protocol-1, MinHerdrVersion) + "\n"))
 		})
 		err := EnsureHerdrProtocol()
 		msg := wantHerdrCode(t, err, "protocol_mismatch")
@@ -239,6 +239,17 @@ func TestEnsureHerdrProtocol(t *testing.T) {
 		}
 		if len(pings) != 1 {
 			t.Fatalf("pinged %d times, want one one-shot check", len(pings))
+		}
+	})
+
+	t.Run("herdr 0.9.0 protocol 22 matches", func(t *testing.T) {
+		resetProtocolChecked(t)
+		listen(t, "proto-22", func(conn net.Conn) {
+			readRequest(t, conn)
+			_, _ = conn.Write([]byte(`{"id":"x","result":{"protocol":22,"version":"0.9.0"}}` + "\n"))
+		})
+		if err := EnsureHerdrProtocol(); err != nil {
+			t.Fatal(err)
 		}
 	})
 }
