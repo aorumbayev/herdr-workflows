@@ -1,8 +1,6 @@
 package picker
 
 import (
-	"os"
-
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/aorumbayev/herdr-workflows/internal/history"
@@ -53,15 +51,10 @@ func (m Model) beginLaunch(def *workflow.Definition, values map[string]string, d
 		title = name
 	}
 
-	getenv := m.env
-	if getenv == nil {
-		getenv = os.Getenv
-	}
 	m.runs = runsbrowser.New(runsbrowser.Options{
 		RepoRoot: m.repoRoot,
 		Width:    m.width,
 		Height:   m.height,
-		Env:      getenv,
 		Now:      m.now,
 	}).OpenLocalDetail(runsbrowser.DetailView{
 		Kind:     "starting",

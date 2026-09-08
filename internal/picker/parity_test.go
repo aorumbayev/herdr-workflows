@@ -2,8 +2,6 @@ package picker
 
 import (
 	"os"
-	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -11,46 +9,9 @@ import (
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
+	"github.com/aorumbayev/herdr-workflows/internal/tui/paritytest"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
-
-var testFuncDecl = regexp.MustCompile(`(?m)^func (Test\w+)\(`)
-
-func loadPackageTestFuncs(dirs ...string) map[string]struct{} {
-	out := make(map[string]struct{})
-	for _, dir := range dirs {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			continue
-		}
-		for _, e := range entries {
-			if e.IsDir() || !strings.HasSuffix(e.Name(), "_test.go") {
-				continue
-			}
-			data, err := os.ReadFile(filepath.Join(dir, e.Name()))
-			if err != nil {
-				continue
-			}
-			for _, m := range testFuncDecl.FindAllSubmatch(data, -1) {
-				out[string(m[1])] = struct{}{}
-			}
-		}
-	}
-	return out
-}
-
-func coveringTestExists(name string, own map[string]struct{}, external map[string]map[string]struct{}) bool {
-	if pkg, fn, ok := strings.Cut(name, "."); ok {
-		funcs, found := external[pkg]
-		if !found {
-			return false
-		}
-		_, ok := funcs[fn]
-		return ok
-	}
-	_, ok := own[name]
-	return ok
-}
 
 // Spec scenarios that picker.ParityBaseline owns (picker-presentation + picker-editor-actions).
 var requiredPickerParityScenarios = []string{
@@ -187,10 +148,10 @@ var requiredPickerParityScenarios = []string{
 }
 
 func TestParityBaselineCoversSpecScenarios(t *testing.T) {
-	ownTests := loadPackageTestFuncs(".")
+	ownTests := paritytest.TestFuncs(".")
 	externalTests := map[string]map[string]struct{}{
-		"tui":      loadPackageTestFuncs("../tui"),
-		"contract": loadPackageTestFuncs("../../scripts/contract"),
+		"tui":      paritytest.TestFuncs("../tui"),
+		"contract": paritytest.TestFuncs("../../scripts/contract"),
 	}
 	byScenario := make(map[string]ParitySurface, len(ParityBaseline()))
 	for _, row := range ParityBaseline() {
@@ -213,7 +174,7 @@ func TestParityBaselineCoversSpecScenarios(t *testing.T) {
 		}
 		if row.CoveringTest == "" {
 			t.Errorf("scenario %q missing CoveringTest", scenario)
-		} else if !coveringTestExists(row.CoveringTest, ownTests, externalTests) {
+		} else if !paritytest.Covered(row.CoveringTest, ownTests, externalTests) {
 			t.Errorf("scenario %q CoveringTest %q does not exist", row.Scenario, row.CoveringTest)
 		}
 		if row.Spec == "" || row.Requirement == "" || row.Kind == "" {

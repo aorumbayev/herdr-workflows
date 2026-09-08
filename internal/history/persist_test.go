@@ -7,14 +7,12 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/aorumbayev/herdr-workflows/internal/config"
 )
 
 func TestLaterWriteRecoversCompleteStateAfterMissedIntermediate(t *testing.T) {
 	// This case is the same as test/history/history-store.test.ts "later write recovers complete state after missed intermediate".
-	_, checkout, getenv := testWriterEnv(t)
-	w := NewWriter(getenv)
+	_, checkout := testWriterEnv(t)
+	w := NewWriter()
 	defer w.Dispose()
 	claimed := w.Claim(ClaimMeta{Workflow: "demo", Source: "repo", CheckoutRoot: checkout})
 	if claimed.State != "claimed" {
@@ -37,7 +35,7 @@ func TestLaterWriteRecoversCompleteStateAfterMissedIntermediate(t *testing.T) {
 		FinishedAt: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
 		Outcome:    "succeeded",
 	})
-	snap, err := ReadSnapshot(id, getenv)
+	snap, err := readSnapshot(id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,8 +49,8 @@ func TestLaterWriteRecoversCompleteStateAfterMissedIntermediate(t *testing.T) {
 
 func TestQueuedPersistsDrainBeforeFinalizeWins(t *testing.T) {
 	// This case is the same as test/history/history-store.test.ts "queued persists drain before finalize wins".
-	_, checkout, getenv := testWriterEnv(t)
-	w := NewWriter(getenv)
+	_, checkout := testWriterEnv(t)
+	w := NewWriter()
 	defer w.Dispose()
 	claimed := w.Claim(ClaimMeta{Workflow: "demo", Source: "repo", CheckoutRoot: checkout})
 	if claimed.State != "claimed" {
@@ -86,7 +84,7 @@ func TestQueuedPersistsDrainBeforeFinalizeWins(t *testing.T) {
 		<-done
 	}
 	w.Finalize("succeeded", FinalizeOpts{})
-	snap, err := ReadSnapshot(claimed.ID, getenv)
+	snap, err := readSnapshot(claimed.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,30 +94,30 @@ func TestQueuedPersistsDrainBeforeFinalizeWins(t *testing.T) {
 }
 
 func TestHeartbeatUpdatesColumnWithoutRewritingSnapshotBlob(t *testing.T) {
-	_, checkout, getenv := testWriterEnv(t)
-	w := NewWriter(getenv)
+	_, checkout := testWriterEnv(t)
+	w := NewWriter()
 	defer w.Dispose()
 	claimed := w.Claim(ClaimMeta{Workflow: "demo", Source: "repo", CheckoutRoot: checkout})
 	if claimed.State != "claimed" {
 		t.Fatalf("claim = %+v", claimed)
 	}
 	id := claimed.ID
-	before := snapshotBlob(t, id, getenv)
+	before := snapshotBlob(t, id)
 	time.Sleep(2 * time.Millisecond)
 	w.Touch()
-	after := snapshotBlob(t, id, getenv)
+	after := snapshotBlob(t, id)
 	if before != after {
 		t.Fatal("heartbeat rewrote snapshot blob")
 	}
-	hb := heartbeatColumn(t, id, getenv)
+	hb := heartbeatColumn(t, id)
 	if hb == "" {
 		t.Fatal("heartbeat_at empty")
 	}
 }
 
-func snapshotBlob(t *testing.T, id string, getenv config.Env) string {
+func snapshotBlob(t *testing.T, id string) string {
 	t.Helper()
-	db, err := openHistory(getenv)
+	db, err := openHistory()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,9 +128,9 @@ func snapshotBlob(t *testing.T, id string, getenv config.Env) string {
 	return blob
 }
 
-func heartbeatColumn(t *testing.T, id string, getenv config.Env) string {
+func heartbeatColumn(t *testing.T, id string) string {
 	t.Helper()
-	db, err := openHistory(getenv)
+	db, err := openHistory()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,8 +158,8 @@ func TestHistoryDSNSetsBusyTimeoutBeforeWAL(t *testing.T) {
 }
 
 func TestFailedMigrationLeavesNoOpenTransaction(t *testing.T) {
-	_, _, getenv := testWriterEnv(t)
-	db, err := openHistory(getenv)
+	testWriterEnv(t)
+	db, err := openHistory()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,19 +169,19 @@ func TestFailedMigrationLeavesNoOpenTransaction(t *testing.T) {
 	if err := migrateSchema(db, schemaSQL); err != nil {
 		t.Fatalf("retry after a failed migration: %v", err)
 	}
-	if err := ScratchSet("k", "v", getenv); err != nil {
+	if err := ScratchSet("k", "v"); err != nil {
 		t.Fatalf("write after a failed migration: %v", err)
 	}
 }
 
 func TestPersistRestoresARowThatVanished(t *testing.T) {
-	_, checkout, getenv := testWriterEnv(t)
-	w := NewWriter(getenv)
+	_, checkout := testWriterEnv(t)
+	w := NewWriter()
 	defer w.Dispose()
 	if w.Claim(ClaimMeta{Workflow: "demo", Source: "repo", CheckoutRoot: checkout}).State != "claimed" {
 		t.Fatal("claim")
 	}
-	db, err := openHistory(getenv)
+	db, err := openHistory()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +189,7 @@ func TestPersistRestoresARowThatVanished(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.Finalize("succeeded", FinalizeOpts{})
-	snap, err := ReadSnapshot(w.ID(), getenv)
+	snap, err := readSnapshot(w.ID())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,13 +199,13 @@ func TestPersistRestoresARowThatVanished(t *testing.T) {
 }
 
 func TestExpiredRunIsNotResurrectedByALateWrite(t *testing.T) {
-	_, checkout, getenv := testWriterEnv(t)
-	w := NewWriter(getenv)
+	_, checkout := testWriterEnv(t)
+	w := NewWriter()
 	defer w.Dispose()
 	if w.Claim(ClaimMeta{Workflow: "demo", Source: "repo", CheckoutRoot: checkout}).State != "claimed" {
 		t.Fatal("claim")
 	}
-	db, err := openHistory(getenv)
+	db, err := openHistory()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,15 +213,15 @@ func TestExpiredRunIsNotResurrectedByALateWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.Finalize("succeeded", FinalizeOpts{})
-	loaded, err := loadSnapshot(w.ID(), getenv)
+	loaded, err := loadSnapshot(w.ID())
 	if err != nil || !loaded.Expired {
 		t.Fatalf("loaded = %+v err=%v", loaded, err)
 	}
 }
 
 func TestOldSchemaDatabaseIsRebuilt(t *testing.T) {
-	_, checkout, getenv := testWriterEnv(t)
-	path := historyDBPath(getenv)
+	_, checkout := testWriterEnv(t)
+	path := historyDBPath()
 	raw, err := sql.Open("sqlite", historyDSN(path))
 	if err != nil {
 		t.Fatal(err)
@@ -240,16 +238,16 @@ func TestOldSchemaDatabaseIsRebuilt(t *testing.T) {
 	if err := os.Chmod(path, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	listed := ListRuns(ListFilter{}, getenv)
+	listed := ListRuns(ListFilter{})
 	if !listed.OK || len(listed.Runs) != 0 || len(listed.Incompatible) != 0 {
 		t.Fatalf("list after rebuild = %+v", listed)
 	}
-	w := NewWriter(getenv)
+	w := NewWriter()
 	defer w.Dispose()
 	if w.Claim(ClaimMeta{Workflow: "demo", Source: "repo", CheckoutRoot: checkout}).State != "claimed" {
 		t.Fatal("claim after rebuild")
 	}
-	if value, err := ScratchGet("durable.key", getenv); err != nil || value != "kept" {
+	if value, err := ScratchGet("durable.key"); err != nil || value != "kept" {
 		t.Fatalf("scratch after rebuild = %q, %v; want durable keys to survive", value, err)
 	}
 }
@@ -259,13 +257,8 @@ func TestHistoryOpensUnderURIDelimiterPath(t *testing.T) {
 	if err := os.MkdirAll(stateDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	getenv := func(key string) string {
-		if key == "HERDR_PLUGIN_STATE_DIR" {
-			return stateDir
-		}
-		return os.Getenv(key)
-	}
-	if err := ScratchSet("k", "v", getenv); err != nil {
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
+	if err := ScratchSet("k", "v"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(stateDir, "history.db")); err != nil {

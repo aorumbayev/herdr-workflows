@@ -46,12 +46,19 @@ func versionAtLeast(live, minimum string) bool {
 }
 
 // StartupResult is the result of a comparison of a live herdr ping with the
-// pinned protocol and the minimum version in the manifest.
+// protocol floor and the minimum version in the manifest.
 type StartupResult struct {
 	Ok       bool
 	Protocol int
 	Version  string
 	Error    string
+}
+
+func protocolAllowed(p float64) bool {
+	if p != math.Trunc(p) {
+		return false
+	}
+	return p >= float64(Protocol)
 }
 
 func finiteProtocol(v any) (float64, bool) {
@@ -77,7 +84,7 @@ func formatProtocol(p float64) string {
 }
 
 // CheckHerdrStartup compares the protocol and version from a live ping with the
-// pinned protocol and the minimum version in the manifest.
+// protocol floor and the minimum version in the manifest.
 func CheckHerdrStartup(protocol any, version any) StartupResult {
 	installed := "missing"
 	versionStr, versionIsString := version.(string)
@@ -104,7 +111,7 @@ func CheckHerdrStartup(protocol any, version any) StartupResult {
 				versionStr, MinHerdrVersion, formatProtocol(proto), Protocol),
 		}
 	}
-	if proto != float64(Protocol) {
+	if !protocolAllowed(proto) {
 		return StartupResult{
 			Error: fmt.Sprintf("herdr protocol mismatch: connected=%s, pinned=%d (installed=%s, required≥%s)",
 				formatProtocol(proto), Protocol, versionStr, MinHerdrVersion),

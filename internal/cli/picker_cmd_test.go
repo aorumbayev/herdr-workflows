@@ -34,9 +34,6 @@ func TestBuildPickerOptionsWiresLiveHooks(t *testing.T) {
 	if opts.ExportShare == nil {
 		t.Fatal("ExportShare must be wired")
 	}
-	if opts.Env == nil {
-		t.Fatal("Env must be wired")
-	}
 	if opts.LoadWorkflow == nil {
 		t.Fatal("LoadWorkflow must be wired")
 	}
@@ -67,7 +64,7 @@ func TestPickerRejectsProtocolMismatchBeforeUI(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, ".hwf", "workflows"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	sockPath := listenPingSocket(t, host.Protocol+1, host.MinHerdrVersion)
+	sockPath := listenPingSocket(t, host.Protocol-1, host.MinHerdrVersion)
 	got := runCLI([]string{"picker"}, root, testCLIEnv(t, map[string]string{
 		"HERDR_WORKFLOWS_REPO_ROOT": root,
 		"HERDR_SOCKET_PATH":         sockPath,

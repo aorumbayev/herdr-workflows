@@ -1,7 +1,6 @@
 package console
 
 import (
-	"os"
 	"strings"
 	"time"
 
@@ -34,7 +33,6 @@ type Options struct {
 	RepoRoot        string
 	Width           int
 	Height          int
-	Env             config.Env
 	Config          config.Config
 	LoadRuns        func() []history.Summary
 	LoadDetail      func(runID string) DetailPayload
@@ -53,7 +51,6 @@ type Model struct {
 	repoRoot            string
 	width               int
 	height              int
-	getenv              config.Env
 	screen              screen
 	wfCursor            int
 	wfOffset            int
@@ -108,22 +105,18 @@ func New(opts Options) Model {
 	if width <= 0 {
 		width = 80
 	}
-	getenv := opts.Env
-	if getenv == nil {
-		getenv = os.Getenv
-	}
 	loadRuns := opts.LoadRuns
 	if loadRuns == nil {
 		repoRoot := opts.RepoRoot
 		loadRuns = func() []history.Summary {
-			state := runsbrowser.Load(repoRoot, runsbrowser.ScopeCurrent, "", "", getenv)
+			state := runsbrowser.Load(repoRoot, runsbrowser.ScopeCurrent, "", "")
 			return state.Items
 		}
 	}
 	loadDetail := opts.LoadDetail
 	if loadDetail == nil {
 		loadDetail = func(runID string) DetailPayload {
-			return defaultLoadDetail(runID, getenv)
+			return defaultLoadDetail(runID)
 		}
 	}
 	loadWorkflow := opts.LoadWorkflow
@@ -165,7 +158,6 @@ func New(opts Options) Model {
 		repoRoot:       opts.RepoRoot,
 		width:          width,
 		height:         opts.Height,
-		getenv:         getenv,
 		now:            nowFn,
 		screen:         screenWorkflows,
 		loadRuns:       loadRuns,
@@ -189,9 +181,9 @@ func New(opts Options) Model {
 	return m
 }
 
-func defaultLoadDetail(runID string, getenv config.Env) DetailPayload {
-	presented := history.RunDetail(runID, getenv, time.Time{})
-	arts, _ := history.LoadDebugArtifacts(runID, getenv)
+func defaultLoadDetail(runID string) DetailPayload {
+	presented := history.RunDetail(runID, time.Time{})
+	arts, _ := history.LoadDebugArtifacts(runID)
 	payload := DetailPayload{
 		Workflow:  presented.Detail.Workflow,
 		Artifacts: arts,

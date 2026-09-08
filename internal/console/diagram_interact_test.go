@@ -73,7 +73,7 @@ func TestModelDiagramClickFocusesCard(t *testing.T) {
 	if !found {
 		t.Fatal("second card hit missing")
 	}
-	next, _ := m.ApplyMouse(tea.MouseClickMsg{
+	next, _ := applyMouse(m, tea.MouseClickMsg{
 		Button: tea.MouseLeft,
 		X:      card.X0 + tui.ChromePaddingX,
 		Y:      card.Y0 + 1,
@@ -107,7 +107,7 @@ func TestModelDiagramCtrlClickTogglesSelection(t *testing.T) {
 		if ctrl {
 			msg.Mod = tea.ModCtrl
 		}
-		next, _ := m.ApplyMouse(msg)
+		next, _ := applyMouse(m, msg)
 		m = next
 	}
 	ids := []railHit{}
@@ -129,7 +129,7 @@ func TestModelDiagramCtrlClickTogglesSelection(t *testing.T) {
 func TestModelDiagramWheelScrolls(t *testing.T) {
 	m := openHandoffDiagram(t)
 	before := m.diagramScroll
-	next, _ := m.ApplyMouse(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
+	next, _ := applyMouse(m, tea.MouseWheelMsg{Button: tea.MouseWheelDown})
 	m = next
 	if m.diagramScroll <= before {
 		t.Fatalf("scroll = %d, want > %d", m.diagramScroll, before)
@@ -491,7 +491,7 @@ func TestModelDiagramYAMLPaneScrolls(t *testing.T) {
 		t.Fatal("yaml pane did not move")
 	}
 	leftW, _ := tui.RailSplit(m.contentWidth())
-	next2, _ := m.ApplyMouse(tea.MouseWheelMsg{Button: tea.MouseWheelUp, X: leftW + tui.ChromePaddingX + 1})
+	next2, _ := applyMouse(m, tea.MouseWheelMsg{Button: tea.MouseWheelUp, X: leftW + tui.ChromePaddingX + 1})
 	if next2.diagramYAMLScroll != m.diagramYAMLScroll-1 {
 		t.Fatalf("wheel over the yaml pane = %d", next2.diagramYAMLScroll)
 	}
@@ -710,4 +710,9 @@ func TestComposerDraftShowsPlaceholderOnlyWhenEmpty(t *testing.T) {
 	if !strings.HasPrefix(typed[0], tui.FieldCursor) || !strings.Contains(typed[0], "rename brief") {
 		t.Fatalf("typed draft = %q", typed)
 	}
+}
+
+func applyMouse(m Model, msg tea.Msg) (Model, tea.Cmd) {
+	next, cmd := m.handleMouse(msg)
+	return next.(Model), cmd
 }

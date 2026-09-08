@@ -353,7 +353,7 @@ func chooseProfile(frame *StepFrame, action *workflow.AgentAction) profileChoice
 		name = frame.Opts.Config.DefaultProfile
 	}
 	if name == "" {
-		global, _ := config.GlobalConfigPath(nil)
+		global, _ := config.GlobalConfigPath()
 		hint := config.PathsHint(global, config.RepoConfigPath(frame.Opts.RepoRoot))
 		return profileChoice{
 			error: fmt.Sprintf(

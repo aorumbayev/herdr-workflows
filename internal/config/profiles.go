@@ -19,8 +19,8 @@ type ProfileEntry struct {
 
 // ListProfiles gives every merged profile with its defining layer and file.
 // Source is global, repo, or local: the highest-priority layer that sets it.
-func ListProfiles(repoRoot string, getenv Env) ([]ProfileEntry, error) {
-	globalPath, err := GlobalConfigPath(getenv)
+func ListProfiles(repoRoot string) ([]ProfileEntry, error) {
+	globalPath, err := GlobalConfigPath()
 	if err != nil {
 		return nil, err
 	}
@@ -55,10 +55,10 @@ func ListProfiles(repoRoot string, getenv Env) ([]ProfileEntry, error) {
 }
 
 // ConfigPathForScope maps a scope name to its layer file path.
-func ConfigPathForScope(scope, repoRoot string, getenv Env) (string, error) {
+func ConfigPathForScope(scope, repoRoot string) (string, error) {
 	switch scope {
 	case "global":
-		return GlobalConfigPath(getenv)
+		return GlobalConfigPath()
 	case "repo":
 		return RepoConfigPath(repoRoot), nil
 	case "local":

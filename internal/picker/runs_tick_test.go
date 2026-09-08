@@ -1,18 +1,16 @@
 package picker
 
 import (
-	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/history"
 )
 
-func writeRunningRun(t *testing.T, getenv config.Env, checkout, workflow, startedAt string) {
+func writeRunningRun(t *testing.T, checkout, workflow, startedAt string) {
 	t.Helper()
-	w := history.NewWriter(getenv)
+	w := history.NewWriter()
 	claimed := w.Claim(history.ClaimMeta{Workflow: workflow, Source: "repo", CheckoutRoot: checkout, StartedAt: startedAt})
 	if !claimed.OK || claimed.State != "claimed" {
 		t.Fatalf("claim = %+v", claimed)
@@ -23,18 +21,13 @@ func writeRunningRun(t *testing.T, getenv config.Env, checkout, workflow, starte
 func TestPickerForwardsRunsTickToEmbeddedModel(t *testing.T) {
 	stateDir := t.TempDir()
 	checkout := t.TempDir()
-	getenv := func(key string) string {
-		if key == "HERDR_PLUGIN_STATE_DIR" {
-			return stateDir
-		}
-		return os.Getenv(key)
-	}
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
 	started := time.Now().UTC()
-	writeRunningRun(t, getenv, checkout, "live", started.Format("2006-01-02T15:04:05.000Z"))
+	writeRunningRun(t, checkout, "live", started.Format("2006-01-02T15:04:05.000Z"))
 
 	var now time.Time
 	now = started.Add(2 * time.Second)
-	m := New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: checkout, Env: getenv, Now: func() time.Time { return now }})
+	m := New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: checkout, Now: func() time.Time { return now }})
 
 	next, cmd := m.Update(press("tab"))
 	m = next.(Model)

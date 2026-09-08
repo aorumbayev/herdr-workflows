@@ -10,28 +10,23 @@ import (
 	"testing"
 )
 
-func testWriterEnv(t *testing.T) (stateDir, checkout string, getenv func(string) string) {
+func testWriterEnv(t *testing.T) (stateDir, checkout string) {
 	t.Helper()
 	stateDir = t.TempDir()
 	checkout = t.TempDir()
 	if err := os.Chmod(stateDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	getenv = func(key string) string {
-		if key == "HERDR_PLUGIN_STATE_DIR" {
-			return stateDir
-		}
-		return os.Getenv(key)
-	}
-	return stateDir, checkout, getenv
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
+	return stateDir, checkout
 }
 
 func TestClaimRejectsReusedIdentity(t *testing.T) {
 	// This case is the same as test/history/history-store.test.ts "exclusive claims reject reused identity".
-	_, checkout, getenv := testWriterEnv(t)
+	_, checkout := testWriterEnv(t)
 	id := AllocateRunID()
-	a := NewWriter(getenv)
-	b := NewWriter(getenv)
+	a := NewWriter()
+	b := NewWriter()
 	defer a.Dispose()
 	defer b.Dispose()
 	first := a.Claim(ClaimMeta{ID: id, Workflow: "demo", Source: "repo", CheckoutRoot: checkout})
@@ -46,9 +41,9 @@ func TestClaimRejectsReusedIdentity(t *testing.T) {
 
 func TestConcurrentClaimsOwnDifferentSnapshots(t *testing.T) {
 	// This case is the same as test/history/history-store.test.ts "concurrent runs own different snapshots".
-	_, checkout, getenv := testWriterEnv(t)
-	a := NewWriter(getenv)
-	b := NewWriter(getenv)
+	_, checkout := testWriterEnv(t)
+	a := NewWriter()
+	b := NewWriter()
 	defer a.Dispose()
 	defer b.Dispose()
 	first := a.Claim(ClaimMeta{Workflow: "demo", Source: "repo", CheckoutRoot: checkout})
@@ -63,8 +58,8 @@ func TestConcurrentClaimsOwnDifferentSnapshots(t *testing.T) {
 
 func TestUnresolvableClaimCheckoutIsUnavailable(t *testing.T) {
 	// This case is the same as test/history/history-store.test.ts "unresolvable claim checkout is unavailable".
-	_, _, getenv := testWriterEnv(t)
-	w := NewWriter(getenv)
+	testWriterEnv(t)
+	w := NewWriter()
 	defer w.Dispose()
 	missing := filepath.Join(t.TempDir(), "missing-checkout")
 	result := w.Claim(ClaimMeta{Workflow: "demo", Source: "repo", CheckoutRoot: missing})
@@ -75,7 +70,7 @@ func TestUnresolvableClaimCheckoutIsUnavailable(t *testing.T) {
 
 func TestClaimStoresRealpathCanonicalRoot(t *testing.T) {
 	// This case is the same as the writer half of "checkout root is realpath-canonicalized".
-	_, checkout, getenv := testWriterEnv(t)
+	_, checkout := testWriterEnv(t)
 	canonical, err := filepath.EvalSymlinks(checkout)
 	if err != nil {
 		t.Fatal(err)
@@ -84,13 +79,13 @@ func TestClaimStoresRealpathCanonicalRoot(t *testing.T) {
 	if err := os.Symlink(checkout, link); err != nil {
 		t.Fatal(err)
 	}
-	w := NewWriter(getenv)
+	w := NewWriter()
 	defer w.Dispose()
 	result := w.Claim(ClaimMeta{Workflow: "demo", Source: "repo", CheckoutRoot: link})
 	if result.State != "claimed" {
 		t.Fatalf("claim = %+v", result)
 	}
-	snap, err := ReadSnapshot(result.ID, getenv)
+	snap, err := readSnapshot(result.ID)
 	if err != nil || snap == nil {
 		t.Fatalf("read err=%v snap=%v", err, snap)
 	}
@@ -103,7 +98,7 @@ func TestClaimRacedAcrossProcessesYieldsOneWinner(t *testing.T) {
 	if os.Getenv("HWF_CLAIM_RACE_STATE") != "" {
 		return
 	}
-	stateDir, _, _ := testWriterEnv(t)
+	stateDir, _ := testWriterEnv(t)
 	id := AllocateRunID()
 	results := make(chan string, 6)
 	var wg sync.WaitGroup
@@ -142,13 +137,8 @@ func TestClaimRaceWorker(t *testing.T) {
 	if stateDir == "" {
 		t.Skip("driven by TestClaimRacedAcrossProcessesYieldsOneWinner")
 	}
-	getenv := func(key string) string {
-		if key == "HERDR_PLUGIN_STATE_DIR" {
-			return stateDir
-		}
-		return os.Getenv(key)
-	}
-	w := NewWriter(getenv)
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
+	w := NewWriter()
 	defer w.Dispose()
 	claim := w.Claim(ClaimMeta{ID: os.Getenv("HWF_CLAIM_RACE_ID"), Workflow: "demo", Source: "repo", CheckoutRoot: stateDir})
 	fmt.Printf("claim-state=%s\n", claim.State)

@@ -2,14 +2,13 @@ package cli
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/aorumbayev/herdr-workflows/internal/history"
 	"github.com/spf13/cobra"
 )
 
 func runScratchGet(cmd *cobra.Command, args []string) error {
-	value, err := history.ScratchGet(args[0], os.Getenv)
+	value, err := history.ScratchGet(args[0])
 	if err != nil {
 		return err
 	}
@@ -18,11 +17,11 @@ func runScratchGet(cmd *cobra.Command, args []string) error {
 }
 
 func runScratchSet(cmd *cobra.Command, args []string) error {
-	return history.ScratchSet(args[0], args[1], os.Getenv)
+	return history.ScratchSet(args[0], args[1])
 }
 
 func runScratchList(cmd *cobra.Command, _ []string) error {
-	keys, err := history.ScratchList(os.Getenv)
+	keys, err := history.ScratchList()
 	if err != nil {
 		return err
 	}
@@ -35,5 +34,5 @@ func runScratchList(cmd *cobra.Command, _ []string) error {
 }
 
 func runScratchDelete(_ *cobra.Command, args []string) error {
-	return history.ScratchDelete(args[0], os.Getenv)
+	return history.ScratchDelete(args[0])
 }

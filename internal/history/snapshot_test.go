@@ -163,7 +163,7 @@ func TestIsSnapshotRejectsMalformedNestedStepFields(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if IsSnapshot(asJSONValue(t, c.snap)) {
+			if isSnapshot(asJSONValue(t, c.snap)) {
 				t.Fatalf("accepted malformed snapshot %s", c.name)
 			}
 		})
@@ -186,14 +186,14 @@ func TestIsSnapshotRejectsProgressAndProjectionVocabulary(t *testing.T) {
 		}}
 		return s
 	}
-	if IsSnapshot(asJSONValue(t, withOutcome("ok"))) {
+	if isSnapshot(asJSONValue(t, withOutcome("ok"))) {
 		t.Fatal(`outcome "ok" (ProgressOutcome) must not be execution vocabulary`)
 	}
 
 	stale := validLiveSnapshot()
 	stale["finished_at"] = validISO
 	stale["status"] = "stale"
-	if IsSnapshot(asJSONValue(t, stale)) {
+	if isSnapshot(asJSONValue(t, stale)) {
 		t.Fatal(`status "stale" (projection) must not be a terminal status`)
 	}
 }
@@ -217,13 +217,13 @@ func TestIsSnapshotTruncatedOnlyLiteralTrue(t *testing.T) {
 		}}
 		return s
 	}
-	if !IsSnapshot(asJSONValue(t, withTruncated(true))) {
+	if !isSnapshot(asJSONValue(t, withTruncated(true))) {
 		t.Fatal("truncated: true must be accepted")
 	}
-	if IsSnapshot(asJSONValue(t, withTruncated(false))) {
+	if isSnapshot(asJSONValue(t, withTruncated(false))) {
 		t.Fatal("truncated: false must be rejected")
 	}
-	if IsSnapshot(asJSONValue(t, withTruncated("yes"))) {
+	if isSnapshot(asJSONValue(t, withTruncated("yes"))) {
 		t.Fatal(`truncated: "yes" must be rejected`)
 	}
 }
@@ -243,4 +243,17 @@ func TestParseFailureFactVerdictAndStreamOptional(t *testing.T) {
 	if !ok || legacy.Verdict != "" || legacy.Stream != "" || legacy.ExitCode == nil || *legacy.ExitCode != 1 {
 		t.Fatalf("v1 compatible %+v", legacy)
 	}
+}
+
+func isSnapshot(v any) bool {
+	_, ok := parseSnapshotValue(v)
+	return ok
+}
+
+func readSnapshot(id string) (*Snapshot, error) {
+	loaded, err := loadSnapshot(id)
+	if err != nil {
+		return nil, err
+	}
+	return loaded.Snap, nil
 }

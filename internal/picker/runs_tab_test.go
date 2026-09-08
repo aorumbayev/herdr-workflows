@@ -1,7 +1,6 @@
 package picker
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -40,13 +39,8 @@ func TestTabSwitchesBetweenWorkflowAndRunsBrowsers(t *testing.T) {
 func TestTabLoadsCurrentCheckoutRuns(t *testing.T) {
 	stateDir := t.TempDir()
 	checkout := t.TempDir()
-	getenv := func(key string) string {
-		if key == "HERDR_PLUGIN_STATE_DIR" {
-			return stateDir
-		}
-		return os.Getenv(key)
-	}
-	w := history.NewWriter(getenv)
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
+	w := history.NewWriter()
 	t.Cleanup(w.Dispose)
 	claimed := w.Claim(history.ClaimMeta{Workflow: "cycle8-tab", Source: "repo", CheckoutRoot: checkout})
 	if !claimed.OK || claimed.State != "claimed" {
@@ -54,7 +48,7 @@ func TestTabLoadsCurrentCheckoutRuns(t *testing.T) {
 	}
 	w.Finalize("succeeded", history.FinalizeOpts{})
 
-	m := New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: checkout, Env: getenv})
+	m := New(Options{Entries: catalogEntries(), Width: 80, RepoRoot: checkout})
 	m = apply(m, "tab")
 	body := m.View().Content
 	if !strings.Contains(body, "cycle8-tab") {

@@ -20,16 +20,16 @@ func demoWorkflow() workflow.Definition {
 }
 
 func TestCreateRunRecorderRejectedAndUnavailable(t *testing.T) {
-	_, checkout, getenv := testWriterEnv(t)
+	_, checkout := testWriterEnv(t)
 	id := AllocateRunID()
-	first, err := CreateRunRecorder(CreateRecorderOpts{Workflow: demoWorkflow(), RunID: id, CheckoutRoot: checkout, Getenv: getenv})
+	first, err := CreateRunRecorder(CreateRecorderOpts{Workflow: demoWorkflow(), RunID: id, CheckoutRoot: checkout})
 	if err != nil || first == nil {
 		t.Fatalf("first err=%v", err)
 	}
 	defer first.Dispose()
 	var acks []string
 	_, err = CreateRunRecorder(CreateRecorderOpts{
-		Workflow: demoWorkflow(), RunID: id, CheckoutRoot: checkout, Getenv: getenv,
+		Workflow: demoWorkflow(), RunID: id, CheckoutRoot: checkout,
 		OnAck: func(line string) { acks = append(acks, line) },
 	})
 	if err == nil {
@@ -48,15 +48,10 @@ func TestCreateRunRecorderRejectedAndUnavailable(t *testing.T) {
 	if err := os.Chmod(state, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	loose := func(key string) string {
-		if key == "HERDR_PLUGIN_STATE_DIR" {
-			return state
-		}
-		return os.Getenv(key)
-	}
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", state)
 	var unavail []string
 	rec, err := CreateRunRecorder(CreateRecorderOpts{
-		Workflow: demoWorkflow(), CheckoutRoot: checkout, Getenv: loose,
+		Workflow: demoWorkflow(), CheckoutRoot: checkout,
 		OnAck: func(line string) { unavail = append(unavail, line) },
 	})
 	if err != nil || rec == nil {
@@ -69,8 +64,8 @@ func TestCreateRunRecorderRejectedAndUnavailable(t *testing.T) {
 }
 
 func TestRecorderFailureBeforeStepAndIdempotentFinish(t *testing.T) {
-	_, checkout, getenv := testWriterEnv(t)
-	rec, err := CreateRunRecorder(CreateRecorderOpts{Workflow: demoWorkflow(), CheckoutRoot: checkout, Getenv: getenv})
+	_, checkout := testWriterEnv(t)
+	rec, err := CreateRunRecorder(CreateRecorderOpts{Workflow: demoWorkflow(), CheckoutRoot: checkout})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,11 +77,11 @@ func TestRecorderFailureBeforeStepAndIdempotentFinish(t *testing.T) {
 	if err := rec.Finished(engine.StatusSucceeded, nil); err != nil {
 		t.Fatal(err)
 	}
-	listed := ListRuns(ListFilter{}, getenv)
+	listed := ListRuns(ListFilter{})
 	if !listed.OK || len(listed.Runs) != 1 {
 		t.Fatalf("%+v", listed)
 	}
-	presented := RunDetail(rec.RunID(), getenv, time.Time{})
+	presented := RunDetail(rec.RunID(), time.Time{})
 	if presented.Detail.Kind != "snapshot" || presented.Detail.Status != "failed" || presented.Detail.FailureExplanation != msg {
 		t.Fatalf("%+v", presented.Detail)
 	}

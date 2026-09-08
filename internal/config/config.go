@@ -174,24 +174,13 @@ func loadFile(file string) (Config, bool, error) {
 
 const pluginID = "herdr-workflows"
 
-// Env reads an environment variable. A nil Env uses os.Getenv.
-type Env func(string) string
-
-func envOr(getenv Env) Env {
-	if getenv == nil {
-		return os.Getenv
-	}
-	return getenv
-}
-
 // ResolvePluginConfigDir finds the herdr-owned plugin config directory.
 // The directory is not ~/.hwf.
-func ResolvePluginConfigDir(getenv Env) (string, error) {
-	env := envOr(getenv)
-	if injected := strings.TrimSpace(env("HERDR_PLUGIN_CONFIG_DIR")); injected != "" {
+func ResolvePluginConfigDir() (string, error) {
+	if injected := strings.TrimSpace(os.Getenv("HERDR_PLUGIN_CONFIG_DIR")); injected != "" {
 		return injected, nil
 	}
-	bin := host.BinPath(env)
+	bin := host.BinPath()
 	cmd := exec.Command(bin, "plugin", "config-dir", pluginID)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -219,8 +208,8 @@ func ResolvePluginConfigDir(getenv Env) (string, error) {
 }
 
 // GlobalConfigPath is the global layer: $HERDR_PLUGIN_CONFIG_DIR/config.yaml.
-func GlobalConfigPath(getenv Env) (string, error) {
-	dir, err := ResolvePluginConfigDir(getenv)
+func GlobalConfigPath() (string, error) {
+	dir, err := ResolvePluginConfigDir()
 	if err != nil {
 		return "", err
 	}
@@ -229,8 +218,8 @@ func GlobalConfigPath(getenv Env) (string, error) {
 
 // PluginStateDir is the herdr-owned plugin state directory for run logs,
 // managed responses, and transcripts.
-func PluginStateDir(getenv Env) (string, error) {
-	if dir := envOr(getenv)("HERDR_PLUGIN_STATE_DIR"); dir != "" {
+func PluginStateDir() (string, error) {
+	if dir := os.Getenv("HERDR_PLUGIN_STATE_DIR"); dir != "" {
 		return dir, nil
 	}
 	home, err := os.UserHomeDir()
@@ -242,9 +231,8 @@ func PluginStateDir(getenv Env) (string, error) {
 
 // HomeDir finds the home directory of the user that invoked the plugin.
 // If $HOME is set, HomeDir uses $HOME. If $HOME is not set, HomeDir uses the OS home.
-func HomeDir(getenv Env) (string, error) {
-	env := envOr(getenv)
-	if home := env("HOME"); home != "" {
+func HomeDir() (string, error) {
+	if home := os.Getenv("HOME"); home != "" {
 		return home, nil
 	}
 	return os.UserHomeDir()
@@ -313,9 +301,9 @@ func mergeLayer(into *Config, layer Config) {
 
 // LoadConfig merges global, then committed repo, then local. A layer of higher
 // precedence replaces full entries by name.
-func LoadConfig(repoRoot string, getenv Env) (Config, error) {
+func LoadConfig(repoRoot string) (Config, error) {
 	merged := emptyConfig()
-	globalPath, err := GlobalConfigPath(getenv)
+	globalPath, err := GlobalConfigPath()
 	if err != nil {
 		return Config{}, err
 	}

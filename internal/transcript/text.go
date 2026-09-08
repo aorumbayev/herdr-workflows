@@ -109,7 +109,7 @@ func Text(paneID string, transcripts map[string]config.TranscriptExtractor, opts
 	}
 	base := opts.ProjectsBase
 	if base == "" {
-		home, err := config.HomeDir(nil)
+		home, err := config.HomeDir()
 		if err != nil {
 			return "", err
 		}

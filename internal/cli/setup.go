@@ -49,14 +49,11 @@ type KeybindingInstallResult struct {
 }
 
 // ResolveBinDir uses XDG_BIN_HOME when that value is set. When it is empty, ResolveBinDir uses ~/.local/bin.
-func ResolveBinDir(getenv func(string) string) string {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-	if custom := strings.TrimSpace(getenv("XDG_BIN_HOME")); custom != "" {
+func ResolveBinDir() string {
+	if custom := strings.TrimSpace(os.Getenv("XDG_BIN_HOME")); custom != "" {
 		return custom
 	}
-	home, err := config.HomeDir(getenv)
+	home, err := config.HomeDir()
 	if err != nil {
 		return filepath.Join(".", ".local", "bin")
 	}
@@ -64,27 +61,21 @@ func ResolveBinDir(getenv func(string) string) string {
 }
 
 // ResolveHerdrConfigPath uses HERDR_CONFIG_PATH when that value is set. When it is empty, ResolveHerdrConfigPath uses XDG/herdr/config.toml.
-func ResolveHerdrConfigPath(getenv func(string) string) string {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-	if custom := strings.TrimSpace(getenv("HERDR_CONFIG_PATH")); custom != "" {
+func ResolveHerdrConfigPath() string {
+	if custom := strings.TrimSpace(os.Getenv("HERDR_CONFIG_PATH")); custom != "" {
 		return custom
 	}
 	base := filepath.Join(".config", "herdr")
-	if xdg := strings.TrimSpace(getenv("XDG_CONFIG_HOME")); xdg != "" {
+	if xdg := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); xdg != "" {
 		base = filepath.Join(xdg, "herdr")
-	} else if home, err := config.HomeDir(getenv); err == nil {
+	} else if home, err := config.HomeDir(); err == nil {
 		base = filepath.Join(home, ".config", "herdr")
 	}
 	return filepath.Join(base, "config.toml")
 }
 
-func resolvePluginRoot(getenv func(string) string, execPath, cwd string) string {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-	if injected := strings.TrimSpace(getenv("HERDR_PLUGIN_ROOT")); injected != "" {
+func resolvePluginRoot(execPath, cwd string) string {
+	if injected := strings.TrimSpace(os.Getenv("HERDR_PLUGIN_ROOT")); injected != "" {
 		abs, err := filepath.Abs(injected)
 		if err == nil {
 			return abs
@@ -128,11 +119,8 @@ func isEphemeralPluginRoot(pluginRoot string) bool {
 	return false
 }
 
-func binDirOnPath(dir string, getenv func(string) string) bool {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-	pathEnv := getenv("PATH")
+func binDirOnPath(dir string) bool {
+	pathEnv := os.Getenv("PATH")
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
 		absDir = dir
@@ -358,10 +346,7 @@ func StripDeadBindings(text string) string {
 	return out
 }
 
-func mergeEnv(getenv func(string) string, extra map[string]string) []string {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
+func mergeEnv(extra map[string]string) []string {
 	base := map[string]string{}
 	for _, entry := range os.Environ() {
 		key, val, ok := strings.Cut(entry, "=")
@@ -372,7 +357,6 @@ func mergeEnv(getenv func(string) string, extra map[string]string) []string {
 	for key, val := range extra {
 		base[key] = val
 	}
-	overlayGetenv(base, getenv, extra)
 	out := make([]string, 0, len(base))
 	for key, val := range base {
 		out = append(out, key+"="+val)
@@ -380,26 +364,10 @@ func mergeEnv(getenv func(string) string, extra map[string]string) []string {
 	return out
 }
 
-func overlayGetenv(base map[string]string, getenv func(string) string, extra map[string]string) {
-	if getenv == nil {
-		return
-	}
-	for _, key := range []string{"HERDR_BIN_PATH", "HERDR_CONFIG_PATH", "PATH", "HOME", "XDG_CONFIG_HOME"} {
-		if extra != nil {
-			if _, ok := extra[key]; ok {
-				continue
-			}
-		}
-		if v := getenv(key); v != "" {
-			base[key] = v
-		}
-	}
-}
-
-func spawnHerdr(args []string, getenv func(string) string, extra map[string]string) (stdout, stderr string, exitCode int, runErr error) {
-	bin := host.BinPath(getenv)
+func spawnHerdr(args []string, extra map[string]string) (stdout, stderr string, exitCode int, runErr error) {
+	bin := host.BinPath()
 	cmd := exec.Command(bin, args...)
-	cmd.Env = mergeEnv(getenv, extra)
+	cmd.Env = mergeEnv(extra)
 	var outBuf, errBuf strings.Builder
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
@@ -414,8 +382,8 @@ func spawnHerdr(args []string, getenv func(string) string, extra map[string]stri
 	return outBuf.String(), errBuf.String(), 0, nil
 }
 
-func validates(candidate string, getenv func(string) string) (bool, string) {
-	stdout, stderr, _, runErr := spawnHerdr([]string{"config", "check"}, getenv, map[string]string{
+func validates(candidate string) (bool, string) {
+	stdout, stderr, _, runErr := spawnHerdr([]string{"config", "check"}, map[string]string{
 		"HERDR_CONFIG_PATH": candidate,
 	})
 	if runErr != nil {
@@ -427,17 +395,12 @@ func validates(candidate string, getenv func(string) string) (bool, string) {
 
 // KeybindingInstallOpts sets the options for InstallKeybindings.
 type KeybindingInstallOpts struct {
-	Getenv func(string) string
 	Reload *bool
 }
 
 // InstallKeybindings adds the prefix+k launch binding and removes tables for actions that are no longer in use.
 func InstallKeybindings(opts KeybindingInstallOpts) KeybindingInstallResult {
-	getenv := opts.Getenv
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-	path := ResolveHerdrConfigPath(getenv)
+	path := ResolveHerdrConfigPath()
 	messages := []string{}
 
 	var original *string
@@ -475,7 +438,7 @@ func InstallKeybindings(opts KeybindingInstallOpts) KeybindingInstallResult {
 		messages = append(messages, fmt.Sprintf("herdr-workflows keybinding install skipped — write failed: %v", err))
 		return KeybindingInstallResult{Messages: messages, Path: path}
 	}
-	ok, out := validates(tmp, getenv)
+	ok, out := validates(tmp)
 	if !ok {
 		_ = os.Remove(tmp)
 		messages = append(messages, "herdr-workflows keybinding install skipped — herdr config check failed:")
@@ -514,13 +477,13 @@ func InstallKeybindings(opts KeybindingInstallOpts) KeybindingInstallResult {
 		reload = *opts.Reload
 	}
 	if reload {
-		appendReloadMessage(&messages, getenv, path)
+		appendReloadMessage(&messages, path)
 	}
 	return KeybindingInstallResult{Messages: messages, Path: path}
 }
 
-func appendReloadMessage(messages *[]string, getenv func(string) string, path string) {
-	stdout, stderr, code, runErr := spawnHerdr([]string{"server", "reload-config"}, getenv, nil)
+func appendReloadMessage(messages *[]string, path string) {
+	stdout, stderr, code, runErr := spawnHerdr([]string{"server", "reload-config"}, nil)
 	if runErr == nil && code == 0 {
 		*messages = append(*messages, fmt.Sprintf("herdr reloaded config so the running server reads %s", path))
 		return
@@ -549,14 +512,13 @@ func runSetup(cmd *cobra.Command, _ []string) error {
 }
 
 func setupInstall(log func(string)) error {
-	getenv := os.Getenv
-	binDir := ResolveBinDir(getenv)
+	binDir := ResolveBinDir()
 	execPath, err := os.Executable()
 	if err != nil {
 		execPath = os.Args[0]
 	}
 	cwd, _ := os.Getwd()
-	pluginRoot := resolvePluginRoot(getenv, execPath, cwd)
+	pluginRoot := resolvePluginRoot(execPath, cwd)
 	binary := resolveManagedBinary(pluginRoot)
 	if binary == "" {
 		log(fmt.Sprintf("skipped cli install: managed binary not found under %s (run build first)", pluginRoot))
@@ -567,11 +529,11 @@ func setupInstall(log func(string)) error {
 		}
 	}
 
-	if !binDirOnPath(binDir, getenv) {
+	if !binDirOnPath(binDir) {
 		log(fmt.Sprintf("warning: %s is not on PATH — add it to your shell profile", binDir))
 	}
 
-	keys := InstallKeybindings(KeybindingInstallOpts{Getenv: getenv})
+	keys := InstallKeybindings(KeybindingInstallOpts{})
 	for _, line := range keys.Messages {
 		log(line)
 	}

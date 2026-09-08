@@ -33,10 +33,6 @@ func ShellArgv(command, shell string) []string {
 	}
 }
 
-func NativeProcessTree(goos string) bool {
-	return goos == "linux" || goos == "darwin"
-}
-
 type CommandOutcome struct {
 	OK       bool
 	Failed   bool

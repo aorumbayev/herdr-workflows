@@ -18,12 +18,7 @@ func TestRealInstallSnapshotReadsUnmodified(t *testing.T) {
 	if err := os.Chmod(state, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	getenv := func(key string) string {
-		if key == "HERDR_PLUGIN_STATE_DIR" {
-			return state
-		}
-		return os.Getenv(key)
-	}
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", state)
 	id := "5da1aa28-f1c3-410f-9cfc-e6ecd75c356e"
 	var v any
 	if err := json.Unmarshal(raw, &v); err != nil {
@@ -33,17 +28,17 @@ func TestRealInstallSnapshotReadsUnmodified(t *testing.T) {
 	if !ok {
 		t.Fatal("fixture is not a snapshot")
 	}
-	if err := insertClaim(parsed, getenv); err != nil {
+	if err := insertClaim(parsed); err != nil {
 		t.Fatal(err)
 	}
-	leftover := filepath.Join(legacyRunsDir(getenv), id+".json")
+	leftover := filepath.Join(legacyRunsDir(), id+".json")
 	if err := os.MkdirAll(filepath.Dir(leftover), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(leftover, []byte(`{"version":1,"id":"`+id+`","workflow":"ignored"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	snap, err := ReadSnapshot(id, getenv)
+	snap, err := readSnapshot(id)
 	if err != nil || snap == nil {
 		t.Fatalf("read err=%v snap=%v", err, snap)
 	}
@@ -56,7 +51,7 @@ func TestRealInstallSnapshotReadsUnmodified(t *testing.T) {
 	if snap.FailureExplanation != "step 0: input 'target' must be one of: claude, codex, cursor, opencode" {
 		t.Fatalf("explanation %q", snap.FailureExplanation)
 	}
-	listed := ListRuns(ListFilter{}, getenv)
+	listed := ListRuns(ListFilter{})
 	if !listed.OK || len(listed.Runs) != 1 || listed.Runs[0].ID != id {
 		t.Fatalf("list %+v", listed)
 	}

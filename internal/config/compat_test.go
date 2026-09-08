@@ -57,7 +57,7 @@ func TestRealInstallGlobalConfigLayerReplacement(t *testing.T) {
 		"profiles:\n  claude:\n    kind: claude\n    args: [\"--model\", \"repo\"]\n")
 	write(t, filepath.Join(root, ".hwf", "config.local.yaml"),
 		"profiles:\n  claude:\n    kind: kimi\ntranscripts:\n  codex:\n    command: [echo, local]\n")
-	cfg, err := LoadConfig(root, nil)
+	cfg, err := LoadConfig(root)
 	if err != nil {
 		t.Fatal(err)
 	}

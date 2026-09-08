@@ -8,36 +8,36 @@ import (
 )
 
 func TestScratchRoundTripAndCap(t *testing.T) {
-	_, _, getenv := testWriterEnv(t)
-	if err := ScratchSet("triage.last_pr", "42", getenv); err != nil {
+	testWriterEnv(t)
+	if err := ScratchSet("triage.last_pr", "42"); err != nil {
 		t.Fatal(err)
 	}
-	got, err := ScratchGet("triage.last_pr", getenv)
+	got, err := ScratchGet("triage.last_pr")
 	if err != nil || got != "42" {
 		t.Fatalf("get = %q err=%v", got, err)
 	}
-	if err := ScratchSet("run-id.b", "x", getenv); err != nil {
+	if err := ScratchSet("run-id.b", "x"); err != nil {
 		t.Fatal(err)
 	}
-	keys, err := ScratchList(getenv)
+	keys, err := ScratchList()
 	if err != nil || len(keys) != 2 || keys[0] != "run-id.b" || keys[1] != "triage.last_pr" {
 		t.Fatalf("list = %+v err=%v", keys, err)
 	}
-	prev, err := ScratchGet("triage.last_pr", getenv)
+	prev, err := ScratchGet("triage.last_pr")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ScratchSet("triage.last_pr", strings.Repeat("x", caps.CaptureByteLimit+1), getenv); err == nil {
+	if err := ScratchSet("triage.last_pr", strings.Repeat("x", caps.CaptureByteLimit+1)); err == nil {
 		t.Fatal("over-cap set succeeded")
 	}
-	still, err := ScratchGet("triage.last_pr", getenv)
+	still, err := ScratchGet("triage.last_pr")
 	if err != nil || still != prev {
 		t.Fatalf("value mutated after cap: %q err=%v", still, err)
 	}
-	if err := ScratchDelete("run-id.b", getenv); err != nil {
+	if err := ScratchDelete("run-id.b"); err != nil {
 		t.Fatal(err)
 	}
-	keys, err = ScratchList(getenv)
+	keys, err = ScratchList()
 	if err != nil || len(keys) != 1 || keys[0] != "triage.last_pr" {
 		t.Fatalf("after delete = %+v err=%v", keys, err)
 	}

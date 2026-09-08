@@ -49,21 +49,6 @@ func NewRun(id string) (*Run, error) {
 
 func (r *Run) ID() string { return r.id }
 
-func (r *Run) HasCurrentStep() bool { return r.depth > 0 }
-
-func (r *Run) TerminalStatus() (RunTerminalStatus, bool) {
-	if r.terminal == nil {
-		return "", false
-	}
-	return *r.terminal, true
-}
-
-func (r *Run) Outcomes() []StepOutcomeKind {
-	out := make([]StepOutcomeKind, len(r.outcomes))
-	copy(out, r.outcomes)
-	return out
-}
-
 func (r *Run) StartStep() error {
 	if r.terminal != nil {
 		return fmt.Errorf("run is already terminal")

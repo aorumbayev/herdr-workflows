@@ -20,13 +20,8 @@ func TestEmptyPermissiveStateRootIsTightenedAndClaimable(t *testing.T) {
 	if err := os.Chmod(stateDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	getenv := func(key string) string {
-		if key == "HERDR_PLUGIN_STATE_DIR" {
-			return stateDir
-		}
-		return os.Getenv(key)
-	}
-	w := NewWriter(getenv)
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
+	w := NewWriter()
 	defer w.Dispose()
 	result := w.Claim(ClaimMeta{Workflow: "demo", Source: "repo", CheckoutRoot: checkout})
 	if !result.OK || result.State != "claimed" {
@@ -54,13 +49,8 @@ func TestNonEmptyPermissiveStateRootMakesHistoryUnavailable(t *testing.T) {
 	if err := os.Chmod(stateDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	getenv := func(key string) string {
-		if key == "HERDR_PLUGIN_STATE_DIR" {
-			return stateDir
-		}
-		return os.Getenv(key)
-	}
-	w := NewWriter(getenv)
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
+	w := NewWriter()
 	defer w.Dispose()
 	result := w.Claim(ClaimMeta{Workflow: "demo", Source: "repo", CheckoutRoot: checkout})
 	if !result.OK || result.State != "unavailable" {

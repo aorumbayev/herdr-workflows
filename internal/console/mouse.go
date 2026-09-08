@@ -93,8 +93,3 @@ func diagramMouseXY(x, y int) (int, int) {
 	}
 	return x, y
 }
-
-func (m Model) ApplyMouse(msg tea.Msg) (Model, tea.Cmd) {
-	next, cmd := m.handleMouse(msg)
-	return next.(Model), cmd
-}

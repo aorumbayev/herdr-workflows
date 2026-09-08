@@ -26,7 +26,7 @@ func runEditor(_ *cobra.Command, _ []string) error {
 	if path == "" {
 		return fmt.Errorf("editor requires %s", picker.EditorFileEnv)
 	}
-	editor, err := workflow.ResolveEditor(os.Getenv)
+	editor, err := workflow.ResolveEditor()
 	if err != nil {
 		_ = host.NotificationShow("herdr-workflows", err.Error())
 		return err

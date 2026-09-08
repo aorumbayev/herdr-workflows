@@ -10,9 +10,9 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/history"
 )
 
-func writeFailedRun(t *testing.T, getenv func(string) string, checkout, workflow string) string {
+func writeFailedRun(t *testing.T, checkout, workflow string) string {
 	t.Helper()
-	w := history.NewWriter(getenv)
+	w := history.NewWriter()
 	t.Cleanup(w.Dispose)
 	claimed := w.Claim(history.ClaimMeta{Workflow: workflow, Source: "repo", CheckoutRoot: checkout})
 	if !claimed.OK || claimed.State != "claimed" {
@@ -33,16 +33,16 @@ func writeFailedRun(t *testing.T, getenv func(string) string, checkout, workflow
 	w.Finalize("failed", history.FinalizeOpts{})
 	_ = history.WriteDebugArtifacts(w.ID(), history.DebugArtifacts{
 		EntryYAML: "version: v1alpha1\nsteps:\n  - id: build\n    run: [false]\n",
-	}, getenv)
+	})
 	return w.ID()
 }
 
 func TestFailedRunDetailShowsCauseAndSource(t *testing.T) {
 	checkout := t.TempDir()
 	stateDir := t.TempDir()
-	getenv := testGetenv(t, stateDir)
-	writeFailedRun(t, getenv, checkout, "demo")
-	m := New(Options{RepoRoot: checkout, Width: 100, Height: 24, Env: getenv})
+	testGetenv(t, stateDir)
+	writeFailedRun(t, checkout, "demo")
+	m := New(Options{RepoRoot: checkout, Width: 100, Height: 24})
 	m = runCmd(m, m.Init())
 	m = apply(m, "enter")
 	body := ansi.Strip(m.View().Content)

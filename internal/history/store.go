@@ -53,19 +53,16 @@ var (
 	dbs   = map[string]*sql.DB{}
 )
 
-func historyDBPath(getenv config.Env) string {
-	dir, err := config.PluginStateDir(getenv)
+func historyDBPath() string {
+	dir, err := config.PluginStateDir()
 	if err != nil {
 		return ""
 	}
 	return filepath.Join(dir, historyDBName)
 }
 
-func openHistory(getenv config.Env) (*sql.DB, error) {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-	state, err := config.PluginStateDir(getenv)
+func openHistory() (*sql.DB, error) {
+	state, err := config.PluginStateDir()
 	if err != nil {
 		return nil, err
 	}
@@ -219,16 +216,16 @@ func isUniqueConstraint(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "unique constraint")
 }
 
-func insertClaim(snap Snapshot, getenv config.Env) error {
-	db, err := openHistory(getenv)
+func insertClaim(snap Snapshot) error {
+	db, err := openHistory()
 	if err != nil {
 		return err
 	}
 	return upsertRun(db, snap, true)
 }
 
-func persistRun(snap Snapshot, getenv config.Env) error {
-	db, err := openHistory(getenv)
+func persistRun(snap Snapshot) error {
+	db, err := openHistory()
 	if err != nil {
 		return err
 	}
@@ -267,8 +264,8 @@ func restoreRun(db *sql.DB, snap Snapshot, blob string) error {
 	return err
 }
 
-func updateHeartbeat(id, at string, getenv config.Env) error {
-	db, err := openHistory(getenv)
+func updateHeartbeat(id, at string) error {
+	db, err := openHistory()
 	if err != nil {
 		return err
 	}
@@ -276,8 +273,8 @@ func updateHeartbeat(id, at string, getenv config.Env) error {
 	return err
 }
 
-func loadRunRow(id string, getenv config.Env) (snapshotLoad, error) {
-	db, err := openHistory(getenv)
+func loadRunRow(id string) (snapshotLoad, error) {
+	db, err := openHistory()
 	if err != nil {
 		return snapshotLoad{}, err
 	}
@@ -316,8 +313,8 @@ func snapshotFromBlob(blob sql.NullString) (Snapshot, bool) {
 	return parseSnapshotValue(v)
 }
 
-func listRunSummaries(now time.Time, getenv config.Env) ([]Summary, []IncompatibleSnapshot, []string, error) {
-	db, err := openHistory(getenv)
+func listRunSummaries(now time.Time) ([]Summary, []IncompatibleSnapshot, []string, error) {
+	db, err := openHistory()
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -374,8 +371,8 @@ func listIncompatible(db *sql.DB) ([]IncompatibleSnapshot, error) {
 	return out, rows.Err()
 }
 
-func retentionCleanup(getenv config.Env) error {
-	db, err := openHistory(getenv)
+func retentionCleanup() error {
+	db, err := openHistory()
 	if err != nil {
 		return err
 	}

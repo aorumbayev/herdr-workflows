@@ -7,7 +7,7 @@ import (
 )
 
 func TestCreateRunRecorderPersistsEntryYAML(t *testing.T) {
-	_, checkout, getenv := testWriterEnv(t)
+	_, checkout := testWriterEnv(t)
 	dir := filepath.Join(checkout, ".hwf", "workflows")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
@@ -20,12 +20,12 @@ func TestCreateRunRecorderPersistsEntryYAML(t *testing.T) {
 	wf := demoWorkflow()
 	wf.Name = "demo"
 	wf.File = path
-	rec, err := CreateRunRecorder(CreateRecorderOpts{Workflow: wf, CheckoutRoot: checkout, Getenv: getenv})
+	rec, err := CreateRunRecorder(CreateRecorderOpts{Workflow: wf, CheckoutRoot: checkout})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rec.Dispose()
-	arts, err := LoadDebugArtifacts(rec.RunID(), getenv)
+	arts, err := LoadDebugArtifacts(rec.RunID())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,8 +35,8 @@ func TestCreateRunRecorderPersistsEntryYAML(t *testing.T) {
 }
 
 func TestRecorderRecordTranscript(t *testing.T) {
-	_, checkout, getenv := testWriterEnv(t)
-	rec, err := CreateRunRecorder(CreateRecorderOpts{Workflow: demoWorkflow(), CheckoutRoot: checkout, Getenv: getenv})
+	_, checkout := testWriterEnv(t)
+	rec, err := CreateRunRecorder(CreateRecorderOpts{Workflow: demoWorkflow(), CheckoutRoot: checkout})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestRecorderRecordTranscript(t *testing.T) {
 		t.Fatal("recorder missing RecordTranscript")
 	}
 	hr.RecordTranscript("session text")
-	arts, err := LoadDebugArtifacts(rec.RunID(), getenv)
+	arts, err := LoadDebugArtifacts(rec.RunID())
 	if err != nil {
 		t.Fatal(err)
 	}

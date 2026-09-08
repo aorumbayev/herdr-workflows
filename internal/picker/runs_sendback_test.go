@@ -1,7 +1,6 @@
 package picker
 
 import (
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -12,9 +11,9 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-func seedFailedRun(t *testing.T, getenv func(string) string, checkout string) {
+func seedFailedRun(t *testing.T, checkout string) {
 	t.Helper()
-	w := history.NewWriter(getenv)
+	w := history.NewWriter()
 	t.Cleanup(w.Dispose)
 	claimed := w.Claim(history.ClaimMeta{Workflow: "demo", Source: "repo", CheckoutRoot: checkout})
 	if !claimed.OK {
@@ -34,19 +33,14 @@ func seedFailedRun(t *testing.T, getenv func(string) string, checkout string) {
 	w.Finalize("failed", history.FinalizeOpts{})
 	_ = history.WriteDebugArtifacts(w.ID(), history.DebugArtifacts{
 		EntryYAML: "version: v1alpha1\nsteps:\n  - id: build\n    run: [false]\n",
-	}, getenv)
+	})
 }
 
 func TestRunsSendbackOmitsOutputTail(t *testing.T) {
 	checkout := t.TempDir()
 	stateDir := t.TempDir()
-	getenv := func(key string) string {
-		if key == "HERDR_PLUGIN_STATE_DIR" {
-			return stateDir
-		}
-		return os.Getenv(key)
-	}
-	seedFailedRun(t, getenv, checkout)
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
+	seedFailedRun(t, checkout)
 	var sent string
 	var notes []string
 	m := New(Options{
@@ -54,7 +48,6 @@ func TestRunsSendbackOmitsOutputTail(t *testing.T) {
 		RepoRoot: checkout,
 		Width:    100,
 		Height:   24,
-		Env:      getenv,
 		ListAgentPanes: func() ([]console.AgentPaneEntry, error) {
 			return []console.AgentPaneEntry{{PaneID: "a1", Title: "Claude"}}, nil
 		},
@@ -79,20 +72,14 @@ func TestRunsSendbackOmitsOutputTail(t *testing.T) {
 func TestRunsSendbackAgentChooser(t *testing.T) {
 	checkout := t.TempDir()
 	stateDir := t.TempDir()
-	getenv := func(key string) string {
-		if key == "HERDR_PLUGIN_STATE_DIR" {
-			return stateDir
-		}
-		return os.Getenv(key)
-	}
-	seedFailedRun(t, getenv, checkout)
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
+	seedFailedRun(t, checkout)
 	var sentPane string
 	m := New(Options{
 		Entries:  []workflow.ListEntry{{Name: "demo", Source: "repo", File: checkout + "/demo.yaml"}},
 		RepoRoot: checkout,
 		Width:    100,
 		Height:   24,
-		Env:      getenv,
 		ListAgentPanes: func() ([]console.AgentPaneEntry, error) {
 			return []console.AgentPaneEntry{
 				{PaneID: "w1:p1", Tab: "1", Status: "idle", Title: "One", Self: true},

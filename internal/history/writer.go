@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/credentials"
 	"github.com/aorumbayev/herdr-workflows/internal/engine"
 )
@@ -31,18 +30,14 @@ type ClaimResult struct {
 }
 
 type Writer struct {
-	getenv    config.Env
 	mu        sync.Mutex
 	snapshot  *Snapshot
 	available bool
 	hbStop    chan struct{}
 }
 
-func NewWriter(getenv config.Env) *Writer {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-	return &Writer{getenv: getenv}
+func NewWriter() *Writer {
+	return &Writer{}
 }
 
 func (w *Writer) ID() string {
@@ -108,7 +103,7 @@ func (w *Writer) Claim(meta ClaimMeta) ClaimResult {
 		HeartbeatAt:  started,
 		Steps:        []StepRecord{},
 	}
-	if err := insertClaim(snap, w.getenv); err != nil {
+	if err := insertClaim(snap); err != nil {
 		if isUniqueConstraint(err) {
 			return ClaimResult{
 				State: "rejected",
@@ -123,7 +118,7 @@ func (w *Writer) Claim(meta ClaimMeta) ClaimResult {
 	w.available = true
 	w.startHeartbeatLocked()
 	w.mu.Unlock()
-	_ = retentionCleanup(w.getenv)
+	_ = retentionCleanup()
 	return ClaimResult{OK: true, State: "claimed", ID: id}
 }
 
@@ -140,7 +135,7 @@ func (w *Writer) Touch() {
 	}
 	at := nowISO()
 	w.snapshot.HeartbeatAt = at
-	_ = updateHeartbeat(w.snapshot.ID, at, w.getenv)
+	_ = updateHeartbeat(w.snapshot.ID, at)
 }
 
 func (w *Writer) SetCurrentStep(step CurrentStep) {
@@ -176,7 +171,7 @@ func (w *Writer) Finalize(status string, opts FinalizeOpts) {
 		applyFailureExplanation(w.snapshot, opts.Error)
 	}
 	w.persistUnlocked()
-	_ = retentionCleanup(w.getenv)
+	_ = retentionCleanup()
 }
 
 func (w *Writer) mutateLive(patch func(*Snapshot)) {
@@ -194,7 +189,7 @@ func (w *Writer) persistUnlocked() {
 	if !w.available || w.snapshot == nil {
 		return
 	}
-	_ = persistRun(*w.snapshot, w.getenv)
+	_ = persistRun(*w.snapshot)
 }
 
 func applyFailureExplanation(snap *Snapshot, text string) {

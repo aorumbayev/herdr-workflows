@@ -113,7 +113,7 @@ func TestToDetailGroupsNestedByParentOrdinal(t *testing.T) {
 			{StepIdentity: StepIdentity{Phase: "main", Workflow: "m", WorkflowPath: []string{"m"}, Ordinal: 2, Total: 2, Action: "workflow", Label: "wrap2"}, FinishedAt: now, Outcome: "succeeded"},
 		},
 	}
-	if !IsSnapshot(mustJSON(t, snap)) {
+	if !isSnapshot(mustJSON(t, snap)) {
 		t.Fatal("fixture must be a valid snapshot")
 	}
 	detail := ToDetail(snap, time.Time{})

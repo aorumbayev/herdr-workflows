@@ -8,12 +8,13 @@ import (
 )
 
 func TestCheckHerdrStartupProtocolMismatch(t *testing.T) {
-	res := CheckHerdrStartup(float64(Protocol+1), MinHerdrVersion)
+	older := float64(Protocol - 1)
+	res := CheckHerdrStartup(older, MinHerdrVersion)
 	if res.Ok {
-		t.Fatal("expected protocol mismatch to fail")
+		t.Fatal("expected a protocol below the floor to fail")
 	}
 	for _, want := range []string{
-		"connected=" + fmt.Sprint(Protocol+1),
+		"connected=" + fmt.Sprint(Protocol-1),
 		"pinned=" + fmt.Sprint(Protocol),
 		"installed=" + MinHerdrVersion,
 		"required≥" + MinHerdrVersion,
@@ -105,5 +106,25 @@ func TestCheckHerdrStartupMatching(t *testing.T) {
 	}
 	if CheckHerdrStartup(float64(Protocol), "0.8.0").Ok {
 		t.Fatal("expected 0.8.0 to fail")
+	}
+}
+
+func TestCheckHerdrStartupAcceptsNewerProtocol(t *testing.T) {
+	if Protocol != 20 {
+		t.Fatalf("Protocol = %d, want 20", Protocol)
+	}
+	res := CheckHerdrStartup(float64(Protocol+1), MinHerdrVersion)
+	if !res.Ok {
+		t.Fatalf("expected protocol %d to pass, got %q", Protocol+1, res.Error)
+	}
+	if res.Protocol != Protocol+1 {
+		t.Fatalf("got protocol=%d", res.Protocol)
+	}
+	herdr090 := CheckHerdrStartup(float64(22), "0.9.0")
+	if !herdr090.Ok {
+		t.Fatalf("expected protocol 22 on 0.9.0 to pass, got %q", herdr090.Error)
+	}
+	if herdr090.Protocol != 22 || herdr090.Version != "0.9.0" {
+		t.Fatalf("got protocol=%d version=%q", herdr090.Protocol, herdr090.Version)
 	}
 }

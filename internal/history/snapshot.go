@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aorumbayev/herdr-workflows/internal/config"
 	"github.com/aorumbayev/herdr-workflows/internal/engine"
 )
 
@@ -67,11 +66,6 @@ type FailureFact struct {
 	StepID       string `json:"step_id,omitempty"`
 	Verdict      string `json:"verdict,omitempty"`
 	Stream       string `json:"stream,omitempty"`
-}
-
-func IsSnapshot(v any) bool {
-	_, ok := parseSnapshotValue(v)
-	return ok
 }
 
 func parseSnapshotValue(v any) (Snapshot, bool) {
@@ -438,18 +432,10 @@ type snapshotLoad struct {
 	Expired      bool
 }
 
-func ReadSnapshot(id string, getenv config.Env) (*Snapshot, error) {
-	loaded, err := loadSnapshot(id, getenv)
-	if err != nil {
-		return nil, err
-	}
-	return loaded.Snap, nil
-}
-
-func loadSnapshot(id string, getenv config.Env) (snapshotLoad, error) {
+func loadSnapshot(id string) (snapshotLoad, error) {
 	normalized, ok := NormalizeRunUUID(id)
 	if !ok {
 		return snapshotLoad{}, nil
 	}
-	return loadRunRow(normalized, getenv)
+	return loadRunRow(normalized)
 }

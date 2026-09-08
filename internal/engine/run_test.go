@@ -15,13 +15,13 @@ func TestRunIsExecutableAggregate(t *testing.T) {
 	if run.ID() != fakeRunID {
 		t.Fatalf("ID() = %q, want %q", run.ID(), fakeRunID)
 	}
-	if run.HasCurrentStep() {
+	if run.depth > 0 {
 		t.Fatal("new Run must have no current step")
 	}
-	if _, ok := run.TerminalStatus(); ok {
+	if run.terminal != nil {
 		t.Fatal("new Run must not be terminal")
 	}
-	if n := len(run.Outcomes()); n != 0 {
+	if n := len(run.outcomes); n != 0 {
 		t.Fatalf("Outcomes() len = %d, want 0", n)
 	}
 }
@@ -44,7 +44,7 @@ func TestRunRejectsContradictoryTransitions(t *testing.T) {
 	if err := run.StartStep(); err != nil {
 		t.Fatalf("StartStep: %v", err)
 	}
-	if !run.HasCurrentStep() {
+	if run.depth == 0 {
 		t.Fatal("StartStep must set current step")
 	}
 	if err := run.Finish(StatusFailed); err == nil {
@@ -56,16 +56,16 @@ func TestRunRejectsContradictoryTransitions(t *testing.T) {
 	if err := run.FinishStep(OutcomeSucceeded); err != nil {
 		t.Fatalf("nested FinishStep: %v", err)
 	}
-	if !run.HasCurrentStep() {
+	if run.depth == 0 {
 		t.Fatal("parent step must remain current after nested finish")
 	}
 	if err := run.FinishStep(OutcomeSucceeded); err != nil {
 		t.Fatalf("FinishStep: %v", err)
 	}
-	if run.HasCurrentStep() {
+	if run.depth > 0 {
 		t.Fatal("FinishStep must clear current step")
 	}
-	if got := run.Outcomes(); len(got) != 2 || got[0] != OutcomeSucceeded || got[1] != OutcomeSucceeded {
+	if got := run.outcomes; len(got) != 2 || got[0] != OutcomeSucceeded || got[1] != OutcomeSucceeded {
 		t.Fatalf("Outcomes() = %v, want two succeeded", got)
 	}
 	if err := run.FinishStep(OutcomeFailed); err == nil {
@@ -90,16 +90,16 @@ func TestRunSkipDoesNotPopParentCurrentStep(t *testing.T) {
 	if err := run.FinishStep(OutcomeSkipped); err != nil {
 		t.Fatalf("nested skip: %v", err)
 	}
-	if !run.HasCurrentStep() {
+	if run.depth == 0 {
 		t.Fatal("parent step must remain current after nested skip")
 	}
-	if got := run.Outcomes(); len(got) != 1 || got[0] != OutcomeSkipped {
+	if got := run.outcomes; len(got) != 1 || got[0] != OutcomeSkipped {
 		t.Fatalf("Outcomes() = %v, want [skipped]", got)
 	}
 	if err := run.FinishStep(OutcomeSucceeded); err != nil {
 		t.Fatalf("parent FinishStep: %v", err)
 	}
-	if run.HasCurrentStep() {
+	if run.depth > 0 {
 		t.Fatal("parent FinishStep must clear current step")
 	}
 }
@@ -124,8 +124,8 @@ func TestRunFinishSucceededRejectsFailedOutcomes(t *testing.T) {
 	if err := run.Finish(StatusFailed); err != nil {
 		t.Fatalf("Finish failed: %v", err)
 	}
-	if got, ok := run.TerminalStatus(); !ok || got != StatusFailed {
-		t.Fatalf("TerminalStatus() = %q, %v, want %s true", got, ok, StatusFailed)
+	if run.terminal == nil || *run.terminal != StatusFailed {
+		t.Fatalf("terminal = %v, want %s", run.terminal, StatusFailed)
 	}
 	if err := run.StartStep(); err == nil {
 		t.Fatal("StartStep after terminal error = nil")

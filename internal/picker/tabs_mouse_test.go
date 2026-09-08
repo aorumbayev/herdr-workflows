@@ -222,11 +222,9 @@ func TestInvalidLocationAndWarnMarkerUseWarnSlot(t *testing.T) {
 }
 
 func TestMissingEditorIsAHardError(t *testing.T) {
-	m := New(Options{
-		Entries: catalogEntries(),
-		Width:   80,
-		Env:     func(string) string { return "" },
-	})
+	t.Setenv("EDITOR", "")
+	t.Setenv("VISUAL", "")
+	m := New(Options{Entries: catalogEntries(), Width: 80})
 	m = apply(m, "ctrl+p")
 	next, _ := m.Update(press("e"))
 	m = next.(Model)

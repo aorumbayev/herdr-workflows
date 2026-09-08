@@ -1,7 +1,6 @@
 package picker
 
 import (
-	"os"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -13,15 +12,8 @@ import (
 
 var newProfileScopeOptions = []string{"global", "repo", "local"}
 
-func (m Model) getenv() config.Env {
-	if m.env != nil {
-		return m.env
-	}
-	return os.Getenv
-}
-
 func (m Model) openProfilesTab() (tea.Model, tea.Cmd) {
-	entries, err := config.ListProfiles(m.repoRoot, m.getenv())
+	entries, err := config.ListProfiles(m.repoRoot)
 	m.profileEntries = entries
 	m.mode = modeProfiles
 	m.filter = ""
@@ -36,7 +28,7 @@ func (m Model) openProfilesTab() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) refreshProfiles() Model {
-	if entries, err := config.ListProfiles(m.repoRoot, m.getenv()); err == nil {
+	if entries, err := config.ListProfiles(m.repoRoot); err == nil {
 		m.profileEntries = entries
 	}
 	return m
@@ -184,7 +176,7 @@ func (m Model) handleNewProfileScope(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) createProfile() (tea.Model, tea.Cmd) {
 	scope := newProfileScopeOptions[m.newProfileScopeCursor]
-	path, err := config.ConfigPathForScope(scope, m.repoRoot, m.getenv())
+	path, err := config.ConfigPathForScope(scope, m.repoRoot)
 	if err != nil {
 		m.status = err.Error()
 		m.mode = modeProfiles
@@ -209,9 +201,8 @@ func (m Model) createProfile() (tea.Model, tea.Cmd) {
 
 func (m Model) beginProfileEdit(path, name string) tea.Cmd {
 	repoRoot := m.repoRoot
-	getenv := m.getenv()
 	validate := func() workflow.ValidateResult {
-		if _, err := config.LoadConfig(repoRoot, getenv); err != nil {
+		if _, err := config.LoadConfig(repoRoot); err != nil {
 			return workflow.ValidateResult{Error: err.Error()}
 		}
 		return workflow.ValidateResult{OK: true}
@@ -225,7 +216,7 @@ func (m Model) beginProfileEdit(path, name string) tea.Cmd {
 			return editorDoneMsg{name: name, result: validate()}
 		}
 	}
-	editor, err := workflow.ResolveEditor(getenv)
+	editor, err := workflow.ResolveEditor()
 	if err != nil {
 		return func() tea.Msg {
 			return editorDoneMsg{name: name, result: workflow.ValidateResult{Error: err.Error()}}
