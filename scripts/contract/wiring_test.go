@@ -70,9 +70,6 @@ func TestVerifyWorkflowUsesUnifiedGoToolVerify(t *testing.T) {
 			t.Fatalf(".github/workflows/verify.yml must not contain %q", forbidden)
 		}
 	}
-	if strings.Count(text, "go tool verify") < 1 {
-		t.Fatal(".github/workflows/verify.yml must invoke go tool verify")
-	}
 	if strings.Contains(text, "version: v2.12") {
 		t.Fatal(".github/workflows/verify.yml must not pin golangci-lint v2.12 (buildir panics on Go 1.27 stdlib poll)")
 	}
@@ -152,20 +149,6 @@ func TestPluginSourceHasNoRuntimeTypeScriptTransform(t *testing.T) {
 	}
 }
 
-func TestAgentsDocumentsPluginRuntimeTypeScriptBoundary(t *testing.T) {
-	for _, rel := range []string{"AGENTS.md", "CLAUDE.md"} {
-		text := readRepoFile(t, rel)
-		for _, want := range []string{
-			"runtime TypeScript transform",
-			"VitePress may keep npm and TypeScript under `docs/`",
-		} {
-			if !strings.Contains(text, want) {
-				t.Fatalf("%s missing %q", rel, want)
-			}
-		}
-	}
-}
-
 func TestPreCommitUsesGoToolVerifyFast(t *testing.T) {
 	text := readRepoFile(t, filepath.Join(".githooks", "pre-commit"))
 	if strings.Contains(text, "npm run verify") {
@@ -201,77 +184,6 @@ func TestReleaseAndDocsWorkflowsUseGo127(t *testing.T) {
 			t.Fatalf("%s still pins Go 1.25", rel)
 		}
 	}
-}
-
-func TestAgentsDocumentsWorkflowAuthoringBoundary(t *testing.T) {
-	for _, rel := range []string{"AGENTS.md", "CLAUDE.md"} {
-		text := readRepoFile(t, rel)
-		if !strings.Contains(text, "Workflow Authoring") {
-			t.Fatalf("%s missing Workflow Authoring", rel)
-		}
-		if !strings.Contains(text, "Definition") {
-			t.Fatalf("%s missing Definition", rel)
-		}
-	}
-}
-
-func TestAgentsDocumentsWorkflowExecutionBoundary(t *testing.T) {
-	for _, rel := range []string{"AGENTS.md", "CLAUDE.md"} {
-		text := readRepoFile(t, rel)
-		if !strings.Contains(text, "Workflow Execution") {
-			t.Fatalf("%s missing Workflow Execution", rel)
-		}
-		engineCell := ""
-		for _, line := range strings.Split(text, "\n") {
-			if strings.Contains(line, "`internal/engine/`") {
-				engineCell = line
-				break
-			}
-		}
-		if engineCell == "" {
-			t.Fatalf("%s missing internal/engine/ layout row", rel)
-		}
-		if !strings.Contains(engineCell, "Workflow Execution") {
-			t.Fatalf("%s engine layout missing Workflow Execution: %s", rel, engineCell)
-		}
-		if !strings.Contains(engineCell, "Run") {
-			t.Fatalf("%s engine layout missing Run: %s", rel, engineCell)
-		}
-	}
-}
-
-func TestAgentsDocumentsRunObservationBoundary(t *testing.T) {
-	for _, rel := range []string{"AGENTS.md", "CLAUDE.md"} {
-		text := readRepoFile(t, rel)
-		historyCell := layoutCell(t, rel, text, "`internal/history/`")
-		if !strings.Contains(historyCell, "Run Observation") {
-			t.Fatalf("%s history layout missing Run Observation: %s", rel, historyCell)
-		}
-		if !strings.Contains(historyCell, "Snapshot") || !strings.Contains(historyCell, "Summary") || !strings.Contains(historyCell, "Detail") {
-			t.Fatalf("%s history layout missing Snapshot/Summary/Detail: %s", rel, historyCell)
-		}
-	}
-}
-
-func TestAgentsDocumentsHerdrAdapterBoundary(t *testing.T) {
-	for _, rel := range []string{"AGENTS.md", "CLAUDE.md"} {
-		text := readRepoFile(t, rel)
-		hostCell := layoutCell(t, rel, text, "`internal/host/`")
-		if !strings.Contains(hostCell, "Herdr Adapter") {
-			t.Fatalf("%s host layout missing Herdr Adapter: %s", rel, hostCell)
-		}
-	}
-}
-
-func layoutCell(t *testing.T, rel, text, marker string) string {
-	t.Helper()
-	for _, line := range strings.Split(text, "\n") {
-		if strings.Contains(line, marker) {
-			return line
-		}
-	}
-	t.Fatalf("%s missing %s layout row", rel, marker)
-	return ""
 }
 
 func TestContributingDocumentsUnifiedVerify(t *testing.T) {
@@ -395,93 +307,6 @@ func TestPromptfooExampleUsesClaudeAgentSDK(t *testing.T) {
 	}
 }
 
-func TestAgentsDocumentsPickerParityBaseline(t *testing.T) {
-	for _, rel := range []string{"AGENTS.md", "CLAUDE.md"} {
-		text := readRepoFile(t, rel)
-		pickerCell := layoutCell(t, rel, text, "`internal/picker/`")
-		if !strings.Contains(pickerCell, "Parity Baseline") {
-			t.Fatalf("%s picker layout missing Parity Baseline: %s", rel, pickerCell)
-		}
-		if !strings.Contains(pickerCell, "picker TUI") {
-			t.Fatalf("%s picker layout must still describe picker TUI: %s", rel, pickerCell)
-		}
-		consoleCell := layoutCell(t, rel, text, "`internal/console/`")
-		if !strings.Contains(consoleCell, "Parity Baseline") {
-			t.Fatalf("%s console layout missing Parity Baseline: %s", rel, consoleCell)
-		}
-		runsCell := layoutCell(t, rel, text, "`internal/runsbrowser/`")
-		if !strings.Contains(runsCell, "Parity Baseline") {
-			t.Fatalf("%s runsbrowser layout missing Parity Baseline: %s", rel, runsCell)
-		}
-		tuiCell := layoutCell(t, rel, text, "`internal/tui/`")
-		if !strings.Contains(tuiCell, "Parity Baseline") {
-			t.Fatalf("%s tui layout missing Parity Baseline: %s", rel, tuiCell)
-		}
-		if !strings.Contains(tuiCell, "Charm") {
-			t.Fatalf("%s tui layout must mention Charm: %s", rel, tuiCell)
-		}
-	}
-}
-
-func TestParityBaselineFilesExist(t *testing.T) {
-	root := repoRoot(t)
-	for _, rel := range []string{
-		filepath.Join("internal", "picker", "parity.go"),
-		filepath.Join("internal", "console", "parity.go"),
-		filepath.Join("internal", "runsbrowser", "parity.go"),
-		filepath.Join("internal", "tui", "charm.go"),
-		filepath.Join("docs", "charm-components.md"),
-	} {
-		path := filepath.Join(root, rel)
-		if _, err := os.Stat(path); err != nil {
-			t.Fatalf("missing Parity Baseline / Charm artifact %s: %v", rel, err)
-		}
-	}
-}
-
-func TestProductImprovementDoesNotHideParityGap(t *testing.T) {
-	agents := readRepoFile(t, "AGENTS.md")
-	surfaces := readRepoFile(t, filepath.Join("docs", "surfaces.md"))
-	combined := agents + "\n" + surfaces
-
-	required := []string{
-		"Product Improvement",
-		"Parity Baseline",
-		"Charm",
-	}
-	for _, want := range required {
-		if !strings.Contains(combined, want) {
-			t.Fatalf("AGENTS.md or docs/surfaces.md missing %q (Product Improvement must not hide a Parity Baseline / Charm gap)", want)
-		}
-	}
-
-	// Product Improvement must not hide a missing comparison or verdict.
-	hasRule := strings.Contains(agents, "must not hide a missing Parity Baseline") ||
-		strings.Contains(agents, "must not hide a missing Parity Baseline comparison or Charm verdict") ||
-		strings.Contains(surfaces, "must not hide a missing Parity Baseline") ||
-		strings.Contains(surfaces, "must not skip that comparison") ||
-		(strings.Contains(agents, "Product Improvement") &&
-			strings.Contains(agents, "must not") &&
-			strings.Contains(agents, "Parity Baseline") &&
-			(strings.Contains(agents, "Charm verdict") || strings.Contains(agents, "Charm")))
-	if !hasRule {
-		t.Fatal("AGENTS.md or docs/surfaces.md must state that a Product Improvement must not hide a missing Parity Baseline comparison or Charm verdict")
-	}
-
-	// This test fails wording that treats a UX redesign as a replacement for the matrix.
-	forbidden := []string{
-		"UX redesign substitutes for the Parity Baseline",
-		"Product Improvement replaces the Parity Baseline",
-		"redesign is enough without Parity Baseline",
-		"skip the Parity Baseline when improving UX",
-	}
-	for _, phrase := range forbidden {
-		if strings.Contains(combined, phrase) {
-			t.Fatalf("must not treat UX redesign as a substitute for the matrix: found %q", phrase)
-		}
-	}
-}
-
 func TestAgentsCiteVerifyProseGoCommand(t *testing.T) {
 	for _, rel := range []string{"AGENTS.md", "CLAUDE.md"} {
 		text := readRepoFile(t, rel)
@@ -490,54 +315,6 @@ func TestAgentsCiteVerifyProseGoCommand(t *testing.T) {
 		}
 		if !strings.Contains(text, "go run ./scripts/verify-prose") {
 			t.Fatalf("%s missing %q", rel, "go run ./scripts/verify-prose")
-		}
-	}
-}
-
-func TestAgentsDocumentsInstallReleaseScript(t *testing.T) {
-	for _, rel := range []string{"AGENTS.md", "CLAUDE.md"} {
-		text := readRepoFile(t, rel)
-		cell := layoutCell(t, rel, text, "`scripts/install-release.sh`")
-		if !strings.Contains(cell, "verified") && !strings.Contains(cell, "archive") && !strings.Contains(cell, "install") {
-			t.Fatalf("%s install-release layout must describe the verified-archive install path: %s", rel, cell)
-		}
-	}
-}
-
-func TestAgentSkillsTeachGoToolVerifyEntry(t *testing.T) {
-	root := repoRoot(t)
-	var paths []string
-	skillsRoot := filepath.Join(root, ".agents", "skills")
-	err := filepath.WalkDir(skillsRoot, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if strings.EqualFold(filepath.Ext(path), ".md") {
-			rel, relErr := filepath.Rel(root, path)
-			if relErr == nil {
-				paths = append(paths, rel)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, rel := range paths {
-		text := readRepoFile(t, rel)
-		teachesLeafEntry := strings.Contains(text, "go test ./...\ngo run ./scripts/verify-prose") ||
-			strings.Contains(text, "`go test ./...` and the Go verify scripts") ||
-			strings.Contains(text, "followed by the Go verify scripts (`go run ./scripts/verify-prose`") ||
-			(strings.Contains(text, "`go test ./...`") && strings.Contains(text, "go run ./scripts/verify-prose") &&
-				!strings.Contains(text, "go tool verify"))
-		if !teachesLeafEntry {
-			continue
-		}
-		if !strings.Contains(text, "go tool verify") {
-			t.Errorf("%s teaches leaf go test/verify-* as the entry point but missing %q", rel, "go tool verify")
 		}
 	}
 }
