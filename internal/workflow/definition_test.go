@@ -100,3 +100,29 @@ steps:
 		t.Fatalf("got %v, want duplicate step id", err)
 	}
 }
+
+func TestParseWorkflowTextRejectsPaneOpenTemplates(t *testing.T) {
+	step := func(input, pane string) string {
+		return "version: v1alpha1\ninputs:\n" + input + "steps:\n  - agent: hi\n    pane: " + pane + "\n"
+	}
+	const places = "  place: {type: choice, options: [tab, beside]}\n"
+	for _, test := range []struct {
+		name, text, want string
+	}{
+		{"step result", "version: v1alpha1\nsteps:\n  - id: a\n    run: \"true\"\n  - agent: hi\n    pane: {open: '{{steps.a.stdout}}'}\n", "pane.open must reference an unconditional closed static choice input"},
+		{"conditional input", step("  mode: [a, b]\n  place: {type: choice, options: [tab], when: '{{inputs.mode}} == \"a\"'}\n", "{open: '{{inputs.place}}'}"), "pane.open input 'place' must be unconditional"},
+		{"open choice", step("  place: {type: choice, options: [tab], allow_custom: true}\n", "{open: '{{inputs.place}}'}"), "pane.open input 'place' must be a closed static choice"},
+		{"text input", step("  place: text\n", "{open: '{{inputs.place}}'}"), "pane.open input 'place' must be a closed static choice"},
+		{"dynamic choice", step("  place: {type: choice, options: {run: [echo, tab]}}\n", "{open: '{{inputs.place}}'}"), "pane.open input 'place' must be a closed static choice"},
+		{"bad option", step("  place: [tab, left]\n", "{open: '{{inputs.place}}'}"), "pane.open input 'place' options must be tab, beside, or below"},
+		{"tab size", step(places, "{open: '{{inputs.place}}', size: 40}"), "pane.target/size are invalid when pane.open can resolve to tab"},
+		{"split workspace", step(places, "{open: '{{inputs.place}}', workspace: main}"), "pane.workspace is invalid when pane.open can resolve to beside/below"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := ParseWorkflowText("pane", test.text, config.Config{}, t.TempDir())
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("got %v, want %q", err, test.want)
+			}
+		})
+	}
+}

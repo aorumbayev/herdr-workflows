@@ -1,5 +1,5 @@
-// Command install-dev compiles the working tree, connects it as a Herdr plugin, operates
-// native setup, and reloads Herdr config. The command is portable. It does not use shell redirects.
+// Command install-dev installs the repository git hooks, compiles the working tree,
+// connects it as a Herdr plugin, operates native setup, and reloads Herdr config. The command is portable. It does not use shell redirects.
 //
 // Usage: go run ./scripts/install-dev
 package main
@@ -23,6 +23,9 @@ func main() {
 func run() error {
 	root, err := reporoot.Find()
 	if err != nil {
+		return err
+	}
+	if err := runCmd(root, "git hooks", "git", []string{"config", "core.hooksPath", ".githooks"}); err != nil {
 		return err
 	}
 	herdr := os.Getenv("HERDR_BIN_PATH")

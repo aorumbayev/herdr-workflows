@@ -778,11 +778,11 @@ func ListWorkflows(repoRoot string, supplied ...config.Config) ([]ListEntry, err
 		}
 		entry.Hidden, entry.Title, entry.Description = workflow.Hidden, workflow.Title, workflow.Description
 		entry.Inputs, entry.RepoOwned = workflow.Inputs, workflow.RepoOwned
-		entry.DynamicOptions = slices.ContainsFunc(workflow.Inputs, func(input InputSpec) bool { return input.DynamicOptions != nil })
 		flags := AnalyzeResolvedSensitivity(Document{
 			Steps: workflow.Steps, Returns: workflow.Returns, OnFailure: workflow.OnFailure,
 		}, workflow.Name, repoRoot)
-		entry.HasCommands, entry.NeedsTranscript = flags.HasCommands, flags.HasTranscript || workflow.NeedsTranscript
+		dynamic := slices.ContainsFunc(workflow.Inputs, func(input InputSpec) bool { return input.DynamicOptions != nil })
+		entry.HasCommands, entry.NeedsTranscript = flags.HasCommands || dynamic, flags.HasTranscript || workflow.NeedsTranscript
 		entry.SensitiveMethods, entry.UnresolvedChildren = flags.SensitiveMethods, flags.UnresolvedChildren
 		result = append(result, entry)
 	}

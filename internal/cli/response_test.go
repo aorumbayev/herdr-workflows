@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/aorumbayev/herdr-workflows/internal/caps"
 )
 
 func writeResponseFile(t *testing.T, root, name, body string) string {
@@ -61,6 +63,18 @@ func TestResponseCheckMissingOrEmptyFile(t *testing.T) {
 	missing := runCLI([]string{"response", "check", gone, "--one-of", "APPROVE"}, root, nil, "")
 	if missing.code != 1 || !strings.Contains(missing.stderr, gone) {
 		t.Fatalf("missing file: code=%d stderr=%q", missing.code, missing.stderr)
+	}
+}
+
+func TestResponseCheckRejectsFileOverCaptureCap(t *testing.T) {
+	root := t.TempDir()
+	file := writeResponseFile(t, root, "response.txt", "APPROVE\n")
+	if err := os.Truncate(file, caps.CaptureByteLimit+1); err != nil {
+		t.Fatal(err)
+	}
+	got := runCLI([]string{"response", "check", file, "--one-of", "APPROVE"}, root, nil, "")
+	if got.code != 1 || !strings.Contains(got.stderr, "response file exceeded 8388608 byte limit") {
+		t.Fatalf("code=%d stderr=%q", got.code, got.stderr)
 	}
 }
 

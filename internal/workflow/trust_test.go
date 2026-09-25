@@ -136,3 +136,17 @@ func TestHomeRepoRootKeepsGlobalSource(t *testing.T) {
 		t.Fatalf("entry = %+v, want global and not repo-owned", entries[0])
 	}
 }
+
+func TestListWorkflowsFlagsDynamicChoiceAsCommand(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", t.TempDir())
+	writeWorkflow(t, root, "pick", trustVersion+"inputs:\n  branch:\n    type: choice\n    options: {run: [git, branch]}\nsteps:\n  - agent: 'use {{inputs.branch}}'\n")
+	entries, err := ListWorkflows(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Error != "" || !entries[0].HasCommands {
+		t.Fatalf("entries = %+v, want one entry with HasCommands", entries)
+	}
+}

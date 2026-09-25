@@ -3,6 +3,7 @@ package workflow
 import (
 	"fmt"
 	"maps"
+	"math"
 	"regexp"
 	"slices"
 	"strconv"
@@ -83,16 +84,12 @@ func ParseDuration(text string) (time.Duration, error) {
 	if m == nil {
 		return 0, &LoadError{fmt.Sprintf("duration must be positive <integer><ms|s|m|h> (got '%s')", text)}
 	}
-	n, _ := strconv.Atoi(m[1])
-	switch m[2] {
-	case "ms":
-		return time.Duration(n) * time.Millisecond, nil
-	case "s":
-		return time.Duration(n) * time.Second, nil
-	case "m":
-		return time.Duration(n) * time.Minute, nil
+	unit := map[string]time.Duration{"ms": time.Millisecond, "s": time.Second, "m": time.Minute, "h": time.Hour}[m[2]]
+	n, err := strconv.ParseInt(m[1], 10, 64)
+	if err != nil || n > math.MaxInt64/int64(unit) {
+		return 0, &LoadError{fmt.Sprintf("duration is too large (got '%s')", text)}
 	}
-	return time.Duration(n) * time.Hour, nil
+	return time.Duration(n) * unit, nil
 }
 
 // checker collects schema issues while the loader reads a workflow.
@@ -258,6 +255,8 @@ func (s *validationScope) checkDuration(m map[string]any, key string) {
 	}
 	if !durationRE.MatchString(text) {
 		s.add("duration must be positive <integer><ms|s|m|h>", key)
+	} else if _, err := ParseDuration(text); err != nil {
+		s.add("duration is too large", key)
 	}
 }
 

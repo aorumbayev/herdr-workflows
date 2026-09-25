@@ -64,7 +64,7 @@ Open the console from the picker: `Ctrl+P`, then `c`, then a placement. `beside`
 | `hwf response check <file>`            | Checks the verdict line of a response file. `--one-of TOKEN,TOKEN`    |
 | `hwf help [command]`, `hwf --version`  | Shows help, or prints the plugin version                              |
 
-`hwf` and `herdr-workflows` are the same command. Bare `hwf` prints help and exits nonzero. Only `launch`, `run`, `picker`, and `console` contact herdr. The other commands never do, so an agent inside a turn can call them.
+`hwf` and `herdr-workflows` are the same command. Bare `hwf` prints help and exits nonzero. `workflow import`, `skills`, `scratch`, `response check`, `help`, and `--version` never call herdr, so an agent inside a turn can call them. `init` without `--global` also never calls herdr. The other commands call herdr, or run `herdr plugin config-dir` to find the global config when `HERDR_PLUGIN_CONFIG_DIR` is not set.
 
 `hwf response check` is the offline oracle behind [`expect:`](/reference#expect). A match exits 0 and prints the token. A mismatch exits nonzero and names the expected tokens. A missing or empty file exits nonzero and names the path. The command never writes to the file.
 
