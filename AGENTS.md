@@ -4,7 +4,7 @@ herdr ≥ 0.8.2 plugin. It sequences short linear YAML workflows (`agent` / `run
 
 Workflow format is `version: v1alpha1`. The package stays semver `0.x`. A later incompatible alpha increments `v1alphaN`. Workflow YAML never declares a herdr version. The plugin manifest and CLI own minimum version and protocol enforcement.
 
-Invariants of record are the loader, `docs/workflow.schema.json` and the embed schema, and the tests. Code is current behavior. The user-facing contract lives in `docs/` and `README.md`. herdr runtime behavior comes from `.agents/references/herdr/docs/next/website/src/content/docs/` with the checkout detached at the release tag (currently v0.8.2). Never invent it from memory. Clone and update that checkout with `.agents/references/AGENTS.md`.
+Invariants of record are the loader, `docs/workflow.schema.json`, and the tests. Code is current behavior. The user-facing contract lives in `docs/` and `README.md`. herdr runtime behavior comes from `.agents/references/herdr/docs/next/website/src/content/docs/` with the checkout detached at the release tag (currently v0.8.2). Never invent it from memory. Clone and update that checkout with `.agents/references/AGENTS.md`.
 
 Before behavior work, read `CONTRIBUTING.md`.
 
@@ -15,7 +15,6 @@ go tool verify                             # every host-feasible check (same as 
 go tool verify -fast                       # pre-commit
 go run ./scripts/generate-workflow-schema  # regenerate docs/workflow.schema.json
 go run ./scripts/gen-herdr-methods         # regenerate internal/host/herdr_methods.gen.go
-go run ./scripts/sync-embed                # copy skills/, manifest, logo, schema into embed/
 go run ./scripts/install-dev               # compile + herdr plugin link + keybindings + reload
 ```
 
@@ -26,13 +25,13 @@ go run ./scripts/install-dev               # compile + herdr plugin link + keybi
 
 ## Layout
 
-Go packages under `internal/` and `embed/` (schema, logo, and skill catalog bytes). Test the Go package whose interface you changed.
+Go packages under `internal/`, plus the root `assets` package, which embeds the manifest, logo, schema, and skill catalog in place. Test the Go package whose interface you changed.
 
 | Path                                         | Role                                                                                                          |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `main.go`                                    | plugin binary entry                                                                                           |
+| `cmd/herdr-workflows/`                       | plugin binary entry                                                                                           |
 | `internal/cli/`                              | Cobra commands, terminal I/O, `hwf init` / `setup`                                                            |
-| `embed/` + `internal/cli/`                   | embedded skill catalog (`assets`) and `hwf skills` registry/show formatting                                   |
+| `skills.go` + `internal/cli/`                | embedded skill catalog (`assets`) and `hwf skills` registry/show formatting                                   |
 | `internal/update/`                           | GitHub release check, managed-plugin `hwf update`, and distribution artifact names/checksums |
 | `internal/picker/`                           | picker TUI, workflow rows, ctrl+p palette, update indicator, Parity Baseline                                  |
 | `internal/console/`                          | full-screen console TUI, workflows/runs lists, run debug tabs, Parity Baseline                                |
@@ -92,20 +91,9 @@ Trace the real flow end to end before editing. Question speculative need. Reuse 
 
 ## Docs style
 
-Prose style of record is `CONTRIBUTING.md` "Documentation style" (Simplified Technical English). This section is only the machine-checked subset.
+Prose style of record is `CONTRIBUTING.md` "Documentation style" (Simplified Technical English).
 
-`go run ./scripts/verify-prose` scans `README.md`, `CONTRIBUTING.md`, `AGENTS.md`, and every `*.md` under `docs/`, `skills/`, and `.agents/skills/`, and fails on:
-
-- **UI verbs** — `select` not `click`/`click on`/`double-click`/`tap`. `press` not `hit`. `enter` not `key in`. `sign in`/`sign out` not `log in`/`log out`.
-- **Wordy phrases** — `to` not `in order to`. `because` not `due to the fact that`. Also `at this point in time`, `in the event that`, `with regard to`, `prior to`, `subsequent to`, `utilize`, `leverage`, `facilitate`, `commence`.
-- **Filler** — `simply`, `just <verb>`, `easily`, `quickly`, `smoothly`, `effortlessly`, `please`, `basically`, `actually`, `obviously`, `of course`.
-- **Direction** — no `see above`/`see below`. `more than`/`less than`, not `over`/`under` before a number.
-- **Anthropomorphism** — `herdr reports`/`requires`/`reads`, never `thinks`, `wants`, `sees`, `knows`.
-- **Bias-free terms** — `allowlist`/`blocklist`, `primary`/`replica`, `quick check`, `sample data`.
-- **Names and spelling** — `GitHub`, `PowerShell`, `JavaScript`, `TypeScript`, `macOS`. US spelling (`-ize`, `behavior`, `analyze`, `artifact`, `gray`).
-- **Punctuation** — no semicolons in prose, including after a code span.
-
-Code spans, fenced blocks, and link targets are skipped, so a genuine technical term passes inside backticks. A failing run prints every hit with its replacement and reason. Add or relax a rule in `scripts/verify-prose/`, and keep out anything a regex cannot judge without flagging correct prose, which is why `since`, `while`, and em dashes are absent.
+`go run ./scripts/verify-prose` scans `README.md`, `CONTRIBUTING.md`, `AGENTS.md`, and every `*.md` under `docs/`, `skills/`, and `.agents/skills/`. The rules live in `scripts/verify-prose/`. A failing run prints every hit with its replacement and reason. Code spans, fenced blocks, and link targets are skipped. Keep out any rule that a regex cannot judge without flagging correct prose.
 
 ## Chat
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Isolated herdr instance + throwaway git repo for e2e smoke testing herdr-workflows.
-# Limitation: `up` still runs `go build -o bin/herdr-workflows .` and `bin/herdr-workflows setup`
+# Limitation: `up` still runs `go build -o bin/herdr-workflows ./cmd/herdr-workflows` and `bin/herdr-workflows setup`
 # against this checkout, so `bin/herdr-workflows` is shared with the user's live plugin link — not a private binary.
 set -euo pipefail
 
@@ -217,7 +217,7 @@ up() {
   # Always reinstall: the point of the sandbox is testing the current working tree.
   # Limitation: this rebuilds the shared checkout bin/herdr-workflows; the user's live
   # herdr picks up the same binary on its next plugin action. Not sandbox-private.
-  (cd "$PLUGIN_ROOT" && go build -o bin/herdr-workflows .)
+  (cd "$PLUGIN_ROOT" && go build -o bin/herdr-workflows ./cmd/herdr-workflows)
   (cd "$PLUGIN_ROOT" && isolated bin/herdr-workflows setup)
   [ -f "$REPO/.hwf/config.yaml" ] || (cd "$REPO" && isolated hwf init)
   verify

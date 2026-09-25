@@ -14,9 +14,12 @@ Thanks for contributing to herdr-workflows.
 
 ```bash
 go mod download
+git config core.hooksPath .githooks
 ```
 
-Optional live link into herdr:
+The second command turns on the pre-commit and commit-msg hooks in `.githooks/`.
+
+Optional live link into herdr. This command also sets `core.hooksPath`:
 
 ```bash
 go run ./scripts/install-dev

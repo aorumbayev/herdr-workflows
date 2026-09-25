@@ -100,7 +100,7 @@ func TestPickerRequiresTTYAfterProtocol(t *testing.T) {
 
 func TestCompiledBinaryPickerServesWithoutTSRuntime(t *testing.T) {
 	bin := filepath.Join(t.TempDir(), "herdr-workflows")
-	build := exec.Command("go", "build", "-o", bin, "github.com/aorumbayev/herdr-workflows")
+	build := exec.Command("go", "build", "-o", bin, "github.com/aorumbayev/herdr-workflows/cmd/herdr-workflows")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}

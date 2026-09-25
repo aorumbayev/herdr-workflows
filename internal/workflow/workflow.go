@@ -258,7 +258,6 @@ type ListEntry struct {
 	SensitiveMethods   []string
 	UnresolvedChildren []string
 	Inputs             []InputSpec
-	DynamicOptions     bool
 	RepoOwned          bool
 }
 

@@ -115,10 +115,6 @@ func assertUniqueStepIDs(file string, steps []Step) error {
 	return nil
 }
 
-func globalResultFieldAllowed(field string) bool {
-	return host.IsGlobalResultDotPath(field)
-}
-
 func unknownField(file string, step int, key, kind string, producer stepProducer, segments []string) error {
 	return bail(file, step, key, fmt.Sprintf("unknown %s result field '%s' on step '%s'", kind, strings.Join(segments, "."), producer.ID))
 }
@@ -151,7 +147,7 @@ func assertAgentField(file string, step int, key string, producer stepProducer, 
 		return nil
 	}
 	if head == AgentInfoField {
-		if len(segments) == 1 || globalResultFieldAllowed(strings.Join(segments, ".")) {
+		if len(segments) == 1 || host.IsGlobalResultDotPath(strings.Join(segments, ".")) {
 			return nil
 		}
 	}
@@ -448,17 +444,6 @@ func assertTemplates(file string, step int, key, text string, opts templateOptio
 	return nil
 }
 
-func assertValueTemplates(file string, step int, key string, value any, opts templateOptions) error {
-	var result error
-	WalkValueStrings(value, key, func(text, path string) any {
-		if result == nil {
-			result = assertTemplates(file, step, path, text, opts)
-		}
-		return text
-	})
-	return result
-}
-
 func assertUsingProfile(file string, step int, key, using string, profiles map[string]bool) error {
 	if strings.Contains(using, "{{") || profiles[using] {
 		return nil
@@ -472,51 +457,6 @@ func assertUsingProfile(file string, step int, key, using string, profiles map[s
 		return bail(file, step, key, fmt.Sprintf("unknown profile '%s' (no profiles configured)", using))
 	}
 	return bail(file, step, key, fmt.Sprintf("unknown profile '%s' (available: %s)", using, strings.Join(available, ", ")))
-}
-
-func assertCwdEnvPane(file string, step int, action Action, opts templateOptions, key func(string) string) error {
-	var cwd string
-	var env map[string]string
-	var pane *PaneSpec
-	switch value := action.(type) {
-	case AgentAction:
-		cwd, env, pane = value.Cwd, value.Env, value.Pane
-	case RunAction:
-		cwd, env, pane = value.Cwd, value.Env, value.Pane
-	}
-	if cwd != "" {
-		if err := assertTemplates(file, step, key("cwd"), cwd, opts); err != nil {
-			return err
-		}
-	}
-	if env != nil {
-		values := make(map[string]any, len(env))
-		for name, value := range env {
-			values[name] = value
-		}
-		if err := assertValueTemplates(file, step, key("env"), values, opts); err != nil {
-			return err
-		}
-	}
-	//nolint:nestif // pane fields each have an independent template path.
-	if pane != nil {
-		if pane.Anchor != "" {
-			if err := assertTemplates(file, step, key("pane.target"), pane.Anchor, opts); err != nil {
-				return err
-			}
-		}
-		if pane.Workspace != "" {
-			if err := assertTemplates(file, step, key("pane.workspace"), pane.Workspace, opts); err != nil {
-				return err
-			}
-		}
-		if strings.Contains(pane.Open, "{{") {
-			if err := assertPaneOpenTemplate(file, step, key("pane.open"), pane.Open, pane, opts); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }
 
 var paneOpenValues = map[string]bool{"tab": true, "beside": true, "below": true}
@@ -562,45 +502,34 @@ func assertActionSites(file string, step int, action Action, opts templateOption
 		}
 		return prefix + "." + name
 	}
+	var pane *PaneSpec
 	switch value := action.(type) {
 	case AgentAction:
-		if err := assertTemplates(file, step, key("agent"), value.Prompt, opts); err != nil {
-			return err
-		}
+		pane = value.Pane
 		if value.Using != "" {
-			if err := assertTemplates(file, step, key("using"), value.Using, opts); err != nil {
-				return err
-			}
 			if err := assertUsingProfile(file, step, key("using"), value.Using, profiles); err != nil {
 				return err
 			}
 		}
-		if value.Target != "" {
-			if err := assertTemplates(file, step, key("target"), value.Target, opts); err != nil {
-				return err
-			}
-		}
-		return assertCwdEnvPane(file, step, value, opts, key)
 	case RunAction:
-		if value.Payload.IsArgv() {
-			for i, element := range value.Payload.Argv {
-				if err := assertTemplates(file, step, key(fmt.Sprintf("run[%d]", i)), element, opts); err != nil {
-					return err
-				}
-			}
-		} else if step != 0 {
+		pane = value.Pane
+		if !value.Payload.IsArgv() && step != 0 {
 			if err := assertShellHwfGuards(file, step, value.Payload.Command, opts); err != nil {
 				return err
 			}
 		}
-		return assertCwdEnvPane(file, step, value, opts, key)
-	case HerdrAction:
-		if value.Params != nil {
-			return assertValueTemplates(file, step, key("params"), value.Params, opts)
+	}
+	for _, site := range actionTemplateSites(action) {
+		var err error
+		if site.key == "pane.open" {
+			if strings.Contains(site.text, "{{") {
+				err = assertPaneOpenTemplate(file, step, key(site.key), site.text, pane, opts)
+			}
+		} else {
+			err = assertTemplates(file, step, key(site.key), site.text, opts)
 		}
-	case WorkflowAction:
-		if value.Inputs != nil {
-			return assertValueTemplates(file, step, key("inputs"), value.Inputs, opts)
+		if err != nil {
+			return err
 		}
 	}
 	return nil

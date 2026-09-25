@@ -25,7 +25,7 @@ func TestCheckWithinLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeLines(t, filepath.Join(dir, "ok.go"), 2500)
-	code, stdout, _ := Check(root)
+	code, stdout := Check(root)
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d", code)
 	}
@@ -41,7 +41,7 @@ func TestCheckOverLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeLines(t, filepath.Join(dir, "big.go"), 2501)
-	code, stdout, _ := Check(root)
+	code, stdout := Check(root)
 	if code != 1 {
 		t.Fatalf("expected exit 1, got %d stdout=%q", code, stdout)
 	}
@@ -60,7 +60,7 @@ func TestCheckGenGoExempt(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeLines(t, filepath.Join(dir, "table.gen.go"), 2501)
-	code, stdout, _ := Check(root)
+	code, stdout := Check(root)
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d stdout=%q", code, stdout)
 	}
@@ -72,7 +72,7 @@ func TestCheckGenGoExempt(t *testing.T) {
 func TestCheckMainGoScanned(t *testing.T) {
 	root := t.TempDir()
 	writeLines(t, filepath.Join(root, "main.go"), 2501)
-	code, stdout, _ := Check(root)
+	code, stdout := Check(root)
 	if code != 1 {
 		t.Fatalf("expected exit 1, got %d", code)
 	}

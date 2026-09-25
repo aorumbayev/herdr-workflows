@@ -4,11 +4,6 @@ node_modules/
 # build / compile
 bin/herdr-workflows
 dist/
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
 *.test
 *.out
 
@@ -22,10 +17,7 @@ dist/
 .DS_Store
 Thumbs.db
 
-# test / coverage / caches
-coverage/
-coverage.out
-*.lcov
+# caches
 .cache/
 
 # go workspaces
@@ -54,9 +46,6 @@ docs/.vitepress/dist/
 # local Herdr and other reference checkouts (tracked instructions only)
 .agents/references/**
 !.agents/references/AGENTS.md
-
-# leftover untracked clone path from older layouts
-/references/
 
 # playwright MCP session artifacts
 /.playwright-mcp/

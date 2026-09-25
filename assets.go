@@ -1,7 +1,5 @@
-// Package assets holds files embedded into the binary. The package
-// embeds the plugin manifest so platform code can read the product
-// version, plus schema and skill copies so go:embed can reach them
-// (patterns cannot leave this directory).
+// Package assets holds files embedded into the binary: the plugin manifest,
+// the logo, the workflow schema, and the bundled skills.
 package assets
 
 import (
@@ -9,16 +7,13 @@ import (
 	"strings"
 )
 
-// herdr-plugin.toml is a generated copy of the repository-root
-// manifest. Run `go run ./scripts/sync-embed` after editing the root.
-//
 //go:embed herdr-plugin.toml
 var manifest string
 
-//go:embed logo.svg
+//go:embed docs/assets/logo.svg
 var LogoSVG string
 
-//go:embed workflow.schema.json
+//go:embed docs/workflow.schema.json
 var WorkflowSchemaJSON string
 
 // ManifestVersion reports the plugin version declared by the manifest.

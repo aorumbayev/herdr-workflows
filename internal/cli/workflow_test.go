@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	assets "github.com/aorumbayev/herdr-workflows/embed"
+	assets "github.com/aorumbayev/herdr-workflows"
 	"github.com/aorumbayev/herdr-workflows/internal/update"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )

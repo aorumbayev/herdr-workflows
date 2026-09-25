@@ -247,7 +247,7 @@ start_server() {
 build_go_private() {
   # Sandbox-private binary — does not mutate checkout bin/herdr-workflows.
   mkdir -p "$GO_ROOT/bin"
-  (cd "$PLUGIN_ROOT" && go build -o "$GO_ROOT/bin/herdr-workflows" .)
+  (cd "$PLUGIN_ROOT" && go build -o "$GO_ROOT/bin/herdr-workflows" ./cmd/herdr-workflows)
   ln -sfn herdr-workflows "$GO_ROOT/bin/hwf"
 }
 

@@ -309,7 +309,7 @@ func TestInstallKeybindingsIdempotent(t *testing.T) {
 	}
 	t.Setenv("HERDR_CONFIG_PATH", path)
 	t.Setenv("HERDR_BIN_PATH", herdrBin)
-	first := InstallKeybindings(KeybindingInstallOpts{})
+	first := InstallKeybindings()
 	joined := strings.Join(first.Messages, "\n")
 	if !strings.Contains(joined, "herdr-workflows.launch") {
 		t.Fatalf("messages = %q", joined)
@@ -342,7 +342,7 @@ func TestInstallKeybindingsIdempotent(t *testing.T) {
 	if err := os.WriteFile(logPath, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	again := InstallKeybindings(KeybindingInstallOpts{})
+	again := InstallKeybindings()
 	if !strings.Contains(strings.Join(again.Messages, "\n"), "already present") {
 		t.Fatalf("again messages = %v", again.Messages)
 	}
@@ -394,7 +394,7 @@ description = "view completed herdr-workflows job results"
 	}
 	t.Setenv("HERDR_CONFIG_PATH", path)
 	t.Setenv("HERDR_BIN_PATH", herdrBin)
-	result := InstallKeybindings(KeybindingInstallOpts{})
+	result := InstallKeybindings()
 	if !strings.Contains(strings.Join(result.Messages, "\n"), "removed dead") {
 		t.Fatalf("messages = %v", result.Messages)
 	}
@@ -415,7 +415,7 @@ description = "view completed herdr-workflows job results"
 	if err != nil || string(bak) != stale {
 		t.Fatalf("backup = %q err=%v", bak, err)
 	}
-	again := InstallKeybindings(KeybindingInstallOpts{})
+	again := InstallKeybindings()
 	if !strings.Contains(strings.Join(again.Messages, "\n"), "already present") {
 		t.Fatalf("again = %v", again.Messages)
 	}
@@ -449,12 +449,9 @@ func TestInstallKeybindingsMissingValidator(t *testing.T) {
 	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	reload := false
 	t.Setenv("HERDR_CONFIG_PATH", path)
 	t.Setenv("HERDR_BIN_PATH", filepath.Join(dir, "missing-herdr"))
-	result := InstallKeybindings(KeybindingInstallOpts{
-		Reload: &reload,
-	})
+	result := InstallKeybindings()
 	if !strings.Contains(strings.Join(result.Messages, "\n"), "config check failed") {
 		t.Fatalf("messages = %v", result.Messages)
 	}
@@ -488,7 +485,7 @@ exit 1
 	}
 	t.Setenv("HERDR_CONFIG_PATH", path)
 	t.Setenv("HERDR_BIN_PATH", herdrBin)
-	result := InstallKeybindings(KeybindingInstallOpts{})
+	result := InstallKeybindings()
 	joined := strings.Join(result.Messages, "\n")
 	for _, want := range []string{"herdr-workflows.launch", "reload-config failed", "may not have loaded the binding"} {
 		if !strings.Contains(joined, want) {

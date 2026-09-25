@@ -1,5 +1,5 @@
-// Command generate-workflow-schema writes docs/workflow.schema.json and the
-// embed/workflow.schema.json copy from the Go schema model. Start this command from the
+// Command generate-workflow-schema writes docs/workflow.schema.json from the Go
+// schema model. Start this command from the
 // repository root with:
 //
 //	go run ./scripts/generate-workflow-schema
@@ -33,8 +33,8 @@ const (
 
 func minLength(value uint64) *uint64 { return &value }
 
-func stringSchema(min uint64) *jsonschema.Schema {
-	return &jsonschema.Schema{Type: "string", MinLength: minLength(min)}
+func stringSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{Type: "string", MinLength: minLength(1)}
 }
 
 func arraySchema(item *jsonschema.Schema, min uint64) *jsonschema.Schema {
@@ -59,7 +59,7 @@ type RunValue []string
 
 func (RunValue) JSONSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{AnyOf: []*jsonschema.Schema{
-		stringSchema(1),
+		stringSchema(),
 		arraySchema(&jsonschema.Schema{Type: "string"}, 1),
 	}}
 }
@@ -68,8 +68,8 @@ type WhenValue struct{}
 
 func (WhenValue) JSONSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{AnyOf: []*jsonschema.Schema{
-		stringSchema(1),
-		arraySchema(stringSchema(1), 1),
+		stringSchema(),
+		arraySchema(stringSchema(), 1),
 	}}
 }
 
@@ -123,13 +123,13 @@ func (SuccessCodes) JSONSchema() *jsonschema.Schema {
 type OptionsValue struct{}
 
 func (OptionsValue) JSONSchema() *jsonschema.Schema {
-	static := arraySchema(stringSchema(1), 1)
+	static := arraySchema(stringSchema(), 1)
 	properties := jsonschema.NewProperties()
 	properties.Set("run", &jsonschema.Schema{
 		Description: "argv run from the repo root to discover the options, one per line. Elements may template `{{inputs.<earlier>}}` to cascade from an earlier answer; `steps` and `context` roots are load errors. Treat it as read-only. Capped at 10s, 1,000 options, and 8 MiB.",
 		Type:        "array",
 		MinItems:    minLength(1),
-		Items:       stringSchema(1),
+		Items:       stringSchema(),
 	})
 	dynamic := &jsonschema.Schema{
 		Type:       "object",
@@ -194,7 +194,7 @@ func (InputRecord) JSONSchema() *jsonschema.Schema {
 			Description: "Shorthand for a closed static choice over these values.",
 			Type:        "array",
 			MinItems:    minLength(1),
-			Items:       stringSchema(1),
+			Items:       stringSchema(),
 		},
 		{
 			Type:                 "object",
@@ -217,7 +217,7 @@ func (ReturnsValue) JSONSchema() *jsonschema.Schema {
 			Description:          "Named templates, which become the fields of the result.",
 			Type:                 "object",
 			PropertyNames:        &jsonschema.Schema{Type: "string", Pattern: identPattern},
-			AdditionalProperties: stringSchema(1),
+			AdditionalProperties: stringSchema(),
 		},
 	}}
 }
@@ -409,16 +409,18 @@ func writeSchema(path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(data, '\n'), 0o644)
+	data = append(data, '\n')
+	if current, err := os.ReadFile(path); err == nil && bytes.Equal(current, data) {
+		return nil
+	}
+	return os.WriteFile(path, data, 0o644)
 }
 
 func main() {
-	for _, dir := range []string{"docs", "embed"} {
-		path := filepath.Join(dir, "workflow.schema.json")
-		if err := writeSchema(path); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		fmt.Printf("wrote %s\n", path)
+	path := filepath.Join("docs", "workflow.schema.json")
+	if err := writeSchema(path); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
+	fmt.Printf("wrote %s\n", path)
 }

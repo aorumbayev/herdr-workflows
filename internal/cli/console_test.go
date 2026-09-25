@@ -1,12 +1,11 @@
 package cli
 
 import (
-	"errors"
 	"os"
 	"strings"
 	"testing"
 
-	assets "github.com/aorumbayev/herdr-workflows/embed"
+	assets "github.com/aorumbayev/herdr-workflows"
 	"github.com/aorumbayev/herdr-workflows/internal/host"
 	"github.com/spf13/cobra"
 )
@@ -145,17 +144,5 @@ func TestConsolePlacementSurfacesPaneOpenFailureInsideHerdr(t *testing.T) {
 	}
 	if called {
 		t.Fatal("must not fall back to in-process when herdr is reachable")
-	}
-}
-
-func TestPaneHostUnavailableOnlyMatchesTransportLoss(t *testing.T) {
-	if !paneHostUnavailable(&host.HerdrError{Code: "no_socket"}) {
-		t.Fatal("no_socket must allow in-process fallback")
-	}
-	if paneHostUnavailable(&host.HerdrError{Code: "pane_not_found"}) {
-		t.Fatal("pane_not_found must surface instead of falling back")
-	}
-	if paneHostUnavailable(errors.New("plain pane failure")) {
-		t.Fatal("plain pane failure must surface instead of falling back")
 	}
 }

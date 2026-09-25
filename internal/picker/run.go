@@ -11,10 +11,7 @@ import (
 
 // RunScreen starts the picker with Prepare, FilterInput, and a background update check.
 func RunScreen(opts Options) (int, error) {
-	check := opts.CheckLatestRelease
-	if check == nil {
-		check = DefaultPickerReleaseCheck()
-	}
+	check := DefaultPickerReleaseCheck()
 	if opts.CopyClipboard == nil {
 		opts.CopyClipboard = tui.CopyToClipboard
 	}

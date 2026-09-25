@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"sync"
 
-	assets "github.com/aorumbayev/herdr-workflows/embed"
+	assets "github.com/aorumbayev/herdr-workflows"
 )
 
 // PlatformName is one of the two native platforms.

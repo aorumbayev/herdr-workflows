@@ -17,7 +17,7 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	hwfBinary = filepath.Join(os.TempDir(), fmt.Sprintf("hwf-e2e-%d", os.Getpid()))
-	build := exec.Command("go", "build", "-o", hwfBinary, ".")
+	build := exec.Command("go", "build", "-o", hwfBinary, "./cmd/herdr-workflows")
 	build.Dir = root
 	if out, err := build.CombinedOutput(); err != nil {
 		fmt.Fprintf(os.Stderr, "e2e: go build failed: %v\n%s\n", err, out)

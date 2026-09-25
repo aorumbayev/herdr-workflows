@@ -33,8 +33,8 @@ line of real output.
 ignore, skipping a test, or widening a type to make the gate green is itself a critical finding.
 See [criteria-risk.md](criteria-risk.md).
 
-**5. Three layers, one truth.** Invariants of record are the loader, `docs/workflow.schema.json` and the
-embed schema, and the tests. Code is current behavior. The user-facing contract lives in `docs/` and
+**5. Three layers, one truth.** Invariants of record are the loader, `docs/workflow.schema.json`,
+and the tests. Code is current behavior. The user-facing contract lives in `docs/` and
 `README.md`. Hard constraints in `AGENTS.md` are a short agent index — a bullet exists only when a
 machine already owns the same rule. When layers disagree, the finding must name **which one is wrong**,
 not merely that they differ.

@@ -41,8 +41,6 @@ linters:
               desc: platform must not import surfaces
             - pkg: github.com/aorumbayev/herdr-workflows/internal/runsbrowser
               desc: platform must not import surfaces
-            - pkg: github.com/aorumbayev/herdr-workflows/internal/tui
-              desc: tui is importable only by picker/console/runsbrowser
         domain-below-surfaces:
           files:
             - "**/internal/workflow/**"
@@ -58,8 +56,6 @@ linters:
               desc: domain must not import surfaces
             - pkg: github.com/aorumbayev/herdr-workflows/internal/runsbrowser
               desc: domain must not import surfaces
-            - pkg: github.com/aorumbayev/herdr-workflows/internal/tui
-              desc: tui is importable only by picker/console/runsbrowser
         tui-only-picker-console-runsbrowser:
           files:
             - $all

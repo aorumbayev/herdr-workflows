@@ -415,7 +415,7 @@ func TestFormatListFilterEdgeSpansTheFullWidth(t *testing.T) {
 	// The update hint shares the field row only. Cutting the edges would tear
 	// two rules that have nothing beside them.
 	for _, width := range []int{20, 80} {
-		if got := FormatListFilterEdge(width); tui.Columns(got) != width {
+		if got := tui.FormatFieldEdge(width); tui.Columns(got) != width {
 			t.Fatalf("edge at width %d = %d columns", width, tui.Columns(got))
 		}
 	}

@@ -289,14 +289,14 @@ func TestUnsafeSnapshotFileACLIsUnavailable(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("posix modes")
 	}
-	_, checkout := testWriterEnv(t)
+	state, checkout := testWriterEnv(t)
 	w := NewWriter()
 	defer w.Dispose()
 	if w.Claim(ClaimMeta{Workflow: "demo", Source: "repo", CheckoutRoot: checkout}).State != "claimed" {
 		t.Fatal("claim")
 	}
 	w.Finalize("succeeded", FinalizeOpts{})
-	if err := os.Chmod(historyDBPath(), 0o644); err != nil {
+	if err := os.Chmod(filepath.Join(state, historyDBName), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	listed := ListRuns(ListFilter{})

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	assets "github.com/aorumbayev/herdr-workflows/embed"
+	assets "github.com/aorumbayev/herdr-workflows"
 	"github.com/aorumbayev/herdr-workflows/internal/host"
 )
 

@@ -140,6 +140,11 @@ func analyzeWorkflowSensitivity(raw Document) Sensitivity {
 	if _, ok := raw.OnFailure.(RunAction); ok {
 		flags.HasCommands = true
 	}
+	for _, input := range raw.Inputs {
+		if declaration, ok := input.Value.(*RawInputMap); ok && declaration.Options != nil && declaration.Options.Dynamic != nil {
+			flags.HasCommands = true
+		}
+	}
 	for _, path := range TemplateRefs(raw.Steps, raw.Returns, raw.OnFailure) {
 		if isSensitiveContextPath(path) {
 			flags.HasTranscript = true

@@ -1,5 +1,5 @@
-// Command install-dev compiles the working tree, connects it as a Herdr plugin, operates
-// native setup, and reloads Herdr config. The command is portable. It does not use shell redirects.
+// Command install-dev installs the repository git hooks, compiles the working tree,
+// connects it as a Herdr plugin, operates native setup, and reloads Herdr config. The command is portable. It does not use shell redirects.
 //
 // Usage: go run ./scripts/install-dev
 package main
@@ -25,6 +25,9 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	if err := runCmd(root, "git hooks", "git", []string{"config", "core.hooksPath", ".githooks"}); err != nil {
+		return err
+	}
 	herdr := os.Getenv("HERDR_BIN_PATH")
 	if herdr == "" {
 		herdr = "herdr"
@@ -32,7 +35,7 @@ func run() error {
 
 	// Unlink fails when no link is there yet. That result is the usual first operation.
 	runCmdIgnoringFailure(root, herdr, []string{"plugin", "unlink", "herdr-workflows"})
-	if err := runCmd(root, "build", "go", []string{"build", "-o", "bin/herdr-workflows", "."}); err != nil {
+	if err := runCmd(root, "build", "go", []string{"build", "-o", "bin/herdr-workflows", "./cmd/herdr-workflows"}); err != nil {
 		return err
 	}
 	if err := runCmd(root, "plugin link", herdr, []string{"plugin", "link", root}); err != nil {

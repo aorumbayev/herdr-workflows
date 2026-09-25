@@ -220,8 +220,8 @@ func TestExpiredRunIsNotResurrectedByALateWrite(t *testing.T) {
 }
 
 func TestOldSchemaDatabaseIsRebuilt(t *testing.T) {
-	_, checkout := testWriterEnv(t)
-	path := historyDBPath()
+	state, checkout := testWriterEnv(t)
+	path := filepath.Join(state, historyDBName)
 	raw, err := sql.Open("sqlite", historyDSN(path))
 	if err != nil {
 		t.Fatal(err)

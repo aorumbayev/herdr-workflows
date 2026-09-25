@@ -18,23 +18,8 @@ func withPluginEnv(t *testing.T) (root, plugin string) {
 	return root, plugin
 }
 
-func TestInitDetectedProfilesUseKnownKinds(t *testing.T) {
-	kinds := map[string]struct{}{}
-	for _, k := range InitSeams.HerdrAgentKinds {
-		kinds[k] = struct{}{}
-	}
-	for name, profile := range InitSeams.DetectProfiles() {
-		if !config.ProfileNameRE.MatchString(name) {
-			t.Fatalf("profile name %q invalid", name)
-		}
-		if _, ok := kinds[profile.Kind]; !ok {
-			t.Fatalf("profile kind %q not in HerdrAgentKinds", profile.Kind)
-		}
-	}
-}
-
 func TestFormatProfilesYamlEmitsKindObjects(t *testing.T) {
-	text := InitSeams.FormatProfilesYaml(ProfilesYAMLInput{
+	text := FormatProfilesYaml(ProfilesYAMLInput{
 		Profiles:       map[string]config.Profile{"claude": {Kind: "claude"}},
 		DefaultProfile: "claude",
 	})

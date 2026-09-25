@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -188,6 +189,19 @@ func TestPreviewFlagsMissingChildren(t *testing.T) {
 	}
 	if !strings.Contains(preview.Text, "missing-child") || !strings.Contains(preview.Text, "not in this bundle") {
 		t.Fatalf("preview text = %q", preview.Text)
+	}
+}
+
+func TestPreviewFlagsDynamicChoiceAsCommand(t *testing.T) {
+	preview, err := PreviewBundle(Bundle{{
+		Name: "pick",
+		YAML: "version: v1alpha1\ninputs:\n  branch:\n    type: choice\n    options: {run: [git, branch]}\nsteps:\n  - agent: 'use {{inputs.branch}}'\n",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(preview.Entries[0].Warnings, "commands") {
+		t.Fatalf("warnings = %v, want commands", preview.Entries[0].Warnings)
 	}
 }
 

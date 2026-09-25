@@ -61,12 +61,11 @@ func Check(root string) (exitCode int, stdout, stderr string) {
 }
 
 func goFiles(root string) ([]string, error) {
-	var paths []string
-	mainPath := filepath.Join(root, "main.go")
-	if info, err := os.Stat(mainPath); err == nil && !info.IsDir() {
-		paths = append(paths, mainPath)
+	paths, err := filepath.Glob(filepath.Join(root, "*.go"))
+	if err != nil {
+		return nil, err
 	}
-	for _, dir := range []string{"internal", "embed", "e2e", "scripts"} {
+	for _, dir := range []string{"cmd", "internal", "e2e", "scripts"} {
 		base := filepath.Join(root, dir)
 		err := filepath.WalkDir(base, func(path string, d os.DirEntry, err error) error {
 			if err != nil {

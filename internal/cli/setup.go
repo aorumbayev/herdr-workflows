@@ -393,13 +393,8 @@ func validates(candidate string) (bool, string) {
 	return strings.Contains(out, "config: ok"), out
 }
 
-// KeybindingInstallOpts sets the options for InstallKeybindings.
-type KeybindingInstallOpts struct {
-	Reload *bool
-}
-
 // InstallKeybindings adds the prefix+k launch binding and removes tables for actions that are no longer in use.
-func InstallKeybindings(opts KeybindingInstallOpts) KeybindingInstallResult {
+func InstallKeybindings() KeybindingInstallResult {
 	path := ResolveHerdrConfigPath()
 	messages := []string{}
 
@@ -472,13 +467,7 @@ func InstallKeybindings(opts KeybindingInstallOpts) KeybindingInstallResult {
 	}
 	messages = append(messages, fmt.Sprintf("%s in %s%s", strings.Join(parts, "; "), path, suffix))
 
-	reload := true
-	if opts.Reload != nil {
-		reload = *opts.Reload
-	}
-	if reload {
-		appendReloadMessage(&messages, path)
-	}
+	appendReloadMessage(&messages, path)
 	return KeybindingInstallResult{Messages: messages, Path: path}
 }
 
@@ -505,13 +494,11 @@ func reloadFailureDetail(stdout, stderr string, code int, runErr error) string {
 
 func runSetup(cmd *cobra.Command, _ []string) error {
 	log := func(line string) { _, _ = fmt.Fprintln(cmd.OutOrStdout(), line) }
-	if err := setupInstall(log); err != nil {
-		log(fmt.Sprintf("skipped setup: %v", err))
-	}
+	setupInstall(log)
 	return nil
 }
 
-func setupInstall(log func(string)) error {
+func setupInstall(log func(string)) {
 	binDir := ResolveBinDir()
 	execPath, err := os.Executable()
 	if err != nil {
@@ -533,9 +520,8 @@ func setupInstall(log func(string)) error {
 		log(fmt.Sprintf("warning: %s is not on PATH — add it to your shell profile", binDir))
 	}
 
-	keys := InstallKeybindings(KeybindingInstallOpts{})
+	keys := InstallKeybindings()
 	for _, line := range keys.Messages {
 		log(line)
 	}
-	return nil
 }

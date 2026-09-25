@@ -74,11 +74,14 @@ func TestParseRawGrammar(t *testing.T) {
 		{"expect empty", "version: v1alpha1\nsteps:\n  - agent: hi\n    expect: {one_of: []}\n", "expected array to have >=1 items"},
 		{"dynamic choice bad root", "version: v1alpha1\ninputs:\n  branch:\n    type: choice\n    options: {run: [git, '{{context.cwd}}']}\nsteps:\n  - run: \"true\"\n", "dynamic choice argv templates may only reference earlier inputs"},
 		{"ready retry", "version: v1alpha1\nsteps:\n  - run: sleep\n    pane: {open: tab}\n    ready_when: /ok/\n    timeout: 1s\n    retry: {attempts: 2}\n", "ready_when: rejects retry"},
+		{"retry delay overflow", "version: v1alpha1\nsteps:\n  - run: sleep\n    retry: {attempts: 2, delay: 9999999999h}\n", "duration is too large"},
+		{"timeout overflow", "version: v1alpha1\nsteps:\n  - run: sleep\n    pane: {open: tab}\n    ready_when: /ok/\n    timeout: 99999999999999999999s\n", "duration is too large"},
 		{"agent retry unknown", "version: v1alpha1\nsteps:\n  - agent: hi\n    retry: {attempts: 2}\n", `Unrecognized key: "retry"`},
 		{"on failure background", "version: v1alpha1\non_failure:\n  run: \"true\"\n  background: true\n  pane: {open: tab}\nsteps:\n  - run: \"true\"\n", "on_failure rejects background"},
 		{"on failure retry", "version: v1alpha1\non_failure:\n  run: \"true\"\n  retry: {attempts: 2}\nsteps:\n  - run: \"true\"\n", "on_failure rejects retry"},
 		{"on failure expect", "version: v1alpha1\non_failure:\n  agent: hi\n  expect: {one_of: [OK, NO]}\nsteps:\n  - run: \"true\"\n", `Unrecognized key: "expect"`},
 		{"unknown template root", "version: v1alpha1\nsteps:\n  - agent: 'see {{foo.bar}}'\n", "invalid template '{{foo.bar}}'"},
+		{"pane name template root", "version: v1alpha1\nsteps:\n  - agent: hi\n    pane: {open: tab, name: 'see {{foo.bar}}'}\n", "invalid template '{{foo.bar}}'"},
 		{"scratch template root", "version: v1alpha1\nsteps:\n  - agent: 'see {{scratch.x}}'\n", "invalid template '{{scratch.x}}'"},
 		{"near miss root", "version: v1alpha1\nsteps:\n  - run: [echo, '{{input.base}}']\n", "invalid template '{{input.base}}'"},
 		{"bare root", "version: v1alpha1\nsteps:\n  - agent: '{{steps}}'\n", "invalid template '{{steps}}'"},
@@ -176,7 +179,7 @@ func TestParseDuration(t *testing.T) {
 			t.Errorf("ParseDuration(%q) = %v, %v, want %v", test.text, got, err, test.want)
 		}
 	}
-	for _, text := range []string{"0s", "5"} {
+	for _, text := range []string{"0s", "5", "99999999999999999999s", "9999999999h", "9223372036855ms"} {
 		if _, err := ParseDuration(text); err == nil {
 			t.Errorf("ParseDuration(%q) accepted", text)
 		}

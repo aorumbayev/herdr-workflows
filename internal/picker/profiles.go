@@ -216,24 +216,7 @@ func (m Model) beginProfileEdit(path, name string) tea.Cmd {
 			return editorDoneMsg{name: name, result: validate()}
 		}
 	}
-	editor, err := workflow.ResolveEditor()
-	if err != nil {
-		return func() tea.Msg {
-			return editorDoneMsg{name: name, result: workflow.ValidateResult{Error: err.Error()}}
-		}
-	}
-	cmd, err := editorCommand(editor, path)
-	if err != nil {
-		return func() tea.Msg {
-			return editorDoneMsg{name: name, result: workflow.ValidateResult{Error: err.Error()}}
-		}
-	}
-	return tea.ExecProcess(cmd, func(err error) tea.Msg {
-		if err != nil {
-			return editorDoneMsg{name: name, result: workflow.ValidateResult{Error: err.Error()}}
-		}
-		return editorDoneMsg{name: name, result: validate()}
-	})
+	return execEditor(path, name, validate)
 }
 
 func (m Model) renderProfiles() string {
