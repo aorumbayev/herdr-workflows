@@ -313,6 +313,12 @@ func TestDetachedLaunchIsRejectedWithoutHistory(t *testing.T) {
 
 	missing := runCLI([]string{"run", "nope", "--detach", "--json"}, root, boardEnv(t, root), "")
 	expectMachineError(t, missing, "launch_rejected")
+	secret := "private-workflow-name"
+	rejected := runCLI([]string{"run", secret, "--detach", "--json"}, root, boardEnv(t, root), "")
+	expectMachineError(t, rejected, "launch_rejected")
+	if strings.Contains(rejected.stdout+rejected.stderr, secret) {
+		t.Fatalf("child error leaked: %q %q", rejected.stdout, rejected.stderr)
+	}
 }
 
 func TestLaunchPayloadRequireHistoryStopsBeforeStepOne(t *testing.T) {

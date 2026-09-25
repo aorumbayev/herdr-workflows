@@ -57,12 +57,8 @@ func runDetachedJSON(cmd *cobra.Command, name string, rawInputs []string) error 
 			default:
 				return machineErr("launch_rejected", ack.Error)
 			}
-		case result := <-handle.Result:
-			detail := result.Detail
-			if detail == "" || result.OK {
-				detail = "run exited before it claimed a history record"
-			}
-			return machineErr("launch_rejected", detail)
+		case <-handle.Result:
+			return machineErr("launch_rejected", "run exited before it claimed a history record")
 		}
 	}
 }
