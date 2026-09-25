@@ -1,6 +1,7 @@
 package picker
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -11,7 +12,7 @@ import (
 func retryPicker(t *testing.T, checkout string, launched *[]LaunchRunOpts, notes *[]string) Model {
 	t.Helper()
 	return New(Options{
-		Entries:  []workflow.ListEntry{{Name: "demo", Source: "repo", File: checkout + "/demo.yaml"}},
+		Entries:  []workflow.ListEntry{{Name: "demo", Source: "repo", File: checkout + "/demo.yaml", HasCommands: true}},
 		RepoRoot: checkout,
 		Width:    100,
 		Height:   24,
@@ -45,6 +46,9 @@ func TestRunsRetryKeysLaunchTheRecordedRun(t *testing.T) {
 			if m.runs.DetailKind() != "starting" {
 				t.Fatalf("detail kind = %q, want starting", m.runs.DetailKind())
 			}
+			if body := m.runs.Body(); !strings.Contains(body, "commands") {
+				t.Fatalf("retry launch must show the consent line:\n%s", body)
+			}
 		})
 	}
 }
@@ -71,5 +75,25 @@ func TestRunsRetryFromFailedRefusesASucceededRun(t *testing.T) {
 	}
 	if len(notes) != 1 || notes[0] != "nothing failed — r retries all steps" {
 		t.Fatalf("notes = %v", notes)
+	}
+}
+
+func TestRunsRetryRefusesAWorkflowMissingFromThisCheckout(t *testing.T) {
+	checkout := t.TempDir()
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", t.TempDir())
+	seedFailedRun(t, checkout)
+	var launched []LaunchRunOpts
+	var notes []string
+	m := New(Options{
+		Entries:   []workflow.ListEntry{{Name: "other", Source: "repo"}},
+		RepoRoot:  checkout,
+		Width:     100,
+		Height:    24,
+		LaunchRun: func(opts LaunchRunOpts) LaunchRunHandle { launched = append(launched, opts); return LaunchRunHandle{} },
+		Notify:    func(_ string, body ...string) error { notes = append(notes, body...); return nil },
+	})
+	apply(m, "tab", "enter", "r")
+	if len(launched) != 0 || len(notes) != 1 || notes[0] != "workflow demo is not loadable in this checkout" {
+		t.Fatalf("launched = %+v notes = %v", launched, notes)
 	}
 }

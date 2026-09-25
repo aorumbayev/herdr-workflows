@@ -126,10 +126,32 @@ func TestLoadRetryRecordRefusesRunsWithoutRetryData(t *testing.T) {
 	}
 }
 
-func TestWriteStepResultRefusesOverCapWithSourceAndLimit(t *testing.T) {
-	testWriterEnv(t)
-	err := writeStepResult(AllocateRunID(), 1, strings.Repeat("x", caps.CaptureByteLimit+1))
-	if err == nil || !strings.Contains(err.Error(), "step 1 result") {
-		t.Fatalf("err = %v, want cap error naming step 1 result", err)
+func TestOverCapRetryDataNamesSourceAndLimitOnLoad(t *testing.T) {
+	_, checkout := testWriterEnv(t)
+	wf := retryWorkflow()
+	rec, err := CreateRunRecorder(CreateRecorderOpts{Workflow: wf, RunID: AllocateRunID(), CheckoutRoot: checkout})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec.(retryPlanner).RecordRetryPlan(workflow.CollectedInputs{Values: map[string]string{}}, []string{"f1", "f2", "f3"})
+	big := &engine.RecorderOutcome{OK: true, Result: map[string]any{"stdout": strings.Repeat("x", caps.CaptureByteLimit)}}
+	_ = rec.StepFinished(wf.Steps[0], 1, 3, "probe", engine.OutcomeSucceeded, big, engine.PhaseMain)
+	_ = rec.Finished(engine.StatusFailed, nil)
+	rec.Dispose()
+	_, err = LoadRetryRecord(rec.RunID(), time.Now())
+	if err == nil || !strings.Contains(err.Error(), "step 1 result") || !strings.Contains(err.Error(), "8388608") {
+		t.Fatalf("err = %v, want cap error naming step 1 result and the limit", err)
+	}
+
+	rec2, err := CreateRunRecorder(CreateRecorderOpts{Workflow: wf, RunID: AllocateRunID(), CheckoutRoot: checkout})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec2.(retryPlanner).RecordRetryPlan(workflow.CollectedInputs{Values: map[string]string{"who": strings.Repeat("y", caps.CaptureByteLimit)}}, nil)
+	_ = rec2.Finished(engine.StatusFailed, nil)
+	rec2.Dispose()
+	_, err = LoadRetryRecord(rec2.RunID(), time.Now())
+	if err == nil || !strings.Contains(err.Error(), "retry plan") || strings.Contains(err.Error(), "predates") {
+		t.Fatalf("err = %v, want cap error naming the retry plan", err)
 	}
 }

@@ -447,6 +447,31 @@ func (s *InputSession) CompleteFromProvided(ctx context.Context, provided map[st
 	return s.Result()
 }
 
+// ActiveInputs keeps recorded values and dynamic domains of inputs that are active under those values.
+func ActiveInputs(def *Definition, values map[string]string, domains map[string][]string) (map[string]string, map[string][]string) {
+	ns := TemplateNamespace{Inputs: map[string]any{}, Steps: map[string]any{}, Context: map[string]any{}}
+	keptValues := map[string]string{}
+	keptDomains := map[string][]string{}
+	for _, input := range def.Inputs {
+		if !EvaluateWhen(input.When, ns) {
+			continue
+		}
+		value, ok := values[input.Name]
+		if !ok {
+			if input.Default != nil {
+				ns.Inputs[input.Name] = *input.Default
+			}
+			continue
+		}
+		keptValues[input.Name] = value
+		ns.Inputs[input.Name] = value
+		if d, ok := domains[input.Name]; ok && input.Type == "choice" && input.DynamicOptions != nil {
+			keptDomains[input.Name] = d
+		}
+	}
+	return keptValues, keptDomains
+}
+
 func resolveInput(file, name string, raw RawInputValue) (InputSpec, error) {
 	if shorthand, ok := raw.(RawInputShorthand); ok {
 		if shorthand != "text" && shorthand != "profile" {

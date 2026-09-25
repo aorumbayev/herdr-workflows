@@ -32,6 +32,8 @@ var requiredRunsParityScenarios = []string{
 	"Choose an agent pane",
 	"r retries all steps and f retries from the failed step",
 	"f on a succeeded run explains and does not launch",
+	"Retry launch shows the consent line of the current workflow",
+	"Retry refuses a workflow missing from this checkout",
 	"Detail footer names the retry keys",
 	"Reused steps carry a reused mark",
 	"Return from detail",

@@ -14,7 +14,14 @@ import (
 
 const artifactRetryPlan = "retry-plan"
 
+// storedResult keeps a result, or the reason it could not be kept.
+type storedResult struct {
+	Value any    `json:"value"`
+	Error string `json:"error,omitempty"`
+}
+
 type retryPlan struct {
+	Error        string              `json:"error,omitempty"`
 	Inputs       map[string]string   `json:"inputs"`
 	Domains      map[string][]string `json:"domains,omitempty"`
 	Fingerprints []string            `json:"fingerprints"`
@@ -41,7 +48,7 @@ func writeRetryPlan(id string, plan retryPlan) error {
 		return err
 	}
 	if err := caps.AssertUnderCaptureCap("retry plan", string(body)); err != nil {
-		return err
+		body, _ = json.Marshal(retryPlan{Error: err.Error()})
 	}
 	db, err := openHistory()
 	if err != nil {
@@ -51,12 +58,12 @@ func writeRetryPlan(id string, plan retryPlan) error {
 }
 
 func writeStepResult(id string, ordinal int, result any) error {
-	body, err := json.Marshal(result)
+	body, err := json.Marshal(storedResult{Value: result})
 	if err != nil {
 		return err
 	}
 	if err := caps.AssertUnderCaptureCap(fmt.Sprintf("step %d result", ordinal), string(body)); err != nil {
-		return err
+		body, _ = json.Marshal(storedResult{Error: err.Error()})
 	}
 	db, err := openHistory()
 	if err != nil {
@@ -98,6 +105,9 @@ func LoadRetryRecord(id string, now time.Time) (RetryRecord, error) {
 	if err := json.Unmarshal([]byte(body), &plan); err != nil {
 		return RetryRecord{}, fmt.Errorf("run %s retry data is unreadable: %w", normalized, err)
 	}
+	if plan.Error != "" {
+		return RetryRecord{}, fmt.Errorf("run %s retry data was not recorded: %s", normalized, plan.Error)
+	}
 	steps, err := topLevelSteps(db, snap)
 	if err != nil {
 		return RetryRecord{}, err
@@ -135,9 +145,13 @@ func loadStepResult(db *sql.DB, id string, step *engine.RetrySourceStep) error {
 	if err != nil || !ok {
 		return err
 	}
-	if err := json.Unmarshal([]byte(body), &step.Result); err != nil {
+	var stored storedResult
+	if err := json.Unmarshal([]byte(body), &stored); err != nil {
 		return fmt.Errorf("step %d result is unreadable: %w", step.Ordinal, err)
 	}
-	step.HasResult = true
+	if stored.Error != "" {
+		return fmt.Errorf("step %d result was not recorded: %s", step.Ordinal, stored.Error)
+	}
+	step.Result, step.HasResult = stored.Value, true
 	return nil
 }

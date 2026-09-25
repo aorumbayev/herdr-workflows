@@ -89,7 +89,7 @@ Rules for `--from-failed`:
 - If a later step reads `{{steps.<id>.pane_id}}` from a reused step, the retry first asks herdr for that pane. If the pane is gone, the retry stops and names the step.
 - `{{context.*}}` comes from the new invocation. `on_failure:` belongs to the new run and runs again if the retry fails.
 
-Run `hwf retry` from the checkout of the earlier run. The retry drops a recorded input that the workflow no longer declares. A new input with no default stops the retry.
+Run `hwf retry` from the checkout of the earlier run. The retry drops a recorded input that the workflow no longer declares, or that is inactive under the recorded answers. A new input with no default stops the retry.
 
 ## Share a workflow
 

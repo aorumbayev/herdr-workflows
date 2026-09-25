@@ -19,15 +19,29 @@ func (m Model) beginRunsRetry(fromFailed bool) (tea.Model, tea.Cmd) {
 		m.runsSendbackStatus("nothing failed — r retries all steps")
 		return m, nil
 	}
+	entry := m.entryNamed(detail.Workflow)
+	if entry == nil {
+		m.runsSendbackStatus("workflow " + detail.Workflow + " is not loadable in this checkout")
+		return m, nil
+	}
 	m.detachLaunch()
 	title := workflow.DisplayTitle(detail.Workflow, detail.Title)
 	if title == "" {
 		title = detail.Workflow
 	}
-	return m.startLaunch(title, "", LaunchRunOpts{
+	return m.startLaunch(title, FormatConsentLine(*entry), LaunchRunOpts{
 		Name:       detail.Workflow,
 		Inputs:     map[string]string{},
 		RetryOf:    detail.ID,
 		FromFailed: fromFailed,
 	})
+}
+
+func (m Model) entryNamed(name string) *workflow.ListEntry {
+	for i := range m.entries {
+		if m.entries[i].Name == name && m.entries[i].Error == "" {
+			return &m.entries[i]
+		}
+	}
+	return nil
 }

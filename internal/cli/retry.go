@@ -65,21 +65,6 @@ func prepareRetry(app config.AppContext, req runRequest) (preparedRetry, error) 
 			return preparedRetry{}, fmt.Errorf("cannot resume run %s: %w", rec.ID, err)
 		}
 	}
-	inputs, domains := declaredInputs(loaded, rec.Inputs, rec.Domains)
+	inputs, domains := workflow.ActiveInputs(loaded, rec.Inputs, rec.Domains)
 	return preparedRetry{workflow: loaded, resume: resume, sourceID: rec.ID, inputs: inputs, domains: domains}, nil
-}
-
-// declaredInputs drops recorded inputs that the current workflow no longer declares.
-func declaredInputs(wf *workflow.Definition, values map[string]string, domains map[string][]string) (map[string]string, map[string][]string) {
-	keptValues := map[string]string{}
-	keptDomains := map[string][]string{}
-	for _, input := range wf.Inputs {
-		if v, ok := values[input.Name]; ok {
-			keptValues[input.Name] = v
-		}
-		if d, ok := domains[input.Name]; ok && input.Type == "choice" && input.DynamicOptions != nil {
-			keptDomains[input.Name] = d
-		}
-	}
-	return keptValues, keptDomains
 }
