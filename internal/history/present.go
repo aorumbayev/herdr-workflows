@@ -333,6 +333,9 @@ func PresentRunDetail(detail Detail) []Block {
 		if step.Truncated {
 			outcome = base + " (truncated read)"
 		}
+		if step.Reused {
+			outcome += " (reused)"
+		}
 		b := Block{Kind: "step", Depth: depth, Ordinal: step.Ordinal, Total: step.Total, Label: step.Label, Outcome: outcome}
 		if step.Explanation != "" {
 			b.Explanation = step.Explanation

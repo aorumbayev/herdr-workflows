@@ -155,6 +155,29 @@ func TestParseLaunchPayloadRoundTrip(t *testing.T) {
 	})
 }
 
+func TestLaunchDetachedRunCarriesRetryFields(t *testing.T) {
+	seen := &spawnSeen{}
+	stdin := &capturingStdin{}
+	source := "00000000-0000-4000-8000-000000000007"
+	handle := LaunchDetachedRun(LaunchRunRequest{
+		Name:       "flaky",
+		RepoRoot:   "/repo",
+		Executable: "/tmp/fake-herdr-workflows",
+		Ctx:        config.InvocationContext{Cwd: "/repo"},
+		RetryOf:    source,
+		FromFailed: true,
+		Spawn:      exitingSpawn(seen, 0, "", "", stdin),
+	})
+	settle(t, handle)
+	payload, err := ParseLaunchPayload(stdin.String())
+	if err != nil {
+		t.Fatalf("ParseLaunchPayload: %v", err)
+	}
+	if payload.RetryOf != source || !payload.FromFailed {
+		t.Fatalf("payload = %+v, want retry fields", payload)
+	}
+}
+
 func TestParseLaunchPayloadErrors(t *testing.T) {
 	cases := []struct {
 		raw     string
@@ -168,6 +191,9 @@ func TestParseLaunchPayloadErrors(t *testing.T) {
 		{raw: `{"name":"x","domains":[]}`, wantErr: "launch payload domains must be an object"},
 		{raw: `{"name":"x","domains":{"a":[1]}}`, wantErr: "launch payload domains.a must be a string array"},
 		{raw: `{"name":"x","runId":""}`, wantErr: "launch payload runId must be a non-empty string"},
+		{raw: `{"name":"x","retryOf":"nope"}`, wantErr: "launch payload retryOf must be a run UUID"},
+		{raw: `{"name":"x","retryOf":"00000000-0000-4000-8000-000000000001","fromFailed":"yes"}`, wantErr: "launch payload fromFailed must be a boolean"},
+		{raw: `{"name":"x","fromFailed":true}`, wantErr: "launch payload fromFailed requires retryOf"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.wantErr, func(t *testing.T) {

@@ -27,6 +27,7 @@ type RunOptions struct {
 	ResolveDynamic *bool
 	Recorder       Recorder
 	Workflow       *workflow.Definition
+	Resume         *Resume
 	OnProgress     func(step, total int, label string, outcome *ProgressOutcome)
 	OnStderr       func(text string)
 }
@@ -419,6 +420,7 @@ func runChild(frame StepFrame, action *workflow.WorkflowAction) (StepOutcome, er
 	childOpts.Name = child.Name
 	childOpts.WorkflowPath = childPath
 	childOpts.Children = child.Children
+	childOpts.Reuse = nil
 	childOpts.Recorder = frame.Opts.Recorder.Child(RecorderScope{
 		Name:          child.Name,
 		WorkflowPath:  childPath,
@@ -549,6 +551,12 @@ func runSteps(steps []workflow.Step, opts StepRunOpts, values workflow.TemplateN
 	for n, step := range steps {
 		n++
 		label := stepLabel(step)
+		if n <= len(opts.Reuse) {
+			if err := replayStep(opts, step, n, total, label, opts.Reuse[n-1], values); err != nil {
+				return StepsResult{}, err
+			}
+			continue
+		}
 		if len(step.When) > 0 && !workflow.EvaluateWhen(step.When, values) {
 			emitProgress(opts, n, total, label, ProgressSkip)
 			if err := opts.Run.FinishStep(OutcomeSkipped); err != nil {
@@ -583,7 +591,11 @@ func runSteps(steps []workflow.Step, opts StepRunOpts, values workflow.TemplateN
 		if err := opts.Run.FinishStep(kind); err != nil {
 			return StepsResult{}, err
 		}
-		_ = opts.Recorder.StepFinished(step, n, total, label, kind, toRecorderOutcome(outcome), PhaseMain)
+		recorded := toRecorderOutcome(outcome)
+		if step.ID != "" {
+			recorded.Result = values.Steps[step.ID]
+		}
+		_ = opts.Recorder.StepFinished(step, n, total, label, kind, recorded, PhaseMain)
 	}
 	if len(tolerated) > 0 {
 		return StepsResult{OK: false, Error: strings.Join(tolerated, "; "), Failures: tolerated}, nil
@@ -795,6 +807,11 @@ func RunWorkflow(opts RunOptions) (StepsResult, error) {
 	if err := caps.AssertHwfEnvValues("HWF environment", collected.Values); err != nil {
 		return failPrecondition(err.Error())
 	}
+	if rp, ok := recorder.(interface {
+		RecordRetryPlan(workflow.CollectedInputs, []string)
+	}); ok {
+		rp.RecordRetryPlan(collected, StepFingerprints(loaded))
+	}
 
 	preflight := preflightContext(loaded, opts.Ctx, opts.Config, deps, recorder.RunID(), opts.RepoRoot, collected.Values)
 	if !preflight.ok {
@@ -805,6 +822,15 @@ func RunWorkflow(opts RunOptions) (StepsResult, error) {
 		if rt, ok := recorder.(interface{ RecordTranscript(string) }); ok {
 			rt.RecordTranscript(preflight.transcriptText)
 		}
+	}
+	if opts.Resume != nil {
+		if msg := validateResume(loaded, opts.Resume); msg != "" {
+			return failPrecondition(msg)
+		}
+		if msg := checkReusedPanes(loaded, opts.Resume, deps); msg != "" {
+			return failPrecondition(msg)
+		}
+		stepOpts.Reuse = opts.Resume.Reused
 	}
 
 	primary, err := runSteps(loaded.Steps, stepOpts, preflight.values)

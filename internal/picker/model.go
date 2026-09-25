@@ -469,6 +469,9 @@ func (m Model) handleRunsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if key == "s" && !m.runs.IsList() {
 		return m.beginRunsSendback()
 	}
+	if (key == "r" || key == "f") && !m.runs.IsList() {
+		return m.beginRunsRetry(key == "f")
+	}
 	return m.forwardRuns(msg)
 }
 

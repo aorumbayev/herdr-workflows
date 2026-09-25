@@ -105,6 +105,8 @@ func buildPickerOptions(app config.AppContext, entries []workflow.ListEntry) pic
 				Inputs:     opts.Inputs,
 				Domains:    opts.Domains,
 				RunID:      opts.RunID,
+				RetryOf:    opts.RetryOf,
+				FromFailed: opts.FromFailed,
 				OnHistoryAck: func(line string) {
 					events <- picker.LaunchEvent{Ack: line}
 				},

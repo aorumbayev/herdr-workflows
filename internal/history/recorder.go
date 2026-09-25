@@ -12,6 +12,7 @@ type CreateRecorderOpts struct {
 	Workflow     workflow.Definition
 	RunID        string
 	CheckoutRoot string
+	RetryOf      string
 	OnAck        func(string)
 }
 
@@ -34,6 +35,7 @@ func CreateRunRecorder(opts CreateRecorderOpts) (engine.Recorder, error) {
 		Title:        opts.Workflow.Title,
 		Source:       sourceOf(opts.Workflow),
 		CheckoutRoot: opts.CheckoutRoot,
+		RetryOf:      opts.RetryOf,
 	})
 	scope := engine.RecorderScope{Name: opts.Workflow.Name, WorkflowPath: []string{opts.Workflow.Name}}
 	if !claim.OK {
@@ -69,6 +71,14 @@ func (r *recorder) RecordTranscript(text string) {
 		return
 	}
 	_ = WriteDebugArtifacts(r.runID, DebugArtifacts{Transcript: text})
+}
+
+// RecordRetryPlan keeps the collected inputs and step fingerprints so a later retry can replay them.
+func (r *recorder) RecordRetryPlan(collected workflow.CollectedInputs, fingerprints []string) {
+	if r.writer == nil {
+		return
+	}
+	_ = writeRetryPlan(r.runID, retryPlan{Inputs: collected.Values, Domains: collected.Domains, Fingerprints: fingerprints})
 }
 
 type claimError string
@@ -121,6 +131,12 @@ func (r *recorder) StepFinished(step workflow.Step, ordinal, total int, label st
 	}
 	if outcome != nil && outcome.OK && outcome.Truncated {
 		rec.Truncated = true
+	}
+	if outcome != nil && outcome.Reused {
+		rec.Reused = true
+	}
+	if len(r.scope.WorkflowPath) == 1 && phase == engine.PhaseMain && kind == engine.OutcomeSucceeded && step.ID != "" && outcome != nil {
+		_ = writeStepResult(r.runID, ordinal, outcome.Result)
 	}
 	if outcome != nil && !outcome.OK {
 		rec.Failure = failureFact(step, outcome)

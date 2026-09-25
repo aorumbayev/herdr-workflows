@@ -20,6 +20,7 @@ type ClaimMeta struct {
 	Source       string
 	CheckoutRoot string
 	StartedAt    string
+	RetryOf      string
 }
 
 type ClaimResult struct {
@@ -102,6 +103,7 @@ func (w *Writer) Claim(meta ClaimMeta) ClaimResult {
 		StartedAt:    started,
 		HeartbeatAt:  started,
 		Steps:        []StepRecord{},
+		RetryOf:      meta.RetryOf,
 	}
 	if err := insertClaim(snap); err != nil {
 		if isUniqueConstraint(err) {

@@ -26,6 +26,17 @@ func newRunCmd() *cobra.Command {
 	return cmd
 }
 
+func newRetryCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "retry <run-id>",
+		Short: "Run a recorded run again with its recorded inputs",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runRetry,
+	}
+	cmd.Flags().Bool("from-failed", false, "reuse steps that finished well and start at the first step that did not")
+	return cmd
+}
+
 func newInitCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "init",

@@ -20,6 +20,9 @@ func detailCards(detail history.Detail, focus int) []tui.CardSpec {
 		if step.Truncated {
 			outcome += " (truncated read)"
 		}
+		if step.Reused {
+			outcome += " (reused)"
+		}
 		cards = append(cards, stepCard(step, outcome, i == focus))
 	}
 	if detail.CurrentStep != nil && detail.CurrentStep.Active {

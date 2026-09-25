@@ -12,7 +12,7 @@ While the picker prompts for inputs, each question shows its name and descriptio
 
 ### Runs
 
-The runs tab defaults to the current checkout root. `Ctrl+G` toggles an All scope across retained checkouts. Each row shows the status, the workflow, the progress, and the elapsed time. `Enter` opens a detail view. `Escape` returns to the list, and an active run continues.
+The runs tab defaults to the current checkout root. `Ctrl+G` toggles an All scope across retained checkouts. Each row shows the status, the workflow, the progress, and the elapsed time. `Enter` opens a detail view. `Escape` returns to the list, and an active run continues. In the detail view, `r` retries all steps and `f` retries from the failed step. Refer to [Retry a run](#retry-a-run).
 
 A launch shows `STARTING`, then closes the popup when the run starts. A launch that fails keeps the popup open with the reason. A run is `RUNNING` while it reports progress, and `STALE` after fifteen seconds of silence. Stale is not failure. Run history stays in a private local database.
 
@@ -42,7 +42,7 @@ In the workflows tab, press `Ctrl+P`. One letter fires the action. `Escape` clos
 
 Open the console from the picker: `Ctrl+P`, then `c`, then a placement. `beside` is the default. From a selected workflow, the console opens on the diagram of that workflow.
 
-`Tab` cycles the workflows list and the runs list. `Enter` on a workflow opens a read-only diagram of its steps, its `when:` edges, and its pane targets. On the diagram, `v` selects step nodes and `s` sends the selected YAML plus your instruction into an agent pane input, without a submit. `Enter` on a run opens debug tabs: `1` log, `2` transcript, `3` yaml-at-run. `y` copies `hwf run <name>` for a retry, without a submit. `Escape` returns.
+`Tab` cycles the workflows list and the runs list. `Enter` on a workflow opens a read-only diagram of its steps, its `when:` edges, and its pane targets. On the diagram, `v` selects step nodes and `s` sends the selected YAML plus your instruction into an agent pane input, without a submit. `Enter` on a run opens debug tabs: `1` log, `2` transcript, `3` yaml-at-run. `y` copies `hwf retry <run-id>` and `Y` copies `hwf retry <run-id> --from-failed`, without a submit. `Escape` returns.
 
 `hwf console` runs the console in the current terminal. `hwf console --placement <tab|beside|below>` opens it in a pane, or in the terminal when no pane host is available.
 
@@ -51,6 +51,7 @@ Open the console from the picker: `Ctrl+P`, then `c`, then a placement. `beside`
 | Command                                | What it does                                                          |
 | -------------------------------------- | --------------------------------------------------------------------- |
 | `hwf run <name>`                       | Runs a workflow. `--input name=value`, repeatable                     |
+| `hwf retry <run-id>`                   | Runs a recorded run again with its inputs. `--from-failed`            |
 | `hwf workflow inspect <name>`          | Prints what a workflow prompts for. `--input`, `--resolve`            |
 | `hwf workflow validate <file>`         | Validates a YAML file through the loader. Prints JSON, exits 0 or 1   |
 | `hwf workflow import "<...>"`          | Imports a shared bundle. `--to repo\|global`, `--yes`, `--force`      |
@@ -69,6 +70,26 @@ Open the console from the picker: `Ctrl+P`, then `c`, then a placement. `beside`
 `hwf response check` is the offline oracle behind [`expect:`](/reference#expect). A match exits 0 and prints the token. A mismatch exits nonzero and names the expected tokens. A missing or empty file exits nonzero and names the path. The command never writes to the file.
 
 A run with no terminal shows a herdr notification with the title `herdr-workflows` when it ends. Success shows `<workflow> succeeded in 12s` with the `done` sound. Every other status shows `<workflow> failed after 12s - <run id>` with the `none` sound. A run in a terminal prints its outcome instead.
+
+## Retry a run
+
+A retry starts a new run of the same workflow with the recorded inputs of an earlier run. The new run records the ID of the earlier run. Retry a run that failed, was interrupted, or is stale. A running run cannot be retried.
+
+- `hwf retry <run-id>` runs every step again.
+- `hwf retry <run-id> --from-failed` starts at the first top-level step that did not succeed, skip, or launch. The steps before it do not run again. Their recorded results fill `{{steps.*}}`, and run detail marks them `reused`.
+
+A run records its inputs, its dynamic choice options, and the result of each top-level step that has an `id:`. This data stays in the private history database, and the picker and the console never show it. Each result obeys the 8 MiB capture cap. Retention removes the data with the run.
+
+Rules for `--from-failed`:
+
+- The unit is one top-level step. A failed `workflow:` step runs its child again from the first child step.
+- You can edit the failed step and the steps after it. If a step before it changed, the retry stops and names that step. Use `hwf retry <run-id>` instead.
+- A reused `skipped` step stays skipped. The retry does not examine its `when:` again. Steps from the failed step on examine `when:` as usual.
+- A reused `launched` step does not start its background action again.
+- If a later step reads `{{steps.<id>.pane_id}}` from a reused step, the retry first asks herdr for that pane. If the pane is gone, the retry stops and names the step.
+- `{{context.*}}` comes from the new invocation. `on_failure:` belongs to the new run and runs again if the retry fails.
+
+Run `hwf retry` from the checkout of the earlier run. The retry drops a recorded input that the workflow no longer declares. A new input with no default stops the retry.
 
 ## Share a workflow
 

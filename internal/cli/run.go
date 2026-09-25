@@ -17,12 +17,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type runRequest struct {
+	name     string
+	inputs   map[string]string
+	domains  map[string][]string
+	runID    string
+	detached bool
+	retry    *retryRequest
+}
+
 func runRun(cmd *cobra.Command, args []string) error {
 	if err := host.EnsureHerdrProtocol(); err != nil {
 		return err
 	}
 
-	name := args[0]
+	req := runRequest{name: args[0], inputs: map[string]string{}}
 	launchPayload, err := cmd.Flags().GetBool("launch-payload")
 	if err != nil {
 		return err
@@ -32,15 +41,14 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	inputs := map[string]string{}
-	var domains map[string][]string
-	var runID string
-
 	if launchPayload {
-		var err error
-		inputs, domains, runID, err = loadLaunchPayload(cmd, name)
+		payload, err := loadLaunchPayload(cmd, req.name)
 		if err != nil {
 			return err
+		}
+		req.inputs, req.domains, req.runID, req.detached = payload.Inputs, payload.Domains, payload.RunID, true
+		if payload.RetryOf != "" {
+			req.retry = &retryRequest{runID: payload.RetryOf, fromFailed: payload.FromFailed}
 		}
 	}
 
@@ -49,17 +57,32 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid inputs: %w", err)
 	}
 	for key, val := range flagInputs {
-		inputs[key] = val
+		req.inputs[key] = val
 	}
+	return executeRun(cmd, req)
+}
 
+func executeRun(cmd *cobra.Command, req runRequest) error {
 	app, err := config.LoadContext(config.LoadOptions{})
 	if err != nil {
 		return err
 	}
 
-	loaded, err := workflow.LoadWorkflow(name, app.RepoRoot, app.Config)
-	if err != nil {
-		return err
+	var loaded *workflow.Definition
+	var resume *engine.Resume
+	retryOf := ""
+	if req.retry != nil {
+		prepared, err := prepareRetry(app, req)
+		if err != nil {
+			return err
+		}
+		loaded, resume, retryOf = prepared.workflow, prepared.resume, prepared.sourceID
+		req.inputs, req.domains = prepared.inputs, prepared.domains
+	} else {
+		loaded, err = workflow.LoadWorkflow(req.name, app.RepoRoot, app.Config)
+		if err != nil {
+			return err
+		}
 	}
 
 	stdout := cmd.OutOrStdout()
@@ -67,8 +90,9 @@ func runRun(cmd *cobra.Command, args []string) error {
 
 	recorder, err := history.CreateRunRecorder(history.CreateRecorderOpts{
 		Workflow:     *loaded,
-		RunID:        runID,
+		RunID:        req.runID,
 		CheckoutRoot: app.RepoRoot,
+		RetryOf:      retryOf,
 		OnAck: func(line string) {
 			writeRunLine(stdout, line)
 		},
@@ -78,15 +102,16 @@ func runRun(cmd *cobra.Command, args []string) error {
 	}
 
 	runOpts := engine.RunOptions{
-		Name:     name,
+		Name:     loaded.Name,
 		RepoRoot: app.RepoRoot,
 		Config:   app.Config,
 		Ctx:      app.Ctx,
 		Deps:     liveRunnerDeps(),
-		Inputs:   inputs,
-		Domains:  domains,
+		Inputs:   req.inputs,
+		Domains:  req.domains,
 		Recorder: recorder,
 		Workflow: loaded,
+		Resume:   resume,
 		OnProgress: func(step, total int, label string, outcome *engine.ProgressOutcome) {
 			o := string(engine.ProgressStart)
 			if outcome != nil {
@@ -106,7 +131,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 			writeRunBytes(stderr, []byte(text))
 		},
 	}
-	if launchPayload {
+	if req.detached {
 		resolveDynamic := false
 		runOpts.ResolveDynamic = &resolveDynamic
 	}
@@ -152,20 +177,20 @@ func isClosedPipe(err error) bool {
 	return errors.As(err, &pathErr) && errors.Is(pathErr.Err, syscall.EPIPE)
 }
 
-func loadLaunchPayload(cmd *cobra.Command, name string) (map[string]string, map[string][]string, string, error) {
+func loadLaunchPayload(cmd *cobra.Command, name string) (engine.LaunchPayload, error) {
 	stdin, err := io.ReadAll(io.LimitReader(cmd.InOrStdin(), int64(caps.CaptureByteLimit)+1))
 	if err != nil {
-		return nil, nil, "", err
+		return engine.LaunchPayload{}, err
 	}
 	if err := caps.AssertUnderCaptureCap("launch payload", string(stdin)); err != nil {
-		return nil, nil, "", err
+		return engine.LaunchPayload{}, err
 	}
 	payload, err := engine.ParseLaunchPayload(string(stdin))
 	if err != nil {
-		return nil, nil, "", err
+		return engine.LaunchPayload{}, err
 	}
 	if payload.Name != name {
-		return nil, nil, "", fmt.Errorf("launch payload name '%s' does not match run name '%s'", payload.Name, name)
+		return engine.LaunchPayload{}, fmt.Errorf("launch payload name '%s' does not match run name '%s'", payload.Name, name)
 	}
-	return payload.Inputs, payload.Domains, payload.RunID, nil
+	return payload, nil
 }
