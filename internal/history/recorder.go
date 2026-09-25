@@ -9,10 +9,11 @@ import (
 )
 
 type CreateRecorderOpts struct {
-	Workflow     workflow.Definition
-	RunID        string
-	CheckoutRoot string
-	OnAck        func(string)
+	Workflow       workflow.Definition
+	RunID          string
+	CheckoutRoot   string
+	RequireHistory bool
+	OnAck          func(string)
 }
 
 type recorder struct {
@@ -44,6 +45,9 @@ func CreateRunRecorder(opts CreateRecorderOpts) (engine.Recorder, error) {
 	if claim.State == "unavailable" {
 		emitAck(opts.OnAck, FormatHistoryAck(Ack{State: "unavailable", ID: claim.ID}))
 		w.Dispose()
+		if opts.RequireHistory {
+			return nil, claimError("run history storage is unavailable")
+		}
 		return &recorder{runID: claim.ID, scope: scope, state: &recorderState{}}, nil
 	}
 	emitAck(opts.OnAck, FormatHistoryAck(Ack{State: "claimed", ID: claim.ID}))

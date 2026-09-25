@@ -165,8 +165,8 @@ func TestRunRejectsInvalidInputValues(t *testing.T) {
 	if !strings.Contains(got.stderr, "--input expects name=value") {
 		t.Fatalf("stderr = %q", got.stderr)
 	}
-	if !strings.Contains(got.stderr, "novalue") {
-		t.Fatalf("stderr = %q", got.stderr)
+	if strings.Contains(got.stderr, "novalue") {
+		t.Fatalf("stderr echoes the input: %q", got.stderr)
 	}
 }
 

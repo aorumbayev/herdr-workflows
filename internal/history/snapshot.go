@@ -432,6 +432,14 @@ type snapshotLoad struct {
 	Expired      bool
 }
 
+func ReadSnapshot(id string) (*Snapshot, error) {
+	loaded, err := loadSnapshot(id)
+	if err != nil {
+		return nil, err
+	}
+	return loaded.Snap, nil
+}
+
 func loadSnapshot(id string) (snapshotLoad, error) {
 	normalized, ok := NormalizeRunUUID(id)
 	if !ok {

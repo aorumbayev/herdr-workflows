@@ -24,10 +24,11 @@ var progressLineRe = regexp.MustCompile(`^\[(\d+)/(\d+)\] (.+)$`)
 
 // LaunchPayload is the stdin JSON for a detached `hwf run --launch-payload`.
 type LaunchPayload struct {
-	Name    string              `json:"name"`
-	Inputs  map[string]string   `json:"inputs"`
-	Domains map[string][]string `json:"domains,omitempty"`
-	RunID   string              `json:"runId,omitempty"`
+	Name           string              `json:"name"`
+	Inputs         map[string]string   `json:"inputs"`
+	Domains        map[string][]string `json:"domains,omitempty"`
+	RunID          string              `json:"runId,omitempty"`
+	RequireHistory bool                `json:"requireHistory,omitempty"`
 }
 
 // SpawnOpts configures the process seam for detached launchers.
@@ -62,16 +63,17 @@ type DetachedRunHandle struct {
 
 // LaunchRunRequest launches a detached `hwf run` with a stdin launch payload.
 type LaunchRunRequest struct {
-	Name         string
-	RepoRoot     string
-	Executable   string
-	Ctx          config.InvocationContext
-	Inputs       map[string]string
-	Domains      map[string][]string
-	RunID        string
-	Env          map[string]string
-	OnHistoryAck func(string)
-	Spawn        func(argv []string, opts SpawnOpts) (*Spawned, error)
+	Name           string
+	RepoRoot       string
+	Executable     string
+	Ctx            config.InvocationContext
+	Inputs         map[string]string
+	Domains        map[string][]string
+	RunID          string
+	RequireHistory bool
+	Env            map[string]string
+	OnHistoryAck   func(string)
+	Spawn          func(argv []string, opts SpawnOpts) (*Spawned, error)
 }
 
 type progressLine struct {
@@ -163,7 +165,15 @@ func parseLaunchPayloadObject(obj map[string]any) (LaunchPayload, error) {
 		runID = s
 	}
 
-	return LaunchPayload{Name: name, Inputs: inputs, Domains: domains, RunID: runID}, nil
+	payload := LaunchPayload{Name: name, Inputs: inputs, Domains: domains, RunID: runID}
+	if raw, exists := obj["requireHistory"]; exists {
+		b, ok := raw.(bool)
+		if !ok {
+			return LaunchPayload{}, errors.New("launch payload requireHistory must be a boolean")
+		}
+		payload.RequireHistory = b
+	}
+	return payload, nil
 }
 
 func selfArgv(executable, command string, args ...string) []string {
@@ -209,16 +219,14 @@ func buildInvocationEnv(ctx config.InvocationContext, repoRoot string) map[strin
 	return env
 }
 
-func buildLaunchPayload(name string, inputs map[string]string, domains map[string][]string, runID string) LaunchPayload {
+func buildLaunchPayload(req LaunchRunRequest) LaunchPayload {
+	inputs := req.Inputs
 	if inputs == nil {
 		inputs = map[string]string{}
 	}
-	payload := LaunchPayload{Name: name, Inputs: inputs}
-	if len(domains) > 0 {
-		payload.Domains = domains
-	}
-	if runID != "" {
-		payload.RunID = runID
+	payload := LaunchPayload{Name: req.Name, Inputs: inputs, RunID: req.RunID, RequireHistory: req.RequireHistory}
+	if len(req.Domains) > 0 {
+		payload.Domains = req.Domains
 	}
 	return payload
 }
@@ -409,7 +417,7 @@ func resolveSpawn(spawn func(argv []string, opts SpawnOpts) (*Spawned, error)) f
 func LaunchDetachedRun(req LaunchRunRequest) DetachedRunHandle {
 	spawn := resolveSpawn(req.Spawn)
 	argv := selfArgv(req.Executable, "run", req.Name, "--launch-payload")
-	payload := buildLaunchPayload(req.Name, req.Inputs, req.Domains, req.RunID)
+	payload := buildLaunchPayload(req)
 	payloadBytes, marshalErr := json.Marshal(payload)
 	env := mergeEnv(environMap(), req.Env, buildInvocationEnv(req.Ctx, req.RepoRoot))
 

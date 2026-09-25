@@ -168,10 +168,10 @@ func TestParitySearchShortDisplayedID(t *testing.T) {
 func TestParityInspectActiveAndToleratedDetailKinds(t *testing.T) {
 	running := DetailLines(DetailView{
 		Kind: "detail",
-		Detail: history.Detail{
+		Detail: history.Detail{Summary: history.Summary{
 			ID: "550e8400-e29b-41d4-a716-446655440000", Workflow: "w", Status: "running",
 			ElapsedMs: 5000,
-		},
+		}},
 		Blocks: []history.Block{
 			{Kind: "head", Status: "RUNNING", Title: "w", DisplayID: "550e8400", Elapsed: "5s"},
 			{Kind: "step", Depth: 0, Ordinal: 1, Total: 2, Label: "build", Outcome: "running"},
@@ -183,9 +183,9 @@ func TestParityInspectActiveAndToleratedDetailKinds(t *testing.T) {
 	}
 	failed := DetailLines(DetailView{
 		Kind: "detail",
-		Detail: history.Detail{
+		Detail: history.Detail{Summary: history.Summary{
 			ID: "550e8400-e29b-41d4-a716-446655440001", Workflow: "w", Status: "failed",
-		},
+		}},
 		Blocks: []history.Block{
 			{Kind: "head", Status: "FAILED", Title: "w", DisplayID: "550e8401", Elapsed: "2s"},
 			{Kind: "step", Depth: 0, Ordinal: 1, Total: 2, Label: "build", Outcome: "failed_continued"},

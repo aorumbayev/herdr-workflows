@@ -52,6 +52,10 @@ func run(args []string, ioStreams streams) int {
 		if errors.Is(execErr, errUsage) {
 			return 1
 		}
+		var machine *machineError
+		if errors.As(execErr, &machine) {
+			writeMachineFailure(ioStreams.out, machine)
+		}
 		_, _ = fmt.Fprintln(ioStreams.err, execErr.Error())
 		var ec interface{ ExitCode() int }
 		if errors.As(execErr, &ec) {
@@ -88,6 +92,7 @@ func newRoot() *cobra.Command {
 	root.SetHelpTemplate(rootHelpTemplate())
 	root.AddCommand(
 		newRunCmd(),
+		newRunsCmd(),
 		newInitCmd(),
 		newWorkflowCmd(),
 		newLaunchCmd(),
