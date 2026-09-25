@@ -32,7 +32,7 @@ func runConsole(cmd *cobra.Command, _ []string) error {
 	}
 	if cmd.Flags().Changed("placement") {
 		err := openConsolePane(placement)
-		if err == nil || !paneHostUnavailable(err) || !consoleHasTTY(cmd) {
+		if err == nil || !host.IsTransportLoss(err) || !consoleHasTTY(cmd) {
 			return err
 		}
 	}
@@ -90,8 +90,4 @@ func openConsolePane(placement console.Placement) error {
 		return err
 	}
 	return nil
-}
-
-func paneHostUnavailable(err error) bool {
-	return host.IsTransportLoss(err)
 }

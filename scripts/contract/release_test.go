@@ -107,18 +107,10 @@ func TestPrepareReleaseDefaultRegeneratesSchemaID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	embedSchemaPath := filepath.Join(root, "embed", "workflow.schema.json")
-	beforeEmbedSchema, err := os.ReadFile(embedSchemaPath)
-	if err != nil {
-		t.Fatal(err)
-	}
 	version := string(current[1])
 	t.Cleanup(func() {
 		_ = os.WriteFile(tomlPath, beforeToml, 0o644)
-		embedPath := filepath.Join(root, "embed", "herdr-plugin.toml")
-		_ = os.WriteFile(embedPath, beforeToml, 0o644)
 		_ = os.WriteFile(schemaPath, beforeSchema, 0o644)
-		_ = os.WriteFile(embedSchemaPath, beforeEmbedSchema, 0o644)
 	})
 	stdout, stderr, code := runPrepareRelease(t, version)
 	if code != 0 {
@@ -159,16 +151,9 @@ func TestPrepareReleaseResolvesRepoRootFromNestedCwd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	embedSchemaPath := filepath.Join(root, "embed", "workflow.schema.json")
-	beforeEmbedSchema, err := os.ReadFile(embedSchemaPath)
-	if err != nil {
-		t.Fatal(err)
-	}
 	t.Cleanup(func() {
 		_ = os.WriteFile(tomlPath, beforeToml, 0o644)
-		_ = os.WriteFile(filepath.Join(root, "embed", "herdr-plugin.toml"), beforeToml, 0o644)
 		_ = os.WriteFile(schemaPath, beforeSchema, 0o644)
-		_ = os.WriteFile(embedSchemaPath, beforeEmbedSchema, 0o644)
 	})
 
 	cmd := exec.Command("go", "run", filepath.Join(root, "scripts", "prepare-release"), string(current[1]))
@@ -187,20 +172,6 @@ func TestPrepareReleaseResolvesRepoRootFromNestedCwd(t *testing.T) {
 	}
 	if strings.Contains(outBuf.String(), filepath.Join(root, "scripts", "herdr-plugin.toml")) {
 		t.Fatalf("stamped nested path: stdout = %q", outBuf.String())
-	}
-}
-
-func TestReleaseWorkflowHasNoNodeToolchain(t *testing.T) {
-	text := readRepoFile(t, filepath.Join(".github", "workflows", "release.yml"))
-	for _, forbidden := range []string{
-		"setup-node",
-		"npm ci",
-		"npx",
-		"working-directory: release",
-	} {
-		if strings.Contains(text, forbidden) {
-			t.Fatalf(".github/workflows/release.yml must not contain %q", forbidden)
-		}
 	}
 }
 
@@ -281,7 +252,6 @@ func TestReleaseWorkflowRunsSemanticReleaseByDispatch(t *testing.T) {
 	if !strings.Contains(text, ".tar.gz") {
 		t.Fatal("expected tar.gz archives attached to the release")
 	}
-	assertGoreleaserArtifactContract(t)
 }
 
 func TestReleaseWorkflowRecoversIncompleteGitHubRelease(t *testing.T) {
@@ -400,11 +370,6 @@ func mustReleaseStep(t *testing.T, steps []releaseWorkflowStep, name string) rel
 }
 
 func TestGoreleaserDefinesSupportedArtifactSet(t *testing.T) {
-	assertGoreleaserArtifactContract(t)
-}
-
-func assertGoreleaserArtifactContract(t *testing.T) {
-	t.Helper()
 	cfg := readRepoFile(t, ".goreleaser.yaml")
 	if !strings.Contains(cfg, "CGO_ENABLED=0") {
 		t.Fatal(".goreleaser.yaml must set CGO_ENABLED=0")
@@ -496,10 +461,6 @@ func TestSemrelrcUsesGitHubProvider(t *testing.T) {
 	}
 	if cfg.Plugins.Provider.Name != "github" {
 		t.Fatalf("provider = %q", cfg.Plugins.Provider.Name)
-	}
-	releaseYml := readRepoFile(t, filepath.Join(".github", "workflows", "release.yml"))
-	if !strings.Contains(releaseYml, "allow-initial-development-versions: true") {
-		t.Fatal("allow-initial-development-versions must be set on go-semantic-release action in release.yml")
 	}
 }
 

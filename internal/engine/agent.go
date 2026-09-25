@@ -838,23 +838,8 @@ func newAgentTurn(frame *StepFrame, action *workflow.AgentAction) StepOutcome {
 		return withFailureDetails(DispatchFailure(fmt.Sprintf("agent (profile %s)", chosen.name), err), baseDetails())
 	}
 
-	prompt := workflow.SubstituteText(action.Prompt, frame.Values)
-	if action.Background {
-		if err := submitPrompt(frame, name, prompt, "", false); err != nil {
-			return withFailureDetails(DispatchFailure(fmt.Sprintf("agent (profile %s)", chosen.name), err), baseDetails())
-		}
-		return StepOutcome{OK: true, Launched: true}
-	}
-
-	path, err := preparedResponsePath(frame)
-	if err != nil {
-		return withFailureDetails(DispatchFailure(fmt.Sprintf("agent (profile %s)", chosen.name), err), baseDetails())
-	}
-	if err := submitPrompt(frame, name, AppendResponseInstruction(prompt, path, action.Expect), path, true); err != nil {
-		return withFailureDetails(DispatchFailure(fmt.Sprintf("agent (profile %s)", chosen.name), err), baseDetails())
-	}
-	outcome := managedResult(frame, name, path, agentTimeout(action), managedWaitNewAgent, baseDetails(), action.Expect)
-	if outcome.OK && closePolicy == "success" {
+	outcome := promptTurn(frame, action, name, fmt.Sprintf("agent (profile %s)", chosen.name), managedWaitNewAgent, baseDetails())
+	if outcome.OK && !outcome.Launched && closePolicy == "success" {
 		closePane(frame, placed)
 	}
 	return outcome
@@ -893,22 +878,28 @@ func targetTurn(frame *StepFrame, action *workflow.AgentAction, rawTarget string
 		}
 	}
 
+	return promptTurn(frame, action, target, fmt.Sprintf("agent (target %s)", target), managedWaitTarget, details)
+}
+
+func promptTurn(frame *StepFrame, action *workflow.AgentAction, target, label string, mode managedWaitMode, details map[string]any) StepOutcome {
+	fail := func(err error) StepOutcome {
+		return withFailureDetails(DispatchFailure(label, err), details)
+	}
 	prompt := workflow.SubstituteText(action.Prompt, frame.Values)
 	if action.Background {
 		if err := submitPrompt(frame, target, prompt, "", false); err != nil {
-			return withFailureDetails(DispatchFailure(fmt.Sprintf("agent (target %s)", target), err), details)
+			return fail(err)
 		}
 		return StepOutcome{OK: true, Launched: true}
 	}
-
 	path, err := preparedResponsePath(frame)
 	if err != nil {
-		return withFailureDetails(DispatchFailure(fmt.Sprintf("agent (target %s)", target), err), details)
+		return fail(err)
 	}
 	if err := submitPrompt(frame, target, AppendResponseInstruction(prompt, path, action.Expect), path, true); err != nil {
-		return withFailureDetails(DispatchFailure(fmt.Sprintf("agent (target %s)", target), err), details)
+		return fail(err)
 	}
-	return managedResult(frame, target, path, agentTimeout(action), managedWaitTarget, details, action.Expect)
+	return managedResult(frame, target, path, agentTimeout(action), mode, details, action.Expect)
 }
 
 // AgentStep runs one managed agent turn (new-agent or target mode).

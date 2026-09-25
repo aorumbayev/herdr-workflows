@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"maps"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -181,93 +179,6 @@ func TestParseLaunchPayloadErrors(t *testing.T) {
 				t.Fatalf("error = %q, want %q", err.Error(), tc.wantErr)
 			}
 		})
-	}
-}
-
-// "a script entry claims no build identity"
-func TestBuildIdentityCompiledVsScript(t *testing.T) {
-	dir := t.TempDir()
-	execPath := filepath.Join(dir, "herdr-workflows")
-	if err := os.WriteFile(execPath, []byte("build"), 0o755); err != nil {
-		t.Fatalf("write exec: %v", err)
-	}
-
-	t.Run("compiled", func(t *testing.T) {
-		entry := filepath.Join(dir, "no-such-bunfs-entry")
-		id, ok := BuildIdentity(entry, execPath)
-		if !ok || id == "" {
-			t.Fatalf("BuildIdentity(%q, exec) = (%q, %v), want non-empty identity", entry, id, ok)
-		}
-	})
-
-	t.Run("script", func(t *testing.T) {
-		entry := filepath.Join(dir, "cli.go")
-		if err := os.WriteFile(entry, []byte("package main\n"), 0o644); err != nil {
-			t.Fatalf("write entry: %v", err)
-		}
-		id, ok := BuildIdentity(entry, execPath)
-		if ok || id != "" {
-			t.Fatalf("BuildIdentity(script, exec) = (%q, %v), want empty/false", id, ok)
-		}
-	})
-
-	t.Run("same-path binary", func(t *testing.T) {
-		id, ok := BuildIdentity(execPath, execPath)
-		if !ok || id == "" {
-			t.Fatalf("BuildIdentity(exec, exec) = (%q, %v), want non-empty identity", id, ok)
-		}
-	})
-}
-
-func TestBuildIdentityChangesWithInstall(t *testing.T) {
-	base := t.TempDir()
-	checkout := filepath.Join(base, "checkout")
-	if err := os.MkdirAll(filepath.Join(checkout, "bin"), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	binary := filepath.Join(checkout, "bin", "herdr-workflows")
-	if err := os.WriteFile(binary, []byte("build-1"), 0o755); err != nil {
-		t.Fatalf("write binary: %v", err)
-	}
-	entry := filepath.Join(base, "missing-bunfs-entry")
-
-	before, ok := BuildIdentity(entry, binary)
-	if !ok || before == "" {
-		t.Fatalf("initial identity = (%q, %v), want non-empty", before, ok)
-	}
-
-	if err := os.WriteFile(binary, []byte("build-2-rewritten-in-place"), 0o755); err != nil {
-		t.Fatalf("rewrite binary: %v", err)
-	}
-	rewritten, ok := BuildIdentity(entry, binary)
-	if !ok || rewritten == "" {
-		t.Fatalf("rewritten identity = (%q, %v), want non-empty", rewritten, ok)
-	}
-	if rewritten == before {
-		t.Fatalf("in-place rewrite must change identity; still %q", rewritten)
-	}
-
-	staged := filepath.Join(base, "staged")
-	if err := os.WriteFile(staged, []byte("build-3"), 0o755); err != nil {
-		t.Fatalf("write staged: %v", err)
-	}
-	if err := os.Rename(staged, binary); err != nil {
-		t.Fatalf("atomic rename: %v", err)
-	}
-	afterAtomic, ok := BuildIdentity(entry, binary)
-	if !ok || afterAtomic == "" {
-		t.Fatalf("atomic identity = (%q, %v), want non-empty", afterAtomic, ok)
-	}
-	if afterAtomic == before {
-		t.Fatalf("atomic replace must change identity; still %q", afterAtomic)
-	}
-
-	if err := os.Rename(checkout, filepath.Join(base, "checkout.old")); err != nil {
-		t.Fatalf("rename checkout: %v", err)
-	}
-	missing, ok := BuildIdentity(entry, binary)
-	if ok || missing != "" {
-		t.Fatalf("after checkout rename BuildIdentity = (%q, %v), want empty/false", missing, ok)
 	}
 }
 

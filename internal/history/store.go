@@ -53,14 +53,6 @@ var (
 	dbs   = map[string]*sql.DB{}
 )
 
-func historyDBPath() string {
-	dir, err := config.PluginStateDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(dir, historyDBName)
-}
-
 func openHistory() (*sql.DB, error) {
 	state, err := config.PluginStateDir()
 	if err != nil {

@@ -1119,32 +1119,6 @@ func parseStringList(value any) []string {
 	return result
 }
 
-func checkedStringList(value any) ([]string, error) {
-	values, ok := value.([]any)
-	if !ok {
-		return nil, fmt.Errorf("%s", typeMismatch("array", value))
-	}
-	result := make([]string, 0, len(values))
-	for _, item := range values {
-		text, ok := item.(string)
-		if !ok {
-			return nil, fmt.Errorf("%s", typeMismatch("string", item))
-		}
-		result = append(result, text)
-	}
-	return result, nil
-}
-
-func checkedInt(value any) (int, error) {
-	if number, ok := value.(int); ok {
-		return number, nil
-	}
-	if number, ok := value.(float64); ok && number == float64(int64(number)) {
-		return int(number), nil
-	}
-	return 0, fmt.Errorf("%s", typeMismatch("number", value))
-}
-
 func parseStringMap(value any) map[string]string {
 	values, _ := value.(map[string]any)
 	result := make(map[string]string, len(values))
@@ -1154,92 +1128,41 @@ func parseStringMap(value any) map[string]string {
 	return result
 }
 
-func parseRawInputValue(value any) (RawInputValue, error) {
+func parseRawInputValue(value any) RawInputValue {
 	switch input := value.(type) {
 	case string:
-		return RawInputShorthand(input), nil
+		return RawInputShorthand(input)
 	case []any:
-		static, err := checkedStringList(input)
-		if err != nil {
-			return nil, err
-		}
-		return RawInputStatic(static), nil
-	case map[string]any:
-		declaration := &RawInputMap{}
-		if value, ok := input["type"]; ok {
-			text, ok := value.(string)
-			if !ok {
-				return nil, fmt.Errorf("%s", typeMismatch("string", value))
-			}
-			declaration.Type = text
-		}
-		if value, ok := input["description"]; ok {
-			text, ok := value.(string)
-			if !ok {
-				return nil, fmt.Errorf("%s", typeMismatch("string", value))
-			}
-			declaration.Description = &text
-		}
-		if value, ok := input["default"]; ok {
-			text, ok := value.(string)
-			if !ok {
-				return nil, fmt.Errorf("%s", typeMismatch("string", value))
-			}
-			declaration.Default = &text
-		}
-		if value, ok := input["options"]; ok {
-			options := &RawInputOptions{}
-			switch option := value.(type) {
-			case []any:
-				static, err := checkedStringList(option)
-				if err != nil {
-					return nil, err
-				}
-				options.Static = static
-			case map[string]any:
-				run, err := checkedStringList(option["run"])
-				if err != nil {
-					return nil, err
-				}
-				options.Dynamic = &DynamicChoice{Run: run}
-			default:
-				return nil, fmt.Errorf("%s", typeMismatch("array|object", value))
-			}
-			declaration.Options = options
-		}
-		if value, ok := input["when"]; ok {
-			switch when := value.(type) {
-			case string:
-				declaration.When = []string{when}
-			case []any:
-				parsed, err := checkedStringList(when)
-				if err != nil {
-					return nil, err
-				}
-				declaration.When = parsed
-				declaration.WhenList = true
-			default:
-				return nil, fmt.Errorf("%s", typeMismatch("string|array", value))
-			}
-		}
-		if value, ok := input["allow_custom"]; ok {
-			custom, ok := value.(bool)
-			if !ok {
-				return nil, fmt.Errorf("%s", typeMismatch("boolean", value))
-			}
-			declaration.AllowCustom = &custom
-		}
-		if value, ok := input["min_length"]; ok {
-			minimum, err := checkedInt(value)
-			if err != nil {
-				return nil, err
-			}
-			converted := minimum
-			declaration.MinLength = &converted
-		}
-		return declaration, nil
+		return RawInputStatic(parseStringList(input))
 	}
-	return nil, fmt.Errorf("%s", typeMismatch("string|array|object", value))
+	input := value.(map[string]any)
+	declaration := &RawInputMap{Type: stringValue(input, "type")}
+	if text, ok := input["description"].(string); ok {
+		declaration.Description = &text
+	}
+	if text, ok := input["default"].(string); ok {
+		declaration.Default = &text
+	}
+	switch option := input["options"].(type) {
+	case []any:
+		declaration.Options = &RawInputOptions{Static: parseStringList(option)}
+	case map[string]any:
+		declaration.Options = &RawInputOptions{Dynamic: &DynamicChoice{Run: parseStringList(option["run"])}}
+	}
+	switch when := input["when"].(type) {
+	case string:
+		declaration.When = []string{when}
+	case []any:
+		declaration.When, declaration.WhenList = parseStringList(when), true
+	}
+	if custom, ok := input["allow_custom"].(bool); ok {
+		declaration.AllowCustom = &custom
+	}
+	if minimum, ok := input["min_length"]; ok {
+		converted := int(asInt(minimum))
+		declaration.MinLength = &converted
+	}
+	return declaration
 }
 
 func assertValidTemplates(file string, step int, key, text string) error {
@@ -1248,17 +1171,6 @@ func assertValidTemplates(file string, step int, key, text string) error {
 			fmt.Sprintf("invalid template '%s' — expected {{inputs|steps|context.<path>}}", bad))
 	}
 	return nil
-}
-
-func assertTemplatesInValue(file string, step int, key string, value any) error {
-	var found error
-	WalkValueStrings(value, key, func(text, path string) any {
-		if found == nil {
-			found = assertValidTemplates(file, step, path, text)
-		}
-		return text
-	})
-	return found
 }
 
 // ParseWhenClause parses a single `when:` clause.
@@ -1363,75 +1275,33 @@ func optionalDuration(value map[string]any, key string) (time.Duration, error) {
 	return ParseDuration(text.(string))
 }
 
-func assertActionTemplates(file string, step int, raw map[string]any, keyPrefix string) error {
-	key := func(name string) string {
-		if keyPrefix == "" {
-			return name
-		}
-		return keyPrefix + "." + name
-	}
-	//nolint:nestif // each action field has a precise template error path.
-	if prompt, ok := raw["agent"].(string); ok {
-		if err := assertValidTemplates(file, step, key("agent"), prompt); err != nil {
-			return err
-		}
-		for _, name := range []string{"using", "target"} {
-			if value, ok := raw[name].(string); ok {
-				if err := assertValidTemplates(file, step, key(name), value); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	if argv, ok := raw["run"].([]any); ok {
-		for i, element := range argv {
-			if err := assertValidTemplates(file, step, key(fmt.Sprintf("run[%d]", i)), element.(string)); err != nil {
-				return err
-			}
-		}
-	}
-	if cwd, ok := raw["cwd"].(string); ok {
-		if err := assertValidTemplates(file, step, key("cwd"), cwd); err != nil {
-			return err
-		}
-	}
-	if env, ok := raw["env"].(map[string]any); ok {
-		if err := assertTemplatesInValue(file, step, key("env"), env); err != nil {
-			return err
-		}
-	}
-	//nolint:nestif // pane placement has several independent templated fields.
-	if pane, ok := raw["pane"].(map[string]any); ok {
-		for _, name := range []string{"target", "workspace"} {
-			if value, ok := pane[name].(string); ok {
-				if err := assertValidTemplates(file, step, key("pane."+name), value); err != nil {
-					return err
-				}
-			}
-		}
-		if open, ok := pane["open"].(string); ok && strings.Contains(open, "{{") {
-			if err := assertValidTemplates(file, step, key("pane.open"), open); err != nil {
-				return err
-			}
-		}
-	}
-	if params, ok := raw["params"].(map[string]any); ok {
-		if err := assertTemplatesInValue(file, step, key("params"), params); err != nil {
-			return err
-		}
-	}
-	if inputs, ok := raw["inputs"].(map[string]any); ok {
-		if err := assertTemplatesInValue(file, step, key("inputs"), inputs); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func toAction(file string, step int, raw map[string]any, keyPrefix string) (Action, error) {
-	if err := assertActionTemplates(file, step, raw, keyPrefix); err != nil {
+	action, err := convertAction(file, step, raw, keyPrefix)
+	if err != nil {
 		return nil, err
 	}
+	for _, site := range actionTemplateSites(action) {
+		key := site.key
+		if keyPrefix != "" {
+			key = keyPrefix + "." + key
+		}
+		if err := assertValidTemplates(file, step, key, site.text); err != nil {
+			return nil, err
+		}
+	}
+	if herdr, ok := action.(HerdrAction); ok {
+		if err := host.ValidateHerdrInvocation(herdr.Method, herdr.Params, IsWholeValueTemplate); err != nil {
+			key := "herdr"
+			if keyPrefix != "" {
+				key = keyPrefix + ".herdr"
+			}
+			return nil, bail(file, step, key, err.Error())
+		}
+	}
+	return action, nil
+}
+
+func convertAction(file string, step int, raw map[string]any, keyPrefix string) (Action, error) {
 	//nolint:nestif // action conversion follows the four explicit YAML forms.
 	if prompt, ok := raw["agent"].(string); ok {
 		action := AgentAction{Prompt: prompt}
@@ -1492,13 +1362,6 @@ func toAction(file string, step int, raw map[string]any, keyPrefix string) (Acti
 	//nolint:nestif // herdr conversion includes load-time invocation validation.
 	if method, ok := raw["herdr"].(string); ok {
 		params, _ := raw["params"].(map[string]any)
-		if err := host.ValidateHerdrInvocation(method, params, IsWholeValueTemplate); err != nil {
-			key := "herdr"
-			if keyPrefix != "" {
-				key = keyPrefix + ".herdr"
-			}
-			return nil, bail(file, step, key, err.Error())
-		}
 		action := HerdrAction{Method: method, Params: params}
 		if retry, ok := raw["retry"].(map[string]any); ok {
 			parsed, err := parseRetry(retry)
@@ -1623,11 +1486,7 @@ func ParseRaw(file, text string) (Document, error) {
 	if inputs, ok := doc["inputs"].(map[string]any); ok {
 		order := orderedMappingKeys(text, "inputs")
 		for _, name := range orderedKeysOrSorted(inputs, order) {
-			value, err := parseRawInputValue(inputs[name])
-			if err != nil {
-				return Document{}, bail(file, 0, "inputs."+name, err.Error())
-			}
-			raw.Inputs = append(raw.Inputs, NamedInput{Name: name, Value: value})
+			raw.Inputs = append(raw.Inputs, NamedInput{Name: name, Value: parseRawInputValue(inputs[name])})
 		}
 	}
 	if returns, ok := doc["returns"]; ok {

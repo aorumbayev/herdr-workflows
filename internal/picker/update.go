@@ -40,12 +40,6 @@ func FormatListFilterRow(filter string, contentWidth int, updateHint string) str
 	return tui.PadColumns(field, room) + " " + updateHint
 }
 
-// FormatListFilterEdge draws the filter field edge. The hint shares the field row
-// only, so both edges span the full width.
-func FormatListFilterEdge(contentWidth int) string {
-	return tui.FormatFieldEdge(contentWidth)
-}
-
 func filterFieldWidth(contentWidth int, updateHint string) int {
 	if updateHint == "" {
 		return contentWidth

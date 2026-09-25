@@ -35,7 +35,7 @@ func run() error {
 
 	// Unlink fails when no link is there yet. That result is the usual first operation.
 	runCmdIgnoringFailure(root, herdr, []string{"plugin", "unlink", "herdr-workflows"})
-	if err := runCmd(root, "build", "go", []string{"build", "-o", "bin/herdr-workflows", "."}); err != nil {
+	if err := runCmd(root, "build", "go", []string{"build", "-o", "bin/herdr-workflows", "./cmd/herdr-workflows"}); err != nil {
 		return err
 	}
 	if err := runCmd(root, "plugin link", herdr, []string{"plugin", "link", root}); err != nil {

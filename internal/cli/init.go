@@ -15,13 +15,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// HerdrAgentKinds lists types that herdr agent start --kind accepts (herdr 0.8.2).
-var HerdrAgentKinds = []string{
-	"pi", "claude", "codex", "gemini", "cursor", "devin", "agy", "cline", "omp",
-	"mastracode", "opencode", "copilot", "kimi", "kiro", "droid", "amp", "grok",
-	"hermes", "kilo", "qodercli", "qwen", "maki",
-}
-
 var knownKinds = []struct {
 	name string
 	bin  string
@@ -101,17 +94,6 @@ func FormatProfilesYaml(in ProfilesYAMLInput) string {
 func jsonString(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
-}
-
-// InitSeams gives tests the init helpers. It does not increase the CLI surface.
-var InitSeams = struct {
-	HerdrAgentKinds    []string
-	DetectProfiles     func() map[string]config.Profile
-	FormatProfilesYaml func(ProfilesYAMLInput) string
-}{
-	HerdrAgentKinds:    HerdrAgentKinds,
-	DetectProfiles:     func() map[string]config.Profile { return detectProfiles(nil) },
-	FormatProfilesYaml: FormatProfilesYaml,
 }
 
 // InitOpts sets the options for RunInit.

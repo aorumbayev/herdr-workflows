@@ -14,7 +14,6 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/console"
 	"github.com/aorumbayev/herdr-workflows/internal/runsbrowser"
 	"github.com/aorumbayev/herdr-workflows/internal/tui"
-	"github.com/aorumbayev/herdr-workflows/internal/update"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
@@ -43,30 +42,29 @@ const (
 
 // Options is the input for a picker model.
 type Options struct {
-	Entries            []workflow.ListEntry
-	RepoRoot           string
-	Config             config.Config
-	Width              int
-	Height             int
-	Chdir              func(string) error
-	LoadWorkflow       func(workflow.ListEntry) (*workflow.Definition, error)
-	CopyClipboard      func(string) error
-	PasteClipboard     func() (string, error)
-	EditWorkflow       func(path, name string) workflow.ValidateResult
-	EditConfig         func(path string) error
-	OpenURL            func(url string) error
-	Notify             func(title string, body ...string) error
-	LaunchRun          func(LaunchRunOpts) LaunchRunHandle
-	AllocateRunID      func() string
-	ExportShare        func(entry workflow.ListEntry) (command string, err error)
-	OpenConsole        func(placement console.Placement, workflow string) error
-	OpenEditor         func(path, name, placement string) error
-	ReopenPopup        func(state PopupState) error
-	Restore            *PopupState
-	ListAgentPanes     func() ([]console.AgentPaneEntry, error)
-	PaneSendText       func(paneID, text string) error
-	CheckLatestRelease func() (*update.LatestRelease, error)
-	Now                func() time.Time
+	Entries        []workflow.ListEntry
+	RepoRoot       string
+	Config         config.Config
+	Width          int
+	Height         int
+	Chdir          func(string) error
+	LoadWorkflow   func(workflow.ListEntry) (*workflow.Definition, error)
+	CopyClipboard  func(string) error
+	PasteClipboard func() (string, error)
+	EditWorkflow   func(path, name string) workflow.ValidateResult
+	EditConfig     func(path string) error
+	OpenURL        func(url string) error
+	Notify         func(title string, body ...string) error
+	LaunchRun      func(LaunchRunOpts) LaunchRunHandle
+	AllocateRunID  func() string
+	ExportShare    func(entry workflow.ListEntry) (command string, err error)
+	OpenConsole    func(placement console.Placement, workflow string) error
+	OpenEditor     func(path, name, placement string) error
+	ReopenPopup    func(state PopupState) error
+	Restore        *PopupState
+	ListAgentPanes func() ([]console.AgentPaneEntry, error)
+	PaneSendText   func(paneID, text string) error
+	Now            func() time.Time
 }
 
 // Model is the picker Bubble Tea model.
@@ -559,24 +557,31 @@ func (m Model) beginEdit(path, name string) tea.Cmd {
 			return editorDoneMsg{name: name, result: m.editWorkflow(path, name)}
 		}
 	}
-	editor, err := workflow.ResolveEditor()
-	if err != nil {
+	repoRoot := m.repoRoot
+	return execEditor(path, name, func() workflow.ValidateResult {
+		return workflow.ValidateFile(path, name, repoRoot)
+	})
+}
+
+func execEditor(path, name string, validate func() workflow.ValidateResult) tea.Cmd {
+	failed := func(err error) tea.Cmd {
 		return func() tea.Msg {
 			return editorDoneMsg{name: name, result: workflow.ValidateResult{Error: err.Error()}}
 		}
 	}
-	repoRoot := m.repoRoot
+	editor, err := workflow.ResolveEditor()
+	if err != nil {
+		return failed(err)
+	}
 	cmd, err := editorCommand(editor, path)
 	if err != nil {
-		return func() tea.Msg {
-			return editorDoneMsg{name: name, result: workflow.ValidateResult{Error: err.Error()}}
-		}
+		return failed(err)
 	}
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {
 		if err != nil {
 			return editorDoneMsg{name: name, result: workflow.ValidateResult{Error: err.Error()}}
 		}
-		return editorDoneMsg{name: name, result: workflow.ValidateFile(path, name, repoRoot)}
+		return editorDoneMsg{name: name, result: validate()}
 	})
 }
 

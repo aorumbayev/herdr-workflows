@@ -166,25 +166,6 @@ func parseLaunchPayloadObject(obj map[string]any) (LaunchPayload, error) {
 	return LaunchPayload{Name: name, Inputs: inputs, Domains: domains, RunID: runID}, nil
 }
 
-// BuildIdentity returns inode:mtimeMs:size for the compiled executable, or empty values when entry is a script.
-// A compiled Go binary is a regular file, so the function keeps the identity when entry is the same as execPath.
-func BuildIdentity(entry, execPath string) (string, bool) {
-	if entry != "" && entry != execPath {
-		if fi, err := os.Stat(entry); err == nil && fi.Mode().IsRegular() {
-			return "", false
-		}
-	}
-	fi, err := os.Stat(execPath)
-	if err != nil {
-		return "", false
-	}
-	st, ok := fi.Sys().(*syscall.Stat_t)
-	if !ok {
-		return "", false
-	}
-	return fmt.Sprintf("%d:%d:%d", st.Ino, fi.ModTime().UnixMilli(), fi.Size()), true
-}
-
 func selfArgv(executable, command string, args ...string) []string {
 	if executable == "" {
 		executable = os.Args[0]

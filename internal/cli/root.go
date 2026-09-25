@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	assets "github.com/aorumbayev/herdr-workflows/embed"
+	assets "github.com/aorumbayev/herdr-workflows"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"

@@ -163,7 +163,7 @@ func (m Model) listFilterRow(width int) string {
 }
 
 func (m Model) listFilterEdge(width int) string {
-	return tui.MuteChrome(FormatListFilterEdge(width))
+	return tui.MuteChrome(tui.FormatFieldEdge(width))
 }
 
 // sensitivityLine is a compact muted note of the touched surfaces, shown only when the workflow is sensitive.

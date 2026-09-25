@@ -48,21 +48,15 @@ func run(args []string) error {
 		return fmt.Errorf("prepare-release: herdr-plugin.toml has no version field")
 	}
 	next := regexp.MustCompile(`(?m)^version\s*=\s*"[^"]+"`).ReplaceAllString(string(text), `version = "`+version+`"`)
-	if err := os.WriteFile(target, []byte(next), 0o644); err != nil {
-		return err
+	if next != string(text) {
+		if err := os.WriteFile(target, []byte(next), 0o644); err != nil {
+			return err
+		}
 	}
 	fmt.Printf("prepare-release: %s → %s\n", target, version)
 
 	if target != defaultToml {
 		return nil
-	}
-
-	sync := exec.Command("go", "run", "./scripts/sync-embed")
-	sync.Dir = root
-	sync.Stdout = os.Stdout
-	sync.Stderr = os.Stderr
-	if err := sync.Run(); err != nil {
-		return err
 	}
 
 	cmd := exec.Command("go", "run", "./scripts/generate-workflow-schema")

@@ -12,9 +12,6 @@ func TestRunIsExecutableAggregate(t *testing.T) {
 		t.Fatalf("NewRun: %v", err)
 	}
 	run = got
-	if run.ID() != fakeRunID {
-		t.Fatalf("ID() = %q, want %q", run.ID(), fakeRunID)
-	}
 	if run.depth > 0 {
 		t.Fatal("new Run must have no current step")
 	}

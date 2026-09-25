@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	assets "github.com/aorumbayev/herdr-workflows/embed"
+	assets "github.com/aorumbayev/herdr-workflows"
 	"github.com/spf13/cobra"
 )
 

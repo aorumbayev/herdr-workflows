@@ -205,53 +205,58 @@ func SubstituteParams(params map[string]any, ns TemplateNamespace) map[string]an
 	return out
 }
 
-func collectTemplatesFromValue(value any, out []TemplatePath) []TemplatePath {
-	WalkValueStrings(value, "", func(text, _ string) any {
-		out = append(out, TextTemplates(text)...)
-		return text
-	})
-	return out
+type templateSite struct {
+	key  string
+	text string
 }
 
-func collectPaneTemplates(pane *PaneSpec, out []TemplatePath) []TemplatePath {
-	for _, text := range []string{pane.Open, pane.Anchor, pane.Workspace, pane.Name} {
-		out = append(out, TextTemplates(text)...)
+func actionTemplateSites(a Action) []templateSite {
+	var sites []templateSite
+	add := func(key, text string) {
+		if text != "" {
+			sites = append(sites, templateSite{key, text})
+		}
 	}
-	return out
+	addMap := func(key string, values map[string]string) {
+		for _, name := range slices.Sorted(maps.Keys(values)) {
+			add(key+"."+name, values[name])
+		}
+	}
+	addPlacement := func(cwd string, env map[string]string, pane *PaneSpec) {
+		add("cwd", cwd)
+		addMap("env", env)
+		if pane != nil {
+			add("pane.target", pane.Anchor)
+			add("pane.workspace", pane.Workspace)
+			add("pane.open", pane.Open)
+			add("pane.name", pane.Name)
+		}
+	}
+	switch act := a.(type) {
+	case AgentAction:
+		add("agent", act.Prompt)
+		add("using", act.Using)
+		add("target", act.Target)
+		addPlacement(act.Cwd, act.Env, act.Pane)
+	case RunAction:
+		for i, element := range act.Payload.Argv {
+			add("run["+strconv.Itoa(i)+"]", element)
+		}
+		addPlacement(act.Cwd, act.Env, act.Pane)
+	case HerdrAction:
+		WalkValueStrings(act.Params, "params", func(text, key string) any {
+			add(key, text)
+			return text
+		})
+	case WorkflowAction:
+		addMap("inputs", act.Inputs)
+	}
+	return sites
 }
 
 func collectActionTemplates(a Action, out []TemplatePath) []TemplatePath {
-	switch act := a.(type) {
-	case AgentAction:
-		out = append(out, TextTemplates(act.Prompt)...)
-		out = append(out, TextTemplates(act.Using)...)
-		out = append(out, TextTemplates(act.Target)...)
-		out = append(out, TextTemplates(act.Cwd)...)
-		for _, value := range act.Env {
-			out = append(out, TextTemplates(value)...)
-		}
-		if act.Pane != nil {
-			out = collectPaneTemplates(act.Pane, out)
-		}
-	case RunAction:
-		if act.Payload.IsArgv() {
-			for _, el := range act.Payload.Argv {
-				out = append(out, TextTemplates(el)...)
-			}
-		}
-		out = append(out, TextTemplates(act.Cwd)...)
-		for _, value := range act.Env {
-			out = append(out, TextTemplates(value)...)
-		}
-		if act.Pane != nil {
-			out = collectPaneTemplates(act.Pane, out)
-		}
-	case HerdrAction:
-		out = collectTemplatesFromValue(act.Params, out)
-	case WorkflowAction:
-		for _, value := range act.Inputs {
-			out = append(out, TextTemplates(value)...)
-		}
+	for _, site := range actionTemplateSites(a) {
+		out = append(out, TextTemplates(site.text)...)
 	}
 	return out
 }

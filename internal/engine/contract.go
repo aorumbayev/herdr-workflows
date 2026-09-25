@@ -159,10 +159,6 @@ type StepRunOpts struct {
 	Env                  []string
 }
 
-func IsCoordinationError(err error) bool {
-	return host.IsTransportLoss(err)
-}
-
 func ErrorText(err error) string {
 	if err == nil {
 		return ""
@@ -187,7 +183,7 @@ func ReadTruncated(result any) bool {
 }
 
 func DispatchFailure(action string, err error) StepOutcome {
-	if IsCoordinationError(err) {
+	if host.IsTransportLoss(err) {
 		return StepOutcome{
 			OK:               false,
 			Error:            fmt.Sprintf("%s: herdr coordination was lost (%s) — the action may still be active; panes were preserved and on_failure was skipped", action, ErrorText(err)),

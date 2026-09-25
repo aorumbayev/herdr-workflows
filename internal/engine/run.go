@@ -10,7 +10,6 @@ var runIDRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 // Run is the in-memory execution lifecycle for one workflow invocation.
 type Run struct {
-	id       string
 	depth    int
 	outcomes []StepOutcomeKind
 	terminal *RunTerminalStatus
@@ -40,14 +39,11 @@ func ValidTerminalStatus(s string) bool {
 }
 
 func NewRun(id string) (*Run, error) {
-	normalized := strings.ToLower(strings.TrimSpace(id))
-	if !runIDRe.MatchString(normalized) {
+	if !ValidRunID(id) {
 		return nil, fmt.Errorf("run id %q is not a canonical UUID", id)
 	}
-	return &Run{id: normalized}, nil
+	return &Run{}, nil
 }
-
-func (r *Run) ID() string { return r.id }
 
 func (r *Run) StartStep() error {
 	if r.terminal != nil {

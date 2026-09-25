@@ -4,7 +4,7 @@ project_name: herdr-workflows
 
 builds:
   - id: herdr-workflows
-    main: .
+    main: ./cmd/herdr-workflows
     binary: herdr-workflows
     env:
       - CGO_ENABLED=0

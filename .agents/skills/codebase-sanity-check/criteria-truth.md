@@ -1,7 +1,7 @@
 # Group B: Truth and Enforcement
 
-Three layers describe one product. Invariants of record are the loader, `docs/workflow.schema.json`
-and the embed schema, and the tests. Code is current behavior. `docs/` and `README.md` are the
+Three layers describe one product. Invariants of record are the loader, `docs/workflow.schema.json`,
+and the tests. Code is current behavior. `docs/` and `README.md` are the
 user-facing contract. Hard constraints in `AGENTS.md` are a short agent index — a bullet exists only
 when a machine already owns the same rule. You find where they disagree and name **which one is
 wrong**. Then you check whether the rules they state are enforced by a machine or only remembered.
@@ -13,9 +13,7 @@ and do not stop early.
 C. You own truth, prose, and enforcement.
 
 **Read first:** `AGENTS.md` "Hard constraints", `CONTRIBUTING.md` "Change classes" and "Documentation
-style". Prose follows Simplified Technical English: active voice, one term per concept, short
-sentences, no marketing filler, no semicolons, American spelling. Exact technical contracts and
-examples stay unchanged.
+style".
 
 ## 1. Docs against code
 
@@ -24,13 +22,13 @@ examples stay unchanged.
 - A capability claim in `README.md`, `docs/guide.md`, `docs/reference.md`, `docs/install.md`, or
   `docs/surfaces.md` that the code does not implement
 - Two pages that state the same fact differently. One of them is wrong
-- A command, flag, path, env var, or key documented but absent from `internal/` or `main.go`
+- A command, flag, path, env var, or key documented but absent from `internal/` or `cmd/`
 - A version, minimum herdr version, or format string that differs between docs and
   `herdr-plugin.toml` or `go.mod`
 
 ### How to measure
 
-- For each claim, grep the implementing surface and cite it: `rg -n "<flag|command|key>" internal main.go`
+- For each claim, grep the implementing surface and cite it: `rg -n "<flag|command|key>" internal cmd`
 - For cross-page contradictions, grep the fact across `README.md docs/*.md AGENTS.md`. When two
   pages disagree, read the code and state the wrong line by `file:line`
 - `rg -n "0\.[0-9]+\.[0-9]+|v1alpha[0-9]+" README.md docs/*.md herdr-plugin.toml go.mod` for
@@ -52,7 +50,7 @@ examples stay unchanged.
 
 - Read loader refinements in `internal/workflow/` and keys in `docs/workflow.schema.json`
 - For each rule, find the implementing site by its own words:
-  `rg -n "<distinctive phrase from the rule>" internal main.go`. A rule with no site at all is
+  `rg -n "<distinctive phrase from the rule>" internal cmd`. A rule with no site at all is
   section 9's finding. A site that behaves differently is this section's
 - Phase 0 gate output (`go tool verify`, docs build) is evidence. Quote it. Do not re-run
 

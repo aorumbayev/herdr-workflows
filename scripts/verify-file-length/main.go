@@ -23,7 +23,7 @@ type finding struct {
 }
 
 // Check examines Go sources in root and gives an exit code with output.
-func Check(root string) (exitCode int, stdout, stderr string) {
+func Check(root string) (exitCode int, stdout string) {
 	var findings []finding
 	scan := func(abs string) {
 		lines, err := countLines(abs)
@@ -37,12 +37,12 @@ func Check(root string) (exitCode int, stdout, stderr string) {
 		}
 	}
 
-	mainPath := filepath.Join(root, "main.go")
-	if info, err := os.Stat(mainPath); err == nil && !info.IsDir() {
-		scan(mainPath)
+	rootFiles, _ := filepath.Glob(filepath.Join(root, "*.go"))
+	for _, path := range rootFiles {
+		scan(path)
 	}
 
-	for _, dir := range []string{"internal", "embed", "e2e", "scripts"} {
+	for _, dir := range []string{"cmd", "internal", "e2e", "scripts"} {
 		base := filepath.Join(root, dir)
 		_ = filepath.WalkDir(base, func(path string, d os.DirEntry, err error) error {
 			if err != nil {
@@ -63,7 +63,7 @@ func Check(root string) (exitCode int, stdout, stderr string) {
 	}
 
 	if len(findings) == 0 {
-		return 0, fmt.Sprintf("file-length: Go sources under %d lines (*.gen.go exempt)\n", maxLines), ""
+		return 0, fmt.Sprintf("file-length: Go sources under %d lines (*.gen.go exempt)\n", maxLines)
 	}
 
 	slices.SortFunc(findings, func(a, b finding) int {
@@ -83,7 +83,7 @@ func Check(root string) (exitCode int, stdout, stderr string) {
 		word = "file"
 	}
 	fmt.Fprintf(&out, "\nfile-length: %d %s over %d lines\n", n, word, maxLines)
-	return 1, out.String(), ""
+	return 1, out.String()
 }
 
 func rel(root, abs string) string {
@@ -121,12 +121,7 @@ func repoRoot() string {
 }
 
 func main() {
-	code, stdout, stderr := Check(repoRoot())
-	if stdout != "" {
-		fmt.Print(stdout)
-	}
-	if stderr != "" {
-		fmt.Fprint(os.Stderr, stderr)
-	}
+	code, stdout := Check(repoRoot())
+	fmt.Print(stdout)
 	os.Exit(code)
 }
