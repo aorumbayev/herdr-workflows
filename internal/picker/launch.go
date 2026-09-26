@@ -43,9 +43,6 @@ type launchFailedMsg struct {
 
 func (m Model) beginLaunch(def *workflow.Definition, values map[string]string, domains map[string][]string) (tea.Model, tea.Cmd) {
 	title := workflow.DisplayTitle(def.Name, def.Title)
-	if title == "" {
-		title = def.Name
-	}
 	inputs := values
 	if inputs == nil {
 		inputs = map[string]string{}
