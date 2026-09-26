@@ -54,12 +54,7 @@ type machineFailure struct {
 }
 
 func writeMachine(w io.Writer, v any) error {
-	raw, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	_, err = w.Write(append(raw, '\n'))
-	return err
+	return json.NewEncoder(w).Encode(v)
 }
 
 func writeMachineFailure(w io.Writer, e *machineError) {

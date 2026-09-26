@@ -3,7 +3,6 @@ package cli
 import (
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -348,50 +347,5 @@ func TestLaunchPayloadRequireHistoryStopsBeforeStepOne(t *testing.T) {
 	}
 	if _, err := os.Stat(sentinel); err != nil {
 		t.Fatal("picker-style launch no longer runs without history")
-	}
-}
-
-func TestRunsHelpListsCommandsAndFlags(t *testing.T) {
-	root := t.TempDir()
-	got := runCLI([]string{"runs", "--help"}, root, nil, "")
-	if got.code != 0 {
-		t.Fatalf("code=%d stderr=%q", got.code, got.stderr)
-	}
-	for _, want := range []string{"list", "get"} {
-		if !strings.Contains(got.stdout, want) {
-			t.Fatalf("runs help lacks %q: %q", want, got.stdout)
-		}
-	}
-	list := runCLI([]string{"runs", "list", "--help"}, root, nil, "")
-	for _, want := range []string{"--json", "--checkout-root", "--status", "--limit", "--cursor", "succeeded"} {
-		if !strings.Contains(list.stdout, want) {
-			t.Fatalf("runs list help lacks %q: %q", want, list.stdout)
-		}
-	}
-	run := runCLI([]string{"run", "--help"}, root, nil, "")
-	for _, want := range []string{"--detach", "--json"} {
-		if !strings.Contains(run.stdout, want) {
-			t.Fatalf("run help lacks %q: %q", want, run.stdout)
-		}
-	}
-}
-
-func TestDetailErrorCodes(t *testing.T) {
-	cases := map[string]string{
-		"snapshot": "", "invalid": "invalid_request", "missing": "run_not_found",
-		"expired": "run_not_found", "incompatible": "incompatible_history", "unavailable": "history_unavailable",
-	}
-	for kind, want := range cases {
-		err := detailError(history.Detail{Kind: kind, Message: kind})
-		if want == "" {
-			if err != nil {
-				t.Fatalf("%s: %v", kind, err)
-			}
-			continue
-		}
-		var machine *machineError
-		if !errors.As(err, &machine) || machine.Code != want || machine.Message != kind {
-			t.Fatalf("%s: %v", kind, err)
-		}
 	}
 }

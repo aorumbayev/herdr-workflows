@@ -18,12 +18,13 @@ import (
 )
 
 type runRequest struct {
-	name     string
-	inputs   map[string]string
-	domains  map[string][]string
-	runID    string
-	detached bool
-	retry    *retryRequest
+	name           string
+	inputs         map[string]string
+	domains        map[string][]string
+	runID          string
+	detached       bool
+	requireHistory bool
+	retry          *retryRequest
 }
 
 func runRun(cmd *cobra.Command, args []string) error {
@@ -57,6 +58,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		req.inputs, req.domains, req.runID, req.detached = payload.Inputs, payload.Domains, payload.RunID, true
+		req.requireHistory = payload.RequireHistory
 		if payload.RetryOf != "" {
 			req.retry = &retryRequest{runID: payload.RetryOf, fromFailed: payload.FromFailed}
 		}
@@ -104,7 +106,7 @@ func executeRun(cmd *cobra.Command, req runRequest) error {
 		RunID:          req.runID,
 		CheckoutRoot:   app.RepoRoot,
 		RetryOf:        retryOf,
-		RequireHistory: payload.RequireHistory,
+		RequireHistory: req.requireHistory,
 		OnAck: func(line string) {
 			writeRunLine(stdout, line)
 		},
