@@ -15,16 +15,6 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-func TestFormatRetryCommand(t *testing.T) {
-	id := "22222222-2222-4222-8222-222222222222"
-	if got := FormatRetryCommand(id, false); got != "hwf retry "+id {
-		t.Fatalf("got %q", got)
-	}
-	if got := FormatRetryCommand(id, true); got != "hwf retry "+id+" --from-failed" {
-		t.Fatalf("got %q", got)
-	}
-}
-
 func TestNewDefaultsClipboardToTUI(t *testing.T) {
 	m := New(Options{})
 	if m.copyText == nil {

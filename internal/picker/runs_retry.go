@@ -22,9 +22,6 @@ func (m Model) beginRunsRetry(fromFailed bool) (tea.Model, tea.Cmd) {
 	}
 	m.detachLaunch()
 	title := workflow.DisplayTitle(detail.Workflow, detail.Title)
-	if title == "" {
-		title = detail.Workflow
-	}
 	return m.startLaunch(title, title+tui.ChromeSep+"saved workflow"+tui.ChromeSep+"repeats recorded actions", LaunchRunOpts{
 		Name:       detail.Workflow,
 		Inputs:     map[string]string{},

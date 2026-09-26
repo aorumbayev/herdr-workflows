@@ -139,7 +139,7 @@ func topLevelSteps(db *sql.DB, snap Snapshot) ([]engine.RetrySourceStep, error) 
 		if len(rec.WorkflowPath) != 1 || rec.Phase != string(engine.PhaseMain) {
 			continue
 		}
-		step := engine.RetrySourceStep{Ordinal: rec.Ordinal, StepID: rec.StepID, Outcome: engine.StepOutcomeKind(rec.Outcome)}
+		step := engine.RetrySourceStep{Ordinal: rec.Ordinal, Outcome: engine.StepOutcomeKind(rec.Outcome)}
 		if rec.StepID != "" && step.Outcome == engine.OutcomeSucceeded {
 			if err := loadStepResult(db, snap.ID, &step); err != nil {
 				return nil, err

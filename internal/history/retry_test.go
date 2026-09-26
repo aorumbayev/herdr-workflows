@@ -74,7 +74,7 @@ func TestLoadRetryRecordRoundTripsInputsFingerprintsAndTopLevelResults(t *testin
 	}
 	first := got.Source.Steps[0]
 	result, _ := first.Result.(map[string]any)
-	if first.StepID != "probe" || !first.HasResult || result["stdout"] != "hi" {
+	if !first.HasResult || result["stdout"] != "hi" {
 		t.Fatalf("step 1 = %+v", first)
 	}
 	if got.Source.Steps[2].Outcome != engine.OutcomeFailed || got.Source.Steps[2].HasResult {

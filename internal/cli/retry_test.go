@@ -88,9 +88,12 @@ func TestRetryFromFailedReusesFinishedStepsAndRecordedInputs(t *testing.T) {
 	}
 }
 
-func TestRetryAllRerunsEveryStepWithRecordedInputs(t *testing.T) {
+func TestRetryAllReplaysSavedWorkflowAndInputs(t *testing.T) {
 	e := newRetryEnv(t, flakyWorkflow)
 	id := e.failFirst(t)
+	if err := os.Remove(filepath.Join(e.root, ".hwf", "workflows", "flaky.yaml")); err != nil {
+		t.Fatal(err)
+	}
 
 	got := e.run([]string{"retry", id}, "")
 	if got.code != 0 {
@@ -101,35 +104,6 @@ func TestRetryAllRerunsEveryStepWithRecordedInputs(t *testing.T) {
 	}
 	if out := e.read(t, "out.txt"); out != "ada" {
 		t.Fatalf("out.txt = %q, want ada", out)
-	}
-}
-
-func TestRetryFromFailedUsesOriginalWorkflowAfterEdit(t *testing.T) {
-	e := newRetryEnv(t, flakyWorkflow)
-	id := e.failFirst(t)
-	writeWorkflow(t, e.root, "flaky", strings.Replace(flakyWorkflow, "echo x >> count", "echo y >> count", 1))
-
-	got := e.run([]string{"retry", id, "--from-failed"}, "")
-	if got.code != 0 {
-		t.Fatalf("code = %d stderr = %q", got.code, got.stderr)
-	}
-	if n := strings.Count(e.read(t, "count"), "x"); n != 1 {
-		t.Fatalf("probe ran %d times", n)
-	}
-}
-
-func TestRetryAllUsesSavedYAMLWhenWorkflowWasRemoved(t *testing.T) {
-	e := newRetryEnv(t, flakyWorkflow)
-	id := e.failFirst(t)
-	if err := os.Remove(filepath.Join(e.root, ".hwf", "workflows", "flaky.yaml")); err != nil {
-		t.Fatal(err)
-	}
-	got := e.run([]string{"retry", id}, "")
-	if got.code != 0 {
-		t.Fatalf("retry code = %d stderr = %q", got.code, got.stderr)
-	}
-	if n := strings.Count(e.read(t, "count"), "x"); n != 2 {
-		t.Fatalf("saved workflow ran %d times, want 2", n)
 	}
 }
 

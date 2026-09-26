@@ -829,7 +829,7 @@ func RunWorkflow(opts RunOptions) (StepsResult, error) {
 	if err := caps.AssertHwfEnvValues("HWF environment", collected.Values); err != nil {
 		return failPrecondition(err.Error())
 	}
-	preflight := preflightResult{}
+	var preflight preflightResult
 	if opts.RetryContext != nil {
 		preflight = retryPreflightContext(opts, recorder.RunID(), collected.Values)
 	} else {

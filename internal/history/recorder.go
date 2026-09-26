@@ -1,7 +1,6 @@
 package history
 
 import (
-	"os"
 	"strings"
 
 	"github.com/aorumbayev/herdr-workflows/internal/engine"
@@ -51,13 +50,7 @@ func CreateRunRecorder(opts CreateRecorderOpts) (engine.Recorder, error) {
 	}
 	emitAck(opts.OnAck, FormatHistoryAck(Ack{State: "claimed", ID: claim.ID}))
 	rec := &recorder{writer: w, runID: claim.ID, workflow: opts.Workflow, scope: scope, state: &recorderState{}}
-	entryYAML := opts.Workflow.SourceYAML
-	if entryYAML == "" && opts.Workflow.File != "" {
-		if body, err := os.ReadFile(opts.Workflow.File); err == nil {
-			entryYAML = string(body)
-		}
-	}
-	rec.persistEntryYAML(entryYAML)
+	rec.persistEntryYAML(opts.Workflow.SourceYAML)
 	return rec, nil
 }
 

@@ -26,7 +26,6 @@ type Resume struct {
 // RetrySourceStep is one recorded top-level main-phase step of a source run.
 type RetrySourceStep struct {
 	Ordinal   int
-	StepID    string
 	Outcome   StepOutcomeKind
 	HasResult bool
 	Result    any
@@ -77,10 +76,6 @@ func digest(v any) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func reusableOutcome(kind StepOutcomeKind) bool {
-	return kind == OutcomeSucceeded || kind == OutcomeSkipped || kind == OutcomeLaunched
-}
-
 // PlanResume picks the first top-level step that did not finish well and checks
 // that every step before it is unchanged and has its recorded result.
 func PlanResume(wf *workflow.Definition, src RetrySource) (*Resume, error) {
@@ -94,7 +89,7 @@ func PlanResume(wf *workflow.Definition, src RetrySource) (*Resume, error) {
 		if ok && step.Outcome == OutcomeLaunched {
 			return nil, fmt.Errorf("step %d launched background work whose state cannot be replayed safely — retry all instead", from)
 		}
-		if !ok || !reusableOutcome(step.Outcome) {
+		if !ok || (step.Outcome != OutcomeSucceeded && step.Outcome != OutcomeSkipped) {
 			break
 		}
 	}

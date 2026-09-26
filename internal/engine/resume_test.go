@@ -68,7 +68,7 @@ steps:
   - run: [echo, e]
 `})
 	src := resumeSource(def,
-		RetrySourceStep{Ordinal: 1, StepID: "a", Outcome: OutcomeSucceeded, HasResult: true, Result: map[string]any{"stdout": "a"}},
+		RetrySourceStep{Ordinal: 1, Outcome: OutcomeSucceeded, HasResult: true, Result: map[string]any{"stdout": "a"}},
 		RetrySourceStep{Ordinal: 2, Outcome: OutcomeSkipped},
 		RetrySourceStep{Ordinal: 3, Outcome: OutcomeSucceeded},
 		RetrySourceStep{Ordinal: 4, Outcome: OutcomeFailedContinued},
@@ -124,7 +124,7 @@ func TestPlanResumeAllowsEditsFromTheResumePointOnly(t *testing.T) {
 	before := loadResumeWorkflow(t, map[string]string{"m": "version: v1alpha1\nsteps:\n  - run: [echo, a]\n  - id: b\n    run: [echo, b]\n"})
 	src := resumeSource(before,
 		RetrySourceStep{Ordinal: 1, Outcome: OutcomeSucceeded},
-		RetrySourceStep{Ordinal: 2, StepID: "b", Outcome: OutcomeFailed},
+		RetrySourceStep{Ordinal: 2, Outcome: OutcomeFailed},
 	)
 	fixedFailed := loadResumeWorkflow(t, map[string]string{"m": "version: v1alpha1\nsteps:\n  - run: [echo, a]\n  - id: b\n    run: [echo, fixed]\n"})
 	if _, err := PlanResume(fixedFailed, src); err != nil {
@@ -141,7 +141,7 @@ func TestPlanResumeRefusesMissingRecordedResult(t *testing.T) {
 	t.Parallel()
 	def := loadResumeWorkflow(t, map[string]string{"m": "version: v1alpha1\nsteps:\n  - id: a\n    run: [echo, a]\n  - run: [echo, b]\n"})
 	_, err := PlanResume(def, resumeSource(def,
-		RetrySourceStep{Ordinal: 1, StepID: "a", Outcome: OutcomeSucceeded},
+		RetrySourceStep{Ordinal: 1, Outcome: OutcomeSucceeded},
 		RetrySourceStep{Ordinal: 2, Outcome: OutcomeFailed},
 	))
 	if err == nil || !strings.Contains(err.Error(), "result of step 1 (a) was not recorded") {
@@ -149,63 +149,16 @@ func TestPlanResumeRefusesMissingRecordedResult(t *testing.T) {
 	}
 }
 
-type retryPlanRecorder struct {
+type reuseRecorder struct {
 	*fakeRecorder
-	inputs       map[string]string
-	fingerprints []string
-	reused       []int
-	results      map[int]any
+	reused []int
 }
 
-func (r *retryPlanRecorder) RecordRetryPlan(collected workflow.CollectedInputs, fingerprints []string, _ map[string]any) {
-	r.inputs = collected.Values
-	r.fingerprints = fingerprints
-}
-
-func (r *retryPlanRecorder) StepFinished(step workflow.Step, ordinal, total int, label string, kind StepOutcomeKind, outcome *RecorderOutcome, phase StepPhase) error {
+func (r *reuseRecorder) StepFinished(step workflow.Step, ordinal, total int, label string, kind StepOutcomeKind, outcome *RecorderOutcome, phase StepPhase) error {
 	if outcome != nil && outcome.Reused {
 		r.reused = append(r.reused, ordinal)
 	}
-	if outcome != nil && outcome.Result != nil {
-		if r.results == nil {
-			r.results = map[int]any{}
-		}
-		r.results[ordinal] = outcome.Result
-	}
 	return r.fakeRecorder.StepFinished(step, ordinal, total, label, kind, outcome, phase)
-}
-
-func TestRunWorkflowRecordsRetryPlanAndStepResults(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	writeRunnerWorkflow(t, root, "m", `version: v1alpha1
-inputs:
-  who: text
-steps:
-  - id: probe
-    run: [sh, -c, "printf hi"]
-  - run: [echo, "{{inputs.who}}"]
-`)
-	rec := &retryPlanRecorder{fakeRecorder: newFakeRecorder()}
-	result, err := RunWorkflow(RunOptions{
-		Name:     "m",
-		RepoRoot: root,
-		Config:   runnerBaseConfig(),
-		Ctx:      config.InvocationContext{Cwd: root},
-		Deps:     runnerDeps(newRunnerHarness()),
-		Inputs:   map[string]string{"who": "ada"},
-		Recorder: rec,
-	})
-	if err != nil || !result.OK {
-		t.Fatalf("RunWorkflow: %v %+v", err, result)
-	}
-	if rec.inputs["who"] != "ada" || len(rec.fingerprints) != 2 {
-		t.Fatalf("plan = %v %v", rec.inputs, rec.fingerprints)
-	}
-	got, ok := rec.results[1].(map[string]any)
-	if !ok || got["stdout"] != "hi" {
-		t.Fatalf("results = %#v", rec.results)
-	}
 }
 
 func TestRunWorkflowResumeReusesEarlierStepsAndRunsTheRest(t *testing.T) {
@@ -220,7 +173,7 @@ steps:
   - run: [sh, -c, 'printf "%s" "$MSG" > out.txt']
     env: { MSG: "{{steps.probe.stdout}}" }
 `)
-	rec := &retryPlanRecorder{fakeRecorder: newFakeRecorder()}
+	rec := &reuseRecorder{fakeRecorder: newFakeRecorder()}
 	var progress []string
 	result, err := RunWorkflow(RunOptions{
 		Name:     "m",

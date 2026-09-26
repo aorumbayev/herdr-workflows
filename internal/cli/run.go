@@ -71,7 +71,7 @@ func executeRun(cmd *cobra.Command, req runRequest) error {
 	var loaded *workflow.Definition
 	var resume *engine.Resume
 	var retryContext map[string]any
-	retryOf := ""
+	var retryOf string
 	if req.retry != nil {
 		prepared, err := prepareRetry(app, req)
 		if err != nil {
