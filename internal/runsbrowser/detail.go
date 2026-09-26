@@ -76,6 +76,12 @@ func focusedStep(detail history.Detail, focus int) (history.DetailStep, bool) {
 func StepCause(step history.DetailStep) string { return stepCause(step) }
 
 func stepCause(step history.DetailStep) string {
+	switch {
+	case step.Outcome == "succeeded" || step.Outcome == "skipped" || step.Outcome == "launched":
+		return step.Outcome
+	case step.Outcome == "running" || step.Active:
+		return "step running"
+	}
 	fact := step.Failure
 	kind := step.Action
 	if fact != nil && fact.Action != "" {
@@ -100,12 +106,6 @@ func stepCause(step history.DetailStep) string {
 	case "workflow":
 		return "workflow step failed"
 	default:
-		if step.Outcome == "running" || step.Active {
-			return "step running"
-		}
-		if step.Outcome == "succeeded" || step.Outcome == "skipped" || step.Outcome == "launched" {
-			return step.Outcome
-		}
 		return "step failed"
 	}
 }

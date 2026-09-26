@@ -97,3 +97,18 @@ func TestRunDetailFooterNamesRetryKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestStepCauseNamesTheOutcomeOfAStepThatDidNotFail(t *testing.T) {
+	for _, outcome := range []string{"succeeded", "skipped", "launched"} {
+		for _, action := range []string{"run", "agent", "herdr", "workflow"} {
+			step := history.DetailStep{StepRecord: history.StepRecord{StepIdentity: history.StepIdentity{Action: action}, Outcome: outcome}}
+			if got := stepCause(step); got != outcome {
+				t.Fatalf("%s %s: cause = %q, want %q", action, outcome, got, outcome)
+			}
+		}
+	}
+	running := history.DetailStep{StepRecord: history.StepRecord{StepIdentity: history.StepIdentity{Action: "herdr"}}, Active: true}
+	if got := stepCause(running); got != "step running" {
+		t.Fatalf("running cause = %q", got)
+	}
+}
