@@ -237,7 +237,7 @@ func handleExistingInstall(dest string, entry OwnershipEntry, kind ownedKind, so
 			*messages = append(*messages, fmt.Sprintf("skipped cli install: %s exists and is not owned by herdr-workflows", dest))
 			return "", true
 		}
-		resolvedLink, _ := filepath.Abs(filepath.Join(filepath.Dir(dest), linkDest))
+		resolvedLink, _ := filepath.Abs(symlinkTarget(dest, linkDest))
 		owned := entry.Kind == ownedSymlink && entry.Source != "" && resolvedLink == entry.Source
 		if kind == ownedSymlink && resolvedLink == absSource && owned {
 			*messages = append(*messages, fmt.Sprintf("%s already linked at %s", name, dest))
@@ -256,6 +256,13 @@ func handleExistingInstall(dest string, entry OwnershipEntry, kind ownedKind, so
 	}
 	*messages = append(*messages, fmt.Sprintf("skipped cli install: %s exists and is not owned by herdr-workflows", dest))
 	return "", true
+}
+
+func symlinkTarget(dest, target string) string {
+	if filepath.IsAbs(target) {
+		return target
+	}
+	return filepath.Join(filepath.Dir(dest), target)
 }
 
 func copyFile(src, dst string) error {
