@@ -162,6 +162,35 @@ func TestInstallCliCommandsRetargetedOwnedSymlink(t *testing.T) {
 	}
 }
 
+func TestInstallCliCommandsReplacesOwnedDanglingLinks(t *testing.T) {
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	oldBinary := filepath.Join(root, "old", "herdr-workflows")
+	newBinary := filepath.Join(root, "staged", "herdr-workflows")
+	for _, path := range []string{oldBinary, newBinary} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	InstallCliCommands(binDir, oldBinary, false)
+	if err := os.Remove(oldBinary); err != nil {
+		t.Fatal(err)
+	}
+	result := InstallCliCommands(binDir, newBinary, true)
+	if containsMessage(result.Messages, "skipped cli install") {
+		t.Fatalf("messages = %v", result.Messages)
+	}
+	for _, name := range []string{"herdr-workflows", "hwf"} {
+		data, err := os.ReadFile(filepath.Join(binDir, name))
+		if err != nil || string(data) != newBinary {
+			t.Fatalf("%s = %q, %v", name, data, err)
+		}
+	}
+}
+
 func TestInstallCliCommandsEphemeralSingleCopy(t *testing.T) {
 	root := t.TempDir()
 	binDir := filepath.Join(root, "bin")
