@@ -31,7 +31,7 @@ Callers outside the repository must substitute an absolute path to the checkout 
 1. Claims `/tmp/hwf-sandbox` with an exclusive `mkdir` when the path is absent, then writes the ownership sentinel (`hwf-sandbox`, `session=hwf-sandbox`, `plugin_root=<this checkout>`). If the path already exists, it validates that complete sentinel (session and plugin-root must match) and reuses the tree. It refuses missing, partial, or mismatched sentinels. It never overwrites or claims unknown contents. It refuses paths outside `/tmp/hwf-sandbox`.
 2. Seeds `repo/` as a git repo (initial commit, a `feature/sandbox` branch, a dirty `src/app.ts` so `git diff HEAD` is non-empty).
 3. Starts Herdr in fixed tmux session `hwf-sandbox` on its own socket. The session name is not overridable. Kill only when that session's `HERDR_SOCKET_PATH` exactly matches the sandbox socket. A sentinel alone is never enough.
-4. Runs `go build -o bin/herdr-workflows ./cmd/herdr-workflows` and then `bin/herdr-workflows setup` against that instance (**shared binary mutation**).
+4. Runs `go build -o bin/herdr-workflows ./cmd/herdr-workflows` and then `bin/herdr-workflows setup` against that instance (**shared binary mutation**). Links the plugin into the sandbox Herdr, so `prefix+k` opens the picker.
 5. Runs `hwf init`, then proves the chain with a `sandbox-selfcheck` workflow.
 
 Other actions: `sandbox.sh status`, `sandbox.sh down` (stops the server, kills the `hwf-sandbox` tmux session only when its socket matches, deletes `/tmp/hwf-sandbox` only after the same complete ownership validator passes), `sandbox.sh guard-check` (non-destructive ownership and kill-guard checks. Never starts Herdr).
@@ -96,6 +96,8 @@ confuses the next run.
 
 ## Gotchas seen for real
 
+- Herdr first-run setup installs agent integrations into the real `$HOME` (`~/.claude`, `~/.config/opencode`, `~/.pi`, `~/.omp`). The sandbox config sets `onboarding = false` to skip it. If a welcome or integrations screen shows, the sandbox did not read its config. Press `Escape`, never `Enter`, and run `down`.
+- Herdr reads an empty `HERDR_CONFIG_PATH` as a path and ignores `config.toml`. `sandbox.sh` removes inherited Herdr variables with `env -u`, not with empty values.
 - Herdr refuses to launch inside a Herdr-managed pane. The sandbox config sets `[experimental] allow_nested = true`. That is why `up` must not overwrite an existing `config.toml`.
 - `hwf run` needs the sandbox repo as cwd. Workflow lookup is repo-rooted.
 - `herdr server reload-config` needs the sandbox server already up. Never run the Go build and `setup` before `sandbox.sh up` has started it.

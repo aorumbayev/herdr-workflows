@@ -155,8 +155,10 @@ seed_config() {
   # and every notification step passes while showing nothing.
   # worktrees.directory: the default is the real ~/.herdr/worktrees, so a worktree.create
   # test would litter the user's home instead of the sandbox.
+  # onboarding = false: first-run setup installs agent integrations into the real $HOME
+  # (~/.claude, ~/.config/opencode, ...), which the sandbox does not isolate.
   [ -f "$CFG/herdr/config.toml" ] ||
-    printf '[experimental]\nallow_nested = true\n\n[ui.toast]\ndelivery = "herdr"\n\n[worktrees]\ndirectory = "%s/worktrees"\n' \
+    printf 'onboarding = false\n\n[experimental]\nallow_nested = true\n\n[ui.toast]\ndelivery = "herdr"\n\n[worktrees]\ndirectory = "%s/worktrees"\n' \
       "$SANDBOX" > "$CFG/herdr/config.toml"
 }
 
@@ -178,13 +180,15 @@ seed_repo() {
 start_server() {
   if server_running; then return 0; fi
   kill_sandbox_tmux
+  # env -u, not tmux -e VAR=: herdr reads an empty HERDR_CONFIG_PATH as a path and
+  # skips config.toml, so onboarding, allow_nested, and prefix+k would not apply.
   tmux new-session -d -s "$FIXED_SESSION" -x 200 -y 50 -c "$REPO" \
     -e XDG_CONFIG_HOME="$CFG" -e XDG_STATE_HOME="$SANDBOX/state" -e XDG_BIN_HOME="$BIN" \
     -e HERDR_PLUGIN_STATE_DIR="$PLUGIN_STATE" \
     -e HERDR_SOCKET_PATH="$SOCK" -e HERDR_CLIENT_SOCKET_PATH="$CLIENT_SOCK" \
-    -e HERDR_PANE_ID= -e HERDR_TAB_ID= -e HERDR_WORKSPACE_ID= -e HERDR_ENV= \
-    -e HERDR_CONFIG_PATH= -e HERDR_BIN_PATH= -e HERDR_PLUGIN_CONFIG_DIR= \
-    "PATH=$BIN:\$PATH herdr; echo '[sandbox herdr exited]'; sleep 86400"
+    "env -u HERDR_PANE_ID -u HERDR_TAB_ID -u HERDR_WORKSPACE_ID -u HERDR_ENV \
+      -u HERDR_CONFIG_PATH -u HERDR_BIN_PATH -u HERDR_PLUGIN_CONFIG_DIR \
+      PATH=$BIN:\$PATH herdr; echo '[sandbox herdr exited]'; sleep 86400"
   for _ in $(seq 1 40); do
     server_running && return 0
     sleep 0.5
@@ -219,6 +223,9 @@ up() {
   # herdr picks up the same binary on its next plugin action. Not sandbox-private.
   (cd "$PLUGIN_ROOT" && go build -o bin/herdr-workflows ./cmd/herdr-workflows)
   (cd "$PLUGIN_ROOT" && isolated bin/herdr-workflows setup)
+  # prefix+k invokes the plugin action, so the sandbox herdr must know the plugin.
+  isolated herdr plugin list 2>/dev/null | grep -q '(herdr-workflows)' ||
+    isolated herdr plugin link "$PLUGIN_ROOT" >/dev/null
   [ -f "$REPO/.hwf/config.yaml" ] || (cd "$REPO" && isolated hwf init)
   verify
   status
