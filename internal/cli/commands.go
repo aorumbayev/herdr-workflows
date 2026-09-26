@@ -22,6 +22,8 @@ func newRunCmd() *cobra.Command {
 		RunE: runRun,
 	}
 	cmd.Flags().StringArray("input", nil, "workflow input (repeatable)")
+	cmd.Flags().Bool("detach", false, "launch in the background and return once history has claimed the run (needs --json)")
+	cmd.Flags().Bool("json", false, "print one JSON object with the run summary (needs --detach)")
 	cmd.Flags().Bool("launch-payload", false, "read launch payload JSON from stdin")
 	return cmd
 }
