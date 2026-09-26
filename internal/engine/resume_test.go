@@ -291,46 +291,41 @@ func TestRunWorkflowResumeRerunsAFailedChildInFull(t *testing.T) {
 	}
 }
 
-func TestRunWorkflowResumeRefusesAGonePaneThatALaterStepNeeds(t *testing.T) {
+func TestCheckReusedPanesRefusesAGonePaneThatALaterStepNeeds(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
-	writeRunnerWorkflow(t, root, "m", `version: v1alpha1
+	def := loadResumeWorkflow(t, map[string]string{"m": `version: v1alpha1
 steps:
   - id: srv
     run: [sh, -c, "echo ready"]
     pane: { open: tab }
     ready_when: /ready/
     timeout: 5s
+  - id: other
+    run: [sh, -c, "echo ready"]
+    pane: { open: tab }
+    ready_when: /ready/
+    timeout: 5s
   - herdr: pane.send_text
     params: { pane_id: "{{steps.srv.pane_id}}", text: hi }
-`)
-	h := newRunnerHarness()
-	deps := runnerDeps(h)
-	deps.HerdrCall = func(method string, params map[string]any) (map[string]any, error) {
-		h.calls = append(h.calls, herdrCallRecord{method: method, params: params})
-		if method == "pane.get" {
-			return nil, errors.New("pane not found")
-		}
-		return map[string]any{}, nil
+`})
+	resume := &Resume{From: 3, Reused: []ReusedStep{
+		{Outcome: OutcomeSucceeded, Result: map[string]any{"pane_id": "w1:p9"}},
+		{Outcome: OutcomeSucceeded, Result: map[string]any{"pane_id": "w1:p8"}},
+	}}
+	var asked []string
+	herdrCall := func(method string, params map[string]any) (map[string]any, error) {
+		asked = append(asked, method+" "+params["pane_id"].(string))
+		return nil, errors.New("pane not found")
 	}
-	result, err := RunWorkflow(RunOptions{
-		Name:     "m",
-		RepoRoot: root,
-		Config:   runnerBaseConfig(),
-		Ctx:      config.InvocationContext{Cwd: root},
-		Deps:     deps,
-		Recorder: newFakeRecorder(),
-		Resume: &Resume{From: 2, Reused: []ReusedStep{
-			{Outcome: OutcomeSucceeded, Result: map[string]any{"pane_id": "w1:p9"}},
-		}},
-	})
-	if err != nil {
-		t.Fatalf("RunWorkflow: %v", err)
+	err := CheckReusedPanes(def, resume, herdrCall)
+	if err == nil || !strings.Contains(err.Error(), "pane w1:p9 from step 1 (srv) is gone") {
+		t.Fatalf("err = %v, want gone pane refusal", err)
 	}
-	if result.OK || !strings.Contains(result.Error, "pane w1:p9 from step 1 (srv) is gone") {
-		t.Fatalf("result = %+v, want gone pane refusal", result)
+	if len(asked) != 1 || asked[0] != "pane.get w1:p9" {
+		t.Fatalf("asked = %v, want only the pane a later step names", asked)
 	}
-	if h.hasMethod("pane.send_text") {
-		t.Fatal("step 2 ran after the pane check failed")
+	alive := func(string, map[string]any) (map[string]any, error) { return map[string]any{}, nil }
+	if err := CheckReusedPanes(def, resume, alive); err != nil {
+		t.Fatalf("live pane: %v", err)
 	}
 }

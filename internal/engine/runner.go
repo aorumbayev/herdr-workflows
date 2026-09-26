@@ -853,9 +853,6 @@ func RunWorkflow(opts RunOptions) (StepsResult, error) {
 		if msg := validateResume(loaded, opts.Resume); msg != "" {
 			return failPrecondition(msg)
 		}
-		if msg := checkReusedPanes(loaded, opts.Resume, deps); msg != "" {
-			return failPrecondition(msg)
-		}
 		stepOpts.Reuse = opts.Resume.Reused
 	}
 

@@ -65,6 +65,9 @@ func prepareRetry(app config.AppContext, req runRequest) (preparedRetry, error) 
 	var resume *engine.Resume
 	if req.retry.fromFailed {
 		resume, err = engine.PlanResume(loaded, rec.Source)
+		if err == nil {
+			err = engine.CheckReusedPanes(loaded, resume, host.HerdrCall)
+		}
 		if err != nil {
 			return preparedRetry{}, fmt.Errorf("cannot resume run %s: %w", rec.ID, err)
 		}

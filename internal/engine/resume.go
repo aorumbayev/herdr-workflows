@@ -127,8 +127,8 @@ func validateResume(wf *workflow.Definition, resume *Resume) string {
 	return ""
 }
 
-// checkReusedPanes confirms that each reused pane a remaining step names still exists.
-func checkReusedPanes(wf *workflow.Definition, resume *Resume, deps RunnerDeps) string {
+// CheckReusedPanes confirms that each reused pane a remaining step names still exists.
+func CheckReusedPanes(wf *workflow.Definition, resume *Resume, herdrCall func(string, map[string]any) (map[string]any, error)) error {
 	ordinals := map[string]int{}
 	for i := range resume.Reused {
 		if id := wf.Steps[i].ID; id != "" {
@@ -150,14 +150,11 @@ func checkReusedPanes(wf *workflow.Definition, resume *Resume, deps RunnerDeps) 
 			continue
 		}
 		checked[pane] = true
-		if deps.HerdrCall == nil {
-			return fmt.Sprintf("pane %s from step %d (%s) cannot be checked without herdr — retry all instead", pane, n, ref.Segments[0])
-		}
-		if _, err := deps.HerdrCall("pane.get", map[string]any{"pane_id": pane}); err != nil {
-			return fmt.Sprintf("pane %s from step %d (%s) is gone (%s) — retry all instead", pane, n, ref.Segments[0], err)
+		if _, err := herdrCall("pane.get", map[string]any{"pane_id": pane}); err != nil {
+			return fmt.Errorf("pane %s from step %d (%s) is gone (%s) — retry all instead", pane, n, ref.Segments[0], err)
 		}
 	}
-	return ""
+	return nil
 }
 
 func replayStep(opts StepRunOpts, step workflow.Step, n, total int, label string, reused ReusedStep, values workflow.TemplateNamespace) error {
