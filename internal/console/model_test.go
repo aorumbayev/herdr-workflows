@@ -16,8 +16,11 @@ import (
 )
 
 func TestFormatRetryCommand(t *testing.T) {
-	got := FormatRetryCommand("deploy")
-	if got != "hwf run deploy" {
+	id := "22222222-2222-4222-8222-222222222222"
+	if got := FormatRetryCommand(id, false); got != "hwf retry "+id {
+		t.Fatalf("got %q", got)
+	}
+	if got := FormatRetryCommand(id, true); got != "hwf retry "+id+" --from-failed" {
 		t.Fatalf("got %q", got)
 	}
 }
@@ -139,14 +142,21 @@ func TestModelRunDetailDebugTabsAndRetryCopy(t *testing.T) {
 	if !strings.Contains(view, "version: v1alpha1") {
 		t.Fatalf("yaml tab = %q", view)
 	}
+	if !strings.Contains(view, "y copy retry") || !strings.Contains(view, "Y copy from-failed") {
+		t.Fatalf("footer = %q", view)
+	}
 	next, _ = m.Update(keyRune('y'))
 	m = next.(Model)
-	if copied != "hwf run alpha" {
+	if copied != "hwf retry "+id {
 		t.Fatalf("copied = %q", copied)
 	}
 	view = stripView(m.View())
 	if !strings.Contains(strings.ToLower(view), "copied") {
 		t.Fatalf("status = %q", view)
+	}
+	_, _ = m.Update(keyRune('Y'))
+	if copied != "hwf retry "+id+" --from-failed" {
+		t.Fatalf("copied = %q", copied)
 	}
 }
 

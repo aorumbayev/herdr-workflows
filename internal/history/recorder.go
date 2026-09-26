@@ -12,14 +12,16 @@ type CreateRecorderOpts struct {
 	Workflow     workflow.Definition
 	RunID        string
 	CheckoutRoot string
+	RetryOf      string
 	OnAck        func(string)
 }
 
 type recorder struct {
-	writer *Writer
-	runID  string
-	scope  engine.RecorderScope
-	state  *recorderState
+	writer   *Writer
+	runID    string
+	workflow workflow.Definition
+	scope    engine.RecorderScope
+	state    *recorderState
 }
 
 type recorderState struct {
@@ -34,6 +36,7 @@ func CreateRunRecorder(opts CreateRecorderOpts) (engine.Recorder, error) {
 		Title:        opts.Workflow.Title,
 		Source:       sourceOf(opts.Workflow),
 		CheckoutRoot: opts.CheckoutRoot,
+		RetryOf:      opts.RetryOf,
 	})
 	scope := engine.RecorderScope{Name: opts.Workflow.Name, WorkflowPath: []string{opts.Workflow.Name}}
 	if !claim.OK {
@@ -47,20 +50,22 @@ func CreateRunRecorder(opts CreateRecorderOpts) (engine.Recorder, error) {
 		return &recorder{runID: claim.ID, scope: scope, state: &recorderState{}}, nil
 	}
 	emitAck(opts.OnAck, FormatHistoryAck(Ack{State: "claimed", ID: claim.ID}))
-	rec := &recorder{writer: w, runID: claim.ID, scope: scope, state: &recorderState{}}
-	rec.persistEntryYAML(opts.Workflow.File)
+	rec := &recorder{writer: w, runID: claim.ID, workflow: opts.Workflow, scope: scope, state: &recorderState{}}
+	entryYAML := opts.Workflow.SourceYAML
+	if entryYAML == "" && opts.Workflow.File != "" {
+		if body, err := os.ReadFile(opts.Workflow.File); err == nil {
+			entryYAML = string(body)
+		}
+	}
+	rec.persistEntryYAML(entryYAML)
 	return rec, nil
 }
 
-func (r *recorder) persistEntryYAML(path string) {
-	if path == "" || r.writer == nil {
+func (r *recorder) persistEntryYAML(body string) {
+	if body == "" || r.writer == nil {
 		return
 	}
-	body, err := os.ReadFile(path)
-	if err != nil || len(body) == 0 {
-		return
-	}
-	_ = WriteDebugArtifacts(r.runID, DebugArtifacts{EntryYAML: string(body)})
+	_ = WriteDebugArtifacts(r.runID, DebugArtifacts{EntryYAML: body})
 }
 
 // RecordTranscript keeps the captured transcript of the run for console debug views.
@@ -69,6 +74,26 @@ func (r *recorder) RecordTranscript(text string) {
 		return
 	}
 	_ = WriteDebugArtifacts(r.runID, DebugArtifacts{Transcript: text})
+}
+
+// RecordRetryPlan keeps the collected inputs and step fingerprints so a later retry can replay them.
+func (r *recorder) RecordRetryPlan(collected workflow.CollectedInputs, fingerprints []string, context map[string]any) {
+	if r.writer == nil {
+		return
+	}
+	sources := map[string]workflow.FrozenSource{}
+	var visit func(*workflow.Definition)
+	visit = func(def *workflow.Definition) {
+		if def == nil {
+			return
+		}
+		sources[def.Name] = workflow.FrozenSource{YAML: def.SourceYAML, Source: def.SourceKind()}
+		for _, child := range def.Children {
+			visit(child)
+		}
+	}
+	visit(&r.workflow)
+	_ = writeRetryPlan(r.runID, retryPlan{Inputs: collected.Values, Domains: collected.Domains, Fingerprints: fingerprints, Sources: sources, Context: context})
 }
 
 type claimError string
@@ -121,6 +146,12 @@ func (r *recorder) StepFinished(step workflow.Step, ordinal, total int, label st
 	}
 	if outcome != nil && outcome.OK && outcome.Truncated {
 		rec.Truncated = true
+	}
+	if outcome != nil && outcome.Reused {
+		rec.Reused = true
+	}
+	if len(r.scope.WorkflowPath) == 1 && phase == engine.PhaseMain && kind == engine.OutcomeSucceeded && step.ID != "" && outcome != nil {
+		_ = writeStepResult(r.runID, ordinal, outcome.Result)
 	}
 	if outcome != nil && !outcome.OK {
 		rec.Failure = failureFact(step, outcome)

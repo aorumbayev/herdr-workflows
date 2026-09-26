@@ -96,6 +96,8 @@ type RecorderOutcome struct {
 	Error            string
 	Details          map[string]any
 	CoordinationLost bool
+	Result           any
+	Reused           bool
 }
 
 type RecorderFinishExtras struct {
@@ -121,6 +123,7 @@ const (
 	ProgressSkip   ProgressOutcome = "skip"
 	ProgressFail   ProgressOutcome = "fail"
 	ProgressLaunch ProgressOutcome = "launch"
+	ProgressReused ProgressOutcome = "reused"
 )
 
 type TranscriptTextOpts struct {
@@ -155,6 +158,7 @@ type StepRunOpts struct {
 	Run                  *Run
 	OnProgress           func(step, total int, label string, outcome *ProgressOutcome)
 	OnStderr             func(text string)
+	Reuse                []ReusedStep
 	RunSteps             func(steps []workflow.Step, opts StepRunOpts, values workflow.TemplateNamespace) (StepsResult, error)
 	Env                  []string
 }

@@ -10,11 +10,13 @@ import (
 
 // LaunchRunOpts is the detached-run request that the picker supplies.
 type LaunchRunOpts struct {
-	Name     string
-	RepoRoot string
-	RunID    string
-	Inputs   map[string]string
-	Domains  map[string][]string
+	Name       string
+	RepoRoot   string
+	RunID      string
+	Inputs     map[string]string
+	Domains    map[string][]string
+	RetryOf    string
+	FromFailed bool
 }
 
 // LaunchEvent is one detached-launch observation. Ack is a child history ack
@@ -40,16 +42,23 @@ type launchFailedMsg struct {
 }
 
 func (m Model) beginLaunch(def *workflow.Definition, values map[string]string, domains map[string][]string) (tea.Model, tea.Cmd) {
+	title := workflow.DisplayTitle(def.Name, def.Title)
+	if title == "" {
+		title = def.Name
+	}
+	inputs := values
+	if inputs == nil {
+		inputs = map[string]string{}
+	}
+	return m.startLaunch(title, m.consent, LaunchRunOpts{Name: def.Name, Inputs: inputs, Domains: domains})
+}
+
+func (m Model) startLaunch(title, message string, opts LaunchRunOpts) (tea.Model, tea.Cmd) {
 	alloc := m.allocateRunID
 	if alloc == nil {
 		alloc = history.AllocateRunID
 	}
 	runID := alloc()
-	name := def.Name
-	title := workflow.DisplayTitle(def.Name, def.Title)
-	if title == "" {
-		title = name
-	}
 
 	m.runs = runsbrowser.New(runsbrowser.Options{
 		RepoRoot: m.repoRoot,
@@ -60,23 +69,14 @@ func (m Model) beginLaunch(def *workflow.Definition, values map[string]string, d
 		Kind:     "starting",
 		ID:       runID,
 		Workflow: title,
-		Message:  m.consent,
+		Message:  message,
 	})
 	m.mode = modeRuns
 	m.launchRunID = runID
 	m.status = ""
 
-	inputs := values
-	if inputs == nil {
-		inputs = map[string]string{}
-	}
-	opts := LaunchRunOpts{
-		Name:     name,
-		RepoRoot: m.repoRoot,
-		RunID:    runID,
-		Inputs:   inputs,
-		Domains:  domains,
-	}
+	opts.RepoRoot = m.repoRoot
+	opts.RunID = runID
 	if m.launchRun == nil {
 		return m, nil
 	}

@@ -223,6 +223,7 @@ type Document struct {
 type Definition struct {
 	Name            string
 	File            string
+	SourceYAML      string
 	Version         string
 	Title           string
 	Description     string

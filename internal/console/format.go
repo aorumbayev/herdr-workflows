@@ -24,8 +24,12 @@ type DebugContent struct {
 }
 
 // FormatRetryCommand is the clipboard text for retry-copy.
-func FormatRetryCommand(workflow string) string {
-	return "hwf run " + strings.TrimSpace(workflow)
+func FormatRetryCommand(runID string, fromFailed bool) string {
+	cmd := "hwf retry " + strings.TrimSpace(runID)
+	if fromFailed {
+		cmd += " --from-failed"
+	}
+	return cmd
 }
 
 // FormatDebugBody shows the body text of one debug tab.
@@ -64,6 +68,7 @@ func FormatDebugTabChrome(active DebugTab) string {
 
 // DetailPayload is one run's console detail load.
 type DetailPayload struct {
+	ID        string
 	Workflow  string
 	LogLines  []string
 	Artifacts history.DebugArtifacts
