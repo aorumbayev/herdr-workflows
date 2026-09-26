@@ -24,6 +24,7 @@ type preparedRetry struct {
 	sourceID string
 	inputs   map[string]string
 	domains  map[string][]string
+	context  map[string]any
 }
 
 func runRetry(cmd *cobra.Command, args []string) error {
@@ -42,8 +43,8 @@ func prepareRetry(app config.AppContext, req runRequest) (preparedRetry, error) 
 	if err != nil {
 		return preparedRetry{}, err
 	}
-	if rec.Status == "running" {
-		return preparedRetry{}, fmt.Errorf("run %s is still running", rec.ID)
+	if rec.Status != "failed" && rec.Status != "interrupted" {
+		return preparedRetry{}, fmt.Errorf("run %s is %s; only failed or interrupted runs can be retried", rec.ID, rec.Status)
 	}
 	if req.name != "" && req.name != rec.Workflow {
 		return preparedRetry{}, fmt.Errorf("run %s belongs to workflow '%s', not '%s'", rec.ID, rec.Workflow, req.name)
@@ -54,7 +55,10 @@ func prepareRetry(app config.AppContext, req runRequest) (preparedRetry, error) 
 	if root := history.CanonicalRepoRoot(app.RepoRoot); root != rec.CheckoutRoot {
 		return preparedRetry{}, fmt.Errorf("run %s started in %s; run it from there", rec.ID, rec.CheckoutRoot)
 	}
-	loaded, err := workflow.LoadWorkflow(rec.Workflow, app.RepoRoot, app.Config)
+	if rec.Context["platform"] != string(config.Platform()) {
+		return preparedRetry{}, fmt.Errorf("run %s was recorded on a different platform", rec.ID)
+	}
+	loaded, err := workflow.ParseFrozenWorkflow(rec.Workflow, rec.Sources, app.Config, app.RepoRoot)
 	if err != nil {
 		return preparedRetry{}, err
 	}
@@ -65,6 +69,5 @@ func prepareRetry(app config.AppContext, req runRequest) (preparedRetry, error) 
 			return preparedRetry{}, fmt.Errorf("cannot resume run %s: %w", rec.ID, err)
 		}
 	}
-	inputs, domains := workflow.ActiveInputs(loaded, rec.Inputs, rec.Domains)
-	return preparedRetry{workflow: loaded, resume: resume, sourceID: rec.ID, inputs: inputs, domains: domains}, nil
+	return preparedRetry{workflow: loaded, resume: resume, sourceID: rec.ID, inputs: rec.Inputs, domains: rec.Domains, context: rec.Context}, nil
 }

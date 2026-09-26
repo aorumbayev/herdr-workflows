@@ -3,6 +3,7 @@ package picker
 import (
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/aorumbayev/herdr-workflows/internal/tui"
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
@@ -15,13 +16,8 @@ func (m Model) beginRunsRetry(fromFailed bool) (tea.Model, tea.Cmd) {
 	case detail.Status == "running":
 		m.runsSendbackStatus("run is still running")
 		return m, nil
-	case fromFailed && detail.Status == "succeeded":
-		m.runsSendbackStatus("nothing failed — r retries all steps")
-		return m, nil
-	}
-	entry := m.entryNamed(detail.Workflow)
-	if entry == nil {
-		m.runsSendbackStatus("workflow " + detail.Workflow + " is not loadable in this checkout")
+	case detail.Status == "succeeded":
+		m.runsSendbackStatus("successful runs cannot be retried")
 		return m, nil
 	}
 	m.detachLaunch()
@@ -29,19 +25,10 @@ func (m Model) beginRunsRetry(fromFailed bool) (tea.Model, tea.Cmd) {
 	if title == "" {
 		title = detail.Workflow
 	}
-	return m.startLaunch(title, FormatConsentLine(*entry), LaunchRunOpts{
+	return m.startLaunch(title, title+tui.ChromeSep+"saved workflow"+tui.ChromeSep+"repeats recorded actions", LaunchRunOpts{
 		Name:       detail.Workflow,
 		Inputs:     map[string]string{},
 		RetryOf:    detail.ID,
 		FromFailed: fromFailed,
 	})
-}
-
-func (m Model) entryNamed(name string) *workflow.ListEntry {
-	for i := range m.entries {
-		if m.entries[i].Name == name && m.entries[i].Error == "" {
-			return &m.entries[i]
-		}
-	}
-	return nil
 }

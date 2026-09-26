@@ -28,6 +28,7 @@ type RunOptions struct {
 	Recorder       Recorder
 	Workflow       *workflow.Definition
 	Resume         *Resume
+	RetryContext   map[string]any
 	OnProgress     func(step, total int, label string, outcome *ProgressOutcome)
 	OnStderr       func(text string)
 }
@@ -721,6 +722,27 @@ func stringInputsToAny(values map[string]string) map[string]any {
 	return out
 }
 
+func retryPreflightContext(opts RunOptions, runID string, inputs map[string]string) preflightResult {
+	values := workflow.TemplateNamespace{
+		Inputs: stringInputsToAny(inputs), Steps: map[string]any{}, Context: maps.Clone(opts.RetryContext),
+	}
+	result := preflightResult{ok: true, values: values}
+	if _, exists := values.Context["transcript_file"]; !exists {
+		return result
+	}
+	transcript, ok := values.Context["transcript"].(string)
+	if !ok {
+		return preflightResult{err: "saved transcript is missing for context.transcript_file"}
+	}
+	path, err := writeTranscriptFile(opts.RepoRoot, runID, transcript)
+	if err != nil {
+		return preflightResult{err: err.Error()}
+	}
+	values.Context["transcript_file"] = path
+	result.transcriptFile = path
+	return result
+}
+
 // RunWorkflow loads a workflow or uses one that the caller supplies.
 // It collects inputs, runs steps, and completes the run.
 func RunWorkflow(opts RunOptions) (StepsResult, error) {
@@ -794,30 +816,34 @@ func RunWorkflow(opts RunOptions) (StepsResult, error) {
 		return StepsResult{OK: false, Error: errText}, nil
 	}
 
-	collected, err := workflow.CompleteWorkflowInputs(context.Background(), loaded, workflow.InputSessionOptions{
-		Config:         opts.Config,
-		RepoRoot:       opts.RepoRoot,
-		Domains:        opts.Domains,
-		ResolveDynamic: opts.ResolveDynamic,
-	}, opts.Inputs)
-	if err != nil {
-		return failPrecondition(err.Error())
+	collected := workflow.CollectedInputs{Values: opts.Inputs, Domains: opts.Domains}
+	if opts.RetryContext == nil {
+		collected, err = workflow.CompleteWorkflowInputs(context.Background(), loaded, workflow.InputSessionOptions{
+			Config: opts.Config, RepoRoot: opts.RepoRoot, Domains: opts.Domains, ResolveDynamic: opts.ResolveDynamic,
+		}, opts.Inputs)
+		if err != nil {
+			return failPrecondition(err.Error())
+		}
 	}
 
 	if err := caps.AssertHwfEnvValues("HWF environment", collected.Values); err != nil {
 		return failPrecondition(err.Error())
 	}
-	if rp, ok := recorder.(interface {
-		RecordRetryPlan(workflow.CollectedInputs, []string)
-	}); ok {
-		rp.RecordRetryPlan(collected, StepFingerprints(loaded))
+	preflight := preflightResult{}
+	if opts.RetryContext != nil {
+		preflight = retryPreflightContext(opts, recorder.RunID(), collected.Values)
+	} else {
+		preflight = preflightContext(loaded, opts.Ctx, opts.Config, deps, recorder.RunID(), opts.RepoRoot, collected.Values)
 	}
-
-	preflight := preflightContext(loaded, opts.Ctx, opts.Config, deps, recorder.RunID(), opts.RepoRoot, collected.Values)
 	if !preflight.ok {
 		return failPrecondition(preflight.err)
 	}
 	transcriptFile = preflight.transcriptFile
+	if rp, ok := recorder.(interface {
+		RecordRetryPlan(workflow.CollectedInputs, []string, map[string]any)
+	}); ok {
+		rp.RecordRetryPlan(collected, StepFingerprints(loaded), preflight.values.Context)
+	}
 	if preflight.transcriptText != "" {
 		if rt, ok := recorder.(interface{ RecordTranscript(string) }); ok {
 			rt.RecordTranscript(preflight.transcriptText)

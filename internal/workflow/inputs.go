@@ -604,6 +604,12 @@ type loadScope struct {
 	Config   config.Config
 	Stack    []string
 	Cache    map[string]*Definition
+	Sources  map[string]FrozenSource
+}
+
+type FrozenSource struct {
+	YAML   string `json:"yaml"`
+	Source string `json:"source"`
 }
 
 func loadChild(name string, scope loadScope) (*Definition, error) {
@@ -612,6 +618,19 @@ func loadChild(name string, scope loadScope) (*Definition, error) {
 	}
 	if cached := scope.Cache[name]; cached != nil {
 		return cached, nil
+	}
+	if scope.Sources != nil {
+		source, ok := scope.Sources[name]
+		if !ok {
+			return nil, &LoadError{fmt.Sprintf("workflow '%s' missing from saved run", name)}
+		}
+		childScope := scope
+		childScope.Stack = append(slices.Clone(scope.Stack), name)
+		loaded, err := loadFrozen(name, source, childScope)
+		if err == nil {
+			scope.Cache[name] = loaded
+		}
+		return loaded, err
 	}
 	resolved, err := ResolveWorkflowFile(name, scope.RepoRoot)
 	if errors.Is(err, ErrWorkflowNotFound) {
@@ -632,11 +651,40 @@ func loadChild(name string, scope loadScope) (*Definition, error) {
 	if err != nil {
 		return nil, err
 	}
+	workflow.SourceYAML = string(body)
 	loaded, err := finalizeWorkflow(workflow, loadScope{RepoRoot: scope.RepoRoot, Config: scope.Config, Stack: append(slices.Clone(scope.Stack), name), Cache: scope.Cache})
 	if err == nil {
 		scope.Cache[name] = loaded
 	}
 	return loaded, err
+}
+
+func loadFrozen(name string, source FrozenSource, scope loadScope) (*Definition, error) {
+	if source.YAML == "" || (source.Source != "repo" && source.Source != "global") {
+		return nil, &LoadError{fmt.Sprintf("workflow '%s' has invalid saved source", name)}
+	}
+	file := name + ".yaml"
+	raw, err := ParseRaw(file, source.YAML)
+	if err != nil {
+		return nil, err
+	}
+	wf, err := loadFromRaw(name, file, source.Source, raw)
+	if err != nil {
+		return nil, err
+	}
+	wf.SourceYAML = source.YAML
+	return finalizeWorkflow(wf, scope)
+}
+
+func ParseFrozenWorkflow(name string, sources map[string]FrozenSource, cfg config.Config, repoRoot string) (*Definition, error) {
+	if !NameRE.MatchString(name) {
+		return nil, &LoadError{NameRule}
+	}
+	source, ok := sources[name]
+	if !ok {
+		return nil, &LoadError{fmt.Sprintf("workflow '%s' missing from saved run", name)}
+	}
+	return loadFrozen(name, source, loadScope{RepoRoot: repoRoot, Config: cfg, Stack: []string{name}, Cache: map[string]*Definition{}, Sources: sources})
 }
 
 func finalizeWorkflow(workflow *Definition, scope loadScope) (*Definition, error) {
@@ -710,6 +758,7 @@ func ParseWorkflowText(name, text string, cfg config.Config, repoRoot string, fi
 	if err != nil {
 		return nil, err
 	}
+	workflow.SourceYAML = text
 	return finalizeWorkflow(workflow, loadScope{RepoRoot: repoRoot, Config: cfg, Stack: []string{name}, Cache: map[string]*Definition{}})
 }
 
@@ -746,6 +795,7 @@ func LoadWorkflowEntry(entry ListEntry, repoRoot string, supplied ...config.Conf
 	if err != nil {
 		return nil, err
 	}
+	workflow.SourceYAML = string(body)
 	return finalizeWorkflow(workflow, loadScope{RepoRoot: repoRoot, Config: cfg, Stack: []string{entry.Name}, Cache: map[string]*Definition{}})
 }
 

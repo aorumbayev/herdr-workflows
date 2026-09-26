@@ -11,13 +11,14 @@ import (
 )
 
 type retryPlanner interface {
-	RecordRetryPlan(workflow.CollectedInputs, []string)
+	RecordRetryPlan(workflow.CollectedInputs, []string, map[string]any)
 }
 
 func retryWorkflow() workflow.Definition {
 	return workflow.Definition{
-		Name:      "m",
-		RepoOwned: true,
+		Name:       "m",
+		RepoOwned:  true,
+		SourceYAML: "version: v1alpha1\nsteps:\n  - run: [true]\n",
 		Steps: []workflow.Step{
 			{ID: "probe", Action: workflow.RunAction{}},
 			{Action: workflow.RunAction{}},
@@ -37,7 +38,7 @@ func recordFailedRun(t *testing.T, checkout string, retryOf string) string {
 	rec.(retryPlanner).RecordRetryPlan(workflow.CollectedInputs{
 		Values:  map[string]string{"who": "ada"},
 		Domains: map[string][]string{"branch": {"main", "dev"}},
-	}, []string{"f1", "f2", "f3"})
+	}, []string{"f1", "f2", "f3"}, map[string]any{"cwd": checkout})
 	ok := &engine.RecorderOutcome{OK: true, Result: map[string]any{"stdout": "hi", "exit_code": 0}}
 	_ = rec.StepFinished(wf.Steps[0], 1, 3, "probe", engine.OutcomeSucceeded, ok, engine.PhaseMain)
 	_ = rec.StepFinished(wf.Steps[1], 2, 3, "run", engine.OutcomeSkipped, &engine.RecorderOutcome{OK: true, Reused: true}, engine.PhaseMain)
@@ -64,6 +65,9 @@ func TestLoadRetryRecordRoundTripsInputsFingerprintsAndTopLevelResults(t *testin
 	}
 	if got.Inputs["who"] != "ada" || len(got.Domains["branch"]) != 2 || strings.Join(got.Source.Fingerprints, ",") != "f1,f2,f3" {
 		t.Fatalf("plan = %v %v", got.Inputs, got.Source.Fingerprints)
+	}
+	if got.Sources["m"].YAML != retryWorkflow().SourceYAML || got.Context["cwd"] != checkout {
+		t.Fatalf("saved workflow or context missing: %+v %+v", got.Sources, got.Context)
 	}
 	if len(got.Source.Steps) != 3 {
 		t.Fatalf("top-level steps = %+v, want 3 (nested excluded)", got.Source.Steps)
@@ -133,7 +137,7 @@ func TestOverCapRetryDataNamesSourceAndLimitOnLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec.(retryPlanner).RecordRetryPlan(workflow.CollectedInputs{Values: map[string]string{}}, []string{"f1", "f2", "f3"})
+	rec.(retryPlanner).RecordRetryPlan(workflow.CollectedInputs{Values: map[string]string{}}, []string{"f1", "f2", "f3"}, map[string]any{})
 	big := &engine.RecorderOutcome{OK: true, Result: map[string]any{"stdout": strings.Repeat("x", caps.CaptureByteLimit)}}
 	_ = rec.StepFinished(wf.Steps[0], 1, 3, "probe", engine.OutcomeSucceeded, big, engine.PhaseMain)
 	_ = rec.Finished(engine.StatusFailed, nil)
@@ -147,7 +151,7 @@ func TestOverCapRetryDataNamesSourceAndLimitOnLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec2.(retryPlanner).RecordRetryPlan(workflow.CollectedInputs{Values: map[string]string{"who": strings.Repeat("y", caps.CaptureByteLimit)}}, nil)
+	rec2.(retryPlanner).RecordRetryPlan(workflow.CollectedInputs{Values: map[string]string{"who": strings.Repeat("y", caps.CaptureByteLimit)}}, nil, map[string]any{})
 	_ = rec2.Finished(engine.StatusFailed, nil)
 	rec2.Dispose()
 	_, err = LoadRetryRecord(rec2.RunID(), time.Now())

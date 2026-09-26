@@ -104,14 +104,68 @@ func TestRetryAllRerunsEveryStepWithRecordedInputs(t *testing.T) {
 	}
 }
 
-func TestRetryFromFailedRefusesAnEditedEarlierStep(t *testing.T) {
+func TestRetryFromFailedUsesOriginalWorkflowAfterEdit(t *testing.T) {
 	e := newRetryEnv(t, flakyWorkflow)
 	id := e.failFirst(t)
 	writeWorkflow(t, e.root, "flaky", strings.Replace(flakyWorkflow, "echo x >> count", "echo y >> count", 1))
 
 	got := e.run([]string{"retry", id, "--from-failed"}, "")
-	if got.code != 1 || !strings.Contains(got.stderr, "step 1 (probe) changed") {
+	if got.code != 0 {
 		t.Fatalf("code = %d stderr = %q", got.code, got.stderr)
+	}
+	if n := strings.Count(e.read(t, "count"), "x"); n != 1 {
+		t.Fatalf("probe ran %d times", n)
+	}
+}
+
+func TestRetryAllUsesSavedYAMLWhenWorkflowWasRemoved(t *testing.T) {
+	e := newRetryEnv(t, flakyWorkflow)
+	id := e.failFirst(t)
+	if err := os.Remove(filepath.Join(e.root, ".hwf", "workflows", "flaky.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	got := e.run([]string{"retry", id}, "")
+	if got.code != 0 {
+		t.Fatalf("retry code = %d stderr = %q", got.code, got.stderr)
+	}
+	if n := strings.Count(e.read(t, "count"), "x"); n != 2 {
+		t.Fatalf("saved workflow ran %d times, want 2", n)
+	}
+}
+
+func TestRetryFromFailedUsesSavedFailedStep(t *testing.T) {
+	e := newRetryEnv(t, flakyWorkflow)
+	id := e.failFirst(t)
+	writeWorkflow(t, e.root, "flaky", strings.Replace(flakyWorkflow, "test -f fixed", "false", 1))
+	got := e.run([]string{"retry", id, "--from-failed"}, "")
+	if got.code != 0 {
+		t.Fatalf("retry code = %d stderr = %q", got.code, got.stderr)
+	}
+	if out := e.read(t, "out.txt"); out != "ada" {
+		t.Fatalf("output = %q", out)
+	}
+}
+
+func TestRetryUsesSavedChildWorkflowAfterRemoval(t *testing.T) {
+	e := newRetryEnv(t, "version: v1alpha1\nsteps:\n  - workflow: child\n")
+	writeWorkflow(t, e.root, "child", "version: v1alpha1\nsteps:\n  - run: [sh, -c, 'test -f fixed']\n")
+	first := e.run([]string{"run", "flaky"}, "")
+	if first.code != 1 {
+		t.Fatalf("first code = %d stderr = %q", first.code, first.stderr)
+	}
+	m := claimedRe.FindStringSubmatch(first.stdout)
+	if m == nil {
+		t.Fatalf("no run id in %q", first.stdout)
+	}
+	if err := os.Remove(filepath.Join(e.root, ".hwf", "workflows", "child.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(e.root, "fixed"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	retry := e.run([]string{"retry", m[1], "--from-failed"}, "")
+	if retry.code != 0 {
+		t.Fatalf("retry code = %d stderr = %q", retry.code, retry.stderr)
 	}
 }
 

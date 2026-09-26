@@ -10,6 +10,7 @@ import (
 
 	"github.com/aorumbayev/herdr-workflows/internal/caps"
 	"github.com/aorumbayev/herdr-workflows/internal/engine"
+	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
 const artifactRetryPlan = "retry-plan"
@@ -21,10 +22,12 @@ type storedResult struct {
 }
 
 type retryPlan struct {
-	Error        string              `json:"error,omitempty"`
-	Inputs       map[string]string   `json:"inputs"`
-	Domains      map[string][]string `json:"domains,omitempty"`
-	Fingerprints []string            `json:"fingerprints"`
+	Error        string                           `json:"error,omitempty"`
+	Inputs       map[string]string                `json:"inputs"`
+	Domains      map[string][]string              `json:"domains,omitempty"`
+	Fingerprints []string                         `json:"fingerprints"`
+	Sources      map[string]workflow.FrozenSource `json:"sources"`
+	Context      map[string]any                   `json:"context"`
 }
 
 // RetryRecord is what `hwf retry` needs from a recorded run. It is private and never shown.
@@ -35,6 +38,8 @@ type RetryRecord struct {
 	Status       string
 	Inputs       map[string]string
 	Domains      map[string][]string
+	Sources      map[string]workflow.FrozenSource
+	Context      map[string]any
 	Source       engine.RetrySource
 }
 
@@ -108,6 +113,9 @@ func LoadRetryRecord(id string, now time.Time) (RetryRecord, error) {
 	if plan.Error != "" {
 		return RetryRecord{}, fmt.Errorf("run %s retry data was not recorded: %s", normalized, plan.Error)
 	}
+	if len(plan.Sources) == 0 || plan.Sources[snap.Workflow].YAML == "" || plan.Context == nil {
+		return RetryRecord{}, fmt.Errorf("run %s lacks original workflow or context for a safe retry", normalized)
+	}
 	steps, err := topLevelSteps(db, snap)
 	if err != nil {
 		return RetryRecord{}, err
@@ -119,6 +127,8 @@ func LoadRetryRecord(id string, now time.Time) (RetryRecord, error) {
 		Status:       ProjectStatus(snap, now),
 		Inputs:       plan.Inputs,
 		Domains:      plan.Domains,
+		Sources:      plan.Sources,
+		Context:      plan.Context,
 		Source:       engine.RetrySource{Fingerprints: plan.Fingerprints, Steps: steps},
 	}, nil
 }

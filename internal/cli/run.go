@@ -70,13 +70,14 @@ func executeRun(cmd *cobra.Command, req runRequest) error {
 
 	var loaded *workflow.Definition
 	var resume *engine.Resume
+	var retryContext map[string]any
 	retryOf := ""
 	if req.retry != nil {
 		prepared, err := prepareRetry(app, req)
 		if err != nil {
 			return err
 		}
-		loaded, resume, retryOf = prepared.workflow, prepared.resume, prepared.sourceID
+		loaded, resume, retryOf, retryContext = prepared.workflow, prepared.resume, prepared.sourceID, prepared.context
 		req.inputs, req.domains = prepared.inputs, prepared.domains
 	} else {
 		loaded, err = workflow.LoadWorkflow(req.name, app.RepoRoot, app.Config)
@@ -102,16 +103,17 @@ func executeRun(cmd *cobra.Command, req runRequest) error {
 	}
 
 	runOpts := engine.RunOptions{
-		Name:     loaded.Name,
-		RepoRoot: app.RepoRoot,
-		Config:   app.Config,
-		Ctx:      app.Ctx,
-		Deps:     liveRunnerDeps(),
-		Inputs:   req.inputs,
-		Domains:  req.domains,
-		Recorder: recorder,
-		Workflow: loaded,
-		Resume:   resume,
+		Name:         loaded.Name,
+		RepoRoot:     app.RepoRoot,
+		Config:       app.Config,
+		Ctx:          app.Ctx,
+		Deps:         liveRunnerDeps(),
+		Inputs:       req.inputs,
+		Domains:      req.domains,
+		Recorder:     recorder,
+		Workflow:     loaded,
+		Resume:       resume,
+		RetryContext: retryContext,
 		OnProgress: func(step, total int, label string, outcome *engine.ProgressOutcome) {
 			o := string(engine.ProgressStart)
 			if outcome != nil {

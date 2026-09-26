@@ -73,23 +73,23 @@ A run with no terminal shows a herdr notification with the title `herdr-workflow
 
 ## Retry a run
 
-A retry starts a new run of the same workflow with the recorded inputs of an earlier run. The new run records the ID of the earlier run. Retry a run that failed, was interrupted, or is stale. A running run cannot be retried.
+A retry starts a new run from the saved YAML and inputs of an earlier run. The new run records the ID of the earlier run. Only failed and interrupted runs can be retried. Running, stale, and successful runs cannot be retried.
 
 - `hwf retry <run-id>` runs every step again.
-- `hwf retry <run-id> --from-failed` starts at the first top-level step that did not succeed, skip, or launch. The steps before it do not run again. Their recorded results fill `{{steps.*}}`, and run detail marks them `reused`.
+- `hwf retry <run-id> --from-failed` starts at the first top-level step that did not succeed or skip. The steps before it do not run again. Their recorded results fill `{{steps.*}}`, and run detail marks them `reused`.
 
-A run records its inputs, its dynamic choice options, and the result of each top-level step that has an `id:`. This data stays in the private history database, and the picker and the console never show it. Each result obeys the 8 MiB capture cap. Retention removes the data with the run.
+A run records its YAML, resolved inputs, context, dynamic choice options, and the result of each top-level step that has an `id:`. This data stays in the private history database, and the picker and the console never show it. Each result obeys the 8 MiB capture cap. Retention removes the data with the run. Older runs without this data cannot be retried.
 
 Rules for `--from-failed`:
 
 - The unit is one top-level step. A failed `workflow:` step runs its child again from the first child step.
-- You can edit the failed step and the steps after it. If a step before it changed, the retry stops and names that step. Use `hwf retry <run-id>` instead.
+- Retry uses the saved YAML for the entry workflow and its child workflows. Later edits and file removals do not change the retry.
 - A reused `skipped` step stays skipped. The retry does not examine its `when:` again. Steps from the failed step on examine `when:` as usual.
-- A reused `launched` step does not start its background action again.
+- A run with a prior `launched` step cannot resume from the failed step because the background action may still be active.
 - If a later step reads `{{steps.<id>.pane_id}}` from a reused step, the retry first asks herdr for that pane. If the pane is gone, the retry stops and names the step.
-- `{{context.*}}` comes from the new invocation. `on_failure:` belongs to the new run and runs again if the retry fails.
+- `{{context.*}}` comes from the earlier run. A saved transcript file is recreated for the new run. `on_failure:` belongs to the new run and runs again if the retry fails.
 
-Run `hwf retry` from the checkout of the earlier run. The retry drops a recorded input that the workflow no longer declares, or that is inactive under the recorded answers. A new input with no default stops the retry.
+Run `hwf retry` from the checkout of the earlier run. The retry uses the resolved inputs from that run without prompting again.
 
 ## Share a workflow
 

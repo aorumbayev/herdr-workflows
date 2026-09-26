@@ -91,6 +91,9 @@ func PlanResume(wf *workflow.Definition, src RetrySource) (*Resume, error) {
 	from := 1
 	for ; from <= len(src.Fingerprints); from++ {
 		step, ok := byOrdinal[from]
+		if ok && step.Outcome == OutcomeLaunched {
+			return nil, fmt.Errorf("step %d launched background work whose state cannot be replayed safely — retry all instead", from)
+		}
 		if !ok || !reusableOutcome(step.Outcome) {
 			break
 		}

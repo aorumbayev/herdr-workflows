@@ -70,7 +70,7 @@ steps:
 	src := resumeSource(def,
 		RetrySourceStep{Ordinal: 1, StepID: "a", Outcome: OutcomeSucceeded, HasResult: true, Result: map[string]any{"stdout": "a"}},
 		RetrySourceStep{Ordinal: 2, Outcome: OutcomeSkipped},
-		RetrySourceStep{Ordinal: 3, Outcome: OutcomeLaunched},
+		RetrySourceStep{Ordinal: 3, Outcome: OutcomeSucceeded},
 		RetrySourceStep{Ordinal: 4, Outcome: OutcomeFailedContinued},
 		RetrySourceStep{Ordinal: 5, Outcome: OutcomeFailed},
 	)
@@ -81,8 +81,20 @@ steps:
 	if plan.From != 4 || len(plan.Reused) != 3 {
 		t.Fatalf("plan = %+v, want From 4 with 3 reused", plan)
 	}
-	if plan.Reused[1].Outcome != OutcomeSkipped || plan.Reused[2].Outcome != OutcomeLaunched {
+	if plan.Reused[1].Outcome != OutcomeSkipped || plan.Reused[2].Outcome != OutcomeSucceeded {
 		t.Fatalf("reused outcomes = %+v", plan.Reused)
+	}
+}
+
+func TestPlanResumeRefusesLaunchedBackgroundStep(t *testing.T) {
+	t.Parallel()
+	def := loadResumeWorkflow(t, map[string]string{"m": "version: v1alpha1\nsteps:\n  - run: [echo, a]\n  - run: [echo, b]\n"})
+	_, err := PlanResume(def, resumeSource(def,
+		RetrySourceStep{Ordinal: 1, Outcome: OutcomeLaunched},
+		RetrySourceStep{Ordinal: 2, Outcome: OutcomeFailed},
+	))
+	if err == nil || !strings.Contains(err.Error(), "launched background work") {
+		t.Fatalf("err = %v", err)
 	}
 }
 
@@ -145,7 +157,7 @@ type retryPlanRecorder struct {
 	results      map[int]any
 }
 
-func (r *retryPlanRecorder) RecordRetryPlan(collected workflow.CollectedInputs, fingerprints []string) {
+func (r *retryPlanRecorder) RecordRetryPlan(collected workflow.CollectedInputs, fingerprints []string, _ map[string]any) {
 	r.inputs = collected.Values
 	r.fingerprints = fingerprints
 }
