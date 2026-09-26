@@ -223,7 +223,7 @@ func runsFooter() string {
 }
 
 func detailFooter() string {
-	return strings.Join([]string{"1/2/3 tabs", "y retry-copy", "esc back"}, tui.ChromeSep)
+	return strings.Join([]string{"1/2/3 tabs", "y copy retry", "Y copy from-failed", "esc back"}, tui.ChromeSep)
 }
 
 func (m Model) detailScrollLines() []string {

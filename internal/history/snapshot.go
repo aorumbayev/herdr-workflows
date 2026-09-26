@@ -29,6 +29,7 @@ type Snapshot struct {
 	Status             string       `json:"status,omitempty"`
 	FailureExplanation string       `json:"failure_explanation,omitempty"`
 	Returns            any          `json:"returns,omitempty"`
+	RetryOf            string       `json:"retry_of,omitempty"`
 }
 
 type StepIdentity struct {
@@ -49,6 +50,7 @@ type StepRecord struct {
 	FinishedAt  string       `json:"finished_at"`
 	Outcome     string       `json:"outcome"`
 	Truncated   bool         `json:"truncated,omitempty"`
+	Reused      bool         `json:"reused,omitempty"`
 	Failure     *FailureFact `json:"failure,omitempty"`
 	Explanation string       `json:"explanation,omitempty"`
 }
@@ -140,6 +142,13 @@ func parseSnapshotValue(v any) (Snapshot, bool) {
 	}
 	if ret, exists := m["returns"]; exists {
 		snap.Returns = ret
+	}
+	if raw, exists := m["retry_of"]; exists {
+		s, ok := asString(raw)
+		if !ok || !engine.ValidRunID(s) {
+			return Snapshot{}, false
+		}
+		snap.RetryOf = s
 	}
 
 	_, hasStatus := m["status"]
@@ -287,6 +296,13 @@ func parseStepRecord(v any) (StepRecord, bool) {
 			return StepRecord{}, false
 		}
 		rec.Truncated = true
+	}
+	if reused, exists := m["reused"]; exists {
+		b, ok := reused.(bool)
+		if !ok || !b {
+			return StepRecord{}, false
+		}
+		rec.Reused = true
 	}
 	if failure, exists := m["failure"]; exists {
 		fact, ok := parseFailureFact(failure)

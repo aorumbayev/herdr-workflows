@@ -11,7 +11,7 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-func seedFailedRun(t *testing.T, checkout string) {
+func seedFailedRun(t *testing.T, checkout string) string {
 	t.Helper()
 	w := history.NewWriter()
 	t.Cleanup(w.Dispose)
@@ -34,6 +34,7 @@ func seedFailedRun(t *testing.T, checkout string) {
 	_ = history.WriteDebugArtifacts(w.ID(), history.DebugArtifacts{
 		EntryYAML: "version: v1alpha1\nsteps:\n  - id: build\n    run: [false]\n",
 	})
+	return w.ID()
 }
 
 func TestRunsSendbackOmitsOutputTail(t *testing.T) {

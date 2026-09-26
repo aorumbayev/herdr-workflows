@@ -77,3 +77,38 @@ func TestDetailPaneSplitsMultiLineOutputTail(t *testing.T) {
 		}
 	}
 }
+
+func TestDetailCardsMarkReusedSteps(t *testing.T) {
+	detail := history.Detail{Steps: []history.DetailStep{
+		{StepRecord: history.StepRecord{StepIdentity: history.StepIdentity{Action: "run", Label: "a"}, Outcome: "succeeded", Reused: true}},
+		{StepRecord: history.StepRecord{StepIdentity: history.StepIdentity{Action: "run", Label: "b"}, Outcome: "failed"}},
+	}}
+	cards := detailCards(detail, 0)
+	if cards[0].Body[0] != "succeeded (reused)" || cards[1].Body[0] != "failed" {
+		t.Fatalf("cards = %+v", cards)
+	}
+}
+
+func TestRunDetailFooterNamesRetryKeys(t *testing.T) {
+	footer := RunDetailFooter()
+	for _, want := range []string{"r retry", "f from-failed"} {
+		if !strings.Contains(footer, want) {
+			t.Fatalf("footer = %q, want %q", footer, want)
+		}
+	}
+}
+
+func TestStepCauseNamesTheOutcomeOfAStepThatDidNotFail(t *testing.T) {
+	for _, outcome := range []string{"succeeded", "skipped", "launched"} {
+		for _, action := range []string{"run", "agent", "herdr", "workflow"} {
+			step := history.DetailStep{StepRecord: history.StepRecord{StepIdentity: history.StepIdentity{Action: action}, Outcome: outcome}}
+			if got := stepCause(step); got != outcome {
+				t.Fatalf("%s %s: cause = %q, want %q", action, outcome, got, outcome)
+			}
+		}
+	}
+	running := history.DetailStep{StepRecord: history.StepRecord{StepIdentity: history.StepIdentity{Action: "herdr"}}, Active: true}
+	if got := stepCause(running); got != "step running" {
+		t.Fatalf("running cause = %q", got)
+	}
+}

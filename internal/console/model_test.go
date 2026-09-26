@@ -15,13 +15,6 @@ import (
 	"github.com/aorumbayev/herdr-workflows/internal/workflow"
 )
 
-func TestFormatRetryCommand(t *testing.T) {
-	got := FormatRetryCommand("deploy")
-	if got != "hwf run deploy" {
-		t.Fatalf("got %q", got)
-	}
-}
-
 func TestNewDefaultsClipboardToTUI(t *testing.T) {
 	m := New(Options{})
 	if m.copyText == nil {
@@ -139,14 +132,21 @@ func TestModelRunDetailDebugTabsAndRetryCopy(t *testing.T) {
 	if !strings.Contains(view, "version: v1alpha1") {
 		t.Fatalf("yaml tab = %q", view)
 	}
+	if !strings.Contains(view, "y copy retry") || !strings.Contains(view, "Y copy from-failed") {
+		t.Fatalf("footer = %q", view)
+	}
 	next, _ = m.Update(keyRune('y'))
 	m = next.(Model)
-	if copied != "hwf run alpha" {
+	if copied != "hwf retry "+id {
 		t.Fatalf("copied = %q", copied)
 	}
 	view = stripView(m.View())
 	if !strings.Contains(strings.ToLower(view), "copied") {
 		t.Fatalf("status = %q", view)
+	}
+	_, _ = m.Update(keyRune('Y'))
+	if copied != "hwf retry "+id+" --from-failed" {
+		t.Fatalf("copied = %q", copied)
 	}
 }
 

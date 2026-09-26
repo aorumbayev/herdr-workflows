@@ -88,6 +88,7 @@ func newRoot() *cobra.Command {
 	root.SetHelpTemplate(rootHelpTemplate())
 	root.AddCommand(
 		newRunCmd(),
+		newRetryCmd(),
 		newInitCmd(),
 		newWorkflowCmd(),
 		newLaunchCmd(),

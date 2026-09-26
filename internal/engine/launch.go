@@ -24,10 +24,12 @@ var progressLineRe = regexp.MustCompile(`^\[(\d+)/(\d+)\] (.+)$`)
 
 // LaunchPayload is the stdin JSON for a detached `hwf run --launch-payload`.
 type LaunchPayload struct {
-	Name    string              `json:"name"`
-	Inputs  map[string]string   `json:"inputs"`
-	Domains map[string][]string `json:"domains,omitempty"`
-	RunID   string              `json:"runId,omitempty"`
+	Name       string              `json:"name"`
+	Inputs     map[string]string   `json:"inputs"`
+	Domains    map[string][]string `json:"domains,omitempty"`
+	RunID      string              `json:"runId,omitempty"`
+	RetryOf    string              `json:"retryOf,omitempty"`
+	FromFailed bool                `json:"fromFailed,omitempty"`
 }
 
 // SpawnOpts configures the process seam for detached launchers.
@@ -69,6 +71,8 @@ type LaunchRunRequest struct {
 	Inputs       map[string]string
 	Domains      map[string][]string
 	RunID        string
+	RetryOf      string
+	FromFailed   bool
 	Env          map[string]string
 	OnHistoryAck func(string)
 	Spawn        func(argv []string, opts SpawnOpts) (*Spawned, error)
@@ -163,7 +167,25 @@ func parseLaunchPayloadObject(obj map[string]any) (LaunchPayload, error) {
 		runID = s
 	}
 
-	return LaunchPayload{Name: name, Inputs: inputs, Domains: domains, RunID: runID}, nil
+	payload := LaunchPayload{Name: name, Inputs: inputs, Domains: domains, RunID: runID}
+	if raw, exists := obj["retryOf"]; exists {
+		s, ok := raw.(string)
+		if !ok || !ValidRunID(s) {
+			return LaunchPayload{}, errors.New("launch payload retryOf must be a run UUID")
+		}
+		payload.RetryOf = s
+	}
+	if raw, exists := obj["fromFailed"]; exists {
+		b, ok := raw.(bool)
+		if !ok {
+			return LaunchPayload{}, errors.New("launch payload fromFailed must be a boolean")
+		}
+		if b && payload.RetryOf == "" {
+			return LaunchPayload{}, errors.New("launch payload fromFailed requires retryOf")
+		}
+		payload.FromFailed = b
+	}
+	return payload, nil
 }
 
 func selfArgv(executable, command string, args ...string) []string {
@@ -256,7 +278,7 @@ func parseProgressLine(line string) *progressLine {
 	if strings.HasSuffix(rest, "…") {
 		return &progressLine{Index: index, Total: total, Label: rest[:len(rest)-len("…")], Outcome: ProgressStart}
 	}
-	for _, outcome := range []ProgressOutcome{ProgressSkip, ProgressFail, ProgressLaunch} {
+	for _, outcome := range []ProgressOutcome{ProgressSkip, ProgressFail, ProgressLaunch, ProgressReused} {
 		suffix := " " + string(outcome)
 		if strings.HasSuffix(rest, suffix) {
 			return &progressLine{
@@ -410,6 +432,8 @@ func LaunchDetachedRun(req LaunchRunRequest) DetachedRunHandle {
 	spawn := resolveSpawn(req.Spawn)
 	argv := selfArgv(req.Executable, "run", req.Name, "--launch-payload")
 	payload := buildLaunchPayload(req.Name, req.Inputs, req.Domains, req.RunID)
+	payload.RetryOf = req.RetryOf
+	payload.FromFailed = req.FromFailed
 	payloadBytes, marshalErr := json.Marshal(payload)
 	env := mergeEnv(environMap(), req.Env, buildInvocationEnv(req.Ctx, req.RepoRoot))
 

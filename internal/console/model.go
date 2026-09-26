@@ -185,6 +185,7 @@ func defaultLoadDetail(runID string) DetailPayload {
 	presented := history.RunDetail(runID, time.Time{})
 	arts, _ := history.LoadDebugArtifacts(runID)
 	payload := DetailPayload{
+		ID:        runID,
 		Workflow:  presented.Detail.Workflow,
 		Artifacts: arts,
 	}
@@ -445,12 +446,12 @@ func (m Model) handleDetailKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.debugTab = DebugTabYAML
 		m.detailScroll = 0
 		return m, nil
-	case "y":
-		name := m.detail.Workflow
-		if runs := m.visibleRuns(); name == "" && m.runCursor >= 0 && m.runCursor < len(runs) {
-			name = runs[m.runCursor].Workflow
+	case "y", "Y":
+		id := m.detail.ID
+		if runs := m.visibleRuns(); id == "" && m.runCursor >= 0 && m.runCursor < len(runs) {
+			id = runs[m.runCursor].ID
 		}
-		cmd := FormatRetryCommand(name)
+		cmd := FormatRetryCommand(id, key == "Y")
 		if err := m.copyText(cmd); err != nil {
 			m.status = "retry copy failed" + tui.ChromeSep + err.Error()
 			return m, nil

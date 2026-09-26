@@ -159,7 +159,7 @@ func RunsFooter(scope Scope) string {
 
 // RunDetailFooter is the detail-mode footer hint.
 func RunDetailFooter() string {
-	return strings.Join([]string{"esc back", "s send", "up/down step"}, tui.ChromeSep)
+	return strings.Join([]string{"esc back", "s send", "r retry", "f from-failed", "up/down step"}, tui.ChromeSep)
 }
 
 // DetailLines shows a detail view as single-width lines.

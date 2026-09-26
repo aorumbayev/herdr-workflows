@@ -396,6 +396,14 @@ func (m Model) SelectedID() string { return m.state.SelectedID }
 // DetailWorkflow is the workflow title on the open detail view.
 func (m Model) DetailWorkflow() string { return m.detailView.Workflow }
 
+// DetailRun is the recorded run on the open detail screen.
+func (m Model) DetailRun() (history.Detail, bool) {
+	if m.screen != screenDetail || m.detailView.Detail.Kind != "snapshot" {
+		return history.Detail{}, false
+	}
+	return m.detailView.Detail, true
+}
+
 // DetailKind is the open detail view kind.
 func (m Model) DetailKind() string { return m.detailView.Kind }
 
