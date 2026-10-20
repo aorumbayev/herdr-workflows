@@ -88,9 +88,9 @@ func HerdrRequest(method string, params map[string]any) (HerdrResponse, error) {
 	payload = append(payload, '\n')
 
 	deadline := time.Now().Add(rpcTimeout)
-	conn, err := net.DialTimeout("unix", address, rpcTimeout)
+	conn, err := dialHerdr(address, rpcTimeout)
 	if err != nil {
-		return HerdrResponse{}, unreachableFailure(method, address, err.Error())
+		return HerdrResponse{}, unreachableFailure(method, herdrEndpoint(address), err.Error())
 	}
 	defer func() { _ = conn.Close() }()
 	_ = conn.SetDeadline(deadline)

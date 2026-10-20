@@ -2,6 +2,8 @@ package engine
 
 import (
 	"maps"
+	"os/exec"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -62,11 +64,23 @@ func TestShellArgv(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := ShellArgv(tc.command, tc.shell)
-			if !slices.Equal(got, tc.expected) {
-				t.Fatalf("ShellArgv(%q, %q) = %v, want %v", tc.command, tc.shell, got, tc.expected)
+			expected := tc.expected
+			if tc.shell == "" && runtime.GOOS == "windows" {
+				// Windows has no sh; the default resolves to the PowerShell on PATH.
+				expected = windowsDefaultShellArgv(tc.command)
+			}
+			if !slices.Equal(got, expected) {
+				t.Fatalf("ShellArgv(%q, %q) = %v, want %v", tc.command, tc.shell, got, expected)
 			}
 		})
 	}
+}
+
+func windowsDefaultShellArgv(command string) []string {
+	if _, err := exec.LookPath("pwsh"); err == nil {
+		return []string{"pwsh", "-NoProfile", "-Command", command}
+	}
+	return []string{"powershell", "-NoProfile", "-Command", command}
 }
 
 func TestRunArgvStepSuccess(t *testing.T) {

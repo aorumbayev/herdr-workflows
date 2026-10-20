@@ -4,7 +4,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/aorumbayev/herdr-workflows/internal/host"
@@ -38,7 +37,7 @@ func spawnPopupReopen(state picker.PopupState) error {
 	}
 	cmd := exec.Command(exe, "picker", "--reopen")
 	cmd.Env = append(os.Environ(), picker.PopupStateEnv+"="+state.Encode())
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	configureProcessGroup(cmd)
 	null, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
 	if err != nil {
 		return err

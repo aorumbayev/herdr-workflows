@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -26,18 +25,6 @@ type SpawnResult struct {
 	Stdout    string
 	Stderr    string
 	TimeoutMs int
-}
-
-// KillSpawn kills the whole process group, then the process as fallback.
-func KillSpawn(cmd *exec.Cmd) {
-	if cmd.Process == nil || cmd.Process.Pid == 0 {
-		return
-	}
-	pid := cmd.Process.Pid
-	if syscall.Kill(-pid, syscall.SIGKILL) == nil {
-		return
-	}
-	_ = cmd.Process.Kill()
 }
 
 type captureBudget struct {
@@ -118,7 +105,7 @@ func Spawn(argv []string, opts SpawnOpts) (SpawnResult, error) {
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = opts.Cwd
 	cmd.Env = opts.Env
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	configureProcessGroup(cmd)
 
 	var budget *captureBudget
 	if opts.MaxCaptureSource != "" {

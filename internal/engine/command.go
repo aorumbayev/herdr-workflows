@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"os/exec"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -29,6 +31,13 @@ func ShellArgv(command, shell string) []string {
 	case "cmd":
 		return []string{"cmd", "/c", command}
 	default:
+		// Windows has no sh; local patch defaults unspecified shells to PowerShell.
+		if runtime.GOOS == "windows" {
+			if _, err := exec.LookPath("pwsh"); err == nil {
+				return []string{"pwsh", "-NoProfile", "-Command", command}
+			}
+			return []string{"powershell", "-NoProfile", "-Command", command}
+		}
 		return []string{"sh", "-c", command}
 	}
 }

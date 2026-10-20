@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 
 	"github.com/aorumbayev/herdr-workflows/internal/config"
 )
@@ -387,7 +386,7 @@ func defaultSpawn(argv []string, opts SpawnOpts) (*Spawned, error) {
 		}
 		cmd.Env = env
 	}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	configureProcessGroup(cmd)
 
 	stdin, stdout, stderr, stdinNull, err := attachSpawnIO(cmd, opts)
 	if err != nil {

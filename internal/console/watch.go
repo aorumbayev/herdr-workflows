@@ -2,7 +2,6 @@ package console
 
 import (
 	"os"
-	"syscall"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -35,11 +34,7 @@ func fileStamp(path string) (diagramFileStamp, bool) {
 	if err != nil {
 		return diagramFileStamp{}, false
 	}
-	var ino uint64
-	if st, ok := info.Sys().(*syscall.Stat_t); ok {
-		ino = st.Ino
-	}
-	return diagramFileStamp{nano: info.ModTime().UnixNano(), size: info.Size(), ino: ino}, true
+	return diagramFileStamp{nano: info.ModTime().UnixNano(), size: info.Size(), ino: fileInode(path, info)}, true
 }
 
 func loadDiagramYAML(path string) []string {

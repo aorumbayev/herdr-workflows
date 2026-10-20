@@ -3,21 +3,23 @@ name = "herdr-workflows"
 version = "0.15.1"
 min_herdr_version = "0.8.2"
 description = "Linear YAML workflow runner for herdr panes"
-platforms = ["linux", "macos"]
+platforms = ["linux", "macos", "windows"]
 
 # Remote GitHub install: download+verify the tag's archive into bin/, then native setup.
 # Local `herdr plugin link` / `go run ./scripts/install-dev` do not run [[build]] — they compile the working tree.
 [[build]]
 command = ["sh", "scripts/install-release.sh"]
+platforms = ["linux", "macos"]
 
 [[build]]
 command = ["bin/herdr-workflows", "setup"]
+platforms = ["linux", "macos"]
 
 [[actions]]
 id = "launch"
 title = "Launch herdr-workflows workflow"
 contexts = ["workspace", "pane", "selection"]
-command = ["bin/herdr-workflows", "launch"]
+command = ["bin/herdr-workflows.exe", "launch"]
 
 [[panes]]
 id = "picker"
@@ -27,16 +29,16 @@ title = "Herdr Workflows"
 placement = "popup"
 width = 64
 height = 18
-command = ["./bin/herdr-workflows", "picker"]
+command = ["./bin/herdr-workflows.exe", "picker"]
 
 [[panes]]
 id = "editor"
 title = "Edit workflow"
 placement = "split"
-command = ["./bin/herdr-workflows", "editor"]
+command = ["./bin/herdr-workflows.exe", "editor"]
 
 [[panes]]
 id = "console"
 title = "Herdr Workflows Console"
 placement = "split"
-command = ["./bin/herdr-workflows", "console"]
+command = ["./bin/herdr-workflows.exe", "console"]

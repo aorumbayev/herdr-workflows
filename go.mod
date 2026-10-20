@@ -10,6 +10,7 @@ tool (
 require (
 	charm.land/bubbletea/v2 v2.0.9
 	charm.land/lipgloss/v2 v2.0.6
+	github.com/Microsoft/go-winio v0.6.2
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/invopop/jsonschema v0.14.0

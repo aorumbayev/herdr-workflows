@@ -3,6 +3,7 @@ node_modules/
 
 # build / compile
 bin/herdr-workflows
+bin/herdr-workflows.exe
 dist/
 *.test
 *.out
