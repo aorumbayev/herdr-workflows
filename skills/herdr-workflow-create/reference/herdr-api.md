@@ -11,17 +11,18 @@ Dotted YAML keys are not actions. The runner never autofills params from UI focu
 
 ## Allowed methods and the selector each one requires
 
-This is the complete allowlist (60 methods, herdr 0.8.2 schema, protocol 20). Anything **not** on
+This is the complete allowlist (61 methods, herdr 0.9.5 schema, protocol floor 20). Anything **not** on
 this list fails at load. The loader denies `plugin.*`, `server.*`, `popup.*`, `events.*`,
-`session.snapshot`, `integration.*`, `pane.graphics.*`, `agent.view.*`, `pane.report_agent*`,
-`pane.release_agent`, and `pane.clear_agent_authority`, even though their namespace prefixes look
+`session.snapshot`, `integration.*`, `agent.view.*`, `pane.report_agent*`, `pane.release_agent`,
+`pane.clear_agent_authority`, `pane.scroll`, `pane.edit_scrollback`, `pane.selection.read`,
+`pane.copy_motion`, `pane.copy_search`, and `pane.link.*`, even though their namespace prefixes look
 allowed. Method names match exactly. There are no wildcards.
 
 Selector required in `params:`
 
 - **none beyond the method's own schema** — `agent.explain` `agent.focus` `agent.get` `agent.list`
   `agent.prompt` `agent.read` `agent.rename` `agent.send_keys` `agent.start` `agent.wait`
-  `client.window_title.clear` `client.window_title.set` `notification.show` `pane.close`
+  `client.window_title.clear` `client.window_title.set` `notification.show` `pane.clear` `pane.close`
   `pane.focus` `pane.get` `pane.input.set` `pane.list` `pane.read` `pane.rename` `pane.report_metadata`
   `pane.send_input` `pane.send_keys` `pane.send_text` `pane.wait_for_output` `ping` `tab.close`
   `tab.focus` `tab.get` `tab.list` `tab.move` `tab.rename` `workspace.close` `workspace.create`
@@ -61,8 +62,8 @@ for example `printf %s "kind-$(printf %s "$PANE" | tr -c 'A-Za-z0-9' '-')"`, the
 This skill lives outside the herdr-workflows checkout, so `src/`, `docs/`, and
 `schemas/` are **not readable**. Do not try to read them. Use these two sources:
 
-1. The method table in this file. It is the complete allowlist (60 methods, 91 known in the
-   herdr 0.8.2 schema, protocol 20). Use it as the authority for **method names** and **param names**.
+1. The method table in this file. It is the complete allowlist (61 methods, 102 known in the
+   herdr 0.9.5 schema, protocol floor 20). Use it as the authority for **method names** and **param names**.
    The selector rules in this file are an extra load-time check.
 2. `scripts/validate.sh` — its error text names the exact missing selector, for example
    `pane.split: params.target_pane_id is required`.
@@ -71,7 +72,7 @@ Never guess a method or param name from memory.
 
 ## Allowlist posture
 
-The loader denies server/plugin lifecycle, identity-authority, experimental graphics, and similar
+The loader denies server/plugin lifecycle, identity-authority, client UI, and similar
 methods at load time with the invariant they protect. That denylist is an accidental-misuse and
 runtime-safety rail, **not** a sandbox. A trusted `run:` can still invoke the complete Herdr CLI
 or socket as the current user.
@@ -81,6 +82,10 @@ or socket as the current user.
 Flag especially destructive or injectable calls to the user (for example
 `pane.close`, `tab.close`, `workspace.close`, `layout.apply`, key/text injection,
 `worktree.create`) even when the allowlist permits them.
+
+On herdr 0.9.0 and later, `workspace.close` on a workspace that has linked worktree workspaces
+fails with `workspace_group_close_required`. Pass `close_group: true` to close the whole group.
+herdr 0.8.2 ignores `close_group` and closes only the named workspace.
 
 ## Results
 
