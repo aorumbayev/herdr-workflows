@@ -102,7 +102,7 @@ func waitForCmd(done chan error, opts SpawnOpts, cmd *exec.Cmd) (int, bool) {
 	case <-cancelled:
 	}
 	KillSpawn(cmd)
-	<-done
+	<-done //nolint:errcheck // after a kill, the wait error only reports the signal
 	return -1, true
 }
 
