@@ -35,7 +35,7 @@ func TestVerifyWorkflowUsesUnifiedGoToolVerify(t *testing.T) {
 		"macos-latest",
 		"actions/setup-node@",
 		"golangci/golangci-lint-action@",
-		"version: v2.13",
+		"version: v2.15",
 		"install-only: true",
 		"install-mode: goinstall",
 	} {
