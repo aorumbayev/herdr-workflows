@@ -441,8 +441,9 @@ A workflow file is code you choose to run. There is no sandbox. A `run:` step ca
 
 | Denied methods                                                                                                                                                                                                                         |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Every `server.*`, `plugin.*`, `events.*`, `integration.*`, `pane.graphics.*`                                                                                                                                                           |
+| Every `server.*`, `plugin.*`, `events.*`, `integration.*`                                                                                                                                                                              |
 | `session.snapshot`, `popup.close`, `pane.report_agent`, `pane.report_agent_session`, `pane.clear_agent_authority`, `pane.release_agent`, `agent.view.set`, `agent.view.clear`                                                          |
+| `pane.scroll`, `pane.edit_scrollback`, `pane.selection.read`, `pane.copy_motion`, `pane.copy_search`, `pane.link.activate`, `pane.link.resolve`                                                                                        |
 
 Allowed: `workspace.*`, `tab.*`, `pane.*`, `worktree.*`, `agent.*`, `layout.*`, `notification.show`, `client.window_title.*`, `ping`. Each denial states the rule it protects. This is a rail against accidental misuse, not a security boundary.
 
